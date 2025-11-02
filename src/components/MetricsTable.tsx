@@ -35,6 +35,7 @@ export const MetricsTable = ({ productId, metrics, onMetricChanged }: MetricsTab
   const [editingMetric, setEditingMetric] = useState<Metric | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [selectedDay, setSelectedDay] = useState<string>("all");
   const [selectedStructure, setSelectedStructure] = useState<string>("all");
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
@@ -57,6 +58,16 @@ export const MetricsTable = ({ productId, metrics, onMetricChanged }: MetricsTab
     return Array.from(months).sort();
   }, [metrics]);
 
+  // Extract unique days
+  const availableDays = useMemo(() => {
+    const days = new Set<string>();
+    metrics.forEach((metric) => {
+      const [day] = metric.date.split("/");
+      if (day) days.add(day);
+    });
+    return Array.from(days).sort((a, b) => Number(a) - Number(b));
+  }, [metrics]);
+
   // Extract unique structures
   const availableStructures = useMemo(() => {
     const structures = new Set(metrics.map((m) => m.structure));
@@ -72,6 +83,14 @@ export const MetricsTable = ({ productId, metrics, onMetricChanged }: MetricsTab
       filtered = filtered.filter((metric) => {
         const [, month] = metric.date.split("/");
         return month === selectedMonth;
+      });
+    }
+
+    // Filter by day
+    if (selectedDay !== "all") {
+      filtered = filtered.filter((metric) => {
+        const [day] = metric.date.split("/");
+        return day === selectedDay;
       });
     }
 
@@ -105,7 +124,7 @@ export const MetricsTable = ({ productId, metrics, onMetricChanged }: MetricsTab
     }
 
     return filtered;
-  }, [metrics, selectedMonth, selectedStructure, sortField, sortDirection]);
+  }, [metrics, selectedMonth, selectedDay, selectedStructure, sortField, sortDirection]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -186,6 +205,20 @@ export const MetricsTable = ({ productId, metrics, onMetricChanged }: MetricsTab
                 {availableMonths.map((month) => (
                   <SelectItem key={month} value={month}>
                     Mês {month}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={selectedDay} onValueChange={setSelectedDay}>
+              <SelectTrigger className="w-full sm:w-[200px]">
+                <SelectValue placeholder="Filtrar por dia" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os dias</SelectItem>
+                {availableDays.map((day) => (
+                  <SelectItem key={day} value={day}>
+                    Dia {day}
                   </SelectItem>
                 ))}
               </SelectContent>
