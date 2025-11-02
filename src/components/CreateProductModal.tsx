@@ -18,17 +18,21 @@ import { toast } from "sonner";
 interface CreateProductModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onProductCreated: () => void;
 }
 
-export const CreateProductModal = ({ open, onOpenChange }: CreateProductModalProps) => {
+export const CreateProductModal = ({ open, onOpenChange, onProductCreated }: CreateProductModalProps) => {
   const [productName, setProductName] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!productName.trim()) {
       toast.error("Por favor, insira um nome para o produto");
       return;
     }
+
+    setLoading(true);
 
     const newProduct: Product = {
       id: crypto.randomUUID(),
@@ -37,11 +41,19 @@ export const CreateProductModal = ({ open, onOpenChange }: CreateProductModalPro
       metrics: [],
     };
 
-    addProduct(newProduct);
-    toast.success("Produto criado com sucesso!");
-    setProductName("");
-    onOpenChange(false);
-    navigate(`/produto/${newProduct.id}`);
+    const productId = await addProduct(newProduct);
+    
+    if (productId) {
+      toast.success("Produto criado com sucesso!");
+      setProductName("");
+      onOpenChange(false);
+      onProductCreated();
+      navigate(`/produto/${productId}`);
+    } else {
+      toast.error("Erro ao criar produto. Tente novamente.");
+    }
+
+    setLoading(false);
   };
 
   return (
@@ -61,16 +73,20 @@ export const CreateProductModal = ({ open, onOpenChange }: CreateProductModalPro
               placeholder="Ex: Curso WhatsApp Pro"
               value={productName}
               onChange={(e) => setProductName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+              onKeyDown={(e) => e.key === "Enter" && !loading && handleCreate()}
             />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+          <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={loading}>
             Cancelar
           </Button>
-          <Button onClick={handleCreate} className="bg-accent text-accent-foreground hover:bg-accent/90">
-            Criar Produto
+          <Button 
+            onClick={handleCreate} 
+            className="bg-accent text-accent-foreground hover:bg-accent/90"
+            disabled={loading}
+          >
+            {loading ? "Criando..." : "Criar Produto"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,9 +1,23 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { addMetric, calculateMetrics } from "@/utils/storage";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { addMetric, calculateMetrics, getUniqueStructures } from "@/utils/storage";
 import { Metric } from "@/types/product";
 import { toast } from "sonner";
 
@@ -13,6 +27,8 @@ interface MetricsFormProps {
 }
 
 export const MetricsForm = ({ productId, onMetricAdded }: MetricsFormProps) => {
+  const [structures, setStructures] = useState<string[]>([]);
+  const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({
     date: "",
     structure: "",
@@ -21,6 +37,15 @@ export const MetricsForm = ({ productId, onMetricAdded }: MetricsFormProps) => {
     pixCount: "",
     pixTotal: "",
   });
+
+  useEffect(() => {
+    loadStructures();
+  }, [productId]);
+
+  const loadStructures = async () => {
+    const uniqueStructures = await getUniqueStructures(productId);
+    setStructures(uniqueStructures);
+  };
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -33,7 +58,7 @@ export const MetricsForm = ({ productId, onMetricAdded }: MetricsFormProps) => {
     parseFloat(formData.pixTotal) || 0
   );
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.date || !formData.structure) {
@@ -52,7 +77,7 @@ export const MetricsForm = ({ productId, onMetricAdded }: MetricsFormProps) => {
       ...calculatedMetrics,
     };
 
-    addMetric(productId, metric);
+    await addMetric(productId, metric);
     toast.success("Métrica registrada com sucesso!");
     
     setFormData({
@@ -65,6 +90,7 @@ export const MetricsForm = ({ productId, onMetricAdded }: MetricsFormProps) => {
     });
     
     onMetricAdded();
+    loadStructures();
   };
 
   return (
@@ -83,12 +109,66 @@ export const MetricsForm = ({ productId, onMetricAdded }: MetricsFormProps) => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="structure">Estrutura</Label>
-              <Input
-                id="structure"
-                placeholder="Ex: Estrutura A"
-                value={formData.structure}
-                onChange={(e) => handleChange("structure", e.target.value)}
-              />
+              <Popover open={open} onOpenChange={setOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={open}
+                    className="w-full justify-between"
+                  >
+                    {formData.structure || "Selecione ou digite..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-full p-0" align="start">
+                  <Command>
+                    <CommandInput
+                      placeholder="Digite a estrutura..."
+                      value={formData.structure}
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, structure: value })
+                      }
+                    />
+                    <CommandEmpty>
+                      <Button
+                        variant="ghost"
+                        className="w-full"
+                        onClick={() => {
+                          setOpen(false);
+                        }}
+                      >
+                        Usar "{formData.structure}"
+                      </Button>
+                    </CommandEmpty>
+                    <CommandGroup>
+                      {structures.map((structure) => (
+                        <CommandItem
+                          key={structure}
+                          value={structure}
+                          onSelect={(currentValue) => {
+                            setFormData({
+                              ...formData,
+                              structure: currentValue,
+                            });
+                            setOpen(false);
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              formData.structure === structure
+                                ? "opacity-100"
+                                : "opacity-0"
+                            )}
+                          />
+                          {structure}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="space-y-2">
               <Label htmlFor="invested">Investido (R$)</Label>

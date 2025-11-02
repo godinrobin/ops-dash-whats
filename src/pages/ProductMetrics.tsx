@@ -16,22 +16,39 @@ const ProductMetrics = () => {
   const [product, setProduct] = useState<Product | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const loadData = () => {
+  const loadData = async () => {
+    setLoading(true);
     if (productId) {
-      const foundProduct = getProduct(productId);
+      const foundProduct = await getProduct(productId);
       if (foundProduct) {
         setProduct(foundProduct);
       } else {
         navigate("/");
       }
     }
-    setProducts(getProducts());
+    const allProducts = await getProducts();
+    setProducts(allProducts);
+    setLoading(false);
   };
 
   useEffect(() => {
     loadData();
-  }, [productId, isModalOpen]);
+  }, [productId]);
+
+  const handleProductCreated = () => {
+    loadData();
+    setIsModalOpen(false);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Carregando...</p>
+      </div>
+    );
+  }
 
   if (!product) {
     return null;
@@ -74,6 +91,10 @@ const ProductMetrics = () => {
             <MetricsCharts metrics={product.metrics} />
           </section>
         </div>
+
+        <footer className="mt-16 text-center text-xs text-muted-foreground/50">
+          criado por João Lucas
+        </footer>
       </div>
 
       <ProductNavigation
@@ -82,7 +103,11 @@ const ProductMetrics = () => {
         onCreateClick={() => setIsModalOpen(true)}
       />
 
-      <CreateProductModal open={isModalOpen} onOpenChange={setIsModalOpen} />
+      <CreateProductModal 
+        open={isModalOpen} 
+        onOpenChange={setIsModalOpen}
+        onProductCreated={handleProductCreated}
+      />
     </div>
   );
 };
