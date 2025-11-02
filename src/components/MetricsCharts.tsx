@@ -6,7 +6,20 @@ interface MetricsChartsProps {
   metrics: Metric[];
 }
 
-const COLORS = ["#00C853", "#00E676", "#69F0AE", "#B9F6CA", "#1DE9B6"];
+// Generate a consistent color for each structure based on a hash
+const stringToColor = (str: string): string => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  
+  // Generate HSL color with good saturation and lightness for visibility
+  const hue = Math.abs(hash % 360);
+  const saturation = 65 + (Math.abs(hash) % 20); // 65-85%
+  const lightness = 55 + (Math.abs(hash >> 8) % 15); // 55-70%
+  
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+};
 
 export const MetricsCharts = ({ metrics }: MetricsChartsProps) => {
   if (metrics.length === 0) {
@@ -42,14 +55,14 @@ export const MetricsCharts = ({ metrics }: MetricsChartsProps) => {
                 }
               />
               <Legend />
-              {structures.map((structure, index) => (
+              {structures.map((structure) => (
                 <Line
                   key={structure}
                   type="monotone"
                   dataKey="cpl"
                   data={metrics.filter((m) => m.structure === structure)}
                   name={structure}
-                  stroke={COLORS[index % COLORS.length]}
+                  stroke={stringToColor(structure)}
                   strokeWidth={2}
                 />
               ))}
@@ -73,14 +86,14 @@ export const MetricsCharts = ({ metrics }: MetricsChartsProps) => {
                 formatter={(value: number) => `${value.toFixed(2)}%`}
               />
               <Legend />
-              {structures.map((structure, index) => (
+              {structures.map((structure) => (
                 <Line
                   key={structure}
                   type="monotone"
                   dataKey="conversion"
                   data={metrics.filter((m) => m.structure === structure)}
                   name={structure}
-                  stroke={COLORS[index % COLORS.length]}
+                  stroke={stringToColor(structure)}
                   strokeWidth={2}
                 />
               ))}
@@ -104,14 +117,14 @@ export const MetricsCharts = ({ metrics }: MetricsChartsProps) => {
                 formatter={(value: number) => `${value.toFixed(2)}x`}
               />
               <Legend />
-              {structures.map((structure, index) => (
+              {structures.map((structure) => (
                 <Line
                   key={structure}
                   type="monotone"
                   dataKey="roas"
                   data={metrics.filter((m) => m.structure === structure)}
                   name={structure}
-                  stroke={COLORS[index % COLORS.length]}
+                  stroke={stringToColor(structure)}
                   strokeWidth={2}
                 />
               ))}

@@ -48,7 +48,20 @@ export const MetricsForm = ({ productId, onMetricAdded }: MetricsFormProps) => {
   };
 
   const handleChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    if (field === "date") {
+      // Remove non-numeric characters
+      const numericValue = value.replace(/\D/g, "");
+      
+      // Format as DD/MM
+      let formattedValue = numericValue;
+      if (numericValue.length >= 3) {
+        formattedValue = `${numericValue.slice(0, 2)}/${numericValue.slice(2, 4)}`;
+      }
+      
+      setFormData((prev) => ({ ...prev, [field]: formattedValue }));
+    } else {
+      setFormData((prev) => ({ ...prev, [field]: value }));
+    }
   };
 
   const calculatedMetrics = calculateMetrics(
@@ -103,6 +116,7 @@ export const MetricsForm = ({ productId, onMetricAdded }: MetricsFormProps) => {
               <Input
                 id="date"
                 placeholder="02/09"
+                maxLength={5}
                 value={formData.date}
                 onChange={(e) => handleChange("date", e.target.value)}
               />
@@ -129,6 +143,12 @@ export const MetricsForm = ({ productId, onMetricAdded }: MetricsFormProps) => {
                       onValueChange={(value) =>
                         setFormData({ ...formData, structure: value })
                       }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && formData.structure) {
+                          e.preventDefault();
+                          setOpen(false);
+                        }
+                      }}
                     />
                     <CommandEmpty>
                       <Button

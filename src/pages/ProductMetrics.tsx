@@ -19,15 +19,16 @@ const ProductMetrics = () => {
   const [loading, setLoading] = useState(true);
 
   const loadData = async () => {
+    if (!productId) return;
+    
     setLoading(true);
-    if (productId) {
-      const foundProduct = await getProduct(productId);
-      if (foundProduct) {
-        setProduct(foundProduct);
-      } else {
-        navigate("/");
-      }
+    const foundProduct = await getProduct(productId);
+    if (foundProduct) {
+      setProduct(foundProduct);
+    } else {
+      navigate("/");
     }
+    
     const allProducts = await getProducts();
     setProducts(allProducts);
     setLoading(false);
