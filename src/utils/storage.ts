@@ -45,6 +45,29 @@ export const addMetric = (productId: string, metric: Metric): void => {
   }
 };
 
+export const updateMetric = (productId: string, metricId: string, updatedMetric: Metric): void => {
+  const products = getProducts();
+  const product = products.find((p) => p.id === productId);
+  if (product) {
+    const index = product.metrics.findIndex((m) => m.id === metricId);
+    if (index !== -1) {
+      product.metrics[index] = updatedMetric;
+      product.lastUpdate = new Date().toLocaleDateString("pt-BR");
+      saveProducts(products);
+    }
+  }
+};
+
+export const deleteMetric = (productId: string, metricId: string): void => {
+  const products = getProducts();
+  const product = products.find((p) => p.id === productId);
+  if (product) {
+    product.metrics = product.metrics.filter((m) => m.id !== metricId);
+    product.lastUpdate = new Date().toLocaleDateString("pt-BR");
+    saveProducts(products);
+  }
+};
+
 export const calculateMetrics = (
   invested: number,
   leads: number,

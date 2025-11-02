@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { MetricsForm } from "@/components/MetricsForm";
 import { MetricsCharts } from "@/components/MetricsCharts";
+import { MetricsTable } from "@/components/MetricsTable";
 import { ProductNavigation } from "@/components/ProductNavigation";
 import { CreateProductModal } from "@/components/CreateProductModal";
 import { getProduct, getProducts } from "@/utils/storage";
@@ -58,6 +59,14 @@ const ProductMetrics = () => {
           <section>
             <h2 className="text-2xl font-semibold mb-4">Adicionar Nova Métrica</h2>
             <MetricsForm productId={product.id} onMetricAdded={loadData} />
+          </section>
+
+          <section>
+            <MetricsTable 
+              productId={product.id} 
+              metrics={product.metrics} 
+              onMetricChanged={loadData}
+            />
           </section>
 
           <section>
