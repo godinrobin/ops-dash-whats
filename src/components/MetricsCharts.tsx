@@ -1,27 +1,39 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Metric } from "@/types/product";
+import { useMemo } from "react";
 
 interface MetricsChartsProps {
   metrics: Metric[];
 }
 
-// Generate a consistent color for each structure based on a hash
-const stringToColor = (str: string): string => {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  
-  // Generate HSL color with good saturation and lightness for visibility
-  const hue = Math.abs(hash % 360);
-  const saturation = 65 + (Math.abs(hash) % 20); // 65-85%
-  const lightness = 55 + (Math.abs(hash >> 8) % 15); // 55-70%
-  
-  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-};
+// Predefined color palette with distinct, vibrant colors
+const COLOR_PALETTE = [
+  "#10b981", // green
+  "#3b82f6", // blue
+  "#f59e0b", // amber
+  "#ef4444", // red
+  "#8b5cf6", // violet
+  "#ec4899", // pink
+  "#14b8a6", // teal
+  "#f97316", // orange
+  "#06b6d4", // cyan
+  "#a855f7", // purple
+  "#84cc16", // lime
+  "#6366f1", // indigo
+];
 
 export const MetricsCharts = ({ metrics }: MetricsChartsProps) => {
+  // Create a stable color mapping for each structure
+  const structureColors = useMemo(() => {
+    const structures = Array.from(new Set(metrics.map((m) => m.structure)));
+    const colorMap: Record<string, string> = {};
+    structures.forEach((structure, index) => {
+      colorMap[structure] = COLOR_PALETTE[index % COLOR_PALETTE.length];
+    });
+    return colorMap;
+  }, [metrics]);
+
   if (metrics.length === 0) {
     return (
       <Card className="shadow-card">
@@ -34,7 +46,7 @@ export const MetricsCharts = ({ metrics }: MetricsChartsProps) => {
     );
   }
 
-  const structures = Array.from(new Set(metrics.map((m) => m.structure)));
+  const structures = Object.keys(structureColors);
 
   return (
     <div className="space-y-6">
@@ -62,7 +74,7 @@ export const MetricsCharts = ({ metrics }: MetricsChartsProps) => {
                   dataKey="cpl"
                   data={metrics.filter((m) => m.structure === structure)}
                   name={structure}
-                  stroke={stringToColor(structure)}
+                  stroke={structureColors[structure]}
                   strokeWidth={2}
                 />
               ))}
@@ -93,7 +105,7 @@ export const MetricsCharts = ({ metrics }: MetricsChartsProps) => {
                   dataKey="conversion"
                   data={metrics.filter((m) => m.structure === structure)}
                   name={structure}
-                  stroke={stringToColor(structure)}
+                  stroke={structureColors[structure]}
                   strokeWidth={2}
                 />
               ))}
@@ -124,7 +136,7 @@ export const MetricsCharts = ({ metrics }: MetricsChartsProps) => {
                   dataKey="roas"
                   data={metrics.filter((m) => m.structure === structure)}
                   name={structure}
-                  stroke={stringToColor(structure)}
+                  stroke={structureColors[structure]}
                   strokeWidth={2}
                 />
               ))}
