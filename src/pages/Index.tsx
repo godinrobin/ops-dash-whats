@@ -1,11 +1,61 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { ProductCard } from "@/components/ProductCard";
+import { CreateProductModal } from "@/components/CreateProductModal";
+import { getProducts } from "@/utils/storage";
+import { Product } from "@/types/product";
 
 const Index = () => {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  useEffect(() => {
+    setProducts(getProducts());
+  }, [isModalOpen]);
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
+    <div className="min-h-screen bg-background p-6 md:p-10">
+      <div className="container mx-auto max-w-6xl">
+        <header className="text-center mb-12">
+          <h1 className="text-4xl md:text-5xl font-bold mb-4">📊 Meus Produtos</h1>
+          <p className="text-muted-foreground text-lg">
+            Gerencie suas métricas de WhatsApp com facilidade
+          </p>
+        </header>
+
+        {products.length === 0 ? (
+          <div className="text-center py-20">
+            <p className="text-muted-foreground text-lg mb-6">
+              Você ainda não tem produtos cadastrados
+            </p>
+            <Button
+              onClick={() => setIsModalOpen(true)}
+              size="lg"
+              className="bg-accent text-accent-foreground hover:bg-accent/90"
+            >
+              + Criar meu primeiro produto
+            </Button>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+              {products.map((product) => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </div>
+            <div className="text-center">
+              <Button
+                onClick={() => setIsModalOpen(true)}
+                size="lg"
+                className="bg-accent text-accent-foreground hover:bg-accent/90"
+              >
+                + Criar novo produto
+              </Button>
+            </div>
+          </>
+        )}
+
+        <CreateProductModal open={isModalOpen} onOpenChange={setIsModalOpen} />
       </div>
     </div>
   );
