@@ -6,6 +6,7 @@ import { MetricsCharts } from "@/components/MetricsCharts";
 import { MetricsTable } from "@/components/MetricsTable";
 import { ProductNavigation } from "@/components/ProductNavigation";
 import { CreateProductModal } from "@/components/CreateProductModal";
+import { Header } from "@/components/Header";
 import { getProduct, getProducts } from "@/utils/storage";
 import { Product } from "@/types/product";
 import { ArrowLeft } from "lucide-react";
@@ -56,22 +57,24 @@ const ProductMetrics = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <div className="container mx-auto max-w-7xl p-6 md:p-10">
-        <header className="mb-8">
-          <Button
-            variant="secondary"
-            onClick={() => navigate("/")}
-            className="mb-4"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Voltar
-          </Button>
-          <h1 className="text-3xl md:text-4xl font-bold text-center mb-2">{product.name}</h1>
-          <p className="text-center text-muted-foreground">
-            Última atualização: {product.lastUpdate}
-          </p>
-        </header>
+    <>
+      <Header />
+      <div className="min-h-screen bg-background pb-24 pt-20">
+        <div className="container mx-auto max-w-7xl p-6 md:p-10">
+          <header className="mb-8">
+            <Button
+              variant="secondary"
+              onClick={() => navigate("/")}
+              className="mb-4"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Voltar
+            </Button>
+            <h1 className="text-3xl md:text-4xl font-bold text-center mb-2">{product.name}</h1>
+            <p className="text-center text-muted-foreground">
+              Última atualização: {product.lastUpdate}
+            </p>
+          </header>
 
         <div className="space-y-8">
           <section>
@@ -93,23 +96,24 @@ const ProductMetrics = () => {
           </section>
         </div>
 
-        <footer className="mt-16 text-center text-xs text-muted-foreground/50">
-          criado por João Lucas
-        </footer>
+          <footer className="mt-16 text-center text-xs text-muted-foreground/50">
+            criado por João Lucas
+          </footer>
+        </div>
+
+        <ProductNavigation
+          products={products}
+          currentProductId={product.id}
+          onCreateClick={() => setIsModalOpen(true)}
+        />
+
+        <CreateProductModal 
+          open={isModalOpen} 
+          onOpenChange={setIsModalOpen}
+          onProductCreated={handleProductCreated}
+        />
       </div>
-
-      <ProductNavigation
-        products={products}
-        currentProductId={product.id}
-        onCreateClick={() => setIsModalOpen(true)}
-      />
-
-      <CreateProductModal 
-        open={isModalOpen} 
-        onOpenChange={setIsModalOpen}
-        onProductCreated={handleProductCreated}
-      />
-    </div>
+    </>
   );
 };
 

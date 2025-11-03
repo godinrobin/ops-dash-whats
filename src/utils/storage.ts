@@ -8,7 +8,6 @@ export const getProducts = async (): Promise<Product[]> => {
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("Error fetching products:", error);
     return [];
   }
 
@@ -37,18 +36,24 @@ export const saveProducts = async (products: Product[]): Promise<void> => {
 };
 
 export const addProduct = async (product: Product): Promise<string | null> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    return null;
+  }
+
   const { data, error } = await supabase
     .from("products")
     .insert({
       id: product.id,
       name: product.name,
       last_update: product.lastUpdate,
+      user_id: user.id,
     })
     .select()
     .single();
 
   if (error) {
-    console.error("Error adding product:", error);
     return null;
   }
 
@@ -59,28 +64,20 @@ export const updateProduct = async (
   productId: string,
   updates: Partial<Product>
 ): Promise<void> => {
-  const { error } = await supabase
+  await supabase
     .from("products")
     .update({
       name: updates.name,
       last_update: updates.lastUpdate || new Date().toLocaleDateString("pt-BR"),
     })
     .eq("id", productId);
-
-  if (error) {
-    console.error("Error updating product:", error);
-  }
 };
 
 export const deleteProduct = async (productId: string): Promise<void> => {
-  const { error } = await supabase
+  await supabase
     .from("products")
     .delete()
     .eq("id", productId);
-
-  if (error) {
-    console.error("Error deleting product:", error);
-  }
 };
 
 export const getProduct = async (
@@ -93,7 +90,6 @@ export const getProduct = async (
     .single();
 
   if (error) {
-    console.error("Error fetching product:", error);
     return undefined;
   }
 
@@ -121,7 +117,7 @@ export const addMetric = async (
   productId: string,
   metric: Metric
 ): Promise<void> => {
-  const { error } = await supabase.from("metrics").insert({
+  await supabase.from("metrics").insert({
     id: metric.id,
     product_id: productId,
     date: metric.date,
@@ -136,11 +132,6 @@ export const addMetric = async (
     roas: metric.roas,
   });
 
-  if (error) {
-    console.error("Error adding metric:", error);
-    return;
-  }
-
   await supabase
     .from("products")
     .update({ last_update: new Date().toLocaleDateString("pt-BR") })
@@ -152,7 +143,7 @@ export const updateMetric = async (
   metricId: string,
   updatedMetric: Metric
 ): Promise<void> => {
-  const { error } = await supabase
+  await supabase
     .from("metrics")
     .update({
       date: updatedMetric.date,
@@ -168,11 +159,6 @@ export const updateMetric = async (
     })
     .eq("id", metricId);
 
-  if (error) {
-    console.error("Error updating metric:", error);
-    return;
-  }
-
   await supabase
     .from("products")
     .update({ last_update: new Date().toLocaleDateString("pt-BR") })
@@ -183,15 +169,10 @@ export const deleteMetric = async (
   productId: string,
   metricId: string
 ): Promise<void> => {
-  const { error } = await supabase
+  await supabase
     .from("metrics")
     .delete()
     .eq("id", metricId);
-
-  if (error) {
-    console.error("Error deleting metric:", error);
-    return;
-  }
 
   await supabase
     .from("products")
@@ -208,7 +189,6 @@ export const getUniqueStructures = async (
     .eq("product_id", productId);
 
   if (error) {
-    console.error("Error fetching structures:", error);
     return [];
   }
 
