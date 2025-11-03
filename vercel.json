@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    { "source": "/produto/:path*", "destination": "/index.html" },
+    { "source": "/auth", "destination": "/index.html" },
+    { "source": "/", "destination": "/index.html" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
