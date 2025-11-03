@@ -170,9 +170,8 @@ export const MetricsTable = ({ productId, metrics, onMetricChanged }: MetricsTab
 
   const averages = {
     cpl: filteredMetrics.length > 0 ? totals.cpl / filteredMetrics.length : 0,
-    conversion:
-      filteredMetrics.length > 0 ? totals.conversion / filteredMetrics.length : 0,
-    roas: filteredMetrics.length > 0 ? totals.roas / filteredMetrics.length : 0,
+    conversion: totals.leads > 0 ? (totals.pixCount / totals.leads) * 100 : 0,
+    roas: totals.invested > 0 ? totals.pixTotal / totals.invested : 0,
   };
 
   const SortIcon = ({ field }: { field: SortField }) => {
