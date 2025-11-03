@@ -59,7 +59,8 @@ const ProductMetrics = () => {
   return (
     <>
       <Header />
-      <div className="min-h-screen bg-background pb-24 pt-28">
+      <div className="h-14 md:h-16" />
+      <div className="min-h-screen bg-background pb-24">
         <div className="container mx-auto max-w-7xl p-6 md:p-10">
           <header className="mb-8">
             <Button
@@ -76,25 +77,25 @@ const ProductMetrics = () => {
             </p>
           </header>
 
-        <div className="space-y-8">
-          <section>
-            <h2 className="text-2xl font-semibold mb-4">Adicionar Nova Métrica</h2>
-            <MetricsForm productId={product.id} onMetricAdded={loadData} />
-          </section>
+          <div className="space-y-8">
+            <section>
+              <h2 className="text-2xl font-semibold mb-4">Adicionar Nova Métrica</h2>
+              <MetricsForm productId={product.id} onMetricAdded={loadData} />
+            </section>
 
-          <section>
-            <MetricsTable 
-              productId={product.id} 
-              metrics={product.metrics} 
-              onMetricChanged={loadData}
-            />
-          </section>
+            <section>
+              <MetricsTable 
+                productId={product.id} 
+                metrics={product.metrics} 
+                onMetricChanged={loadData}
+              />
+            </section>
 
-          <section>
-            <h2 className="text-2xl font-semibold mb-4">Gráficos Comparativos</h2>
-            <MetricsCharts metrics={product.metrics} />
-          </section>
-        </div>
+            <section>
+              <h2 className="text-2xl font-semibold mb-4">Gráficos Comparativos</h2>
+              <MetricsCharts metrics={product.metrics} />
+            </section>
+          </div>
 
           <footer className="mt-16 text-center text-xs text-muted-foreground/50">
             criado por João Lucas
