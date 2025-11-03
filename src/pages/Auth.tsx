@@ -64,15 +64,6 @@ const Auth = () => {
       return;
     }
 
-    if (password.length < 6) {
-      toast({
-        variant: "destructive",
-        title: "Senha muito curta",
-        description: "A senha deve ter no mínimo 6 caracteres",
-      });
-      return;
-    }
-
     setLoading(true);
     const { error } = await signUp(username, password);
     setLoading(false);
@@ -118,6 +109,7 @@ const Auth = () => {
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     disabled={loading}
+                    className="focus-visible:ring-green-500 focus-visible:border-green-500"
                   />
                 </div>
                 <div className="space-y-2">
@@ -129,9 +121,10 @@ const Auth = () => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={loading}
+                    className="focus-visible:ring-green-500 focus-visible:border-green-500"
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={loading}>
+                <Button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white" disabled={loading}>
                   {loading ? "Entrando..." : "Entrar"}
                 </Button>
               </form>
@@ -148,6 +141,7 @@ const Auth = () => {
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     disabled={loading}
+                    className="focus-visible:ring-green-500 focus-visible:border-green-500"
                   />
                 </div>
                 <div className="space-y-2">
@@ -155,13 +149,14 @@ const Auth = () => {
                   <Input
                     id="signup-password"
                     type="password"
-                    placeholder="Escolha uma senha (mínimo 6 caracteres)"
+                    placeholder="Escolha uma senha"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={loading}
+                    className="focus-visible:ring-green-500 focus-visible:border-green-500"
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={loading}>
+                <Button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white" disabled={loading}>
                   {loading ? "Criando conta..." : "Criar conta"}
                 </Button>
               </form>
