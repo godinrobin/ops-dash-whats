@@ -59,7 +59,7 @@ const ProductMetrics = () => {
   return (
     <>
       <Header />
-      <div className="min-h-screen bg-background pb-24 pt-20">
+      <div className="min-h-screen bg-background pb-24 pt-24">
         <div className="container mx-auto max-w-7xl p-6 md:p-10">
           <header className="mb-8">
             <Button

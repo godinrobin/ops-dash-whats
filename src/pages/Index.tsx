@@ -30,7 +30,7 @@ const Index = () => {
   return (
     <>
       <Header />
-      <div className="min-h-screen bg-background p-6 md:p-10 pt-20">
+      <div className="min-h-screen bg-background p-6 md:p-10 pt-24">
         <div className="container mx-auto max-w-6xl">
           <header className="text-center mb-12">
             <h1 className="text-4xl md:text-5xl font-bold mb-4">📊 Meus Produtos</h1>
