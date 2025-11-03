@@ -62,7 +62,7 @@ export const EditMetricModal = ({
     parseFloat(formData.pixTotal) || 0
   );
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!metric) return;
 
     if (!formData.date || !formData.structure) {
@@ -81,7 +81,7 @@ export const EditMetricModal = ({
       ...calculatedMetrics,
     };
 
-    updateMetric(productId, metric.id, updatedMetric);
+    await updateMetric(productId, metric.id, updatedMetric);
     toast.success("Métrica atualizada com sucesso!");
     onOpenChange(false);
     onMetricUpdated();
