@@ -83,7 +83,7 @@ const Index = () => {
         />
 
           <footer className="mt-16 text-center text-xs text-muted-foreground/50">
-            criado por João Lucas
+            Criado por <a href="https://instagram.com/joaolucaspss" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground transition-colors">@joaolucaspss</a>
           </footer>
         </div>
       </div>
