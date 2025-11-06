@@ -114,7 +114,34 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      metrics_with_product: {
+        Row: {
+          conversion: number | null
+          cpl: number | null
+          created_at: string | null
+          date: string | null
+          id: string | null
+          invested: number | null
+          leads: number | null
+          pix_count: number | null
+          pix_total: number | null
+          product_id: string | null
+          product_name: string | null
+          result: number | null
+          roas: number | null
+          structure: string | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metrics_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       [_ in never]: never
