@@ -70,6 +70,36 @@ export type Database = {
           },
         ]
       }
+      organized_numbers: {
+        Row: {
+          celular: string
+          created_at: string
+          id: string
+          numero: string
+          operacao: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          celular: string
+          created_at?: string
+          id?: string
+          numero: string
+          operacao: string
+          status: string
+          user_id: string
+        }
+        Update: {
+          celular?: string
+          created_at?: string
+          id?: string
+          numero?: string
+          operacao?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       products: {
         Row: {
           created_at: string
