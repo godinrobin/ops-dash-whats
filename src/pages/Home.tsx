@@ -14,7 +14,7 @@ const Home = () => {
 
   const videos = [
     { id: "81hMbGdBQd0", name: "COMO CRIAR ENTREGÁVEL COM IA" },
-    { id: "7t1YRp-kl00", name: "COMO FUNCIONA UM FUNIL DE X1 NO PIX" },
+    { id: "x0YPLhDF6Ag", name: "COMO FUNCIONA UM FUNIL DE X1 NO PIX" },
     { id: "dDijem3cE7Y", name: "COMO ESCALO NO WHATSAPP" },
     { id: "Eb_IMIGdXbs", name: "CRIAR WHATSAPP SEM CADASTRAR CHIP" },
     { id: "1m4UhUWcrQU", name: "MÚLTIPLOS WHATSAPP NO IPHONE" },
