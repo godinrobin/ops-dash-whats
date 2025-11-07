@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Trash2, Plus, Edit2, ArrowUpDown, Search, GripVertical } from "lucide-react";
+import { Trash2, Plus, Edit2, ArrowUpDown, Search, GripVertical, Eye, EyeOff } from "lucide-react";
 import { formatPhoneNumber } from "@/utils/phoneFormatter";
 import { EditNumberModal } from "@/components/EditNumberModal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -42,12 +42,13 @@ interface OrganizedNumber {
 type SortField = 'numero' | 'celular' | 'status' | 'operacao';
 type SortDirection = 'asc' | 'desc' | null;
 
-function SortableRow({ number, isSelected, onSelect, onEdit, onDelete }: {
+function SortableRow({ number, isSelected, onSelect, onEdit, onDelete, numbersBlurred }: {
   number: OrganizedNumber;
   isSelected: boolean;
   onSelect: (id: string) => void;
   onEdit: (number: OrganizedNumber) => void;
   onDelete: (id: string) => void;
+  numbersBlurred: boolean;
 }) {
   const {
     attributes,
@@ -81,7 +82,11 @@ function SortableRow({ number, isSelected, onSelect, onEdit, onDelete }: {
           </button>
         </div>
       </TableCell>
-      <TableCell className="font-medium">{number.numero}</TableCell>
+      <TableCell className="font-medium">
+        <span className={numbersBlurred ? "blur-sm select-none" : ""}>
+          {number.numero}
+        </span>
+      </TableCell>
       <TableCell>{number.celular}</TableCell>
       <TableCell>{number.status}</TableCell>
       <TableCell>{number.operacao}</TableCell>
@@ -133,6 +138,7 @@ const NumberOrganizer = () => {
     status: "",
     operacao: ""
   });
+  const [numbersBlurred, setNumbersBlurred] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -174,9 +180,9 @@ const NumberOrganizer = () => {
 
   const filteredAndSortedNumbers = useMemo(() => {
     let filtered = numbers.filter(number => {
-      if (filters.celular && number.celular !== filters.celular) return false;
-      if (filters.status && number.status !== filters.status) return false;
-      if (filters.operacao && number.operacao !== filters.operacao) return false;
+      if (filters.celular && filters.celular.trim() && number.celular !== filters.celular) return false;
+      if (filters.status && filters.status.trim() && number.status !== filters.status) return false;
+      if (filters.operacao && filters.operacao.trim() && number.operacao !== filters.operacao) return false;
       
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
@@ -607,15 +613,25 @@ const NumberOrganizer = () => {
                         />
                       </TableHead>
                       <TableHead>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleSort('numero')}
-                          className="flex items-center gap-1"
-                        >
-                          Número
-                          <ArrowUpDown className="w-3 h-3" />
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleSort('numero')}
+                            className="flex items-center gap-1"
+                          >
+                            Número
+                            <ArrowUpDown className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => setNumbersBlurred(!numbersBlurred)}
+                          >
+                            {numbersBlurred ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </Button>
+                        </div>
                       </TableHead>
                       <TableHead>
                         <Button
@@ -666,6 +682,7 @@ const NumberOrganizer = () => {
                           onSelect={handleSelectNumber}
                           onEdit={setEditingNumber}
                           onDelete={handleDeleteNumber}
+                          numbersBlurred={numbersBlurred}
                         />
                       ))}
                     </SortableContext>
