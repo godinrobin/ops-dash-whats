@@ -2,9 +2,20 @@ import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart3, ListOrdered } from "lucide-react";
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
+import Autoplay from "embla-carousel-autoplay";
 
 const Home = () => {
   const navigate = useNavigate();
+
+  const videos = [
+    { id: "81hMbGdBQd0", name: "COMO CRIAR ENTREGÁVEL COM IA" },
+    { id: "7t1YRp-kl00", name: "COMO FUNCIONA UM FUNIL DE X1 NO PIX" },
+    { id: "dDijem3cE7Y", name: "COMO ESCALO NO WHATSAPP" },
+    { id: "Eb_IMIGdXbs", name: "CRIAR WHATSAPP SEM CADASTRAR CHIP" },
+    { id: "1m4UhUWcrQU", name: "MÚLTIPLOS WHATSAPP NO IPHONE" },
+    { id: "FXpRT-Dsqes", name: "ORGANIZADOR DE NÚMEROS DE WHATSAPP" },
+  ];
 
   return (
     <>
@@ -60,6 +71,51 @@ const Home = () => {
               </CardContent>
             </Card>
           </div>
+
+          <section className="mt-16">
+            <h2 className="text-3xl font-bold text-center mb-8">Conteúdo</h2>
+            <Carousel
+              opts={{
+                align: "start",
+                loop: true,
+              }}
+              plugins={[
+                Autoplay({
+                  delay: 3000,
+                }),
+              ]}
+              className="w-full max-w-5xl mx-auto"
+            >
+              <CarouselContent>
+                {videos.map((video, index) => (
+                  <CarouselItem key={index} className="md:basis-1/2 lg:basis-1/3">
+                    <div className="p-1">
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="aspect-video mb-3">
+                            <iframe
+                              width="100%"
+                              height="100%"
+                              src={`https://www.youtube.com/embed/${video.id}`}
+                              title={video.name}
+                              frameBorder="0"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                              referrerPolicy="strict-origin-when-cross-origin"
+                              allowFullScreen
+                              className="rounded-lg"
+                            />
+                          </div>
+                          <p className="text-sm font-medium text-center">{video.name}</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+              <CarouselPrevious />
+              <CarouselNext />
+            </Carousel>
+          </section>
 
           <footer className="mt-16 text-center text-xs text-muted-foreground/50">
             Criado por <a href="https://instagram.com/joaolucaspss" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground transition-colors">@joaolucaspss</a>
