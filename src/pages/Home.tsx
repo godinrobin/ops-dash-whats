@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,6 +8,9 @@ import Autoplay from "embla-carousel-autoplay";
 
 const Home = () => {
   const navigate = useNavigate();
+  const autoplayPlugin = useRef(
+    Autoplay({ delay: 3000, stopOnInteraction: true })
+  );
 
   const videos = [
     { id: "81hMbGdBQd0", name: "COMO CRIAR ENTREGÁVEL COM IA" },
@@ -79,11 +83,7 @@ const Home = () => {
                 align: "start",
                 loop: true,
               }}
-              plugins={[
-                Autoplay({
-                  delay: 3000,
-                }),
-              ]}
+              plugins={[autoplayPlugin.current]}
               className="w-full max-w-5xl mx-auto"
             >
               <CarouselContent>
