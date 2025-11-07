@@ -89,10 +89,10 @@ const Home = () => {
               <CarouselContent>
                 {videos.map((video, index) => (
                   <CarouselItem key={index} className="md:basis-1/2 lg:basis-1/3">
-                    <div className="p-1">
-                      <Card>
-                        <CardContent className="p-4">
-                          <div className="aspect-video mb-3">
+                    <div className="p-1 h-full">
+                      <Card className="h-full flex flex-col">
+                        <CardContent className="p-4 flex flex-col h-full">
+                          <div className="aspect-video mb-3 flex-shrink-0">
                             <iframe
                               width="100%"
                               height="100%"
@@ -105,7 +105,7 @@ const Home = () => {
                               className="rounded-lg"
                             />
                           </div>
-                          <p className="text-sm font-medium text-center">{video.name}</p>
+                          <p className="text-sm font-medium text-center line-clamp-2 min-h-[2.5rem]">{video.name}</p>
                         </CardContent>
                       </Card>
                     </div>
