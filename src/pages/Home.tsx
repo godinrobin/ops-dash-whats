@@ -2,9 +2,24 @@ import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart3, ListOrdered } from "lucide-react";
+import { Carousel, CarouselContent, CarouselItem } from "@/components/ui/carousel";
+import Autoplay from "embla-carousel-autoplay";
+import { useRef } from "react";
 
 const Home = () => {
   const navigate = useNavigate();
+  const plugin = useRef(
+    Autoplay({ delay: 3000, stopOnInteraction: false })
+  );
+
+  const videos = [
+    "https://www.youtube.com/embed/81hMbGdBQd0?si=u2MDyu8evv-SA8q-",
+    "https://www.youtube.com/embed/7t1YRp-kl00?si=WbLtRXszAsDzQUPA",
+    "https://www.youtube.com/embed/dDijem3cE7Y?si=QzquTiMkrk0pxWj4",
+    "https://www.youtube.com/embed/1m4UhUWcrQU?si=kIZ9_bv2wvJ1QY-W",
+    "https://www.youtube.com/embed/Eb_IMIGdXbs?si=JlLwU0aHcmhCmZ_2",
+    "https://www.youtube.com/embed/FXpRT-Dsqes?si=nm1wIp6dhkRxYbC0"
+  ];
 
   return (
     <>
@@ -60,6 +75,44 @@ const Home = () => {
               </CardContent>
             </Card>
           </div>
+
+          <section className="mt-16">
+            <h2 className="text-3xl font-bold text-center mb-8">Conteúdo</h2>
+            <Carousel
+              opts={{
+                align: "start",
+                loop: true,
+              }}
+              plugins={[plugin.current]}
+              className="w-full"
+            >
+              <CarouselContent>
+                {videos.map((videoUrl, index) => (
+                  <CarouselItem key={index} className="md:basis-1/2 lg:basis-1/3">
+                    <div className="p-1">
+                      <Card className="border-2">
+                        <CardContent className="p-4">
+                          <div className="aspect-video">
+                            <iframe
+                              width="100%"
+                              height="100%"
+                              src={videoUrl}
+                              title={`YouTube video ${index + 1}`}
+                              frameBorder="0"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                              referrerPolicy="strict-origin-when-cross-origin"
+                              allowFullScreen
+                              className="rounded-md"
+                            />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+            </Carousel>
+          </section>
 
           <footer className="mt-16 text-center text-xs text-muted-foreground/50">
             Criado por <a href="https://instagram.com/joaolucaspss" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground transition-colors">@joaolucaspss</a>
