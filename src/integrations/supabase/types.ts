@@ -77,6 +77,7 @@ export type Database = {
           id: string
           numero: string
           operacao: string
+          order_position: number | null
           status: string
           user_id: string
         }
@@ -86,6 +87,7 @@ export type Database = {
           id?: string
           numero: string
           operacao: string
+          order_position?: number | null
           status: string
           user_id: string
         }
@@ -95,6 +97,7 @@ export type Database = {
           id?: string
           numero?: string
           operacao?: string
+          order_position?: number | null
           status?: string
           user_id?: string
         }
