@@ -26,6 +26,7 @@ export type Database = {
           pix_count: number
           pix_total: number
           product_id: string
+          product_name: string
           result: number
           roas: number
           structure: string
@@ -41,6 +42,7 @@ export type Database = {
           pix_count: number
           pix_total: number
           product_id: string
+          product_name: string
           result: number
           roas: number
           structure: string
@@ -56,6 +58,7 @@ export type Database = {
           pix_count?: number
           pix_total?: number
           product_id?: string
+          product_name?: string
           result?: number
           roas?: number
           structure?: string
