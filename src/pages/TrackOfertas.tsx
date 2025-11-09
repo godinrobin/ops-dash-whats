@@ -32,6 +32,7 @@ const TrackOfertas = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isDailyUpdateRunning, setIsDailyUpdateRunning] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
   const [newOffer, setNewOffer] = useState({ name: "", ad_library_link: "" });
   const [expandedOffer, setExpandedOffer] = useState<TrackedOffer | null>(null);
@@ -48,6 +49,34 @@ const TrackOfertas = () => {
   useEffect(() => {
     if (user) {
       loadOffers();
+      checkDailyUpdateStatus();
+      
+      // Subscribe to update status changes
+      const channel = supabase
+        .channel('daily-update-status')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'daily_update_status',
+          },
+          (payload) => {
+            console.log('Update status changed:', payload);
+            if (payload.new && typeof payload.new === 'object' && 'is_running' in payload.new) {
+              setIsDailyUpdateRunning(payload.new.is_running as boolean);
+              if (!payload.new.is_running) {
+                // Update completed, refresh all data
+                loadOffers();
+              }
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   }, [user]);
 
@@ -77,6 +106,24 @@ const TrackOfertas = () => {
 
     setOffers(data || []);
     setIsInitialLoading(false);
+  };
+
+  const checkDailyUpdateStatus = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('daily_update_status')
+        .select('is_running')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (data) {
+        setIsDailyUpdateRunning(data.is_running);
+      }
+    } catch (error) {
+      console.error('Error checking update status:', error);
+    }
   };
 
   const loadAllMetrics = async () => {
@@ -128,7 +175,7 @@ const TrackOfertas = () => {
 
     try {
       // Fazer GET para o webhook
-      const response = await fetch(`https://n8n.chatwp.xyz/webhook-test/recebe-link?link=${encodeURIComponent(newOffer.ad_library_link)}`, {
+      const response = await fetch(`https://webhook.chatwp.xyz/webhook/recebe-link?link=${encodeURIComponent(newOffer.ad_library_link)}`, {
         method: "GET",
       });
 
@@ -140,7 +187,7 @@ const TrackOfertas = () => {
       const webhookData = await response.text();
       console.log("🔍 Resposta do Webhook:", webhookData);
       
-      const activeAdsCount = parseInt(webhookData) || 0;
+      const activeAdsCount = parseInt(webhookData.trim()) || 0;
       console.log("📊 Número de anúncios ativos:", activeAdsCount);
 
       // Inserir oferta no banco
@@ -178,8 +225,8 @@ const TrackOfertas = () => {
       loadOffers();
     } catch (error: any) {
       toast({
-        title: "Erro ao cadastrar oferta",
-        description: error.message,
+        title: "Erro",
+        description: "Ocorreu um erro ao processar sua solicitação.",
         variant: "destructive",
       });
     } finally {
@@ -230,6 +277,23 @@ const TrackOfertas = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
+      
+      {/* Blur overlay when daily update is running */}
+      {isDailyUpdateRunning && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-card p-8 rounded-lg border-2 border-accent max-w-md mx-4">
+            <div className="flex flex-col items-center gap-4">
+              <div className="animate-spin rounded-full h-16 w-16 border-4 border-accent border-t-transparent"></div>
+              <div className="text-center">
+                <h3 className="text-2xl font-semibold mb-2">Atualizando ofertas...</h3>
+                <p className="text-muted-foreground">
+                  Estamos atualizando os dados de todas as ofertas. Isso pode levar alguns minutos.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Loading inicial */}
       <Dialog open={isInitialLoading}>

@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      daily_update_status: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          failed_offers: number | null
+          id: string
+          is_running: boolean
+          processed_offers: number | null
+          started_at: string | null
+          total_offers: number | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          failed_offers?: number | null
+          id?: string
+          is_running?: boolean
+          processed_offers?: number | null
+          started_at?: string | null
+          total_offers?: number | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          failed_offers?: number | null
+          id?: string
+          is_running?: boolean
+          processed_offers?: number | null
+          started_at?: string | null
+          total_offers?: number | null
+        }
+        Relationships: []
+      }
       metrics: {
         Row: {
           conversion: number
