@@ -117,9 +117,15 @@ export const addMetric = async (
   productId: string,
   metric: Metric
 ): Promise<void> => {
-  await supabase.from("metrics").insert({
-    id: metric.id,
+  const { data: product } = await supabase
+    .from("products")
+    .select("name")
+    .eq("id", productId)
+    .single();
+
+  await supabase.from("metrics").insert([{
     product_id: productId,
+    product_name: product?.name || "",
     date: metric.date,
     structure: metric.structure,
     invested: metric.invested,
@@ -130,7 +136,7 @@ export const addMetric = async (
     conversion: metric.conversion,
     result: metric.result,
     roas: metric.roas,
-  });
+  }]);
 
   await supabase
     .from("products")
