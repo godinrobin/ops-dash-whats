@@ -136,10 +136,14 @@ const TrackOfertas = () => {
       }
 
       const webhookData = await response.json();
+      console.log("🔍 Resposta do Webhook:", webhookData);
+      
       // Webhook retorna array com objeto contendo NUMERO_DE_ADS
       const activeAdsCount = Array.isArray(webhookData) && webhookData.length > 0 
         ? parseInt(webhookData[0].NUMERO_DE_ADS || "0") 
         : 0;
+      
+      console.log("📊 Número de anúncios ativos:", activeAdsCount);
 
       // Inserir oferta no banco
       const { data: offerData, error: offerError } = await supabase
@@ -319,6 +323,9 @@ const TrackOfertas = () => {
           {/* Loading Dialog */}
           <Dialog open={isLoading}>
             <DialogContent className="sm:max-w-[400px] bg-card border-border text-center">
+              <DialogHeader>
+                <DialogTitle className="sr-only">Carregando</DialogTitle>
+              </DialogHeader>
               <div className="flex flex-col items-center gap-4 py-6">
                 <div className="animate-spin rounded-full h-16 w-16 border-4 border-accent border-t-transparent"></div>
                 <p className="text-lg font-medium text-foreground">{loadingMessage}</p>
@@ -397,23 +404,23 @@ const TrackOfertas = () => {
                   </CardHeader>
                   <CardContent>
                     {metrics.length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground">
+                       <div className="text-center py-8 text-muted-foreground">
                         Carregando dados da oferta...
                       </div>
                     ) : (
                       <>
-                        <div className="h-[300px] mb-6">
+                        <div className="h-[200px] mb-4">
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={metrics}>
                               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                               <XAxis 
                                 dataKey="date" 
                                 stroke="hsl(var(--muted-foreground))"
-                                tick={{ fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
                               />
                               <YAxis 
                                 stroke="hsl(var(--muted-foreground))"
-                                tick={{ fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
                               />
                               <Tooltip 
                                 contentStyle={{
@@ -426,53 +433,53 @@ const TrackOfertas = () => {
                                 type="monotone" 
                                 dataKey="active_ads_count" 
                                 stroke="hsl(var(--accent))" 
-                                strokeWidth={3}
-                                dot={{ fill: "hsl(var(--accent))", r: 5 }}
+                                strokeWidth={2}
+                                dot={{ fill: "hsl(var(--accent))", r: 3 }}
                                 name="Anúncios Ativos"
                               />
                             </LineChart>
                           </ResponsiveContainer>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <Card className="border-border bg-secondary/50">
-                            <CardHeader className="pb-3">
-                              <CardTitle className="text-sm font-medium text-muted-foreground">
+                            <CardHeader className="pb-2">
+                              <CardTitle className="text-xs font-medium text-muted-foreground">
                                 Variação vs. Dia Anterior
                               </CardTitle>
                             </CardHeader>
-                            <CardContent>
-                              <div className="flex items-center gap-3">
+                            <CardContent className="pb-3">
+                              <div className="flex items-center gap-2">
                                 {variation.type === "up" && (
                                   <>
-                                    <div className="rounded-full bg-positive/10 p-2">
-                                      <TrendingUp className="h-6 w-6 text-positive" />
+                                    <div className="rounded-full bg-positive/10 p-1.5">
+                                      <TrendingUp className="h-4 w-4 text-positive" />
                                     </div>
                                     <div>
-                                      <p className="text-2xl font-bold text-positive">+{variation.value}</p>
-                                      <p className="text-sm text-muted-foreground">Anúncios a mais</p>
+                                      <p className="text-lg font-bold text-positive">+{variation.value}</p>
+                                      <p className="text-xs text-muted-foreground">Anúncios a mais</p>
                                     </div>
                                   </>
                                 )}
                                 {variation.type === "down" && (
                                   <>
-                                    <div className="rounded-full bg-negative/10 p-2">
-                                      <TrendingDown className="h-6 w-6 text-negative" />
+                                    <div className="rounded-full bg-negative/10 p-1.5">
+                                      <TrendingDown className="h-4 w-4 text-negative" />
                                     </div>
                                     <div>
-                                      <p className="text-2xl font-bold text-negative">-{variation.value}</p>
-                                      <p className="text-sm text-muted-foreground">Anúncios a menos</p>
+                                      <p className="text-lg font-bold text-negative">-{variation.value}</p>
+                                      <p className="text-xs text-muted-foreground">Anúncios a menos</p>
                                     </div>
                                   </>
                                 )}
                                 {variation.type === "neutral" && (
                                   <>
-                                    <div className="rounded-full bg-muted/30 p-2">
-                                      <Minus className="h-6 w-6 text-muted-foreground" />
+                                    <div className="rounded-full bg-muted/30 p-1.5">
+                                      <Minus className="h-4 w-4 text-muted-foreground" />
                                     </div>
                                     <div>
-                                      <p className="text-2xl font-bold text-muted-foreground">0</p>
-                                      <p className="text-sm text-muted-foreground">Sem variação</p>
+                                      <p className="text-lg font-bold text-muted-foreground">0</p>
+                                      <p className="text-xs text-muted-foreground">Sem variação</p>
                                     </div>
                                   </>
                                 )}
@@ -481,19 +488,19 @@ const TrackOfertas = () => {
                           </Card>
 
                           <Card className="border-border bg-secondary/50">
-                            <CardHeader className="pb-3">
-                              <CardTitle className="text-sm font-medium text-muted-foreground">
+                            <CardHeader className="pb-2">
+                              <CardTitle className="text-xs font-medium text-muted-foreground">
                                 Total de Anúncios Ativos Hoje
                               </CardTitle>
                             </CardHeader>
-                            <CardContent>
-                              <div className="flex items-center gap-3">
-                                <div className="rounded-full bg-accent/10 p-2">
-                                  <TrendingUp className="h-6 w-6 text-accent" />
+                            <CardContent className="pb-3">
+                              <div className="flex items-center gap-2">
+                                <div className="rounded-full bg-accent/10 p-1.5">
+                                  <TrendingUp className="h-4 w-4 text-accent" />
                                 </div>
                                 <div>
-                                  <p className="text-2xl font-bold text-accent">{getCurrentCount()}</p>
-                                  <p className="text-sm text-muted-foreground">Anúncios no ar</p>
+                                  <p className="text-lg font-bold text-accent">{getCurrentCount()}</p>
+                                  <p className="text-xs text-muted-foreground">Anúncios no ar</p>
                                 </div>
                               </div>
                             </CardContent>
