@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, TrendingUp, TrendingDown, Minus, ExternalLink, Trash2 } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Minus, ExternalLink, Trash2, Edit, Maximize2, X } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 interface TrackedOffer {
@@ -31,8 +31,10 @@ const TrackOfertas = () => {
   const [allMetrics, setAllMetrics] = useState<Record<string, OfferMetric[]>>({});
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [loadingMessage, setLoadingMessage] = useState("");
   const [newOffer, setNewOffer] = useState({ name: "", ad_library_link: "" });
+  const [expandedOffer, setExpandedOffer] = useState<TrackedOffer | null>(null);
 
   const loadingMessages = [
     "🚀 Enviando informações para o Meta Ads...",
@@ -56,6 +58,7 @@ const TrackOfertas = () => {
   }, [offers]);
 
   const loadOffers = async () => {
+    setIsInitialLoading(true);
     const { data, error } = await supabase
       .from("tracked_offers")
       .select("*")
@@ -68,10 +71,12 @@ const TrackOfertas = () => {
         description: error.message,
         variant: "destructive",
       });
+      setIsInitialLoading(false);
       return;
     }
 
     setOffers(data || []);
+    setIsInitialLoading(false);
   };
 
   const loadAllMetrics = async () => {
@@ -131,14 +136,11 @@ const TrackOfertas = () => {
         throw new Error("Erro ao consultar webhook");
       }
 
-      const webhookData = await response.json();
+      // Webhook retorna apenas o número como texto puro
+      const webhookData = await response.text();
       console.log("🔍 Resposta do Webhook:", webhookData);
       
-      // Webhook retorna array com objeto contendo NUMERO_DE_ADS
-      const activeAdsCount = Array.isArray(webhookData) && webhookData.length > 0 
-        ? parseInt(webhookData[0].NUMERO_DE_ADS || "0") 
-        : 0;
-      
+      const activeAdsCount = parseInt(webhookData) || 0;
       console.log("📊 Número de anúncios ativos:", activeAdsCount);
 
       // Inserir oferta no banco
@@ -228,6 +230,20 @@ const TrackOfertas = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
+      
+      {/* Loading inicial */}
+      <Dialog open={isInitialLoading}>
+        <DialogContent className="sm:max-w-[400px] bg-card border-border text-center">
+          <DialogHeader>
+            <DialogTitle className="sr-only">Carregando ofertas</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-4 py-6">
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-accent border-t-transparent"></div>
+            <p className="text-lg font-medium text-foreground">Carregando ofertas...</p>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <main className="container mx-auto px-4 pt-20 pb-8">
         <div className="mb-8 flex items-center justify-between">
           <div>
@@ -345,29 +361,6 @@ const TrackOfertas = () => {
           </Card>
         ) : (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-              {offers.map((offer) => (
-                <Button
-                  key={offer.id}
-                  variant={selectedOffer?.id === offer.id ? "default" : "outline"}
-                  onClick={() => setSelectedOffer(offer)}
-                  className={`h-auto py-3 px-4 flex items-center justify-between group ${
-                    selectedOffer?.id === offer.id ? "bg-accent hover:bg-accent/90" : ""
-                  }`}
-                >
-                  <span className="truncate text-sm">{offer.name}</span>
-                  <Trash2 
-                    className="h-4 w-4 text-destructive ml-2 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (confirm(`Deseja realmente excluir a oferta "${offer.name}"?`)) {
-                        handleDeleteOffer(offer.id);
-                      }
-                    }}
-                  />
-                </Button>
-              ))}
-            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
               {offers.map((offer) => {
@@ -375,9 +368,33 @@ const TrackOfertas = () => {
                 const variation = getVariation(metrics);
                 
                 return (
-                  <Card key={offer.id} className="border-border bg-card/50 backdrop-blur">
+                  <Card key={offer.id} className="border-border bg-card/50 backdrop-blur relative group">
                       <CardHeader className="pb-2 px-3 pt-3">
-                        <CardTitle className="text-sm font-semibold truncate">{offer.name}</CardTitle>
+                        <div className="flex items-start justify-between gap-2">
+                          <CardTitle className="text-sm font-semibold truncate flex-1">{offer.name}</CardTitle>
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 hover:bg-accent/20"
+                              onClick={() => setExpandedOffer(offer)}
+                            >
+                              <Maximize2 className="h-3 w-3 text-accent" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 hover:bg-destructive/20"
+                              onClick={() => {
+                                if (confirm(`Deseja realmente excluir a oferta "${offer.name}"?`)) {
+                                  handleDeleteOffer(offer.id);
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-3 w-3 text-destructive" />
+                            </Button>
+                          </div>
+                        </div>
                         <CardDescription className="flex items-center gap-1 text-xs">
                           <ExternalLink className="h-3 w-3 flex-shrink-0" />
                           <a 
@@ -494,6 +511,142 @@ const TrackOfertas = () => {
           </div>
         )}
       </main>
+
+      {/* Popup expandido */}
+      <Dialog open={!!expandedOffer} onOpenChange={() => setExpandedOffer(null)}>
+        <DialogContent className="sm:max-w-[90vw] md:max-w-[800px] bg-card border-2 border-accent">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="text-2xl">{expandedOffer?.name}</DialogTitle>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-accent hover:bg-accent/20"
+                onClick={() => setExpandedOffer(null)}
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <DialogDescription className="flex items-center gap-2 mt-2">
+              <ExternalLink className="h-4 w-4" />
+              <a 
+                href={expandedOffer?.ad_library_link} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="hover:text-accent transition-colors"
+              >
+                Ver biblioteca de anúncios
+              </a>
+            </DialogDescription>
+          </DialogHeader>
+          
+          {expandedOffer && allMetrics[expandedOffer.id] && (
+            <div className="space-y-6 py-4">
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={allMetrics[expandedOffer.id]}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis 
+                      dataKey="date" 
+                      stroke="hsl(var(--muted-foreground))"
+                      tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
+                    />
+                    <YAxis 
+                      stroke="hsl(var(--muted-foreground))"
+                      tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
+                    />
+                    <Tooltip 
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "8px",
+                      }}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="active_ads_count" 
+                      stroke="hsl(var(--accent))" 
+                      strokeWidth={3}
+                      dot={{ fill: "hsl(var(--accent))", r: 4 }}
+                      name="Anúncios Ativos"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card className="border-border bg-secondary/50">
+                  <CardHeader>
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      Variação vs. Dia Anterior
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {(() => {
+                      const variation = getVariation(allMetrics[expandedOffer.id] || []);
+                      return (
+                        <div className="flex items-center gap-3">
+                          {variation.type === "up" && (
+                            <>
+                              <div className="rounded-full bg-positive/10 p-3">
+                                <TrendingUp className="h-6 w-6 text-positive" />
+                              </div>
+                              <div>
+                                <p className="text-2xl font-bold text-positive">+{variation.value}</p>
+                                <p className="text-sm text-muted-foreground">Anúncios a mais</p>
+                              </div>
+                            </>
+                          )}
+                          {variation.type === "down" && (
+                            <>
+                              <div className="rounded-full bg-destructive/10 p-3">
+                                <TrendingDown className="h-6 w-6 text-destructive" />
+                              </div>
+                              <div>
+                                <p className="text-2xl font-bold text-destructive">-{variation.value}</p>
+                                <p className="text-sm text-muted-foreground">Anúncios a menos</p>
+                              </div>
+                            </>
+                          )}
+                          {variation.type === "neutral" && (
+                            <>
+                              <div className="rounded-full bg-muted/50 p-3">
+                                <Minus className="h-6 w-6 text-muted-foreground" />
+                              </div>
+                              <div>
+                                <p className="text-2xl font-bold text-muted-foreground">0</p>
+                                <p className="text-sm text-muted-foreground">Sem variação</p>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </CardContent>
+                </Card>
+
+                <Card className="border-border bg-secondary/50">
+                  <CardHeader>
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      Total de Anúncios Ativos Hoje
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-full bg-accent/10 p-3">
+                        <span className="text-2xl">📊</span>
+                      </div>
+                      <p className="text-3xl font-bold text-foreground">
+                        {getCurrentCount(allMetrics[expandedOffer.id] || [])}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
