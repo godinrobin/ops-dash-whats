@@ -28,7 +28,7 @@ const TrackOfertas = () => {
   const { toast } = useToast();
   const [offers, setOffers] = useState<TrackedOffer[]>([]);
   const [selectedOffer, setSelectedOffer] = useState<TrackedOffer | null>(null);
-  const [metrics, setMetrics] = useState<OfferMetric[]>([]);
+  const [allMetrics, setAllMetrics] = useState<Record<string, OfferMetric[]>>({});
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
@@ -50,10 +50,10 @@ const TrackOfertas = () => {
   }, [user]);
 
   useEffect(() => {
-    if (selectedOffer) {
-      loadMetrics(selectedOffer.id);
+    if (offers.length > 0) {
+      loadAllMetrics();
     }
-  }, [selectedOffer]);
+  }, [offers]);
 
   const loadOffers = async () => {
     const { data, error } = await supabase
@@ -72,28 +72,24 @@ const TrackOfertas = () => {
     }
 
     setOffers(data || []);
-    if (data && data.length > 0 && !selectedOffer) {
-      setSelectedOffer(data[0]);
-    }
   };
 
-  const loadMetrics = async (offerId: string) => {
-    const { data, error } = await supabase
-      .from("offer_metrics")
-      .select("*")
-      .eq("offer_id", offerId)
-      .order("date", { ascending: true });
+  const loadAllMetrics = async () => {
+    const metricsData: Record<string, OfferMetric[]> = {};
+    
+    for (const offer of offers) {
+      const { data, error } = await supabase
+        .from("offer_metrics")
+        .select("*")
+        .eq("offer_id", offer.id)
+        .order("date", { ascending: true });
 
-    if (error) {
-      toast({
-        title: "Erro ao carregar métricas",
-        description: error.message,
-        variant: "destructive",
-      });
-      return;
+      if (!error && data) {
+        metricsData[offer.id] = data;
+      }
     }
-
-    setMetrics(data || []);
+    
+    setAllMetrics(metricsData);
   };
 
   const handleAddOffer = async () => {
@@ -210,31 +206,24 @@ const TrackOfertas = () => {
       description: "A oferta foi removida com sucesso.",
     });
 
-    if (selectedOffer?.id === offerId) {
-      setSelectedOffer(null);
-      setMetrics([]);
-    }
-
     loadOffers();
   };
 
-  const getCurrentCount = () => {
+  const getCurrentCount = (metrics: OfferMetric[]) => {
     if (metrics.length === 0) return 0;
     return metrics[metrics.length - 1].active_ads_count;
   };
 
-  const getVariation = () => {
-    if (metrics.length < 2) return { type: "neutral", value: 0 };
+  const getVariation = (metrics: OfferMetric[]) => {
+    if (metrics.length < 2) return { type: "neutral" as const, value: 0 };
     const current = metrics[metrics.length - 1].active_ads_count;
     const previous = metrics[metrics.length - 2].active_ads_count;
     const diff = current - previous;
     
-    if (diff > 0) return { type: "up", value: diff };
-    if (diff < 0) return { type: "down", value: Math.abs(diff) };
-    return { type: "neutral", value: 0 };
+    if (diff > 0) return { type: "up" as const, value: diff };
+    if (diff < 0) return { type: "down" as const, value: Math.abs(diff) };
+    return { type: "neutral" as const, value: 0 };
   };
-
-  const variation = getVariation();
 
   return (
     <div className="min-h-screen bg-background">
@@ -355,78 +344,75 @@ const TrackOfertas = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-6">
-            <div className="flex gap-2 flex-wrap">
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {offers.map((offer) => (
-                <div key={offer.id} className="relative group">
-                  <Button
-                    variant={selectedOffer?.id === offer.id ? "default" : "outline"}
-                    onClick={() => setSelectedOffer(offer)}
-                    className={selectedOffer?.id === offer.id ? "bg-accent hover:bg-accent/90 pr-10" : "pr-10"}
-                  >
-                    {offer.name}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full px-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                <Button
+                  key={offer.id}
+                  variant={selectedOffer?.id === offer.id ? "default" : "outline"}
+                  onClick={() => setSelectedOffer(offer)}
+                  className={`h-auto py-3 px-4 flex items-center justify-between group ${
+                    selectedOffer?.id === offer.id ? "bg-accent hover:bg-accent/90" : ""
+                  }`}
+                >
+                  <span className="truncate text-sm">{offer.name}</span>
+                  <Trash2 
+                    className="h-4 w-4 text-destructive ml-2 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" 
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDeleteOffer(offer.id);
+                      if (confirm(`Deseja realmente excluir a oferta "${offer.name}"?`)) {
+                        handleDeleteOffer(offer.id);
+                      }
                     }}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </div>
+                  />
+                </Button>
               ))}
             </div>
 
-            {selectedOffer && (
-              <>
-                <Card className="border-border bg-card/50 backdrop-blur">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="text-2xl">{selectedOffer.name}</CardTitle>
-                        <CardDescription className="flex items-center gap-2 mt-2">
-                          <ExternalLink className="h-4 w-4" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+              {offers.map((offer) => {
+                const metrics = allMetrics[offer.id] || [];
+                const variation = getVariation(metrics);
+                
+                return (
+                  <Card key={offer.id} className="border-border bg-card/50 backdrop-blur">
+                      <CardHeader className="pb-2 px-3 pt-3">
+                        <CardTitle className="text-sm font-semibold truncate">{offer.name}</CardTitle>
+                        <CardDescription className="flex items-center gap-1 text-xs">
+                          <ExternalLink className="h-3 w-3 flex-shrink-0" />
                           <a 
-                            href={selectedOffer.ad_library_link} 
+                            href={offer.ad_library_link} 
                             target="_blank" 
                             rel="noopener noreferrer"
-                            className="hover:text-accent transition-colors"
+                            className="hover:text-accent transition-colors truncate"
                           >
-                            Ver biblioteca de anúncios
+                            Ver anúncios
                           </a>
                         </CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {metrics.length === 0 ? (
-                       <div className="text-center py-8 text-muted-foreground">
-                        Carregando dados da oferta...
-                      </div>
-                    ) : (
-                      <>
-                        <div className="h-[200px] mb-4">
+                      </CardHeader>
+                      <CardContent className="px-3 pb-3">
+                        <div className="h-[120px] mb-2">
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={metrics}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
                               <XAxis 
                                 dataKey="date" 
                                 stroke="hsl(var(--muted-foreground))"
-                                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
+                                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 9 }}
+                                height={20}
                               />
                               <YAxis 
                                 stroke="hsl(var(--muted-foreground))"
-                                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
+                                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 9 }}
+                                width={25}
                               />
                               <Tooltip 
                                 contentStyle={{
                                   backgroundColor: "hsl(var(--card))",
                                   border: "1px solid hsl(var(--border))",
-                                  borderRadius: "8px",
+                                  borderRadius: "6px",
+                                  fontSize: "11px",
+                                  padding: "4px 8px",
                                 }}
                               />
                               <Line 
@@ -434,52 +420,49 @@ const TrackOfertas = () => {
                                 dataKey="active_ads_count" 
                                 stroke="hsl(var(--accent))" 
                                 strokeWidth={2}
-                                dot={{ fill: "hsl(var(--accent))", r: 3 }}
-                                name="Anúncios Ativos"
+                                dot={{ fill: "hsl(var(--accent))", r: 2 }}
+                                name="Anúncios"
                               />
                             </LineChart>
                           </ResponsiveContainer>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-2 gap-2">
                           <Card className="border-border bg-secondary/50">
-                            <CardHeader className="pb-2">
-                              <CardTitle className="text-xs font-medium text-muted-foreground">
-                                Variação vs. Dia Anterior
+                            <CardHeader className="pb-1 px-2 pt-2">
+                              <CardTitle className="text-[10px] font-medium text-muted-foreground">
+                                Variação
                               </CardTitle>
                             </CardHeader>
-                            <CardContent className="pb-3">
-                              <div className="flex items-center gap-2">
+                            <CardContent className="pb-2 px-2">
+                              <div className="flex items-center gap-1">
                                 {variation.type === "up" && (
                                   <>
-                                    <div className="rounded-full bg-positive/10 p-1.5">
-                                      <TrendingUp className="h-4 w-4 text-positive" />
+                                    <div className="rounded-full bg-positive/10 p-1">
+                                      <TrendingUp className="h-3 w-3 text-positive" />
                                     </div>
                                     <div>
-                                      <p className="text-lg font-bold text-positive">+{variation.value}</p>
-                                      <p className="text-xs text-muted-foreground">Anúncios a mais</p>
+                                      <p className="text-sm font-bold text-positive">+{variation.value}</p>
                                     </div>
                                   </>
                                 )}
                                 {variation.type === "down" && (
                                   <>
-                                    <div className="rounded-full bg-negative/10 p-1.5">
-                                      <TrendingDown className="h-4 w-4 text-negative" />
+                                    <div className="rounded-full bg-destructive/10 p-1">
+                                      <TrendingDown className="h-3 w-3 text-destructive" />
                                     </div>
                                     <div>
-                                      <p className="text-lg font-bold text-negative">-{variation.value}</p>
-                                      <p className="text-xs text-muted-foreground">Anúncios a menos</p>
+                                      <p className="text-sm font-bold text-destructive">-{variation.value}</p>
                                     </div>
                                   </>
                                 )}
                                 {variation.type === "neutral" && (
                                   <>
-                                    <div className="rounded-full bg-muted/30 p-1.5">
-                                      <Minus className="h-4 w-4 text-muted-foreground" />
+                                    <div className="rounded-full bg-muted/50 p-1">
+                                      <Minus className="h-3 w-3 text-muted-foreground" />
                                     </div>
                                     <div>
-                                      <p className="text-lg font-bold text-muted-foreground">0</p>
-                                      <p className="text-xs text-muted-foreground">Sem variação</p>
+                                      <p className="text-sm font-bold text-muted-foreground">0</p>
                                     </div>
                                   </>
                                 )}
@@ -488,30 +471,26 @@ const TrackOfertas = () => {
                           </Card>
 
                           <Card className="border-border bg-secondary/50">
-                            <CardHeader className="pb-2">
-                              <CardTitle className="text-xs font-medium text-muted-foreground">
-                                Total de Anúncios Ativos Hoje
+                            <CardHeader className="pb-1 px-2 pt-2">
+                              <CardTitle className="text-[10px] font-medium text-muted-foreground">
+                                Total Hoje
                               </CardTitle>
                             </CardHeader>
-                            <CardContent className="pb-3">
-                              <div className="flex items-center gap-2">
-                                <div className="rounded-full bg-accent/10 p-1.5">
-                                  <TrendingUp className="h-4 w-4 text-accent" />
+                            <CardContent className="pb-2 px-2">
+                              <div className="flex items-center gap-1">
+                                <div className="rounded-full bg-accent/10 p-1">
+                                  <span className="text-[10px] font-bold text-accent">📊</span>
                                 </div>
-                                <div>
-                                  <p className="text-lg font-bold text-accent">{getCurrentCount()}</p>
-                                  <p className="text-xs text-muted-foreground">Anúncios no ar</p>
-                                </div>
+                                <p className="text-sm font-bold text-foreground">{getCurrentCount(metrics)}</p>
                               </div>
                             </CardContent>
                           </Card>
                         </div>
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
-              </>
-            )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
           </div>
         )}
       </main>

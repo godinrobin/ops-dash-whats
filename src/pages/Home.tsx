@@ -108,9 +108,9 @@ const Home = () => {
             >
               <CarouselContent>
                 {videos.map((video, index) => (
-                  <CarouselItem key={index} className="md:basis-1/2 lg:basis-1/3">
+                <CarouselItem key={index} className="md:basis-1/2 lg:basis-1/3">
                     <div className="p-1 h-full">
-                      <Card className="h-full flex flex-col">
+                      <Card className="h-full flex flex-col bg-black border-2 border-accent">
                         <CardContent className="p-4 flex flex-col h-full">
                           <div className="aspect-video mb-3 flex-shrink-0">
                             <iframe
