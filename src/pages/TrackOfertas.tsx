@@ -31,7 +31,17 @@ const TrackOfertas = () => {
   const [metrics, setMetrics] = useState<OfferMetric[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("");
   const [newOffer, setNewOffer] = useState({ name: "", ad_library_link: "" });
+
+  const loadingMessages = [
+    "🚀 Enviando informações para o Meta Ads...",
+    "🕵️ Seu concorrente não vai gostar disso...",
+    "📊 Analisando biblioteca de anúncios...",
+    "⚡ Está quase lá...",
+    "🎯 Coletando dados de performance...",
+    "🔥 Descobrindo os segredos da concorrência..."
+  ];
 
   useEffect(() => {
     if (user) {
@@ -107,6 +117,14 @@ const TrackOfertas = () => {
 
     setIsLoading(true);
 
+    // Mostrar mensagens de loading com intervalo
+    let messageIndex = 0;
+    setLoadingMessage(loadingMessages[0]);
+    const messageInterval = setInterval(() => {
+      messageIndex = (messageIndex + 1) % loadingMessages.length;
+      setLoadingMessage(loadingMessages[messageIndex]);
+    }, 2000);
+
     try {
       // Fazer GET para o webhook
       const response = await fetch(`https://n8n.chatwp.xyz/webhook-test/recebe-link?link=${encodeURIComponent(newOffer.ad_library_link)}`, {
@@ -118,7 +136,10 @@ const TrackOfertas = () => {
       }
 
       const webhookData = await response.json();
-      const activeAdsCount = webhookData.active_ads_count || 0;
+      // Webhook retorna array com objeto contendo NUMERO_DE_ADS
+      const activeAdsCount = Array.isArray(webhookData) && webhookData.length > 0 
+        ? parseInt(webhookData[0].NUMERO_DE_ADS || "0") 
+        : 0;
 
       // Inserir oferta no banco
       const { data: offerData, error: offerError } = await supabase
@@ -160,6 +181,7 @@ const TrackOfertas = () => {
         variant: "destructive",
       });
     } finally {
+      clearInterval(messageInterval);
       setIsLoading(false);
     }
   };
@@ -290,6 +312,16 @@ const TrackOfertas = () => {
                 >
                   {isLoading ? "Cadastrando..." : "Cadastrar Oferta"}
                 </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Loading Dialog */}
+          <Dialog open={isLoading}>
+            <DialogContent className="sm:max-w-[400px] bg-card border-border text-center">
+              <div className="flex flex-col items-center gap-4 py-6">
+                <div className="animate-spin rounded-full h-16 w-16 border-4 border-accent border-t-transparent"></div>
+                <p className="text-lg font-medium text-foreground">{loadingMessage}</p>
               </div>
             </DialogContent>
           </Dialog>

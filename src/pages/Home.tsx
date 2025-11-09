@@ -2,7 +2,6 @@ import { useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart3, ListOrdered } from "lucide-react";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import Autoplay from "embla-carousel-autoplay";
 
@@ -35,12 +34,12 @@ const Home = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Card 
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2"
+              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
               onClick={() => navigate("/metricas")}
             >
               <CardHeader className="text-center">
                 <div className="flex justify-center mb-4">
-                  <BarChart3 className="w-16 h-16 text-primary" />
+                  <span className="text-6xl">📊</span>
                 </div>
                 <CardTitle className="text-2xl">Sistema de Métricas</CardTitle>
                 <CardDescription className="text-base">
@@ -55,12 +54,12 @@ const Home = () => {
             </Card>
 
             <Card 
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2"
+              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
               onClick={() => navigate("/organizador-numeros")}
             >
               <CardHeader className="text-center">
                 <div className="flex justify-center mb-4">
-                  <ListOrdered className="w-16 h-16 text-primary" />
+                  <span className="text-6xl">📱</span>
                 </div>
                 <CardTitle className="text-2xl">Organizador de Números</CardTitle>
                 <CardDescription className="text-base">
@@ -75,7 +74,7 @@ const Home = () => {
             </Card>
 
             <Card 
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent/50"
+              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
               onClick={() => navigate("/track-ofertas")}
             >
               <CardHeader className="text-center">
@@ -86,7 +85,7 @@ const Home = () => {
                   Track Ofertas
                 </CardTitle>
                 <CardDescription className="text-base">
-                  Acompanhe a performance dos anúncios das suas ofertas
+                  Acompanhe a performance dos anúncios de seus concorrentes
                 </CardDescription>
               </CardHeader>
               <CardContent className="text-center">
