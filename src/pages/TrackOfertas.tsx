@@ -516,17 +516,7 @@ const TrackOfertas = () => {
       <Dialog open={!!expandedOffer} onOpenChange={() => setExpandedOffer(null)}>
         <DialogContent className="sm:max-w-[90vw] md:max-w-[800px] bg-card border-2 border-accent">
           <DialogHeader>
-            <div className="flex items-center justify-between">
-              <DialogTitle className="text-2xl">{expandedOffer?.name}</DialogTitle>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-accent hover:bg-accent/20"
-                onClick={() => setExpandedOffer(null)}
-              >
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
+            <DialogTitle className="text-2xl">{expandedOffer?.name}</DialogTitle>
             <DialogDescription className="flex items-center gap-2 mt-2">
               <ExternalLink className="h-4 w-4" />
               <a 
