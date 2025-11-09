@@ -49,6 +49,11 @@ export default {
         },
         positive: "hsl(var(--positive))",
         negative: "hsl(var(--negative))",
+        orange: {
+          400: "hsl(25 95% 53%)",
+          500: "hsl(25 95% 48%)",
+          600: "hsl(25 95% 43%)",
+        },
       },
       boxShadow: {
         soft: "var(--shadow-soft)",

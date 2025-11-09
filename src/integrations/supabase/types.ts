@@ -73,6 +73,38 @@ export type Database = {
           },
         ]
       }
+      offer_metrics: {
+        Row: {
+          active_ads_count: number
+          created_at: string
+          date: string
+          id: string
+          offer_id: string
+        }
+        Insert: {
+          active_ads_count: number
+          created_at?: string
+          date: string
+          id?: string
+          offer_id: string
+        }
+        Update: {
+          active_ads_count?: number
+          created_at?: string
+          date?: string
+          id?: string
+          offer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "offer_metrics_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "tracked_offers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organized_numbers: {
         Row: {
           celular: string
@@ -145,6 +177,30 @@ export type Database = {
           created_at?: string
           id?: string
           username?: string
+        }
+        Relationships: []
+      }
+      tracked_offers: {
+        Row: {
+          ad_library_link: string
+          created_at: string
+          id: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          ad_library_link: string
+          created_at?: string
+          id?: string
+          name: string
+          user_id: string
+        }
+        Update: {
+          ad_library_link?: string
+          created_at?: string
+          id?: string
+          name?: string
+          user_id?: string
         }
         Relationships: []
       }

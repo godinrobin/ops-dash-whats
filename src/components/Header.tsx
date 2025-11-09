@@ -24,7 +24,7 @@ export const Header = () => {
               <ArrowLeft className="h-5 w-5" />
             </Button>
           )}
-          <h1 className="text-xl font-bold">Sistema de Métricas</h1>
+          <h1 className="text-xl font-bold bg-gradient-to-r from-accent to-orange-400 bg-clip-text text-transparent">Zapdata</h1>
         </div>
         <Button
           variant="outline"

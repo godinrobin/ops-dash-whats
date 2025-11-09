@@ -25,7 +25,7 @@ const Home = () => {
       <Header />
       <div className="h-14 md:h-16" />
       <div className="min-h-screen bg-background p-6 md:p-10">
-        <div className="container mx-auto max-w-4xl">
+        <div className="container mx-auto max-w-6xl">
           <header className="text-center mb-12">
             <h1 className="text-4xl md:text-5xl font-bold mb-4">🎯 Bem-vindo!</h1>
             <p className="text-muted-foreground text-lg">
@@ -33,7 +33,7 @@ const Home = () => {
             </p>
           </header>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Card 
               className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2"
               onClick={() => navigate("/metricas")}
@@ -70,6 +70,28 @@ const Home = () => {
               <CardContent className="text-center">
                 <p className="text-sm text-muted-foreground">
                   Mantenha controle de números, status e operações
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card 
+              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent/50"
+              onClick={() => navigate("/track-ofertas")}
+            >
+              <CardHeader className="text-center">
+                <div className="flex justify-center mb-4">
+                  <span className="text-6xl">🎯</span>
+                </div>
+                <CardTitle className="text-2xl bg-gradient-to-r from-accent to-orange-400 bg-clip-text text-transparent">
+                  Track Ofertas
+                </CardTitle>
+                <CardDescription className="text-base">
+                  Acompanhe a performance dos anúncios das suas ofertas
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="text-center">
+                <p className="text-sm text-muted-foreground">
+                  Monitore anúncios ativos e tendências diariamente
                 </p>
               </CardContent>
             </Card>
