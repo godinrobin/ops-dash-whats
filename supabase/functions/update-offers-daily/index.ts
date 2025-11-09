@@ -11,6 +11,16 @@ interface TrackedOffer {
   user_id: string;
 }
 
+const logSafe = (level: 'info' | 'error', message: string, metadata?: any) => {
+  const sanitized = {
+    ...metadata,
+    offerId: metadata?.offerId ? `***${metadata.offerId.slice(-4)}` : undefined,
+    userId: undefined,
+    webhookResponse: metadata?.webhookResponse ? '[REDACTED]' : undefined,
+  };
+  console[level](message, sanitized);
+};
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
