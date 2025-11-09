@@ -51,7 +51,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         return { error: { message: "Nome de usuário já existe" } };
       }
 
-      const email = `${username}@metricas.local`;
+      const email = `${username.toLowerCase().trim()}@metricas.local`;
       const redirectUrl = `${window.location.origin}/`;
 
       const { data, error } = await supabase.auth.signUp({
@@ -59,13 +59,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         password,
         options: {
           data: {
-            username,
+            username: username.toLowerCase().trim(),
           },
           emailRedirectTo: redirectUrl,
         },
       });
 
       if (error) {
+        if (error.message?.includes('leaked') || error.message?.includes('compromised')) {
+          return {
+            error: {
+              message: 'Esta senha foi encontrada em vazamentos de dados. Por favor, escolha uma senha diferente e única.'
+            }
+          };
+        }
         return { error };
       }
 
@@ -77,7 +84,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signIn = async (username: string, password: string) => {
     try {
-      const email = `${username}@metricas.local`;
+      const email = `${username.toLowerCase().trim()}@metricas.local`;
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,

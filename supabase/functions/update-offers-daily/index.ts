@@ -16,6 +16,15 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const authHeader = req.headers.get('authorization');
+  if (!authHeader) {
+    logSafe('error', 'Unauthorized access attempt', { code: 'AUTH_001' });
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
   try {
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -134,7 +143,7 @@ Deno.serve(async (req) => {
           `Successfully updated offer ${offer.id} with ${activeAdsCount} ads`
         );
       } catch (error) {
-        console.error(`Failed to process offer ${offer.id}:`, error);
+        logSafe('error', 'Failed to process offer', { code: 'PROCESS_001', offerId: offer.id });
         failedCount++;
       }
 
@@ -176,10 +185,10 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('Error in daily update:', error);
+    logSafe('error', 'Critical error in daily update', { code: 'CRITICAL_001' });
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),
-      {
+      { 
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
