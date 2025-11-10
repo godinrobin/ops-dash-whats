@@ -100,14 +100,12 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Calculate delay between requests (distribute over 1 hour)
-    const delayMs = (60 * 60 * 1000) / totalOffers; // 1 hour in ms divided by number of offers
     const today = new Date().toISOString().split('T')[0];
 
     let processedCount = 0;
     let failedCount = 0;
 
-    // Process each offer with delay
+    // Process all offers without delay
     for (const offer of offers as TrackedOffer[]) {
       try {
         console.log(`Processing offer ${offer.id}...`);
@@ -165,11 +163,6 @@ Deno.serve(async (req) => {
           failed_offers: failedCount,
         })
         .eq('id', statusId);
-
-      // Wait before processing next offer (except for the last one)
-      if (processedCount + failedCount < totalOffers) {
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      }
     }
 
     // Mark update as completed
