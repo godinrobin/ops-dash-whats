@@ -280,7 +280,7 @@ const TrackOfertas = () => {
             </p>
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-orange-400/30 bg-orange-400/5">
               <span className="text-sm text-muted-foreground">
-                ℹ️ Os resultados dos anúncios são atualizados diariamente até às 08:00
+                ℹ️ Os resultados dos anúncios são atualizados diariamente às 08:00
               </span>
             </div>
           </div>
