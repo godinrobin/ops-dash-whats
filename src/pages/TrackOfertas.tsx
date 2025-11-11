@@ -165,59 +165,21 @@ const TrackOfertas = () => {
 
     setIsLoading(true);
 
-    // Mostrar mensagens de loading com intervalo
-    let messageIndex = 0;
-    setLoadingMessage(loadingMessages[0]);
-    const messageInterval = setInterval(() => {
-      messageIndex = (messageIndex + 1) % loadingMessages.length;
-      setLoadingMessage(loadingMessages[messageIndex]);
-    }, 2000);
-
     try {
-      // Fazer GET para o webhook
-      const response = await fetch(`https://webhook.chatwp.xyz/webhook/recebe-link?link=${encodeURIComponent(newOffer.ad_library_link)}`, {
-        method: "GET",
-      });
-
-      if (!response.ok) {
-        throw new Error("Erro ao consultar webhook");
-      }
-
-      // Webhook retorna apenas o número como texto puro
-      const webhookData = await response.text();
-      console.log("🔍 Resposta do Webhook:", webhookData);
-      
-      const activeAdsCount = parseInt(webhookData.trim()) || 0;
-      console.log("📊 Número de anúncios ativos:", activeAdsCount);
-
-      // Inserir oferta no banco
-      const { data: offerData, error: offerError } = await supabase
+      // Inserir oferta no banco (sem buscar métricas)
+      const { error: offerError } = await supabase
         .from("tracked_offers")
         .insert([{
           user_id: user?.id,
           name: newOffer.name,
           ad_library_link: newOffer.ad_library_link,
-        }])
-        .select()
-        .single();
+        }]);
 
       if (offerError) throw offerError;
 
-      // Inserir métrica inicial
-      const today = new Date().toISOString().split("T")[0];
-      const { error: metricError } = await supabase
-        .from("offer_metrics")
-        .insert([{
-          offer_id: offerData.id,
-          date: today,
-          active_ads_count: activeAdsCount,
-        }]);
-
-      if (metricError) throw metricError;
-
       toast({
         title: "Oferta cadastrada!",
-        description: `${activeAdsCount} anúncios ativos encontrados.`,
+        description: "Os dados dos anúncios serão atualizados até às 08:00.",
       });
 
       setNewOffer({ name: "", ad_library_link: "" });
@@ -230,7 +192,6 @@ const TrackOfertas = () => {
         variant: "destructive",
       });
     } finally {
-      clearInterval(messageInterval);
       setIsLoading(false);
     }
   };
@@ -310,13 +271,18 @@ const TrackOfertas = () => {
 
       <main className="container mx-auto px-4 pt-20 pb-8">
         <div className="mb-8 flex items-center justify-between">
-          <div>
+          <div className="flex-1">
             <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-accent to-orange-400 bg-clip-text text-transparent">
               Track Ofertas
             </h2>
-            <p className="text-muted-foreground">
+            <p className="text-muted-foreground mb-3">
               Acompanhe a performance dos anúncios ativos das suas ofertas
             </p>
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-orange-400/30 bg-orange-400/5">
+              <span className="text-sm text-muted-foreground">
+                ℹ️ Os resultados dos anúncios são atualizados diariamente até às 08:00
+              </span>
+            </div>
           </div>
           
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
