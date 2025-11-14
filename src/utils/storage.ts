@@ -4,8 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 export const getProducts = async (): Promise<Product[]> => {
   const { data, error } = await supabase
     .from("products")
-    .select("*, metrics(*)")
-    .order("created_at", { ascending: false });
+    .select("*, metrics!metrics_product_id_fkey(*)")
+    .order("created_at", { ascending: false })
+    .order("created_at", { referencedTable: "metrics", ascending: false });
 
   if (error) {
     return [];
@@ -85,8 +86,9 @@ export const getProduct = async (
 ): Promise<Product | undefined> => {
   const { data, error } = await supabase
     .from("products")
-    .select("*, metrics(*)")
+    .select("*, metrics!metrics_product_id_fkey(*)")
     .eq("id", productId)
+    .order("created_at", { referencedTable: "metrics", ascending: false })
     .single();
 
   if (error) {
