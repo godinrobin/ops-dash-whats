@@ -74,6 +74,8 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
                 src={conversation.contactPhoto}
                 alt={conversation.contactName}
                 className="w-10 h-10 rounded-full"
+                crossOrigin="anonymous"
+                referrerPolicy="no-referrer"
               />
               <div className="flex-1">
                 <p className="font-semibold text-[17px] leading-tight tracking-tight" style={{ 

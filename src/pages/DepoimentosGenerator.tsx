@@ -120,6 +120,10 @@ const DepoimentosGenerator = () => {
         backgroundColor: null,
         scale: 2,
         logging: false,
+        useCORS: true,
+        allowTaint: false,
+        imageTimeout: 0,
+        foreignObjectRendering: true,
       });
 
       const link = document.createElement('a');

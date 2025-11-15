@@ -22,7 +22,7 @@ export const WhatsAppMessage = ({ message, theme }: WhatsAppMessageProps) => {
       <div
         className={`relative max-w-[85%] rounded-[8px] shadow-sm ${
           isSent ? "rounded-br-[3px]" : "rounded-bl-[3px]"
-        } ${message.mediaType ? "" : "px-[7px] py-[6px]"}`}
+        } ${message.mediaType ? "" : "px-[7px] pt-[6px]"} pb-[18px] ${isSent ? "pr-[26px]" : "pr-[10px]"}`}
         style={{ backgroundColor: isSent ? bgSent : bgReceived }}
       >
         {message.replyTo && (
@@ -79,14 +79,14 @@ export const WhatsAppMessage = ({ message, theme }: WhatsAppMessageProps) => {
 
         {(message.text || message.caption) && (
           <p 
-            className={`text-[14.2px] break-words whitespace-pre-wrap leading-[19.1px] ${message.mediaType ? "px-2 pb-1 pt-2" : ""}`}
+            className={`text-[14.2px] break-words whitespace-pre-wrap leading-[19.1px] text-left ${message.mediaType ? "px-2 pb-1 pt-2" : ""}`}
             style={{ color: textColor, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
           >
             {message.caption || message.text}
           </p>
         )}
 
-        <div className={`flex items-center justify-end gap-1 mt-1 ${message.mediaType ? "px-2 pb-1" : ""} ${isSent ? 'ml-10' : ''}`}>
+        <div className={`absolute bottom-[6px] right-[6px] flex items-center gap-1`}>
           <span className="text-[11px] leading-[15px]" style={{ color: textMuted }}>
             {message.timestamp}
           </span>
