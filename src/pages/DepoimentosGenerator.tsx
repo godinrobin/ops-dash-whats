@@ -115,26 +115,61 @@ const DepoimentosGenerator = () => {
     const element = document.getElementById('whatsapp-simulator');
     if (!element) return;
 
+    // Pré-carrega imagens externas (ex.: avatar) como dataURL para evitar canvas em branco
+    const originals: Array<{ img: HTMLImageElement; src: string }> = [];
+    const imgs = Array.from(element.querySelectorAll('img')) as HTMLImageElement[];
+    for (const img of imgs) {
+      const src = img.getAttribute('src') || '';
+      try {
+        const isHttp = /^https?:\/\//i.test(src);
+        const sameOrigin = isHttp && new URL(src).origin === window.location.origin;
+        if (isHttp && !sameOrigin) {
+          originals.push({ img, src });
+          const resp = await fetch(src, { mode: 'cors', cache: 'no-store' });
+          const blob = await resp.blob();
+          const reader = new FileReader();
+          const dataUrl: string = await new Promise((resolve) => {
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+          });
+          img.crossOrigin = 'anonymous';
+          img.referrerPolicy = 'no-referrer';
+          img.src = dataUrl;
+          await new Promise((resolve) => {
+            if (img.complete) return resolve(null);
+            img.onload = () => resolve(null);
+            img.onerror = () => resolve(null);
+          });
+        }
+      } catch (e) {
+        // Ignora falhas individuais e segue com o restante
+        console.warn('Falha ao embutir imagem', src, e);
+      }
+    }
+
     try {
       const canvas = await html2canvas(element, {
-        backgroundColor: null,
+        backgroundColor: '#ffffff',
         scale: 2,
         logging: false,
         useCORS: true,
         allowTaint: false,
-        imageTimeout: 0,
-        foreignObjectRendering: true,
       });
 
       const link = document.createElement('a');
       link.download = `depoimento-${selectedConversation?.contactName || 'conversa'}.png`;
-      link.href = canvas.toDataURL();
+      link.href = canvas.toDataURL('image/png');
       link.click();
-      
-      toast.success("Imagem baixada com sucesso!");
+
+      toast.success('Imagem baixada com sucesso!');
     } catch (error) {
-      toast.error("Erro ao gerar imagem");
+      toast.error('Erro ao gerar imagem');
       console.error(error);
+    } finally {
+      // Restaura src originais
+      for (const { img, src } of originals) {
+        img.src = src;
+      }
     }
   };
 
