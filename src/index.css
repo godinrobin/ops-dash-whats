@@ -114,7 +114,7 @@ All colors MUST be HSL.
 
 /* Balão enviado precisa de espaço extra para os dois checks */
 #whatsapp-simulator.export-mode .whatsapp-bubble.rounded-br-\[3px\] {
-  padding-right: 36px !important;
+  padding-right: 40px !important;
 }
 
 /* Força conteúdo sempre a iniciar no topo/esquerda */
@@ -139,7 +139,12 @@ All colors MUST be HSL.
 /* Ajuste fino dos ícones de visto no export */
 #whatsapp-simulator.export-mode .whatsapp-timestamp svg {
   position: relative !important;
-  top: -1px !important; /* sobe 1px para alinhar com a base do horário */
+  top: -2px !important; /* sobe para alinhar com a base do horário */
+}
+#whatsapp-simulator.export-mode .whatsapp-timestamp > div {
+  display: inline-block !important;
+  position: relative !important;
+  top: -2px !important;
 }
 /* Alinhamento fino dos elementos do rodapé do balão no export */
 #whatsapp-simulator.export-mode .whatsapp-timestamp span,
