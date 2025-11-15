@@ -20,9 +20,9 @@ export const WhatsAppMessage = ({ message, theme }: WhatsAppMessageProps) => {
   return (
     <div className={`flex ${isSent ? "justify-end" : "justify-start"} mb-[2px] px-2`}>
       <div
-        className={`relative max-w-[85%] rounded-lg shadow-sm ${
-          isSent ? "rounded-br-sm" : "rounded-bl-sm"
-        } ${message.mediaType ? "" : "px-2 py-1"}`}
+        className={`relative max-w-[85%] rounded-[8px] shadow-sm ${
+          isSent ? "rounded-br-[3px]" : "rounded-bl-[3px]"
+        } ${message.mediaType ? "" : "px-[7px] py-[6px]"}`}
         style={{ backgroundColor: isSent ? bgSent : bgReceived }}
       >
         {message.replyTo && (
@@ -79,15 +79,15 @@ export const WhatsAppMessage = ({ message, theme }: WhatsAppMessageProps) => {
 
         {(message.text || message.caption) && (
           <p 
-            className={`text-[14.2px] break-words whitespace-pre-wrap leading-[1.35] ${message.mediaType ? "px-2 pb-1 pt-2" : "py-1"}`}
+            className={`text-[14.2px] break-words whitespace-pre-wrap leading-[19.1px] ${message.mediaType ? "px-2 pb-1 pt-2" : ""}`}
             style={{ color: textColor, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
           >
             {message.caption || message.text}
           </p>
         )}
 
-        <div className={`flex items-center justify-end gap-1 mt-0.5 ${message.mediaType ? "px-2 pb-1" : ""} ${isSent ? 'ml-10' : ''}`}>
-          <span className="text-[11px]" style={{ color: textMuted }}>
+        <div className={`flex items-center justify-end gap-1 mt-1 ${message.mediaType ? "px-2 pb-1" : ""} ${isSent ? 'ml-10' : ''}`}>
+          <span className="text-[11px] leading-[15px]" style={{ color: textMuted }}>
             {message.timestamp}
           </span>
           {isSent && (

@@ -26,8 +26,8 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
         )}
 
         <div className="relative pt-2 px-6" style={{ backgroundColor: bgHeader }}>
-          <div className="flex justify-between items-center text-xs font-semibold" style={{ color: textHeader }}>
-            <span className="tracking-tight">{conversation.phoneTime}</span>
+          <div className="flex justify-between items-center text-[13px] font-semibold" style={{ color: textHeader }}>
+            <span className="tracking-tight ml-2">{conversation.phoneTime}</span>
             <div className="flex items-center gap-[2px]">
               {/* Signal bars */}
               <svg width="16" height="11" viewBox="0 0 16 11" fill="none">
@@ -39,8 +39,8 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
               {/* WiFi */}
               <svg width="16" height="12" viewBox="0 0 16 12" fill="none" className="ml-0.5">
                 <path d="M8 10.5C8.82843 10.5 9.5 9.82843 9.5 9C9.5 8.17157 8.82843 7.5 8 7.5C7.17157 7.5 6.5 8.17157 6.5 9C6.5 9.82843 7.17157 10.5 8 10.5Z" fill="currentColor"/>
-                <path d="M4 6.5C5.5 5 6.5 4.5 8 4.5C9.5 4.5 10.5 5 12 6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                <path d="M1.5 3.5C3.5 1.5 5.5 0.5 8 0.5C10.5 0.5 12.5 1.5 14.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                <path d="M4 6.5C5.5 5 6.5 4.5 8 4.5C9.5 4.5 10.5 5 12 6.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                <path d="M1.5 3.5C3.5 1.5 5.5 0.5 8 0.5C10.5 0.5 12.5 1.5 14.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
               </svg>
               {/* Battery */}
               <svg width="26" height="12" viewBox="0 0 26 12" fill="none" className="ml-0.5">
@@ -53,22 +53,21 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
 
           <div className="flex items-center justify-between pt-3 pb-3">
             <div className="flex items-center gap-3 flex-1">
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-2">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                   <path d="M15 19L8 12L15 5" stroke="#000000" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
                 {conversation.unreadCount && conversation.unreadCount > 0 && (
-                  <div 
-                    className="min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1"
+                  <span 
                     style={{ 
-                      backgroundColor: "#000000",
-                      fontSize: "10px",
+                      color: "#000000",
+                      fontSize: "16px",
                       fontWeight: "600",
                       fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif"
                     }}
                   >
-                    <span style={{ color: "#ffffff" }}>{conversation.unreadCount}</span>
-                  </div>
+                    {conversation.unreadCount}
+                  </span>
                 )}
               </div>
               <img
