@@ -130,8 +130,8 @@ All colors MUST be HSL.
   margin: 0 !important; /* remove mt-1 e ml-10 */
   padding: 0 !important;
   display: flex !important;
-  align-items: center !important;
-  gap: 4px !important;
+  align-items: baseline !important;
+  gap: 3px !important;
   white-space: nowrap !important; /* evita quebra entre horário e vistos */
   line-height: 1 !important; /* mantém altura compacta e alinhada */
 }
@@ -139,12 +139,14 @@ All colors MUST be HSL.
 /* Remove margens negativas dos ícones de visto e ml-10 do enviado */
 #whatsapp-simulator.export-mode .whatsapp-timestamp svg {
   margin-left: 0 !important;
+  position: relative !important;
+  top: 1px !important; /* desce 1px para alinhar com a base do horário */
 }
 /* Alinhamento fino dos elementos do rodapé do balão no export */
 #whatsapp-simulator.export-mode .whatsapp-timestamp span,
 #whatsapp-simulator.export-mode .whatsapp-timestamp svg {
   display: inline-block !important;
-  vertical-align: middle !important;
+  vertical-align: baseline !important;
 }
 
 /* Garantia extra: ocultar contador quando zero durante export */
