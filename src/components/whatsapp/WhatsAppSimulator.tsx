@@ -62,7 +62,6 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
                     className="min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1"
                     style={{ 
                       backgroundColor: "#000000",
-                      color: "#000000",
                       fontSize: "10px",
                       fontWeight: "600",
                       fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif"
@@ -131,7 +130,7 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
           <Plus className="w-7 h-7" style={{ color: "#000000" }} strokeWidth={1.5} />
           <div 
             className="flex-1 rounded-full px-4 py-2.5 flex items-center"
-            style={{ backgroundColor: bgInputField, border: "1px solid #e0e0e0" }}
+            style={{ backgroundColor: bgInputField, border: "2px solid #d1d1d6" }}
           >
           </div>
           <Camera 
@@ -139,14 +138,7 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
             style={{ color: "#000000" }} 
             strokeWidth={1.5}
           />
-          {/* Ícone de Figurinha customizado */}
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="9" stroke="#000000" strokeWidth="1.5"/>
-            <circle cx="9" cy="10" r="1.5" fill="#000000"/>
-            <circle cx="15" cy="10" r="1.5" fill="#000000"/>
-            <path d="M8 15C8 15 9.5 17 12 17C14.5 17 16 15 16 15" stroke="#000000" strokeWidth="1.5" strokeLinecap="round"/>
-          </svg>
-          <Mic 
+          <Mic
             className="w-[24px] h-[24px]" 
             style={{ color: "#000000" }} 
             strokeWidth={1.5}

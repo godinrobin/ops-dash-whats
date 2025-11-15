@@ -19,6 +19,8 @@ export interface WhatsAppMessage {
   };
   mediaType?: "image" | "video" | "pdf";
   mediaUrl?: string;
+  caption?: string;
+  pdfName?: string;
 }
 
 export interface Conversation {
