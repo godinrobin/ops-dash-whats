@@ -57,9 +57,9 @@ export const WhatsAppMessage = ({ message, theme }: WhatsAppMessageProps) => {
             {message.timestamp}
           </span>
           {isSent && (
-            <div className="flex -space-x-1">
+            <div className="flex">
               <Check className="w-[14px] h-[14px]" style={{ color: "#53bdeb" }} strokeWidth={2.5} />
-              <Check className="w-[14px] h-[14px]" style={{ color: "#53bdeb" }} strokeWidth={2.5} />
+              <Check className="w-[14px] h-[14px] -ml-[9px]" style={{ color: "#53bdeb" }} strokeWidth={2.5} />
             </div>
           )}
         </div>
