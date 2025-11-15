@@ -106,23 +106,23 @@ All colors MUST be HSL.
 }
 
 /* WhatsApp export mode - alinha horário/visto no canto do balão */
-.export-mode .whatsapp-bubble {
+#whatsapp-simulator.export-mode .whatsapp-bubble {
   position: relative !important;
   padding-bottom: 20px !important;
   padding-right: 12px !important;
 }
 
 /* Balão enviado precisa de espaço extra para os dois checks */
-.export-mode .whatsapp-bubble.rounded-br-\[3px\] {
+#whatsapp-simulator.export-mode .whatsapp-bubble.rounded-br-\[3px\] {
   padding-right: 32px !important;
 }
 
 /* Força conteúdo sempre a iniciar no topo/esquerda */
-.export-mode .whatsapp-bubble p {
+#whatsapp-simulator.export-mode .whatsapp-bubble p {
   text-align: left !important;
   color: #000000 !important;
 }
-.export-mode .whatsapp-timestamp {
+#whatsapp-simulator.export-mode .whatsapp-timestamp {
   position: absolute !important;
   bottom: 6px !important;
   right: 8px !important;
@@ -134,7 +134,12 @@ All colors MUST be HSL.
 }
 
 /* Remove margens negativas dos ícones de visto */
-.export-mode .whatsapp-timestamp svg {
+#whatsapp-simulator.export-mode .whatsapp-timestamp svg {
   margin-left: 0 !important;
+}
+
+/* Garantia extra: ocultar contador quando zero durante export */
+#whatsapp-simulator.export-mode .unread-count[data-count="0"] {
+  display: none !important;
 }
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
