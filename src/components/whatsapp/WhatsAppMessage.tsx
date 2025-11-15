@@ -69,18 +69,20 @@ export const WhatsAppMessage = ({ message, theme }: WhatsAppMessageProps) => {
               <FileText className="w-6 h-6 text-white" />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-medium" style={{ color: textColor }}>Documento.pdf</p>
+              <p className="text-sm font-medium" style={{ color: textColor }}>
+                {message.pdfName || "Documento.pdf"}
+              </p>
               <p className="text-xs" style={{ color: textMuted }}>PDF</p>
             </div>
           </div>
         )}
 
-        {message.text && (
+        {(message.text || message.caption) && (
           <p 
             className={`text-[14.2px] break-words whitespace-pre-wrap leading-[1.35] ${message.mediaType ? "px-2 pb-1 pt-2" : "py-1"}`}
             style={{ color: textColor, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
           >
-            {message.text}
+            {message.caption || message.text}
           </p>
         )}
 

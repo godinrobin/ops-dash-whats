@@ -24,6 +24,8 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
   const [editingText, setEditingText] = useState("");
   const [newMediaType, setNewMediaType] = useState<"image" | "video" | "pdf" | undefined>(undefined);
   const [newMediaUrl, setNewMediaUrl] = useState("");
+  const [mediaCaption, setMediaCaption] = useState("");
+  const [pdfName, setPdfName] = useState("");
 
   const updateField = (field: keyof Conversation, value: any) => {
     onUpdate({ ...conversation, [field]: value });
@@ -53,7 +55,9 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
       timestamp: newMessageTime,
       replyTo,
       mediaType: newMediaType,
-      mediaUrl: newMediaUrl || undefined
+      mediaUrl: newMediaUrl || undefined,
+      caption: mediaCaption || undefined,
+      pdfName: pdfName || undefined
     };
 
     onUpdate({
@@ -65,6 +69,8 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
     setReplyToId(null);
     setNewMediaType(undefined);
     setNewMediaUrl("");
+    setMediaCaption("");
+    setPdfName("");
     toast.success("Mensagem adicionada!");
   };
 
@@ -283,12 +289,32 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
             </Select>
             
             {newMediaType && (
-              <Input
-                value={newMediaUrl}
-                onChange={(e) => setNewMediaUrl(e.target.value)}
-                placeholder="URL da imagem/vídeo/pdf"
-                className="text-xs"
-              />
+              <>
+                <Input
+                  value={newMediaUrl}
+                  onChange={(e) => setNewMediaUrl(e.target.value)}
+                  placeholder="URL da imagem/vídeo/pdf"
+                  className="text-xs"
+                />
+                
+                {newMediaType !== "pdf" && (
+                  <Input
+                    value={mediaCaption}
+                    onChange={(e) => setMediaCaption(e.target.value)}
+                    placeholder="Legenda (opcional)"
+                    className="text-xs"
+                  />
+                )}
+                
+                {newMediaType === "pdf" && (
+                  <Input
+                    value={pdfName}
+                    onChange={(e) => setPdfName(e.target.value)}
+                    placeholder="Nome do PDF (Ex: Documento.pdf)"
+                    className="text-xs"
+                  />
+                )}
+              </>
             )}
           </div>
 
