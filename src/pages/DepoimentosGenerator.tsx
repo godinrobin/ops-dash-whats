@@ -17,6 +17,8 @@ export interface WhatsAppMessage {
     senderName: string;
     text: string;
   };
+  mediaType?: "image" | "video" | "pdf";
+  mediaUrl?: string;
 }
 
 export interface Conversation {

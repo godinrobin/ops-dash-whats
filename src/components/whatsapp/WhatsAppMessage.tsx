@@ -1,5 +1,5 @@
 import { WhatsAppMessage as MessageType } from "@/pages/DepoimentosGenerator";
-import { Check } from "lucide-react";
+import { Check, FileText, Play } from "lucide-react";
 
 interface WhatsAppMessageProps {
   message: MessageType;
@@ -20,14 +20,14 @@ export const WhatsAppMessage = ({ message, theme }: WhatsAppMessageProps) => {
   return (
     <div className={`flex ${isSent ? "justify-end" : "justify-start"} mb-[2px] px-2`}>
       <div
-        className={`relative max-w-[85%] rounded-lg px-2 py-1 shadow-sm ${
+        className={`relative max-w-[85%] rounded-lg shadow-sm ${
           isSent ? "rounded-br-sm" : "rounded-bl-sm"
-        }`}
+        } ${message.mediaType ? "" : "px-2 py-1"}`}
         style={{ backgroundColor: isSent ? bgSent : bgReceived }}
       >
         {message.replyTo && (
           <div 
-            className="mb-1 px-2 py-1 rounded border-l-4"
+            className="mb-1 px-2 py-1 rounded border-l-4 mt-2 mx-2"
             style={{ 
               backgroundColor: replyBg,
               borderColor: replyBorder
@@ -45,14 +45,46 @@ export const WhatsAppMessage = ({ message, theme }: WhatsAppMessageProps) => {
           </div>
         )}
 
-        <p 
-          className="text-[14.2px] break-words whitespace-pre-wrap leading-[1.35] py-1"
-          style={{ color: textColor, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
-        >
-          {message.text}
-        </p>
+        {/* Media Content */}
+        {message.mediaType === "image" && message.mediaUrl && (
+          <div className="rounded-t-lg overflow-hidden">
+            <img src={message.mediaUrl} alt="Imagem" className="w-full max-h-[300px] object-cover" />
+          </div>
+        )}
 
-        <div className={`flex items-center justify-end gap-1 mt-0.5 ${isSent ? 'ml-10' : ''}`}>
+        {message.mediaType === "video" && message.mediaUrl && (
+          <div className="rounded-t-lg overflow-hidden relative bg-black">
+            <img src={message.mediaUrl} alt="Video" className="w-full max-h-[300px] object-cover opacity-70" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center">
+                <Play className="w-8 h-8 text-black ml-1" fill="black" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {message.mediaType === "pdf" && message.mediaUrl && (
+          <div className="p-3 flex items-center gap-3 border-b" style={{ borderColor: textMuted + "40" }}>
+            <div className="w-12 h-12 rounded-lg bg-red-500 flex items-center justify-center">
+              <FileText className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium" style={{ color: textColor }}>Documento.pdf</p>
+              <p className="text-xs" style={{ color: textMuted }}>PDF</p>
+            </div>
+          </div>
+        )}
+
+        {message.text && (
+          <p 
+            className={`text-[14.2px] break-words whitespace-pre-wrap leading-[1.35] ${message.mediaType ? "px-2 pb-1 pt-2" : "py-1"}`}
+            style={{ color: textColor, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
+          >
+            {message.text}
+          </p>
+        )}
+
+        <div className={`flex items-center justify-end gap-1 mt-0.5 ${message.mediaType ? "px-2 pb-1" : ""} ${isSent ? 'ml-10' : ''}`}>
           <span className="text-[11px]" style={{ color: textMuted }}>
             {message.timestamp}
           </span>
@@ -64,9 +96,12 @@ export const WhatsAppMessage = ({ message, theme }: WhatsAppMessageProps) => {
           )}
         </div>
 
+        {/* Tail */}
         <div
           className={`absolute bottom-0 ${
-            isSent ? "right-[-6px]" : "left-[-6px]"
+            isSent
+              ? "right-[-6px]"
+              : "left-[-6px]"
           }`}
           style={{
             width: 0,

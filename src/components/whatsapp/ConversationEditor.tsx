@@ -22,14 +22,16 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
   const [replyToId, setReplyToId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
+  const [newMediaType, setNewMediaType] = useState<"image" | "video" | "pdf" | undefined>(undefined);
+  const [newMediaUrl, setNewMediaUrl] = useState("");
 
   const updateField = (field: keyof Conversation, value: any) => {
     onUpdate({ ...conversation, [field]: value });
   };
 
   const addMessage = () => {
-    if (!newMessageText.trim()) {
-      toast.error("Digite uma mensagem");
+    if (!newMessageText.trim() && !newMediaType) {
+      toast.error("Digite uma mensagem ou adicione uma mídia");
       return;
     }
 
@@ -49,7 +51,9 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
       text: newMessageText,
       type: newMessageType,
       timestamp: newMessageTime,
-      replyTo
+      replyTo,
+      mediaType: newMediaType,
+      mediaUrl: newMediaUrl || undefined
     };
 
     onUpdate({
@@ -59,6 +63,8 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
 
     setNewMessageText("");
     setReplyToId(null);
+    setNewMediaType(undefined);
+    setNewMediaUrl("");
     toast.success("Mensagem adicionada!");
   };
 
@@ -258,6 +264,34 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
             rows={3}
             className="mt-2"
           />
+          
+          <div className="mt-2 space-y-2">
+            <Label className="text-xs">Adicionar Mídia (Opcional)</Label>
+            <Select
+              value={newMediaType || "none"}
+              onValueChange={(value) => setNewMediaType(value === "none" ? undefined : value as "image" | "video" | "pdf")}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sem mídia</SelectItem>
+                <SelectItem value="image">Imagem</SelectItem>
+                <SelectItem value="video">Vídeo</SelectItem>
+                <SelectItem value="pdf">PDF</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            {newMediaType && (
+              <Input
+                value={newMediaUrl}
+                onChange={(e) => setNewMediaUrl(e.target.value)}
+                placeholder="URL da imagem/vídeo/pdf"
+                className="text-xs"
+              />
+            )}
+          </div>
+
           <div className="grid grid-cols-2 gap-2 mt-2">
             <div>
               <Label className="text-xs">Tipo</Label>
@@ -327,21 +361,24 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
                           size="sm"
                           onClick={() => setReplyToId(message.id)}
                           title="Responder"
+                          className="hover:bg-primary/10"
                         >
-                          <Send className="w-3 h-3" />
+                          <Send className="w-3 h-3 text-primary" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => startEditMessage(message)}
                           title="Editar"
+                          className="hover:bg-blue-500/10"
                         >
-                          <Edit2 className="w-3 h-3" />
+                          <Edit2 className="w-3 h-3 text-blue-600" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => deleteMessage(message.id)}
+                          className="hover:bg-destructive/10"
                         >
                           <Trash2 className="w-3 h-3 text-destructive" />
                         </Button>

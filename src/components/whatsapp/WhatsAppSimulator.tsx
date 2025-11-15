@@ -1,5 +1,5 @@
 import { Conversation } from "@/pages/DepoimentosGenerator";
-import { Phone, Video, MoreVertical, Camera, Mic, Plus, Sticker } from "lucide-react";
+import { Phone, Video, MoreVertical, Camera, Mic, Plus } from "lucide-react";
 import { WhatsAppMessage } from "./WhatsAppMessage";
 import whatsappBgLight from "@/assets/whatsapp-bg-light.png";
 
@@ -62,13 +62,13 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
                     className="min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1"
                     style={{ 
                       backgroundColor: "#000000",
-                      color: "#ffffff",
+                      color: "#000000",
                       fontSize: "10px",
                       fontWeight: "600",
                       fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif"
                     }}
                   >
-                    {conversation.unreadCount}
+                    <span style={{ color: "#ffffff" }}>{conversation.unreadCount}</span>
                   </div>
                 )}
               </div>
@@ -95,10 +95,10 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
               </div>
             </div>
             <div className="flex items-center gap-6">
-              <Video className="w-[23px] h-[23px]" style={{ color: "#000000" }} strokeWidth={2} />
-              <Phone className="w-[23px] h-[23px]" style={{ color: "#000000" }} strokeWidth={2} />
+              <Video className="w-[23px] h-[23px]" style={{ color: "#000000" }} strokeWidth={1.5} />
+              <Phone className="w-[23px] h-[23px]" style={{ color: "#000000" }} strokeWidth={1.5} />
               {!isIOS && (
-                <MoreVertical className="w-[23px] h-[23px]" style={{ color: "#000000" }} strokeWidth={2} />
+                <MoreVertical className="w-[23px] h-[23px]" style={{ color: "#000000" }} strokeWidth={1.5} />
               )}
             </div>
           </div>
@@ -128,22 +128,28 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
         </div>
 
         <div className="p-2 flex items-center gap-2" style={{ backgroundColor: bgInput }}>
-          <Plus className="w-7 h-7" style={{ color: "#000000" }} strokeWidth={2} />
+          <Plus className="w-7 h-7" style={{ color: "#000000" }} strokeWidth={1.5} />
           <div 
-            className="flex-1 rounded-full px-4 py-2.5 flex items-center gap-3"
-            style={{ backgroundColor: bgInputField, border: "1px solid #000000" }}
+            className="flex-1 rounded-full px-4 py-2.5 flex items-center"
+            style={{ backgroundColor: bgInputField, border: "1px solid #e0e0e0" }}
           >
-            <Sticker className="w-[21px] h-[21px]" style={{ color: "#000000" }} strokeWidth={2} />
           </div>
           <Camera 
-            className="w-[26px] h-[26px]" 
+            className="w-[24px] h-[24px]" 
             style={{ color: "#000000" }} 
-            strokeWidth={2}
+            strokeWidth={1.5}
           />
+          {/* Ícone de Figurinha customizado */}
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="9" stroke="#000000" strokeWidth="1.5"/>
+            <circle cx="9" cy="10" r="1.5" fill="#000000"/>
+            <circle cx="15" cy="10" r="1.5" fill="#000000"/>
+            <path d="M8 15C8 15 9.5 17 12 17C14.5 17 16 15 16 15" stroke="#000000" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
           <Mic 
-            className="w-[26px] h-[26px]" 
+            className="w-[24px] h-[24px]" 
             style={{ color: "#000000" }} 
-            strokeWidth={2}
+            strokeWidth={1.5}
           />
         </div>
 
