@@ -147,6 +147,9 @@ All colors MUST be HSL.
   display: inline-block !important;
   vertical-align: baseline !important;
 }
+#whatsapp-simulator.export-mode .whatsapp-timestamp span {
+  line-height: 14px !important; /* igual ao tamanho dos ícones (14px) */
+}
 
 /* Garantia extra: ocultar contador quando zero durante export */
 #whatsapp-simulator.export-mode .unread-count[data-count="0"] {
