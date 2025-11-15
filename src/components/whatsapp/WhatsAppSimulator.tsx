@@ -57,12 +57,12 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                   <path d="M15 19L8 12L15 5" stroke="#000000" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
-                {conversation.unreadCount && conversation.unreadCount > 0 && (
+                {Number(conversation.unreadCount ?? 0) > 0 && (
                   <span 
                     style={{ 
                       color: "#000000",
                       fontSize: "16px",
-                      fontWeight: "400",
+                      fontWeight: 300,
                       fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif"
                     }}
                   >
