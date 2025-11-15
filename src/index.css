@@ -132,6 +132,8 @@ All colors MUST be HSL.
   display: flex !important;
   align-items: center !important;
   gap: 4px !important;
+  white-space: nowrap !important; /* evita quebra entre horário e vistos */
+  line-height: 1 !important; /* mantém altura compacta e alinhada */
 }
 
 /* Remove margens negativas dos ícones de visto e ml-10 do enviado */
