@@ -1,6 +1,7 @@
 import { Conversation } from "@/pages/DepoimentosGenerator";
 import { ArrowLeft, Phone, Video, MoreVertical, Camera, Mic, Plus, Smile, Sticker } from "lucide-react";
 import { WhatsAppMessage } from "./WhatsAppMessage";
+import whatsappBgLight from "@/assets/whatsapp-bg-light.png";
 
 interface WhatsAppSimulatorProps {
   conversation: Conversation;
@@ -11,10 +12,10 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
   const isDark = conversation.theme === "dark";
 
   const bgChat = isDark ? "#0b141a" : "#efeae2";
-  const bgHeader = isDark ? "#1f2c33" : "#075e54";
+  const bgHeader = isDark ? "#1f2c33" : "#f0f2f5";
   const bgInput = isDark ? "#1f2c33" : "#f0f0f0";
   const bgInputField = isDark ? "#2a3942" : "#ffffff";
-  const textHeader = "#ffffff";
+  const textHeader = isDark ? "#ffffff" : "#111b21";
   const textInput = isDark ? "#8696a0" : "#667781";
 
   return (
@@ -78,20 +79,23 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
           style={{
             backgroundImage: isDark 
               ? `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23182229' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
-              : `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d9d0c3' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-            backgroundColor: bgChat
+              : `url(${whatsappBgLight})`,
+            backgroundColor: bgChat,
+            backgroundSize: isDark ? '60px 60px' : 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: isDark ? 'repeat' : 'no-repeat'
           }}
         >
           {conversation.unreadCount && conversation.unreadCount > 0 && (
             <div className="flex items-center justify-center my-2">
               <div 
-                className="px-2.5 py-0.5 rounded-md text-[12px] font-medium shadow-sm"
+                className="px-2.5 py-1 rounded-md text-[11px] font-semibold uppercase tracking-wide shadow-sm"
                 style={{ 
-                  backgroundColor: isDark ? "#1c2b33" : "#c6dae0",
-                  color: isDark ? "#8696a0" : "#667781"
+                  backgroundColor: isDark ? "#1c2b33" : "#d1d7db",
+                  color: isDark ? "#8696a0" : "#54656f"
                 }}
               >
-                MENSAGENS NÃO LIDAS: {conversation.unreadCount}
+                UNREAD MESSAGES
               </div>
             </div>
           )}
