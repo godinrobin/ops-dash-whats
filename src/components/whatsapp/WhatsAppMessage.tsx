@@ -24,11 +24,7 @@ export const WhatsAppMessage = ({ message, theme, exportMode = false }: WhatsApp
         className={`relative max-w-[85%] rounded-[8px] shadow-sm whatsapp-bubble ${
           isSent ? "rounded-br-[3px]" : "rounded-bl-[3px]"
         } ${message.mediaType ? "" : "px-[7px] pt-[6px]"}`}
-        style={{ 
-          backgroundColor: isSent ? bgSent : bgReceived,
-          paddingBottom: '22px',
-          paddingRight: isSent ? '36px' : '16px'
-        }}
+        style={{ backgroundColor: isSent ? bgSent : bgReceived }}
       >
         {message.replyTo && (
           <div 
@@ -91,10 +87,7 @@ export const WhatsAppMessage = ({ message, theme, exportMode = false }: WhatsApp
           </p>
         )}
 
-        <div 
-          className="whatsapp-timestamp absolute flex items-center gap-1"
-          style={{ bottom: 6, right: 8, left: 'auto', margin: 0, padding: 0, whiteSpace: 'nowrap', lineHeight: 1 }}
-        >
+        <div className={`whatsapp-timestamp flex items-center justify-end gap-1 mt-1 ${message.mediaType ? "px-2 pb-1" : ""} ${isSent ? 'ml-10' : ''}`}>
           <span className="text-[11px] leading-[15px]" style={{ color: textMuted }}>
             {message.timestamp}
           </span>

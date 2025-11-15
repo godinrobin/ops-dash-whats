@@ -118,6 +118,9 @@ const DepoimentosGenerator = () => {
     const element = document.getElementById('whatsapp-simulator');
     if (!element) return null;
 
+    // Ativa modo de exportação (alinha selo/horário no canto do balão)
+    element.classList.add('export-mode');
+
     // Pré-carrega imagens externas (ex.: avatar) como dataURL para evitar canvas em branco
     const originals: Array<{ img: HTMLImageElement; src: string }> = [];
     const imgs = Array.from(element.querySelectorAll('img')) as HTMLImageElement[];
@@ -163,10 +166,11 @@ const DepoimentosGenerator = () => {
       toast.error('Erro ao gerar imagem');
       return null;
     } finally {
-      // Restaura src originais
+      // Restaura src originais e desativa export-mode
       for (const { img, src } of originals) {
         img.src = src;
       }
+      element.classList.remove('export-mode');
     }
   };
 
@@ -178,13 +182,13 @@ const DepoimentosGenerator = () => {
   };
 
   const downloadScreenshot = async () => {
-    const url = await makeScreenshotDataUrl();
-    if (!url) return;
+    if (!previewUrl) return;
     const link = document.createElement('a');
     link.download = `depoimento-${selectedConversation?.contactName || 'conversa'}.png`;
-    link.href = url;
+    link.href = previewUrl;
     link.click();
     toast.success('Imagem baixada com sucesso!');
+    setPreviewOpen(false);
   };
 
   // Persistência em localStorage
