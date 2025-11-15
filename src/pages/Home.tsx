@@ -94,6 +94,28 @@ const Home = () => {
                 </p>
               </CardContent>
             </Card>
+
+            <Card 
+              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
+              onClick={() => navigate("/gerador-depoimentos")}
+            >
+              <CardHeader className="text-center">
+                <div className="flex justify-center mb-4">
+                  <span className="text-6xl">💬</span>
+                </div>
+                <CardTitle className="text-2xl bg-gradient-to-r from-emerald-500 to-green-400 bg-clip-text text-transparent">
+                  Gerador de Depoimentos
+                </CardTitle>
+                <CardDescription className="text-base">
+                  Crie conversas realistas do WhatsApp
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="text-center">
+                <p className="text-sm text-muted-foreground">
+                  Simule depoimentos com interface idêntica ao WhatsApp
+                </p>
+              </CardContent>
+            </Card>
           </div>
 
           <section className="mt-16">
