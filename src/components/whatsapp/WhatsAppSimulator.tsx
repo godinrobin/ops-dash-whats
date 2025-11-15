@@ -1,5 +1,5 @@
 import { Conversation } from "@/pages/DepoimentosGenerator";
-import { Battery, Signal, Wifi, ArrowLeft, Phone, Video, MoreVertical, Camera, Mic, Plus, Smile } from "lucide-react";
+import { ArrowLeft, Phone, Video, MoreVertical, Camera, Mic, Plus, Smile, Sticker } from "lucide-react";
 import { WhatsAppMessage } from "./WhatsAppMessage";
 
 interface WhatsAppSimulatorProps {
@@ -25,36 +25,50 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
         )}
 
         <div className="relative pt-2 px-6" style={{ backgroundColor: bgHeader }}>
-          <div className="flex justify-between items-center text-xs" style={{ color: textHeader }}>
-            <span className="font-semibold">{conversation.phoneTime}</span>
-            <div className="flex items-center gap-1">
-              <Signal className="w-3 h-3" />
-              <Wifi className="w-3 h-3" />
-              <Battery className="w-3 h-3" />
-              <span className="text-[10px]">{conversation.batteryLevel}%</span>
+          <div className="flex justify-between items-center text-xs font-semibold" style={{ color: textHeader }}>
+            <span>{conversation.phoneTime}</span>
+            <div className="flex items-center gap-[2px]">
+              {/* Signal bars */}
+              <svg width="16" height="11" viewBox="0 0 16 11" fill="none">
+                <rect x="0" y="7" width="2.5" height="4" rx="0.5" fill="currentColor"/>
+                <rect x="4" y="5" width="2.5" height="6" rx="0.5" fill="currentColor"/>
+                <rect x="8" y="3" width="2.5" height="8" rx="0.5" fill="currentColor"/>
+                <rect x="12" y="0" width="2.5" height="11" rx="0.5" fill="currentColor"/>
+              </svg>
+              {/* WiFi */}
+              <svg width="16" height="12" viewBox="0 0 16 12" fill="none" className="ml-0.5">
+                <path d="M8 10.5C8.82843 10.5 9.5 9.82843 9.5 9C9.5 8.17157 8.82843 7.5 8 7.5C7.17157 7.5 6.5 8.17157 6.5 9C6.5 9.82843 7.17157 10.5 8 10.5Z" fill="currentColor"/>
+                <path d="M4 6.5C5.5 5 6.5 4.5 8 4.5C9.5 4.5 10.5 5 12 6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                <path d="M1.5 3.5C3.5 1.5 5.5 0.5 8 0.5C10.5 0.5 12.5 1.5 14.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+              {/* Battery */}
+              <svg width="26" height="12" viewBox="0 0 26 12" fill="none" className="ml-0.5">
+                <rect x="1" y="1" width="20" height="10" rx="2" stroke="currentColor" strokeWidth="1" fill="none"/>
+                <rect x="2.5" y="2.5" width={`${(conversation.batteryLevel / 100) * 17}`} height="7" rx="1" fill="currentColor"/>
+                <path d="M22 4V8C22.5 7.8 23 7.5 23.5 7V5C23 4.5 22.5 4.2 22 4Z" fill="currentColor"/>
+              </svg>
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-2 pb-3">
+          <div className="flex items-center justify-between pt-3 pb-3">
             <div className="flex items-center gap-3 flex-1">
-              <ArrowLeft className="w-6 h-6" style={{ color: textHeader }} />
+              <ArrowLeft className="w-6 h-6" style={{ color: textHeader }} strokeWidth={2.5} />
               <img
                 src={conversation.contactPhoto}
                 alt={conversation.contactName}
-                className="w-10 h-10 rounded-full border-2"
-                style={{ borderColor: textHeader }}
+                className="w-10 h-10 rounded-full"
               />
               <div className="flex-1">
-                <p className="font-semibold text-base" style={{ color: textHeader }}>
+                <p className="font-semibold text-[17px] leading-tight tracking-tight" style={{ color: textHeader }}>
                   {conversation.contactName}
                 </p>
-                <p className="text-xs opacity-80" style={{ color: textHeader }}>online</p>
+                <p className="text-[13px] opacity-70 mt-0.5" style={{ color: textHeader }}>online</p>
               </div>
             </div>
-            <div className="flex items-center gap-5">
-              <Video className="w-[22px] h-[22px]" style={{ color: textHeader }} />
-              <Phone className="w-[22px] h-[22px]" style={{ color: textHeader }} />
-              <MoreVertical className="w-[22px] h-[22px]" style={{ color: textHeader }} />
+            <div className="flex items-center gap-6">
+              <Video className="w-[23px] h-[23px]" style={{ color: textHeader }} strokeWidth={2} />
+              <Phone className="w-[23px] h-[23px]" style={{ color: textHeader }} strokeWidth={2} />
+              <MoreVertical className="w-[23px] h-[23px]" style={{ color: textHeader }} strokeWidth={2} />
             </div>
           </div>
         </div>
@@ -69,15 +83,15 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
           }}
         >
           {conversation.unreadCount && conversation.unreadCount > 0 && (
-            <div className="flex items-center justify-center my-3">
+            <div className="flex items-center justify-center my-2">
               <div 
-                className="px-3 py-1 rounded-full text-xs font-medium"
+                className="px-2.5 py-0.5 rounded-md text-[12px] font-medium shadow-sm"
                 style={{ 
-                  backgroundColor: isDark ? "#182229" : "#d1d7db",
-                  color: isDark ? "#8696a0" : "#54656f"
+                  backgroundColor: isDark ? "#1c2b33" : "#c6dae0",
+                  color: isDark ? "#8696a0" : "#667781"
                 }}
               >
-                Mensagens não lidas: {conversation.unreadCount}
+                MENSAGENS NÃO LIDAS: {conversation.unreadCount}
               </div>
             </div>
           )}
@@ -94,20 +108,25 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
         </div>
 
         <div className="p-2 flex items-center gap-2" style={{ backgroundColor: bgInput }}>
-          <Plus className="w-6 h-6" style={{ color: textInput }} />
+          <Plus className="w-7 h-7" style={{ color: textInput }} strokeWidth={2} />
           <div 
-            className="flex-1 rounded-full px-4 py-2 flex items-center gap-2"
+            className="flex-1 rounded-full px-4 py-2.5 flex items-center gap-3"
             style={{ backgroundColor: bgInputField }}
           >
-            <Smile className="w-5 h-5" style={{ color: textInput }} />
-            <span className="text-sm flex-1" style={{ color: textInput }}>Mensagem</span>
-            <Camera className="w-5 h-5" style={{ color: textInput }} />
+            <Smile className="w-[22px] h-[22px]" style={{ color: textInput }} strokeWidth={2} />
+            <span className="text-[15px] flex-1" style={{ color: textInput }}>Mensagem</span>
+            <Sticker className="w-[21px] h-[21px]" style={{ color: textInput }} strokeWidth={1.8} />
           </div>
+          <Camera 
+            className="w-[26px] h-[26px]" 
+            style={{ color: textInput }} 
+            strokeWidth={2}
+          />
           <div 
             className="w-12 h-12 rounded-full flex items-center justify-center"
             style={{ backgroundColor: "#00a884" }}
           >
-            <Mic className="w-5 h-5 text-white" />
+            <Mic className="w-5 h-5 text-white" strokeWidth={2.5} />
           </div>
         </div>
 
