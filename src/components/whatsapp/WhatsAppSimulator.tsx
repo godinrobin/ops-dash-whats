@@ -1,5 +1,5 @@
 import { Conversation } from "@/pages/DepoimentosGenerator";
-import { ArrowLeft, Phone, Video, MoreVertical, Camera, Mic, Plus, Smile, Sticker } from "lucide-react";
+import { Phone, Video, MoreVertical, Camera, Mic, Plus, Smile, Sticker } from "lucide-react";
 import { WhatsAppMessage } from "./WhatsAppMessage";
 import whatsappBgLight from "@/assets/whatsapp-bg-light.png";
 
@@ -27,7 +27,7 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
 
         <div className="relative pt-2 px-6" style={{ backgroundColor: bgHeader }}>
           <div className="flex justify-between items-center text-xs font-semibold" style={{ color: textHeader }}>
-            <span>{conversation.phoneTime}</span>
+            <span className="tracking-tight">{conversation.phoneTime}</span>
             <div className="flex items-center gap-[2px]">
               {/* Signal bars */}
               <svg width="16" height="11" viewBox="0 0 16 11" fill="none">
@@ -53,7 +53,22 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
 
           <div className="flex items-center justify-between pt-3 pb-3">
             <div className="flex items-center gap-3 flex-1">
-              <ArrowLeft className="w-6 h-6" style={{ color: textHeader }} strokeWidth={2.5} />
+              <div className="flex items-center gap-1">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ color: textHeader }}>
+                  <path d="M15 19L8 12L15 5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                {conversation.unreadCount && conversation.unreadCount > 0 && (
+                  <div 
+                    className="min-w-[18px] h-[18px] rounded-full flex items-center justify-center text-[11px] font-bold px-1"
+                    style={{ 
+                      backgroundColor: isDark ? "#00a884" : "#25d366",
+                      color: "#ffffff"
+                    }}
+                  >
+                    {conversation.unreadCount}
+                  </div>
+                )}
+              </div>
               <img
                 src={conversation.contactPhoto}
                 alt={conversation.contactName}
@@ -90,20 +105,6 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
             backgroundRepeat: isDark ? 'repeat' : 'no-repeat'
           }}
         >
-          {conversation.unreadCount && conversation.unreadCount > 0 && (
-            <div className="flex items-center justify-center my-2">
-              <div 
-                className="px-2.5 py-1 rounded-md text-[11px] font-semibold uppercase tracking-wide shadow-sm"
-                style={{ 
-                  backgroundColor: isDark ? "#1c2b33" : "#d1d7db",
-                  color: isDark ? "#8696a0" : "#54656f"
-                }}
-              >
-                UNREAD MESSAGES
-              </div>
-            </div>
-          )}
-
           <div className="space-y-[2px]">
             {conversation.messages.map((message) => (
               <WhatsAppMessage 
@@ -130,12 +131,11 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
             style={{ color: isDark ? textInput : "#54656f" }} 
             strokeWidth={2}
           />
-          <div 
-            className="w-12 h-12 rounded-full flex items-center justify-center"
-            style={{ backgroundColor: isDark ? "#00a884" : "#54656f" }}
-          >
-            <Mic className="w-5 h-5 text-white" strokeWidth={2.5} />
-          </div>
+          <Mic 
+            className="w-[26px] h-[26px]" 
+            style={{ color: isDark ? textInput : "#54656f" }} 
+            strokeWidth={2}
+          />
         </div>
 
         {isIOS && (
