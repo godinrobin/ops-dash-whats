@@ -194,6 +194,8 @@ const DepoimentosGenerator = () => {
   useEffect(() => {
     localStorage.setItem('dg.conversations', JSON.stringify(conversations));
   }, [conversations]);
+
+  return (
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container mx-auto px-4 py-8 pt-24">

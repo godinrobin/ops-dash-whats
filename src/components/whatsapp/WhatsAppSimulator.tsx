@@ -37,10 +37,10 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
                 <rect x="12" y="0" width="2.5" height="11" rx="0.5" fill="currentColor"/>
               </svg>
               {/* WiFi */}
-              <svg width="16" height="12" viewBox="0 0 16 12" fill="none" className="ml-0.5">
-                <path d="M8 10.5C8.82843 10.5 9.5 9.82843 9.5 9C9.5 8.17157 8.82843 7.5 8 7.5C7.17157 7.5 6.5 8.17157 6.5 9C6.5 9.82843 7.17157 10.5 8 10.5Z" fill="currentColor"/>
-                <path d="M4 6.5C5.5 5 6.5 4.5 8 4.5C9.5 4.5 10.5 5 12 6.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                <path d="M1.5 3.5C3.5 1.5 5.5 0.5 8 0.5C10.5 0.5 12.5 1.5 14.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              <svg width="15" height="11" viewBox="0 0 15 11" fill="none" className="ml-0.5">
+                <circle cx="7.5" cy="9" r="1" fill="currentColor"/>
+                <path d="M4.5 6.5C5.5 5.5 6.3 5 7.5 5C8.7 5 9.5 5.5 10.5 6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" fill="none"/>
+                <path d="M1.5 3.5C3 2 5 1 7.5 1C10 1 12 2 13.5 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" fill="none"/>
               </svg>
               {/* Battery */}
               <svg width="26" height="12" viewBox="0 0 26 12" fill="none" className="ml-0.5">
@@ -62,7 +62,7 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
                     style={{ 
                       color: "#000000",
                       fontSize: "16px",
-                      fontWeight: "600",
+                      fontWeight: "400",
                       fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif"
                     }}
                   >
