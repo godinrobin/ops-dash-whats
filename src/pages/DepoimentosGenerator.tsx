@@ -70,6 +70,8 @@ const DepoimentosGenerator = () => {
   ]);
 
   const [selectedConversationId, setSelectedConversationId] = useState<string>("1");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const selectedConversation = conversations.find(c => c.id === selectedConversationId);
 
@@ -111,12 +113,10 @@ const DepoimentosGenerator = () => {
     toast.success("Conversa excluída!");
   };
 
-  const downloadScreenshot = async () => {
+  // Gera o DataURL do simulador sem alterar o layout da prévia
+  const makeScreenshotDataUrl = async (): Promise<string | null> => {
     const element = document.getElementById('whatsapp-simulator');
-    if (!element) return;
-
-    // Ativa modo de exportação (alinha selo/horário no canto do balão)
-    element.classList.add('export-mode');
+    if (!element) return null;
 
     // Pré-carrega imagens externas (ex.: avatar) como dataURL para evitar canvas em branco
     const originals: Array<{ img: HTMLImageElement; src: string }> = [];
@@ -145,7 +145,6 @@ const DepoimentosGenerator = () => {
           });
         }
       } catch (e) {
-        // Ignora falhas individuais e segue com o restante
         console.warn('Falha ao embutir imagem', src, e);
       }
     }
@@ -158,23 +157,34 @@ const DepoimentosGenerator = () => {
         useCORS: true,
         allowTaint: false,
       });
-
-      const link = document.createElement('a');
-      link.download = `depoimento-${selectedConversation?.contactName || 'conversa'}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-
-      toast.success('Imagem baixada com sucesso!');
+      return canvas.toDataURL('image/png');
     } catch (error) {
-      toast.error('Erro ao gerar imagem');
       console.error(error);
+      toast.error('Erro ao gerar imagem');
+      return null;
     } finally {
-      // Restaura src originais e desativa export-mode
+      // Restaura src originais
       for (const { img, src } of originals) {
         img.src = src;
       }
-      element.classList.remove('export-mode');
     }
+  };
+
+  const previewScreenshot = async () => {
+    const url = await makeScreenshotDataUrl();
+    if (!url) return;
+    setPreviewUrl(url);
+    setPreviewOpen(true);
+  };
+
+  const downloadScreenshot = async () => {
+    const url = await makeScreenshotDataUrl();
+    if (!url) return;
+    const link = document.createElement('a');
+    link.download = `depoimento-${selectedConversation?.contactName || 'conversa'}.png`;
+    link.href = url;
+    link.click();
+    toast.success('Imagem baixada com sucesso!');
   };
 
   // Persistência em localStorage
@@ -209,9 +219,9 @@ const DepoimentosGenerator = () => {
               <Plus className="mr-2 h-4 w-4" />
               Nova Conversa
             </Button>
-            <Button onClick={downloadScreenshot} size="sm">
+            <Button onClick={previewScreenshot} size="sm">
               <Download className="mr-2 h-4 w-4" />
-              Baixar Imagem
+              Pré-visualizar
             </Button>
           </div>
         </div>
