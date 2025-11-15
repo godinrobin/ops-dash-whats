@@ -107,19 +107,34 @@ All colors MUST be HSL.
 
 /* WhatsApp export mode - alinha horário/visto no canto do balão */
 .export-mode .whatsapp-bubble {
-  padding-bottom: 18px !important;
-  padding-right: 10px !important;
+  position: relative !important;
+  padding-bottom: 20px !important;
+  padding-right: 12px !important;
 }
 
+/* Balão enviado precisa de espaço extra para os dois checks */
 .export-mode .whatsapp-bubble.rounded-br-\[3px\] {
-  padding-right: 26px !important;
+  padding-right: 32px !important;
 }
 
+/* Força conteúdo sempre a iniciar no topo/esquerda */
+.export-mode .whatsapp-bubble p {
+  text-align: left !important;
+  color: #000000 !important;
+}
 .export-mode .whatsapp-timestamp {
   position: absolute !important;
   bottom: 6px !important;
-  right: 6px !important;
+  right: 8px !important;
   margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
 }
 
+/* Remove margens negativas dos ícones de visto */
+.export-mode .whatsapp-timestamp svg {
+  margin-left: 0 !important;
+}
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
