@@ -132,15 +132,14 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
           <div>
             <Label>Sistema Operacional</Label>
             <Select
-              value={conversation.os}
-              onValueChange={(value: "ios" | "android") => updateField("os", value)}
+              value="ios"
+              disabled
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ios">iPhone (iOS)</SelectItem>
-                <SelectItem value="android">Android</SelectItem>
               </SelectContent>
             </Select>
           </div>

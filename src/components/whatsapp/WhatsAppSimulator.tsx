@@ -1,5 +1,5 @@
 import { Conversation } from "@/pages/DepoimentosGenerator";
-import { Phone, Video, MoreVertical, Camera, Mic, Plus, Smile, Sticker } from "lucide-react";
+import { Phone, Video, MoreVertical, Camera, Mic, Plus, Sticker } from "lucide-react";
 import { WhatsAppMessage } from "./WhatsAppMessage";
 import whatsappBgLight from "@/assets/whatsapp-bg-light.png";
 
@@ -12,8 +12,8 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
   const isDark = conversation.theme === "dark";
 
   const bgChat = isDark ? "#0b141a" : "#efeae2";
-  const bgHeader = isDark ? "#1f2c33" : "#f0f2f5";
-  const bgInput = isDark ? "#1f2c33" : "#f0f0f0";
+  const bgHeader = isDark ? "#1f2c33" : "#f4f0ec";
+  const bgInput = isDark ? "#1f2c33" : "#f4f0ec";
   const bgInputField = isDark ? "#2a3942" : "#ffffff";
   const textHeader = isDark ? "#ffffff" : "#111b21";
   const textInput = isDark ? "#8696a0" : "#667781";
@@ -54,15 +54,18 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
           <div className="flex items-center justify-between pt-3 pb-3">
             <div className="flex items-center gap-3 flex-1">
               <div className="flex items-center gap-1">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ color: textHeader }}>
-                  <path d="M15 19L8 12L15 5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M15 19L8 12L15 5" stroke="#000000" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
                 {conversation.unreadCount && conversation.unreadCount > 0 && (
                   <div 
-                    className="min-w-[18px] h-[18px] rounded-full flex items-center justify-center text-[11px] font-bold px-1"
+                    className="min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1"
                     style={{ 
-                      backgroundColor: isDark ? "#00a884" : "#25d366",
-                      color: "#ffffff"
+                      backgroundColor: "#000000",
+                      color: "#ffffff",
+                      fontSize: "10px",
+                      fontWeight: "600",
+                      fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif"
                     }}
                   >
                     {conversation.unreadCount}
@@ -75,19 +78,27 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
                 className="w-10 h-10 rounded-full"
               />
               <div className="flex-1">
-                <p className="font-semibold text-[17px] leading-tight tracking-tight" style={{ color: textHeader }}>
+                <p className="font-semibold text-[17px] leading-tight tracking-tight" style={{ 
+                  color: textHeader,
+                  fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif",
+                  fontWeight: "500"
+                }}>
                   {conversation.contactName}
                 </p>
                 {conversation.isOnline !== false && (
-                  <p className="text-[13px] opacity-70 mt-0.5" style={{ color: textHeader }}>online</p>
+                  <p className="text-[13px] opacity-70 mt-0.5" style={{ 
+                    color: textHeader,
+                    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif",
+                    fontWeight: "400"
+                  }}>online</p>
                 )}
               </div>
             </div>
             <div className="flex items-center gap-6">
-              <Video className="w-[23px] h-[23px]" style={{ color: textHeader }} strokeWidth={2} />
-              <Phone className="w-[23px] h-[23px]" style={{ color: textHeader }} strokeWidth={2} />
+              <Video className="w-[23px] h-[23px]" style={{ color: "#000000" }} strokeWidth={2} />
+              <Phone className="w-[23px] h-[23px]" style={{ color: "#000000" }} strokeWidth={2} />
               {!isIOS && (
-                <MoreVertical className="w-[23px] h-[23px]" style={{ color: textHeader }} strokeWidth={2} />
+                <MoreVertical className="w-[23px] h-[23px]" style={{ color: "#000000" }} strokeWidth={2} />
               )}
             </div>
           </div>
@@ -117,23 +128,21 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
         </div>
 
         <div className="p-2 flex items-center gap-2" style={{ backgroundColor: bgInput }}>
-          <Plus className="w-7 h-7" style={{ color: isDark ? textInput : "#54656f" }} strokeWidth={2} />
+          <Plus className="w-7 h-7" style={{ color: "#000000" }} strokeWidth={2} />
           <div 
             className="flex-1 rounded-full px-4 py-2.5 flex items-center gap-3"
-            style={{ backgroundColor: bgInputField }}
+            style={{ backgroundColor: bgInputField, border: "1px solid #000000" }}
           >
-            <Smile className="w-[22px] h-[22px]" style={{ color: textInput }} strokeWidth={2} />
-            <span className="text-[15px] flex-1" style={{ color: textInput }}>Mensagem</span>
-            <Sticker className="w-[21px] h-[21px]" style={{ color: textInput }} strokeWidth={1.8} />
+            <Sticker className="w-[21px] h-[21px]" style={{ color: "#000000" }} strokeWidth={2} />
           </div>
           <Camera 
             className="w-[26px] h-[26px]" 
-            style={{ color: isDark ? textInput : "#54656f" }} 
+            style={{ color: "#000000" }} 
             strokeWidth={2}
           />
           <Mic 
             className="w-[26px] h-[26px]" 
-            style={{ color: isDark ? textInput : "#54656f" }} 
+            style={{ color: "#000000" }} 
             strokeWidth={2}
           />
         </div>
