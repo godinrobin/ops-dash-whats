@@ -20,7 +20,8 @@
   }
 }
 
-/* existing styles... */ Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+/* 
+Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
 All colors MUST be HSL.
 */
 
@@ -102,6 +103,23 @@ All colors MUST be HSL.
     position: relative;
     z-index: 1;
   }
+}
+
+/* WhatsApp export mode - alinha horário/visto no canto do balão */
+.export-mode .whatsapp-bubble {
+  padding-bottom: 18px !important;
+  padding-right: 10px !important;
+}
+
+.export-mode .whatsapp-bubble.rounded-br-\[3px\] {
+  padding-right: 26px !important;
+}
+
+.export-mode .whatsapp-timestamp {
+  position: absolute !important;
+  bottom: 6px !important;
+  right: 6px !important;
+  margin: 0 !important;
 }
 
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
