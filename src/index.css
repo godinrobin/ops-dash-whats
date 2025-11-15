@@ -136,11 +136,10 @@ All colors MUST be HSL.
   line-height: 1 !important; /* mantém altura compacta e alinhada */
 }
 
-/* Remove margens negativas dos ícones de visto e ml-10 do enviado */
+/* Ajuste fino dos ícones de visto no export */
 #whatsapp-simulator.export-mode .whatsapp-timestamp svg {
-  margin-left: 0 !important;
   position: relative !important;
-  top: 1px !important; /* desce 1px para alinhar com a base do horário */
+  top: -1px !important; /* sobe 1px para alinhar com a base do horário */
 }
 /* Alinhamento fino dos elementos do rodapé do balão no export */
 #whatsapp-simulator.export-mode .whatsapp-timestamp span,

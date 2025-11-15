@@ -7,7 +7,7 @@ import { Plus, Download } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import html2canvas from "html2canvas";
 import { toast } from "sonner";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 export interface WhatsAppMessage {
   id: string;
   text: string;
@@ -284,11 +284,11 @@ const DepoimentosGenerator = () => {
         </div>
       </main>
 
-      {/* Modal de Prévia */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-[95vw] md:max-w-2xl max-h-[90vh] overflow-auto">
           <DialogHeader>
             <DialogTitle>Prévia do Download</DialogTitle>
+            <DialogDescription className="sr-only">Prévia da imagem que será baixada</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col items-center gap-4">
             {previewUrl && (
