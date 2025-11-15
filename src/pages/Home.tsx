@@ -32,7 +32,7 @@ const Home = () => {
             </p>
           </header>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-4xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Card 
               className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
               onClick={() => navigate("/metricas")}
@@ -91,28 +91,6 @@ const Home = () => {
               <CardContent className="text-center">
                 <p className="text-sm text-muted-foreground">
                   Monitore anúncios ativos e tendências diariamente
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card 
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
-              onClick={() => navigate("/gerador-depoimentos")}
-            >
-              <CardHeader className="text-center">
-                <div className="flex justify-center mb-4">
-                  <span className="text-6xl">💬</span>
-                </div>
-                <CardTitle className="text-2xl bg-gradient-to-r from-emerald-500 to-green-400 bg-clip-text text-transparent">
-                  Gerador de Depoimentos
-                </CardTitle>
-                <CardDescription className="text-base">
-                  Crie conversas realistas do WhatsApp
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-center">
-                <p className="text-sm text-muted-foreground">
-                  Simule depoimentos com interface idêntica ao WhatsApp
                 </p>
               </CardContent>
             </Card>

@@ -10,7 +10,6 @@ import Index from "./pages/Index";
 import ProductMetrics from "./pages/ProductMetrics";
 import NumberOrganizer from "./pages/NumberOrganizer";
 import TrackOfertas from "./pages/TrackOfertas";
-import DepoimentosGenerator from "./pages/DepoimentosGenerator";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -29,7 +28,6 @@ const App = () => (
             <Route path="/metricas" element={<ProtectedRoute><Index /></ProtectedRoute>} />
             <Route path="/organizador-numeros" element={<ProtectedRoute><NumberOrganizer /></ProtectedRoute>} />
             <Route path="/track-ofertas" element={<ProtectedRoute><TrackOfertas /></ProtectedRoute>} />
-            <Route path="/gerador-depoimentos" element={<ProtectedRoute><DepoimentosGenerator /></ProtectedRoute>} />
             <Route path="/produto/:productId" element={<ProtectedRoute><ProductMetrics /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />

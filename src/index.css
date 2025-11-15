@@ -20,8 +20,7 @@
   }
 }
 
-/* 
-Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
 All colors MUST be HSL.
 */
 
@@ -105,59 +104,4 @@ All colors MUST be HSL.
   }
 }
 
-/* WhatsApp export mode - alinha horário/visto no canto do balão */
-#whatsapp-simulator.export-mode .whatsapp-bubble {
-  position: relative !important;
-  padding-bottom: 22px !important; /* espaço para horário/visto */
-  padding-right: 16px !important;
-}
-
-/* Balão enviado precisa de espaço extra para os dois checks */
-#whatsapp-simulator.export-mode .whatsapp-bubble.rounded-br-\[3px\] {
-  padding-right: 40px !important;
-}
-
-/* Força conteúdo sempre a iniciar no topo/esquerda */
-#whatsapp-simulator.export-mode .whatsapp-bubble p {
-  text-align: left !important;
-  color: #000000 !important;
-}
-#whatsapp-simulator.export-mode .whatsapp-timestamp {
-  position: absolute !important;
-  bottom: 6px !important;
-  right: 8px !important;
-  left: auto !important;
-  margin: 0 !important; /* remove mt-1 e ml-10 */
-  padding: 0 !important;
-  display: flex !important;
-  align-items: baseline !important;
-  gap: 3px !important;
-  white-space: nowrap !important; /* evita quebra entre horário e vistos */
-  line-height: 1 !important; /* mantém altura compacta e alinhada */
-}
-
-/* Ajuste fino dos ícones de visto no export */
-#whatsapp-simulator.export-mode .whatsapp-timestamp svg {
-  position: relative !important;
-  top: -2px !important; /* sobe para alinhar com a base do horário */
-}
-#whatsapp-simulator.export-mode .whatsapp-timestamp > div {
-  display: inline-block !important;
-  position: relative !important;
-  top: -2px !important;
-}
-/* Alinhamento fino dos elementos do rodapé do balão no export */
-#whatsapp-simulator.export-mode .whatsapp-timestamp span,
-#whatsapp-simulator.export-mode .whatsapp-timestamp svg {
-  display: inline-block !important;
-  vertical-align: baseline !important;
-}
-#whatsapp-simulator.export-mode .whatsapp-timestamp span {
-  line-height: 14px !important; /* igual ao tamanho dos ícones (14px) */
-}
-
-/* Garantia extra: ocultar contador quando zero durante export */
-#whatsapp-simulator.export-mode .unread-count[data-count="0"] {
-  display: none !important;
-}
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
