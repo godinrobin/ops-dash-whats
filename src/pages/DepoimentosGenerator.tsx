@@ -31,6 +31,7 @@ export interface Conversation {
   theme: "light" | "dark";
   messages: WhatsAppMessage[];
   unreadCount?: number;
+  isOnline?: boolean;
 }
 
 const DepoimentosGenerator = () => {
@@ -46,6 +47,7 @@ const DepoimentosGenerator = () => {
       os: "ios",
       theme: "light",
       unreadCount: 0,
+      isOnline: true,
       messages: [
         {
           id: "1",
@@ -79,6 +81,7 @@ const DepoimentosGenerator = () => {
       os: "ios",
       theme: "light",
       unreadCount: 0,
+      isOnline: true,
       messages: []
     };
     setConversations([...conversations, newConversation]);
