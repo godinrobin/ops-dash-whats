@@ -4,9 +4,10 @@ import { Check, FileText, Play } from "lucide-react";
 interface WhatsAppMessageProps {
   message: MessageType;
   theme: "light" | "dark";
+  exportMode?: boolean;
 }
 
-export const WhatsAppMessage = ({ message, theme }: WhatsAppMessageProps) => {
+export const WhatsAppMessage = ({ message, theme, exportMode = false }: WhatsAppMessageProps) => {
   const isSent = message.type === "sent";
   const isDark = theme === "dark";
 
@@ -20,9 +21,9 @@ export const WhatsAppMessage = ({ message, theme }: WhatsAppMessageProps) => {
   return (
     <div className={`flex ${isSent ? "justify-end" : "justify-start"} mb-[2px] px-2`}>
       <div
-        className={`relative max-w-[85%] rounded-[8px] shadow-sm ${
+        className={`relative max-w-[85%] rounded-[8px] shadow-sm whatsapp-bubble ${
           isSent ? "rounded-br-[3px]" : "rounded-bl-[3px]"
-        } ${message.mediaType ? "" : "px-[7px] pt-[6px]"} pb-[18px] ${isSent ? "pr-[26px]" : "pr-[10px]"}`}
+        } ${message.mediaType ? "" : "px-[7px] pt-[6px]"}`}
         style={{ backgroundColor: isSent ? bgSent : bgReceived }}
       >
         {message.replyTo && (
@@ -86,7 +87,7 @@ export const WhatsAppMessage = ({ message, theme }: WhatsAppMessageProps) => {
           </p>
         )}
 
-        <div className={`absolute bottom-[6px] right-[6px] flex items-center gap-1`}>
+        <div className={`whatsapp-timestamp flex items-center justify-end gap-1 mt-1 ${message.mediaType ? "px-2 pb-1" : ""} ${isSent ? 'ml-10' : ''}`}>
           <span className="text-[11px] leading-[15px]" style={{ color: textMuted }}>
             {message.timestamp}
           </span>

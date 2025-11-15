@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Header } from "@/components/Header";
 import { WhatsAppSimulator } from "@/components/whatsapp/WhatsAppSimulator";
 import { ConversationEditor } from "@/components/whatsapp/ConversationEditor";
@@ -115,6 +115,9 @@ const DepoimentosGenerator = () => {
     const element = document.getElementById('whatsapp-simulator');
     if (!element) return;
 
+    // Ativa modo de exportação (alinha selo/horário no canto do balão)
+    element.classList.add('export-mode');
+
     // Pré-carrega imagens externas (ex.: avatar) como dataURL para evitar canvas em branco
     const originals: Array<{ img: HTMLImageElement; src: string }> = [];
     const imgs = Array.from(element.querySelectorAll('img')) as HTMLImageElement[];
@@ -166,14 +169,31 @@ const DepoimentosGenerator = () => {
       toast.error('Erro ao gerar imagem');
       console.error(error);
     } finally {
-      // Restaura src originais
+      // Restaura src originais e desativa export-mode
       for (const { img, src } of originals) {
         img.src = src;
       }
+      element.classList.remove('export-mode');
     }
   };
 
-  return (
+  // Persistência em localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('dg.conversations');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length) {
+          setConversations(parsed);
+          setSelectedConversationId(parsed[0].id);
+        }
+      } catch {}
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('dg.conversations', JSON.stringify(conversations));
+  }, [conversations]);
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container mx-auto px-4 py-8 pt-24">
