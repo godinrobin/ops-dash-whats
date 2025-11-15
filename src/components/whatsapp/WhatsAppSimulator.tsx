@@ -59,6 +59,8 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
                 </svg>
                 {Number(conversation.unreadCount ?? 0) > 0 && (
                   <span 
+                    className="unread-count"
+                    data-count={(conversation.unreadCount ?? 0).toString()}
                     style={{ 
                       color: "#000000",
                       fontSize: "16px",
