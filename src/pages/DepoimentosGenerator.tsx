@@ -215,7 +215,7 @@ const DepoimentosGenerator = () => {
             <p className="text-muted-foreground mt-1">Crie conversas realistas do WhatsApp</p>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <Button onClick={addConversation} variant="outline" size="sm">
+            <Button onClick={addConversation} variant="outline" size="sm" className="border-green-500 hover:bg-green-50 dark:hover:bg-green-950">
               <Plus className="mr-2 h-4 w-4" />
               Nova Conversa
             </Button>
@@ -279,6 +279,28 @@ const DepoimentosGenerator = () => {
           </div>
         </div>
       </main>
+
+      {/* Modal de Prévia */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-[95vw] md:max-w-2xl max-h-[90vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle>Prévia do Download</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-4">
+            {previewUrl && (
+              <img 
+                src={previewUrl} 
+                alt="Prévia do depoimento" 
+                className="w-full h-auto rounded-lg border"
+              />
+            )}
+            <Button onClick={downloadScreenshot} className="w-full" size="lg">
+              <Download className="mr-2 h-4 w-4" />
+              Salvar PNG
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
