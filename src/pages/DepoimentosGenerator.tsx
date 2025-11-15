@@ -13,6 +13,10 @@ export interface WhatsAppMessage {
   text: string;
   type: "sent" | "received";
   timestamp: string;
+  replyTo?: {
+    senderName: string;
+    text: string;
+  };
 }
 
 export interface Conversation {
@@ -24,7 +28,9 @@ export interface Conversation {
   batteryLevel: number;
   carrier: string;
   os: "ios" | "android";
+  theme: "light" | "dark";
   messages: WhatsAppMessage[];
+  unreadCount?: number;
 }
 
 const DepoimentosGenerator = () => {
@@ -38,6 +44,8 @@ const DepoimentosGenerator = () => {
       batteryLevel: 85,
       carrier: "Vivo",
       os: "ios",
+      theme: "light",
+      unreadCount: 0,
       messages: [
         {
           id: "1",
@@ -69,6 +77,8 @@ const DepoimentosGenerator = () => {
       batteryLevel: 85,
       carrier: "Vivo",
       os: "ios",
+      theme: "light",
+      unreadCount: 0,
       messages: []
     };
     setConversations([...conversations, newConversation]);
@@ -120,18 +130,18 @@ const DepoimentosGenerator = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main className="container mx-auto px-4 py-8">
-        <div className="flex justify-between items-center mb-6">
+      <main className="container mx-auto px-4 py-8 pt-24">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div>
             <h1 className="text-3xl font-bold text-foreground">Gerador de Depoimentos</h1>
             <p className="text-muted-foreground mt-1">Crie conversas realistas do WhatsApp</p>
           </div>
-          <div className="flex gap-2">
-            <Button onClick={addConversation} variant="outline">
+          <div className="flex gap-2 flex-wrap">
+            <Button onClick={addConversation} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />
               Nova Conversa
             </Button>
-            <Button onClick={downloadScreenshot}>
+            <Button onClick={downloadScreenshot} size="sm">
               <Download className="mr-2 h-4 w-4" />
               Baixar Imagem
             </Button>
