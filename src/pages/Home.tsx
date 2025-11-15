@@ -32,7 +32,7 @@ const Home = () => {
             </p>
           </header>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-4xl mx-auto">
             <Card 
               className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
               onClick={() => navigate("/metricas")}

@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Trash2, Send, UserCircle } from "lucide-react";
+import { Trash2, Send, UserCircle, Edit2, X } from "lucide-react";
 import { toast } from "sonner";
 
 interface ConversationEditorProps {
@@ -19,6 +19,9 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
   const [newMessageText, setNewMessageText] = useState("");
   const [newMessageType, setNewMessageType] = useState<"sent" | "received">("received");
   const [newMessageTime, setNewMessageTime] = useState("10:30");
+  const [replyToId, setReplyToId] = useState<string | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
 
   const updateField = (field: keyof Conversation, value: any) => {
     onUpdate({ ...conversation, [field]: value });
@@ -30,11 +33,23 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
       return;
     }
 
+    let replyTo = undefined;
+    if (replyToId) {
+      const replyMessage = conversation.messages.find(m => m.id === replyToId);
+      if (replyMessage) {
+        replyTo = {
+          senderName: replyMessage.type === "sent" ? "Você" : conversation.contactName,
+          text: replyMessage.text
+        };
+      }
+    }
+
     const newMessage: WhatsAppMessage = {
       id: Date.now().toString(),
       text: newMessageText,
       type: newMessageType,
-      timestamp: newMessageTime
+      timestamp: newMessageTime,
+      replyTo
     };
 
     onUpdate({
@@ -43,6 +58,7 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
     });
 
     setNewMessageText("");
+    setReplyToId(null);
     toast.success("Mensagem adicionada!");
   };
 
@@ -52,6 +68,34 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
       messages: conversation.messages.filter(m => m.id !== messageId)
     });
     toast.success("Mensagem removida!");
+  };
+
+  const startEditMessage = (message: WhatsAppMessage) => {
+    setEditingMessageId(message.id);
+    setEditingText(message.text);
+  };
+
+  const saveEditMessage = () => {
+    if (!editingText.trim()) {
+      toast.error("Digite um texto");
+      return;
+    }
+
+    onUpdate({
+      ...conversation,
+      messages: conversation.messages.map(m =>
+        m.id === editingMessageId ? { ...m, text: editingText } : m
+      )
+    });
+
+    setEditingMessageId(null);
+    setEditingText("");
+    toast.success("Mensagem editada!");
+  };
+
+  const cancelEdit = () => {
+    setEditingMessageId(null);
+    setEditingText("");
   };
 
   return (
@@ -68,7 +112,6 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
       </div>
 
       <div className="space-y-4">
-        {/* Configurações Básicas */}
         <div>
           <Label>Nome da Conversa</Label>
           <Input
@@ -85,23 +128,41 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
           />
         </div>
 
-        <div>
-          <Label>Sistema Operacional</Label>
-          <Select
-            value={conversation.os}
-            onValueChange={(value: "ios" | "android") => updateField("os", value)}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ios">iPhone (iOS)</SelectItem>
-              <SelectItem value="android">Android</SelectItem>
-            </SelectContent>
-          </Select>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <Label>Sistema Operacional</Label>
+            <Select
+              value={conversation.os}
+              onValueChange={(value: "ios" | "android") => updateField("os", value)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ios">iPhone (iOS)</SelectItem>
+                <SelectItem value="android">Android</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label>Tema</Label>
+            <Select
+              value={conversation.theme}
+              onValueChange={(value: "light" | "dark") => updateField("theme", value)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="light">Claro</SelectItem>
+                <SelectItem value="dark">Escuro</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <div>
             <Label>Horário</Label>
             <Input
@@ -118,6 +179,15 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
               max="100"
               value={conversation.batteryLevel}
               onChange={(e) => updateField("batteryLevel", parseInt(e.target.value))}
+            />
+          </div>
+          <div>
+            <Label>Não Lidas</Label>
+            <Input
+              type="number"
+              min="0"
+              value={conversation.unreadCount || 0}
+              onChange={(e) => updateField("unreadCount", parseInt(e.target.value))}
             />
           </div>
         </div>
@@ -148,9 +218,24 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
           </div>
         </div>
 
-        {/* Adicionar Mensagem */}
         <div className="border-t pt-4 mt-4">
           <Label>Nova Mensagem</Label>
+          {replyToId && (
+            <div className="mt-2 p-2 bg-muted rounded-lg flex items-start justify-between">
+              <div className="flex-1">
+                <p className="text-xs font-medium text-primary">
+                  Respondendo: {conversation.messages.find(m => m.id === replyToId)?.text.substring(0, 50)}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setReplyToId(null)}
+              >
+                <X className="w-3 h-3" />
+              </Button>
+            </div>
+          )}
           <Textarea
             value={newMessageText}
             onChange={(e) => setNewMessageText(e.target.value)}
@@ -189,7 +274,6 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
           </Button>
         </div>
 
-        {/* Lista de Mensagens */}
         <div className="border-t pt-4 mt-4">
           <Label className="mb-2 block">Mensagens ({conversation.messages.length})</Label>
           <div className="space-y-2 max-h-[300px] overflow-y-auto">
@@ -197,22 +281,66 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
               <div
                 key={message.id}
                 className={`p-2 rounded-lg border ${
-                  message.type === "sent" ? "bg-green-50" : "bg-gray-50"
+                  message.type === "sent" ? "bg-green-50 dark:bg-green-950/20" : "bg-gray-50 dark:bg-gray-900/20"
                 }`}
               >
-                <div className="flex justify-between items-start mb-1">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {message.type === "sent" ? "Enviada" : "Recebida"} - {message.timestamp}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => deleteMessage(message.id)}
-                  >
-                    <Trash2 className="w-3 h-3 text-destructive" />
-                  </Button>
-                </div>
-                <p className="text-sm">{message.text}</p>
+                {editingMessageId === message.id ? (
+                  <div className="space-y-2">
+                    <Textarea
+                      value={editingText}
+                      onChange={(e) => setEditingText(e.target.value)}
+                      rows={3}
+                    />
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={saveEditMessage}>
+                        Salvar
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={cancelEdit}>
+                        Cancelar
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {message.type === "sent" ? "Enviada" : "Recebida"} - {message.timestamp}
+                      </span>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setReplyToId(message.id)}
+                          title="Responder"
+                        >
+                          <Send className="w-3 h-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => startEditMessage(message)}
+                          title="Editar"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteMessage(message.id)}
+                        >
+                          <Trash2 className="w-3 h-3 text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                    {message.replyTo && (
+                      <div className="mb-1 p-1 bg-primary/10 border-l-2 border-primary text-xs">
+                        <p className="font-medium">{message.replyTo.senderName}</p>
+                        <p className="text-muted-foreground">{message.replyTo.text.substring(0, 50)}...</p>
+                      </div>
+                    )}
+                    <p className="text-sm">{message.text}</p>
+                  </>
+                )}
               </div>
             ))}
           </div>
