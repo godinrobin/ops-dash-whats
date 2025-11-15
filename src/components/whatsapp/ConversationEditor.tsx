@@ -343,7 +343,7 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
               />
             </div>
           </div>
-          <Button onClick={addMessage} className="w-full mt-2">
+          <Button onClick={addMessage} className="w-full mt-2 bg-green-600 hover:bg-green-700 text-white">
             <Send className="w-4 h-4 mr-2" />
             Adicionar Mensagem
           </Button>
