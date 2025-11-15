@@ -7,7 +7,7 @@ import { Plus, Download } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import html2canvas from "html2canvas";
 import { toast } from "sonner";
-
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 export interface WhatsAppMessage {
   id: string;
   text: string;
