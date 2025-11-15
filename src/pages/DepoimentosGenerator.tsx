@@ -120,6 +120,8 @@ const DepoimentosGenerator = () => {
 
     // Ativa modo de exportação (alinha selo/horário no canto do balão)
     element.classList.add('export-mode');
+    // Garante reflow antes de capturar (evita desalinhamento)
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 
     // Pré-carrega imagens externas (ex.: avatar) como dataURL para evitar canvas em branco
     const originals: Array<{ img: HTMLImageElement; src: string }> = [];
