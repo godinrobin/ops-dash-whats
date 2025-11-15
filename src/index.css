@@ -140,6 +140,12 @@ All colors MUST be HSL.
 #whatsapp-simulator.export-mode .whatsapp-timestamp svg {
   margin-left: 0 !important;
 }
+/* Alinhamento fino dos elementos do rodapé do balão no export */
+#whatsapp-simulator.export-mode .whatsapp-timestamp span,
+#whatsapp-simulator.export-mode .whatsapp-timestamp svg {
+  display: inline-block !important;
+  vertical-align: middle !important;
+}
 
 /* Garantia extra: ocultar contador quando zero durante export */
 #whatsapp-simulator.export-mode .unread-count[data-count="0"] {
