@@ -200,6 +200,22 @@ export const ConversationEditor = ({ conversation, onUpdate, onDelete }: Convers
           />
         </div>
 
+        <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+          <Label className="mb-0">Contato Online</Label>
+          <Select
+            value={conversation.isOnline === false ? "offline" : "online"}
+            onValueChange={(value) => updateField("isOnline", value === "online")}
+          >
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="online">Online</SelectItem>
+              <SelectItem value="offline">Offline</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         <div>
           <Label>URL da Foto do Contato</Label>
           <div className="flex gap-2">

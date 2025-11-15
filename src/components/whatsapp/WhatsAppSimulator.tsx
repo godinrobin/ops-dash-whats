@@ -20,7 +20,7 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
 
   return (
     <div id="whatsapp-simulator" className="mx-auto" style={{ width: '375px' }}>
-      <div className={`relative ${isIOS ? 'rounded-[55px]' : 'rounded-[40px]'} overflow-hidden shadow-2xl bg-black`}>
+      <div className="relative overflow-hidden shadow-2xl bg-black">
         {isIOS && (
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-7 bg-black rounded-b-3xl z-50" />
         )}
@@ -63,13 +63,17 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
                 <p className="font-semibold text-[17px] leading-tight tracking-tight" style={{ color: textHeader }}>
                   {conversation.contactName}
                 </p>
-                <p className="text-[13px] opacity-70 mt-0.5" style={{ color: textHeader }}>online</p>
+                {conversation.isOnline !== false && (
+                  <p className="text-[13px] opacity-70 mt-0.5" style={{ color: textHeader }}>online</p>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-6">
               <Video className="w-[23px] h-[23px]" style={{ color: textHeader }} strokeWidth={2} />
               <Phone className="w-[23px] h-[23px]" style={{ color: textHeader }} strokeWidth={2} />
-              <MoreVertical className="w-[23px] h-[23px]" style={{ color: textHeader }} strokeWidth={2} />
+              {!isIOS && (
+                <MoreVertical className="w-[23px] h-[23px]" style={{ color: textHeader }} strokeWidth={2} />
+              )}
             </div>
           </div>
         </div>
@@ -112,7 +116,7 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
         </div>
 
         <div className="p-2 flex items-center gap-2" style={{ backgroundColor: bgInput }}>
-          <Plus className="w-7 h-7" style={{ color: textInput }} strokeWidth={2} />
+          <Plus className="w-7 h-7" style={{ color: isDark ? textInput : "#54656f" }} strokeWidth={2} />
           <div 
             className="flex-1 rounded-full px-4 py-2.5 flex items-center gap-3"
             style={{ backgroundColor: bgInputField }}
@@ -123,12 +127,12 @@ export const WhatsAppSimulator = ({ conversation }: WhatsAppSimulatorProps) => {
           </div>
           <Camera 
             className="w-[26px] h-[26px]" 
-            style={{ color: textInput }} 
+            style={{ color: isDark ? textInput : "#54656f" }} 
             strokeWidth={2}
           />
           <div 
             className="w-12 h-12 rounded-full flex items-center justify-center"
-            style={{ backgroundColor: "#00a884" }}
+            style={{ backgroundColor: isDark ? "#00a884" : "#54656f" }}
           >
             <Mic className="w-5 h-5 text-white" strokeWidth={2.5} />
           </div>

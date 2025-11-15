@@ -12,7 +12,7 @@ export const WhatsAppMessage = ({ message, theme }: WhatsAppMessageProps) => {
 
   const bgSent = isDark ? "#005c4b" : "#d9fdd3";
   const bgReceived = isDark ? "#1f2c33" : "#ffffff";
-  const textColor = isDark ? "#e9edef" : "#111b21";
+  const textColor = isDark ? "#e9edef" : "#000000";
   const textMuted = isDark ? "#8696a0" : "#667781";
   const replyBg = isDark ? "rgba(0, 0, 0, 0.2)" : "rgba(0, 0, 0, 0.05)";
   const replyBorder = isDark ? "#06cf9c" : "#06cf9c";
@@ -46,8 +46,8 @@ export const WhatsAppMessage = ({ message, theme }: WhatsAppMessageProps) => {
         )}
 
         <p 
-          className="text-[15px] break-words whitespace-pre-wrap leading-[1.3] py-1"
-          style={{ color: textColor }}
+          className="text-[14.2px] break-words whitespace-pre-wrap leading-[1.35] py-1"
+          style={{ color: textColor, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
         >
           {message.text}
         </p>
