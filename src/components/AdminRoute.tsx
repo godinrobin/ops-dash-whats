@@ -4,20 +4,34 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 
 export const AdminRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
+
     const checkAdmin = async () => {
-      if (!loading && !user) {
-        console.log("AdminRoute: Usuário não autenticado, redirecionando para /auth");
-        navigate("/auth");
+      console.log("AdminRoute: Iniciando verificação", { authLoading, userId: user?.id });
+      
+      if (authLoading) {
+        console.log("AdminRoute: Ainda carregando auth...");
         return;
       }
 
-      if (user) {
-        console.log("AdminRoute: Verificando role de admin para usuário:", user.id);
+      if (!user) {
+        console.log("AdminRoute: Sem usuário, redirecionando para /auth");
+        if (isMounted) {
+          navigate("/auth", { replace: true });
+          setChecking(false);
+        }
+        return;
+      }
+
+      try {
+        console.log("AdminRoute: Verificando role de admin para:", user.id);
+        
         const { data, error } = await supabase
           .from("user_roles")
           .select("role")
@@ -25,30 +39,53 @@ export const AdminRoute = ({ children }: { children: React.ReactNode }) => {
           .eq("role", "admin")
           .maybeSingle();
 
-        console.log("AdminRoute: Resultado da query:", { data, error });
+        console.log("AdminRoute: Resultado:", { data, error });
+
+        if (!isMounted) return;
 
         if (error) {
           console.error("AdminRoute: Erro ao verificar role:", error);
-          navigate("/");
           setIsAdmin(false);
-        } else if (!data) {
-          console.log("AdminRoute: Usuário não é admin, redirecionando para /");
-          navigate("/");
+          setChecking(false);
+          navigate("/", { replace: true });
+          return;
+        }
+
+        if (!data) {
+          console.log("AdminRoute: Usuário não é admin");
           setIsAdmin(false);
-        } else {
-          console.log("AdminRoute: Usuário é admin!");
-          setIsAdmin(true);
+          setChecking(false);
+          navigate("/", { replace: true });
+          return;
+        }
+
+        console.log("AdminRoute: Usuário é admin! Carregando painel...");
+        setIsAdmin(true);
+        setChecking(false);
+      } catch (err) {
+        console.error("AdminRoute: Erro inesperado:", err);
+        if (isMounted) {
+          setIsAdmin(false);
+          setChecking(false);
+          navigate("/", { replace: true });
         }
       }
     };
 
     checkAdmin();
-  }, [user, loading, navigate]);
 
-  if (loading || isAdmin === null) {
+    return () => {
+      isMounted = false;
+    };
+  }, [user, authLoading, navigate]);
+
+  if (authLoading || checking) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-lg">Verificando permissões...</div>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="text-lg text-muted-foreground">Verificando permissões...</p>
+        </div>
       </div>
     );
   }
