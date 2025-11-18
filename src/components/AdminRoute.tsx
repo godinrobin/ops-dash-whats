@@ -11,11 +11,13 @@ export const AdminRoute = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const checkAdmin = async () => {
       if (!loading && !user) {
+        console.log("AdminRoute: Usuário não autenticado, redirecionando para /auth");
         navigate("/auth");
         return;
       }
 
       if (user) {
+        console.log("AdminRoute: Verificando role de admin para usuário:", user.id);
         const { data, error } = await supabase
           .from("user_roles")
           .select("role")
@@ -23,10 +25,18 @@ export const AdminRoute = ({ children }: { children: React.ReactNode }) => {
           .eq("role", "admin")
           .maybeSingle();
 
-        if (error || !data) {
+        console.log("AdminRoute: Resultado da query:", { data, error });
+
+        if (error) {
+          console.error("AdminRoute: Erro ao verificar role:", error);
+          navigate("/");
+          setIsAdmin(false);
+        } else if (!data) {
+          console.log("AdminRoute: Usuário não é admin, redirecionando para /");
           navigate("/");
           setIsAdmin(false);
         } else {
+          console.log("AdminRoute: Usuário é admin!");
           setIsAdmin(true);
         }
       }
