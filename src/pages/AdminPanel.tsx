@@ -45,82 +45,18 @@ export default function AdminPanel() {
 
   const loadAllData = async () => {
     try {
-      // Buscar usuários
-      const { data: profilesData } = await supabase
-        .from("profiles")
-        .select("id, username");
+      const { data, error } = await supabase.functions.invoke('admin-get-all-data');
 
-      if (profilesData) {
-        const usersWithEmails = await Promise.all(
-          profilesData.map(async (profile) => {
-            const { data: { user } } = await supabase.auth.admin.getUserById(profile.id);
-            return {
-              id: profile.id,
-              email: user?.email || "N/A",
-              username: profile.username,
-            };
-          })
-        );
-        setUsers(usersWithEmails);
+      if (error) {
+        console.error("Erro ao carregar dados:", error);
+        return;
       }
 
-      // Buscar números organizados
-      const { data: numbersData } = await supabase
-        .from("organized_numbers")
-        .select("numero, celular, status, operacao, user_id");
-
-      if (numbersData && profilesData) {
-        const numbersWithUsers = await Promise.all(
-          numbersData.map(async (num) => {
-            const { data: { user } } = await supabase.auth.admin.getUserById(num.user_id);
-            return {
-              user_email: user?.email || "N/A",
-              numero: num.numero,
-              celular: num.celular,
-              status: num.status,
-              operacao: num.operacao,
-            };
-          })
-        );
-        setNumbers(numbersWithUsers);
-      }
-
-      // Buscar produtos de métricas
-      const { data: productsData } = await supabase
-        .from("products")
-        .select("name, last_update, user_id");
-
-      if (productsData) {
-        const productsWithUsers = await Promise.all(
-          productsData.map(async (prod) => {
-            const { data: { user } } = await supabase.auth.admin.getUserById(prod.user_id);
-            return {
-              user_email: user?.email || "N/A",
-              product_name: prod.name,
-              last_update: prod.last_update,
-            };
-          })
-        );
-        setProducts(productsWithUsers);
-      }
-
-      // Buscar ofertas rastreadas
-      const { data: offersData } = await supabase
-        .from("tracked_offers")
-        .select("name, ad_library_link, user_id");
-
-      if (offersData) {
-        const offersWithUsers = await Promise.all(
-          offersData.map(async (offer) => {
-            const { data: { user } } = await supabase.auth.admin.getUserById(offer.user_id);
-            return {
-              user_email: user?.email || "N/A",
-              offer_name: offer.name,
-              ad_library_link: offer.ad_library_link,
-            };
-          })
-        );
-        setOffers(offersWithUsers);
+      if (data) {
+        setUsers(data.users || []);
+        setNumbers(data.numbers || []);
+        setProducts(data.products || []);
+        setOffers(data.offers || []);
       }
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
