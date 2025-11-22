@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, TrendingUp, TrendingDown, Minus, ExternalLink, Trash2, Edit, Maximize2, X, RefreshCw } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Minus, ExternalLink, Trash2, Edit, Maximize2, X } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -233,62 +233,6 @@ const TrackOfertas = () => {
     loadOffers();
   };
 
-  const handleManualUpdate = async () => {
-    if (offers.length === 0) {
-      toast({
-        title: "Nenhuma oferta cadastrada",
-        description: "Cadastre ofertas antes de atualizar.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      setIsDailyUpdateRunning(true);
-      
-      let completed = false;
-      let attempts = 0;
-      const maxAttempts = 50; // Safety limit to prevent infinite loops
-      
-      while (!completed && attempts < maxAttempts) {
-        attempts++;
-        
-        const { data, error } = await supabase.functions.invoke('update-offers-daily', {
-          body: { manual_trigger: true }
-        });
-
-        if (error) throw error;
-
-        console.log(`Batch ${attempts} completed:`, data);
-
-        // Check if all offers are processed
-        if (data?.completed) {
-          completed = true;
-        } else if (data?.remaining > 0) {
-          // Continue processing - wait a bit before next batch
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        } else {
-          // Something went wrong
-          break;
-        }
-      }
-
-      // Reload offers after completion
-      setTimeout(() => {
-        loadOffers();
-        setIsDailyUpdateRunning(false);
-      }, 2000);
-      
-    } catch (error: any) {
-      console.error('Erro ao disparar atualização:', error);
-      setIsDailyUpdateRunning(false);
-      toast({
-        title: "Erro ao atualizar",
-        description: error.message || "Ocorreu um erro ao iniciar a atualização.",
-        variant: "destructive",
-      });
-    }
-  };
 
   const getCurrentCount = (metrics: OfferMetric[]) => {
     if (metrics.length === 0) return 0;
