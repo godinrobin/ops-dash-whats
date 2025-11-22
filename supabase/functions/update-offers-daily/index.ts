@@ -110,18 +110,45 @@ Deno.serve(async (req) => {
       try {
         console.log(`Processing offer ${offer.id}...`);
 
-        // Call webhook with link parameter
-        const webhookUrl = `https://webhook.chatwp.xyz/webhook/recebe-link?link=${encodeURIComponent(
-          offer.ad_library_link
-        )}`;
+        // Call Apify API to scrape Facebook Ads
+        const apifyToken = Deno.env.get('APIFY_API_TOKEN');
+        const apifyUrl = `https://api.apify.com/v2/acts/XtaWFhbtfxyzqrFmd/run-sync-get-dataset-items?token=${apifyToken}`;
+        
+        const apifyBody = {
+          count: 100,
+          scrapeAdDetails: false,
+          "scrapePageAds.activeStatus": "all",
+          "scrapePageAds.countryCode": "ALL",
+          urls: [
+            {
+              url: offer.ad_library_link
+            }
+          ],
+          period: ""
+        };
 
-        const webhookResponse = await fetch(webhookUrl);
-        const responseText = await webhookResponse.text();
+        console.log(`Calling Apify for offer ${offer.id}...`);
+        
+        const apifyResponse = await fetch(apifyUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(apifyBody),
+        });
 
-        console.log(`Webhook response for ${offer.id}:`, responseText);
+        if (!apifyResponse.ok) {
+          const errorText = await apifyResponse.text();
+          console.error(`Apify API error for ${offer.id}:`, errorText);
+          throw new Error(`Apify API returned status ${apifyResponse.status}`);
+        }
 
-        // Parse response (expecting plain text number)
-        const activeAdsCount = parseInt(responseText.trim()) || 0;
+        const apifyData = await apifyResponse.json();
+        console.log(`Apify response for ${offer.id}:`, JSON.stringify(apifyData).substring(0, 200));
+
+        // Count active ads from the response
+        // The response is an array of ad objects
+        const activeAdsCount = Array.isArray(apifyData) ? apifyData.length : 0;
 
         // Check if metric already exists for today
         const { data: existingMetric } = await supabaseClient
