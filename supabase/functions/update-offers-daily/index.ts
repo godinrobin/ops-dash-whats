@@ -49,27 +49,50 @@ Deno.serve(async (req) => {
       }
     );
 
+    const today = new Date().toISOString().split('T')[0];
+    const BATCH_SIZE = 3; // Process 3 offers per execution to avoid timeout
+
     console.log('Starting daily update process...');
 
-    // Mark update as running
-    const { data: statusData, error: statusError } = await supabaseClient
+    // Check if there's already a running update for today
+    const { data: existingStatus } = await supabaseClient
       .from('daily_update_status')
-      .insert({
-        is_running: true,
-        started_at: new Date().toISOString(),
-      })
-      .select()
+      .select('*')
+      .eq('is_running', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .single();
 
-    if (statusError) {
-      console.error('Error creating status:', statusError);
-      throw statusError;
+    let statusId: string;
+    let currentProcessed = 0;
+    let currentFailed = 0;
+
+    if (existingStatus) {
+      // Continue existing update
+      statusId = existingStatus.id;
+      currentProcessed = existingStatus.processed_offers || 0;
+      currentFailed = existingStatus.failed_offers || 0;
+      console.log(`Continuing existing update. Progress: ${currentProcessed} processed, ${currentFailed} failed`);
+    } else {
+      // Start new update
+      const { data: statusData, error: statusError } = await supabaseClient
+        .from('daily_update_status')
+        .insert({
+          is_running: true,
+          started_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (statusError) {
+        console.error('Error creating status:', statusError);
+        throw statusError;
+      }
+      statusId = statusData.id;
     }
 
-    const statusId = statusData.id;
-
     // Get all tracked offers
-    const { data: offers, error: offersError } = await supabaseClient
+    const { data: allOffers, error: offersError } = await supabaseClient
       .from('tracked_offers')
       .select('id, ad_library_link, user_id');
 
@@ -78,8 +101,7 @@ Deno.serve(async (req) => {
       throw offersError;
     }
 
-    const totalOffers = offers?.length || 0;
-    console.log(`Found ${totalOffers} offers to update`);
+    const totalOffers = allOffers?.length || 0;
 
     // Update total offers count
     await supabaseClient
@@ -87,7 +109,7 @@ Deno.serve(async (req) => {
       .update({ total_offers: totalOffers })
       .eq('id', statusId);
 
-    if (!offers || offers.length === 0) {
+    if (!allOffers || allOffers.length === 0) {
       console.log('No offers to update');
       await supabaseClient
         .from('daily_update_status')
@@ -103,13 +125,52 @@ Deno.serve(async (req) => {
       );
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    // Get offers already processed today
+    const { data: processedToday } = await supabaseClient
+      .from('offer_metrics')
+      .select('offer_id')
+      .eq('date', today);
+
+    const processedOfferIds = new Set(processedToday?.map(m => m.offer_id) || []);
+    
+    // Get offers that still need to be processed
+    const offersToProcess = allOffers.filter(
+      offer => !processedOfferIds.has(offer.id)
+    );
+
+    console.log(`Total offers: ${totalOffers}, Already processed today: ${processedOfferIds.size}, Remaining: ${offersToProcess.length}`);
+
+    if (offersToProcess.length === 0) {
+      console.log('All offers already processed today');
+      await supabaseClient
+        .from('daily_update_status')
+        .update({
+          is_running: false,
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', statusId);
+
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'All offers already processed',
+          processed: totalOffers,
+          failed: currentFailed,
+          total: totalOffers,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Take only a batch of offers to process
+    const batchToProcess = offersToProcess.slice(0, BATCH_SIZE);
+    console.log(`Processing batch of ${batchToProcess.length} offers`);
 
     let processedCount = 0;
     let failedCount = 0;
 
-    // Process all offers with delay and timeout
-    for (const offer of offers as TrackedOffer[]) {
+    // Process batch of offers with delay and timeout
+    for (const offer of batchToProcess as TrackedOffer[]) {
       try {
         console.log(`Processing offer ${offer.id}...`);
 
@@ -200,43 +261,74 @@ Deno.serve(async (req) => {
         failedCount++;
       }
 
-      // Update progress
+      // Update progress with cumulative counts
+      const newProcessedTotal = currentProcessed + processedCount;
+      const newFailedTotal = currentFailed + failedCount;
+      
       await supabaseClient
         .from('daily_update_status')
         .update({
-          processed_offers: processedCount,
-          failed_offers: failedCount,
+          processed_offers: newProcessedTotal,
+          failed_offers: newFailedTotal,
         })
         .eq('id', statusId);
 
       // Add 2 second delay between offers to prevent API overload
-      if (processedCount + failedCount < totalOffers) {
+      if (processedCount + failedCount < batchToProcess.length) {
         await sleep(2000);
       }
     }
 
-    // Mark update as completed
-    await supabaseClient
-      .from('daily_update_status')
-      .update({
-        is_running: false,
-        completed_at: new Date().toISOString(),
-      })
-      .eq('id', statusId);
+    const newProcessedTotal = currentProcessed + processedCount;
+    const newFailedTotal = currentFailed + failedCount;
+    const remainingOffers = offersToProcess.length - batchToProcess.length;
 
-    console.log(
-      `Daily update completed. Processed: ${processedCount}, Failed: ${failedCount}`
-    );
+    // Check if all offers have been processed
+    if (remainingOffers === 0) {
+      // Mark update as completed
+      await supabaseClient
+        .from('daily_update_status')
+        .update({
+          is_running: false,
+          completed_at: new Date().toISOString(),
+          processed_offers: newProcessedTotal,
+          failed_offers: newFailedTotal,
+        })
+        .eq('id', statusId);
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        processed: processedCount,
-        failed: failedCount,
-        total: totalOffers,
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+      console.log(
+        `Daily update completed. Total processed: ${newProcessedTotal}, Total failed: ${newFailedTotal}`
+      );
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          completed: true,
+          processed: newProcessedTotal,
+          failed: newFailedTotal,
+          total: totalOffers,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    } else {
+      // More offers to process
+      console.log(
+        `Batch completed. Progress: ${newProcessedTotal}/${totalOffers} processed, ${newFailedTotal} failed, ${remainingOffers} remaining`
+      );
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          completed: false,
+          processed: newProcessedTotal,
+          failed: newFailedTotal,
+          total: totalOffers,
+          remaining: remainingOffers,
+          message: `Processed ${batchToProcess.length} offers. ${remainingOffers} remaining. Call again to continue.`
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
   } catch (error) {
     logSafe('error', 'Critical error in daily update', { code: 'CRITICAL_001' });
     return new Response(
