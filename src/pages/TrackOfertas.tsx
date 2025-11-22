@@ -264,10 +264,6 @@ const TrackOfertas = () => {
         // Check if all offers are processed
         if (data?.completed) {
           completed = true;
-          toast({
-            title: "Atualização concluída!",
-            description: `Todas as ${data.total} ofertas foram processadas. ${data.failed || 0} falharam.`,
-          });
         } else if (data?.remaining > 0) {
           // Continue processing - wait a bit before next batch
           await new Promise(resolve => setTimeout(resolve, 1000));
@@ -331,19 +327,11 @@ const TrackOfertas = () => {
                       value={(updateProgress.processed / updateProgress.total) * 100} 
                       className="h-3"
                     />
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">
-                        {updateProgress.processed} de {updateProgress.total} ofertas processadas
-                      </span>
-                      <span className="text-accent font-semibold">
+                    <div className="flex justify-center text-sm">
+                      <span className="text-accent font-semibold text-lg">
                         {Math.round((updateProgress.processed / updateProgress.total) * 100)}%
                       </span>
                     </div>
-                    {updateProgress.failed > 0 && (
-                      <p className="text-xs text-destructive">
-                        {updateProgress.failed} {updateProgress.failed === 1 ? 'oferta falhou' : 'ofertas falharam'}
-                      </p>
-                    )}
                   </div>
                 )}
               </div>
@@ -382,17 +370,6 @@ const TrackOfertas = () => {
           </div>
           
           <div className="flex gap-3">
-            <Button 
-              size="lg" 
-              variant="outline"
-              onClick={handleManualUpdate}
-              disabled={isDailyUpdateRunning || offers.length === 0}
-              className="border-accent/30 hover:bg-accent/10"
-            >
-              <RefreshCw className={`mr-2 h-5 w-5 ${isDailyUpdateRunning ? 'animate-spin' : ''}`} />
-              Atualizar Agora
-            </Button>
-            
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
                 <Button 
