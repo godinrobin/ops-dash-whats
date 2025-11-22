@@ -246,20 +246,41 @@ const TrackOfertas = () => {
     try {
       setIsDailyUpdateRunning(true);
       
-      const { data, error } = await supabase.functions.invoke('update-offers-daily', {
-        body: { manual_trigger: true }
-      });
+      let completed = false;
+      let attempts = 0;
+      const maxAttempts = 50; // Safety limit to prevent infinite loops
+      
+      while (!completed && attempts < maxAttempts) {
+        attempts++;
+        
+        const { data, error } = await supabase.functions.invoke('update-offers-daily', {
+          body: { manual_trigger: true }
+        });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      toast({
-        title: "Atualização iniciada!",
-        description: "Os dados das ofertas estão sendo atualizados. Isso pode levar alguns minutos.",
-      });
+        console.log(`Batch ${attempts} completed:`, data);
 
-      // Aguarda um tempo antes de recarregar
+        // Check if all offers are processed
+        if (data?.completed) {
+          completed = true;
+          toast({
+            title: "Atualização concluída!",
+            description: `Todas as ${data.total} ofertas foram processadas. ${data.failed || 0} falharam.`,
+          });
+        } else if (data?.remaining > 0) {
+          // Continue processing - wait a bit before next batch
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        } else {
+          // Something went wrong
+          break;
+        }
+      }
+
+      // Reload offers after completion
       setTimeout(() => {
         loadOffers();
+        setIsDailyUpdateRunning(false);
       }, 2000);
       
     } catch (error: any) {
