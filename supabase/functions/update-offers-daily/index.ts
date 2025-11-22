@@ -11,6 +11,9 @@ interface TrackedOffer {
   user_id: string;
 }
 
+// Helper function to add delay between API calls
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 const logSafe = (level: 'info' | 'error', message: string, metadata?: any) => {
   const sanitized = {
     ...metadata,
@@ -105,7 +108,7 @@ Deno.serve(async (req) => {
     let processedCount = 0;
     let failedCount = 0;
 
-    // Process all offers without delay
+    // Process all offers with delay and timeout
     for (const offer of offers as TrackedOffer[]) {
       try {
         console.log(`Processing offer ${offer.id}...`);
@@ -129,54 +132,69 @@ Deno.serve(async (req) => {
 
         console.log(`Calling Apify for offer ${offer.id}...`);
         
-        const apifyResponse = await fetch(apifyUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(apifyBody),
-        });
-
-        if (!apifyResponse.ok) {
-          const errorText = await apifyResponse.text();
-          console.error(`Apify API error for ${offer.id}:`, errorText);
-          throw new Error(`Apify API returned status ${apifyResponse.status}`);
-        }
-
-        const apifyData = await apifyResponse.json();
-        console.log(`Apify response for ${offer.id}:`, JSON.stringify(apifyData).substring(0, 200));
-
-        // Count active ads from the response
-        // The response is an array of ad objects
-        const activeAdsCount = Array.isArray(apifyData) ? apifyData.length : 0;
-
-        // Check if metric already exists for today
-        const { data: existingMetric } = await supabaseClient
-          .from('offer_metrics')
-          .select('id')
-          .eq('offer_id', offer.id)
-          .eq('date', today)
-          .single();
-
-        if (existingMetric) {
-          // Update existing metric
-          await supabaseClient
-            .from('offer_metrics')
-            .update({ active_ads_count: activeAdsCount })
-            .eq('id', existingMetric.id);
-        } else {
-          // Insert new metric
-          await supabaseClient.from('offer_metrics').insert({
-            offer_id: offer.id,
-            date: today,
-            active_ads_count: activeAdsCount,
+        // Create AbortController with 30s timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        
+        try {
+          const apifyResponse = await fetch(apifyUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(apifyBody),
+            signal: controller.signal,
           });
-        }
 
-        processedCount++;
-        console.log(
-          `Successfully updated offer ${offer.id} with ${activeAdsCount} ads`
-        );
+          clearTimeout(timeoutId);
+
+          if (!apifyResponse.ok) {
+            const errorText = await apifyResponse.text();
+            console.error(`Apify API error for ${offer.id}:`, errorText);
+            throw new Error(`Apify API returned status ${apifyResponse.status}`);
+          }
+
+          const apifyData = await apifyResponse.json();
+          console.log(`Apify response for ${offer.id}:`, JSON.stringify(apifyData).substring(0, 200));
+
+          // Count active ads from the response
+          // The response is an array of ad objects
+          const activeAdsCount = Array.isArray(apifyData) ? apifyData.length : 0;
+
+          // Check if metric already exists for today
+          const { data: existingMetric } = await supabaseClient
+            .from('offer_metrics')
+            .select('id')
+            .eq('offer_id', offer.id)
+            .eq('date', today)
+            .single();
+
+          if (existingMetric) {
+            // Update existing metric
+            await supabaseClient
+              .from('offer_metrics')
+              .update({ active_ads_count: activeAdsCount })
+              .eq('id', existingMetric.id);
+          } else {
+            // Insert new metric
+            await supabaseClient.from('offer_metrics').insert({
+              offer_id: offer.id,
+              date: today,
+              active_ads_count: activeAdsCount,
+            });
+          }
+
+          processedCount++;
+          console.log(
+            `Successfully updated offer ${offer.id} with ${activeAdsCount} ads`
+          );
+        } catch (fetchError) {
+          clearTimeout(timeoutId);
+          if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+            console.error(`Timeout while processing offer ${offer.id}`);
+          }
+          throw fetchError;
+        }
       } catch (error) {
         logSafe('error', 'Failed to process offer', { code: 'PROCESS_001', offerId: offer.id });
         failedCount++;
@@ -190,6 +208,11 @@ Deno.serve(async (req) => {
           failed_offers: failedCount,
         })
         .eq('id', statusId);
+
+      // Add 2 second delay between offers to prevent API overload
+      if (processedCount + failedCount < totalOffers) {
+        await sleep(2000);
+      }
     }
 
     // Mark update as completed

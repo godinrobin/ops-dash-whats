@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, TrendingUp, TrendingDown, Minus, ExternalLink, Trash2, Edit, Maximize2, X, RefreshCw } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 interface TrackedOffer {
@@ -36,6 +37,7 @@ const TrackOfertas = () => {
   const [loadingMessage, setLoadingMessage] = useState("");
   const [newOffer, setNewOffer] = useState({ name: "", ad_library_link: "" });
   const [expandedOffer, setExpandedOffer] = useState<TrackedOffer | null>(null);
+  const [updateProgress, setUpdateProgress] = useState({ processed: 0, total: 0, failed: 0 });
 
   const loadingMessages = [
     "🚀 Enviando informações para o Meta Ads...",
@@ -65,6 +67,13 @@ const TrackOfertas = () => {
             console.log('Update status changed:', payload);
             if (payload.new && typeof payload.new === 'object' && 'is_running' in payload.new) {
               setIsDailyUpdateRunning(payload.new.is_running as boolean);
+              
+              // Update progress data
+              const processed = (payload.new as any).processed_offers || 0;
+              const total = (payload.new as any).total_offers || 0;
+              const failed = (payload.new as any).failed_offers || 0;
+              setUpdateProgress({ processed, total, failed });
+              
               if (!payload.new.is_running) {
                 // Update completed, refresh all data
                 loadOffers();
@@ -112,7 +121,7 @@ const TrackOfertas = () => {
     try {
       const { data, error } = await supabase
         .from('daily_update_status')
-        .select('is_running')
+        .select('is_running, processed_offers, total_offers, failed_offers')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -120,6 +129,11 @@ const TrackOfertas = () => {
       if (error) throw error;
       if (data) {
         setIsDailyUpdateRunning(data.is_running);
+        setUpdateProgress({
+          processed: data.processed_offers || 0,
+          total: data.total_offers || 0,
+          failed: data.failed_offers || 0,
+        });
       }
     } catch (error) {
       console.error('Error checking update status:', error);
@@ -283,13 +297,34 @@ const TrackOfertas = () => {
       {isDailyUpdateRunning && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
           <div className="bg-card p-8 rounded-lg border-2 border-accent max-w-md mx-4">
-            <div className="flex flex-col items-center gap-4">
+            <div className="flex flex-col items-center gap-6">
               <div className="animate-spin rounded-full h-16 w-16 border-4 border-accent border-t-transparent"></div>
-              <div className="text-center">
+              <div className="text-center w-full">
                 <h3 className="text-2xl font-semibold mb-2">Atualizando ofertas...</h3>
-                <p className="text-muted-foreground">
+                <p className="text-muted-foreground mb-4">
                   Estamos atualizando os dados de todas as ofertas. Isso pode levar alguns minutos.
                 </p>
+                {updateProgress.total > 0 && (
+                  <div className="space-y-3 mt-6">
+                    <Progress 
+                      value={(updateProgress.processed / updateProgress.total) * 100} 
+                      className="h-3"
+                    />
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        {updateProgress.processed} de {updateProgress.total} ofertas processadas
+                      </span>
+                      <span className="text-accent font-semibold">
+                        {Math.round((updateProgress.processed / updateProgress.total) * 100)}%
+                      </span>
+                    </div>
+                    {updateProgress.failed > 0 && (
+                      <p className="text-xs text-destructive">
+                        {updateProgress.failed} {updateProgress.failed === 1 ? 'oferta falhou' : 'ofertas falharam'}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
