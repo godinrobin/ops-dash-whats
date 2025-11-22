@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, TrendingUp, TrendingDown, Minus, ExternalLink, Trash2, Edit, Maximize2, X } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Minus, ExternalLink, Trash2, Edit, Maximize2, X, RefreshCw } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 interface TrackedOffer {
@@ -219,6 +219,46 @@ const TrackOfertas = () => {
     loadOffers();
   };
 
+  const handleManualUpdate = async () => {
+    if (offers.length === 0) {
+      toast({
+        title: "Nenhuma oferta cadastrada",
+        description: "Cadastre ofertas antes de atualizar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsDailyUpdateRunning(true);
+      
+      const { data, error } = await supabase.functions.invoke('update-offers-daily', {
+        body: { manual_trigger: true }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Atualização iniciada!",
+        description: "Os dados das ofertas estão sendo atualizados. Isso pode levar alguns minutos.",
+      });
+
+      // Aguarda um tempo antes de recarregar
+      setTimeout(() => {
+        loadOffers();
+      }, 2000);
+      
+    } catch (error: any) {
+      console.error('Erro ao disparar atualização:', error);
+      setIsDailyUpdateRunning(false);
+      toast({
+        title: "Erro ao atualizar",
+        description: error.message || "Ocorreu um erro ao iniciar a atualização.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const getCurrentCount = (metrics: OfferMetric[]) => {
     if (metrics.length === 0) return 0;
     return metrics[metrics.length - 1].active_ads_count;
@@ -285,17 +325,29 @@ const TrackOfertas = () => {
             </div>
           </div>
           
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button 
-                size="lg" 
-                className="bg-accent hover:bg-accent/90"
-                disabled={offers.length >= 10}
-              >
-                <Plus className="mr-2 h-5 w-5" />
-                Adicionar Oferta {offers.length}/10
-              </Button>
-            </DialogTrigger>
+          <div className="flex gap-3">
+            <Button 
+              size="lg" 
+              variant="outline"
+              onClick={handleManualUpdate}
+              disabled={isDailyUpdateRunning || offers.length === 0}
+              className="border-accent/30 hover:bg-accent/10"
+            >
+              <RefreshCw className={`mr-2 h-5 w-5 ${isDailyUpdateRunning ? 'animate-spin' : ''}`} />
+              Atualizar Agora
+            </Button>
+            
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button 
+                  size="lg" 
+                  className="bg-accent hover:bg-accent/90"
+                  disabled={offers.length >= 10}
+                >
+                  <Plus className="mr-2 h-5 w-5" />
+                  Adicionar Oferta {offers.length}/10
+                </Button>
+              </DialogTrigger>
             <DialogContent className="sm:max-w-[500px] bg-card border-border">
               <DialogHeader>
                 <DialogTitle className="text-2xl">Cadastrar Nova Oferta</DialogTitle>
@@ -354,6 +406,7 @@ const TrackOfertas = () => {
               </div>
             </DialogContent>
           </Dialog>
+          </div>
 
           {/* Loading Dialog */}
           <Dialog open={isLoading}>
