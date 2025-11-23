@@ -24,6 +24,23 @@ const logSafe = (level: 'info' | 'error', message: string, metadata?: any) => {
   console[level](message, sanitized);
 };
 
+// Helper function to validate Facebook Ad Library link
+const isValidAdLibraryLink = (url: string): boolean => {
+  if (!url || url.trim() === '') return false;
+  
+  // Must be a Facebook Ad Library URL
+  if (!url.includes('facebook.com/ads/library')) return false;
+  
+  // Must have a specific page ID or ad ID, not a keyword search
+  // Valid formats:
+  // - ?id=123456 (specific ad)
+  // - view_all_page_id=123456 (specific page)
+  const hasSpecificId = url.includes('id=') && !url.includes('search_type=keyword');
+  const hasPageId = url.includes('view_all_page_id=');
+  
+  return hasSpecificId || hasPageId;
+};
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -186,6 +203,23 @@ Deno.serve(async (req) => {
     for (const offer of batchToProcess as TrackedOffer[]) {
       try {
         console.log(`Processing offer ${offer.id}...`);
+        
+        // Validate offer link before processing
+        if (!isValidAdLibraryLink(offer.ad_library_link)) {
+          console.log(`Skipping offer ${offer.id}: invalid Ad Library link (${offer.ad_library_link.substring(0, 50)}...)`);
+          failedCount++;
+          
+          // Update progress immediately
+          await supabaseClient
+            .from('daily_update_status')
+            .update({
+              processed_offers: currentProcessed + processedCount,
+              failed_offers: currentFailed + failedCount,
+            })
+            .eq('id', statusId);
+          
+          continue; // Skip this offer
+        }
 
         // Call Apify API to scrape Facebook Ads
         const apifyToken = Deno.env.get('APIFY_API_TOKEN');
