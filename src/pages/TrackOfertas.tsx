@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, TrendingUp, TrendingDown, Minus, ExternalLink, Trash2, Edit, Maximize2, X } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Minus, ExternalLink, Trash2, Edit, Maximize2, X, RefreshCw } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -233,6 +233,61 @@ const TrackOfertas = () => {
     loadOffers();
   };
 
+  const handleManualUpdate = async () => {
+    if (offers.length === 0) {
+      toast({
+        title: "Nenhuma oferta cadastrada",
+        description: "Cadastre ofertas antes de atualizar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsDailyUpdateRunning(true);
+      
+      let completed = false;
+      let attempts = 0;
+      const maxAttempts = 50;
+      
+      while (!completed && attempts < maxAttempts) {
+        attempts++;
+        
+        const { data, error } = await supabase.functions.invoke('update-offers-daily', {
+          body: { manual_trigger: true }
+        });
+
+        if (error) {
+          console.error('Error calling update function:', error);
+          throw error;
+        }
+
+        console.log(`Batch ${attempts} completed:`, data);
+
+        if (data?.completed) {
+          completed = true;
+        } else if (data?.remaining > 0) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        } else {
+          break;
+        }
+      }
+
+      setTimeout(() => {
+        loadOffers();
+        setIsDailyUpdateRunning(false);
+      }, 2000);
+      
+    } catch (error: any) {
+      console.error('Erro ao disparar atualização:', error);
+      setIsDailyUpdateRunning(false);
+      toast({
+        title: "Erro ao atualizar",
+        description: error.message || "Ocorreu um erro ao iniciar a atualização.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const getCurrentCount = (metrics: OfferMetric[]) => {
     if (metrics.length === 0) return 0;
@@ -314,6 +369,17 @@ const TrackOfertas = () => {
           </div>
           
           <div className="flex gap-3">
+            <Button
+              onClick={handleManualUpdate}
+              disabled={isDailyUpdateRunning || offers.length === 0}
+              variant="outline"
+              size="lg"
+              className="border-accent text-accent hover:bg-accent/10"
+            >
+              <RefreshCw className={`mr-2 h-5 w-5 ${isDailyUpdateRunning ? 'animate-spin' : ''}`} />
+              Atualizar Agora
+            </Button>
+            
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
                 <Button 
