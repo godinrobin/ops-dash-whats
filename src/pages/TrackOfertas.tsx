@@ -249,51 +249,73 @@ const TrackOfertas = () => {
       let completed = false;
       let attempts = 0;
       const maxAttempts = 50;
+      const startTime = Date.now();
+      const maxDuration = 10 * 60 * 1000; // 10 minutos máximo
       
       while (!completed && attempts < maxAttempts) {
         attempts++;
         
-        // Usar fetch direto já que a função é pública
-        const response = await fetch(
-          `https://dcjizoulbggsavizbukq.supabase.co/functions/v1/update-offers-daily`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ manual_trigger: true })
-          }
-        );
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('Error calling update function:', errorText);
-          throw new Error(`HTTP ${response.status}: ${errorText}`);
+        // Verificar timeout de segurança
+        if (Date.now() - startTime > maxDuration) {
+          console.error('Atualização cancelada: tempo máximo excedido (10 min)');
+          throw new Error('Tempo máximo de atualização excedido');
         }
+        
+        console.log(`Tentativa ${attempts}: Chamando função de atualização...`);
+        
+        try {
+          const response = await fetch(
+            `https://dcjizoulbggsavizbukq.supabase.co/functions/v1/update-offers-daily`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ manual_trigger: true })
+            }
+          );
 
-        const data = await response.json();
-        console.log(`Batch ${attempts} completed:`, data);
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`Erro HTTP ${response.status}:`, errorText);
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+          }
 
-        if (data?.completed) {
-          completed = true;
-        } else if (data?.remaining > 0) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        } else {
-          break;
+          const data = await response.json();
+          console.log(`Lote ${attempts} concluído:`, data);
+
+          if (data?.completed === true) {
+            console.log('✅ Atualização completa!');
+            completed = true;
+          } else if (data?.remaining && data.remaining > 0) {
+            console.log(`⏳ Aguardando 3s antes do próximo lote... (${data.remaining} restantes)`);
+            await new Promise(resolve => setTimeout(resolve, 3000));
+          } else {
+            console.log('⚠️ Resposta inesperada, finalizando:', data);
+            break;
+          }
+        } catch (fetchError) {
+          console.error(`Erro na tentativa ${attempts}:`, fetchError);
+          throw fetchError;
         }
       }
 
+      if (attempts >= maxAttempts) {
+        console.warn('Limite de tentativas atingido');
+      }
+
+      console.log('Recarregando dados...');
       setTimeout(() => {
         loadOffers();
         setIsDailyUpdateRunning(false);
       }, 2000);
       
     } catch (error: any) {
-      console.error('Erro ao disparar atualização:', error);
+      console.error('Erro fatal na atualização:', error);
       setIsDailyUpdateRunning(false);
       toast({
         title: "Erro ao atualizar",
-        description: error.message || "Ocorreu um erro ao iniciar a atualização.",
+        description: error.message || "Ocorreu um erro ao processar a atualização.",
         variant: "destructive",
       });
     }
