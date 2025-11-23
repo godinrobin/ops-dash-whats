@@ -54,6 +54,28 @@ Deno.serve(async (req) => {
 
     console.log('Starting daily update process...');
 
+    // First, check for stuck updates (running for more than 30 minutes)
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const { data: stuckStatus } = await supabaseClient
+      .from('daily_update_status')
+      .select('*')
+      .eq('is_running', true)
+      .lt('started_at', thirtyMinutesAgo)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (stuckStatus) {
+      console.log(`Found stuck update from ${stuckStatus.started_at}. Marking as failed.`);
+      await supabaseClient
+        .from('daily_update_status')
+        .update({
+          is_running: false,
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', stuckStatus.id);
+    }
+
     // Check if there's already a running update for today
     const { data: existingStatus } = await supabaseClient
       .from('daily_update_status')
@@ -61,7 +83,7 @@ Deno.serve(async (req) => {
       .eq('is_running', true)
       .order('created_at', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
     let statusId: string;
     let currentProcessed = 0;
@@ -330,9 +352,41 @@ Deno.serve(async (req) => {
       );
     }
   } catch (error) {
-    logSafe('error', 'Critical error in daily update', { code: 'CRITICAL_001' });
+    logSafe('error', 'Critical error in daily update', { code: 'CRITICAL_001', error: error instanceof Error ? error.message : String(error) });
+    
+    // CRITICAL: Always mark status as completed even on error
+    try {
+      const supabaseClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      );
+      
+      // Find and close any running status
+      const { data: runningStatus } = await supabaseClient
+        .from('daily_update_status')
+        .select('id')
+        .eq('is_running', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (runningStatus) {
+        await supabaseClient
+          .from('daily_update_status')
+          .update({
+            is_running: false,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', runningStatus.id);
+        
+        console.log('Marked failed update as completed');
+      }
+    } catch (cleanupError) {
+      console.error('Error during cleanup:', cleanupError);
+    }
+    
     return new Response(
-      JSON.stringify({ error: 'Internal server error' }),
+      JSON.stringify({ error: 'Internal server error', completed: true }),
       { 
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

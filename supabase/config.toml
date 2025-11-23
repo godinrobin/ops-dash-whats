@@ -1,1 +1,4 @@
 project_id = "dcjizoulbggsavizbukq"
+
+[functions.update-offers-daily]
+verify_jwt = false
