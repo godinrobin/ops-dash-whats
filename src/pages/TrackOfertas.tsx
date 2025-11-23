@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, TrendingUp, TrendingDown, Minus, ExternalLink, Trash2, Edit, Maximize2, X, RefreshCw } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Minus, ExternalLink, Trash2, Edit, Maximize2, X, RefreshCw, AlertTriangle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -396,6 +397,12 @@ const TrackOfertas = () => {
     return { type: "neutral" as const, value: 0 };
   };
 
+  const isInvalidLink = (metrics: OfferMetric[]) => {
+    if (metrics.length === 0) return false;
+    // Considera link inválido se a última métrica tem 0 anúncios
+    return metrics[metrics.length - 1].active_ads_count === 0;
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -584,6 +591,7 @@ const TrackOfertas = () => {
               {offers.map((offer) => {
                 const metrics = allMetrics[offer.id] || [];
                 const variation = getVariation(metrics);
+                const hasInvalidLink = isInvalidLink(metrics);
                 
                 return (
                   <Card key={offer.id} className="border-border bg-card/50 backdrop-blur relative group">
@@ -626,6 +634,14 @@ const TrackOfertas = () => {
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="px-3 pb-3">
+                        {hasInvalidLink && (
+                          <Alert variant="destructive" className="mb-3 p-2 border-destructive/50">
+                            <AlertTriangle className="h-3 w-3" />
+                            <AlertDescription className="text-[10px] leading-tight ml-5">
+                              Link inválido. Verifique se o link está correto e aponta para uma página ou anúncio específico.
+                            </AlertDescription>
+                          </Alert>
+                        )}
                         <div className="h-[120px] mb-2">
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={metrics}>
@@ -747,6 +763,15 @@ const TrackOfertas = () => {
               </a>
             </DialogDescription>
           </DialogHeader>
+          
+          {expandedOffer && isInvalidLink(allMetrics[expandedOffer.id] || []) && (
+            <Alert variant="destructive" className="border-destructive/50">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="ml-6">
+                <strong>Link inválido detectado.</strong> O link desta oferta não aponta para uma página ou anúncio específico da Biblioteca de Anúncios do Facebook. Por favor, verifique se o link está correto e atualize a oferta.
+              </AlertDescription>
+            </Alert>
+          )}
           
           {expandedOffer && allMetrics[expandedOffer.id] && (
             <div className="space-y-6 py-4">
