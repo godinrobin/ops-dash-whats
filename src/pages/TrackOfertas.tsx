@@ -245,23 +245,26 @@ const TrackOfertas = () => {
 
     try {
       setIsDailyUpdateRunning(true);
-      
       let completed = false;
       let attempts = 0;
       const maxAttempts = 50;
       const startTime = Date.now();
       const maxDuration = 10 * 60 * 1000; // 10 minutos máximo
+      let consecutiveErrors = 0;
+      const maxConsecutiveErrors = 3;
+      
+      console.log('🚀 Iniciando atualização manual de ofertas...');
       
       while (!completed && attempts < maxAttempts) {
         attempts++;
         
         // Verificar timeout de segurança
         if (Date.now() - startTime > maxDuration) {
-          console.error('Atualização cancelada: tempo máximo excedido (10 min)');
+          console.error('❌ Atualização cancelada: tempo máximo excedido (10 min)');
           throw new Error('Tempo máximo de atualização excedido');
         }
         
-        console.log(`Tentativa ${attempts}: Chamando função de atualização...`);
+        console.log(`📡 [${attempts}/${maxAttempts}] Chamando edge function...`);
         
         try {
           const response = await fetch(
@@ -277,41 +280,73 @@ const TrackOfertas = () => {
 
           if (!response.ok) {
             const errorText = await response.text();
-            console.error(`Erro HTTP ${response.status}:`, errorText);
-            throw new Error(`HTTP ${response.status}: ${errorText}`);
+            console.error(`❌ HTTP ${response.status}:`, errorText);
+            consecutiveErrors++;
+            
+            if (consecutiveErrors >= maxConsecutiveErrors) {
+              throw new Error(`Muitos erros consecutivos (${consecutiveErrors}). Último: HTTP ${response.status}`);
+            }
+            
+            console.warn(`⚠️ Tentando novamente após erro... (${consecutiveErrors}/${maxConsecutiveErrors})`);
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            continue;
           }
 
           const data = await response.json();
-          console.log(`Lote ${attempts} concluído:`, data);
+          console.log(`✅ Lote ${attempts} processado:`, JSON.stringify(data));
+          
+          // Reset error counter on success
+          consecutiveErrors = 0;
 
+          // Verificar se completou
           if (data?.completed === true) {
-            console.log('✅ Atualização completa!');
+            console.log('🎉 Atualização completa! Total processado:', data.processed);
             completed = true;
-          } else if (data?.remaining && data.remaining > 0) {
-            console.log(`⏳ Aguardando 3s antes do próximo lote... (${data.remaining} restantes)`);
-            await new Promise(resolve => setTimeout(resolve, 3000));
-          } else {
-            console.log('⚠️ Resposta inesperada, finalizando:', data);
             break;
+          } 
+          
+          // Verificar se há mais para processar
+          if (data?.remaining !== undefined && data.remaining > 0) {
+            console.log(`⏳ Aguardando 3s... (Restantes: ${data.remaining}/${data.total})`);
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            continue;
           }
-        } catch (fetchError) {
-          console.error(`Erro na tentativa ${attempts}:`, fetchError);
-          throw fetchError;
+          
+          // Se chegou aqui, resposta inesperada
+          console.warn('⚠️ Resposta sem "completed" ou "remaining". Assumindo conclusão:', data);
+          completed = true;
+          
+        } catch (fetchError: any) {
+          console.error(`❌ Erro na tentativa ${attempts}:`, fetchError);
+          consecutiveErrors++;
+          
+          if (consecutiveErrors >= maxConsecutiveErrors) {
+            throw new Error(`Muitos erros consecutivos (${consecutiveErrors}). Último: ${fetchError.message}`);
+          }
+          
+          console.warn(`⚠️ Tentando novamente após erro... (${consecutiveErrors}/${maxConsecutiveErrors})`);
+          await new Promise(resolve => setTimeout(resolve, 5000));
         }
       }
 
       if (attempts >= maxAttempts) {
-        console.warn('Limite de tentativas atingido');
+        console.warn('⚠️ Limite de tentativas atingido');
+        throw new Error(`Limite de ${maxAttempts} tentativas atingido`);
       }
 
-      console.log('Recarregando dados...');
+      console.log('🔄 Recarregando dados...');
       setTimeout(() => {
         loadOffers();
         setIsDailyUpdateRunning(false);
       }, 2000);
       
+      toast({
+        title: "Atualização concluída",
+        description: "As ofertas foram atualizadas com sucesso.",
+      });
+      
     } catch (error: any) {
-      console.error('Erro fatal na atualização:', error);
+      console.error('💥 Erro fatal na atualização:', error);
       setIsDailyUpdateRunning(false);
       toast({
         title: "Erro ao atualizar",
