@@ -253,15 +253,25 @@ const TrackOfertas = () => {
       while (!completed && attempts < maxAttempts) {
         attempts++;
         
-        const { data, error } = await supabase.functions.invoke('update-offers-daily', {
-          body: { manual_trigger: true }
-        });
+        // Usar fetch direto já que a função é pública
+        const response = await fetch(
+          `https://dcjizoulbggsavizbukq.supabase.co/functions/v1/update-offers-daily`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ manual_trigger: true })
+          }
+        );
 
-        if (error) {
-          console.error('Error calling update function:', error);
-          throw error;
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Error calling update function:', errorText);
+          throw new Error(`HTTP ${response.status}: ${errorText}`);
         }
 
+        const data = await response.json();
         console.log(`Batch ${attempts} completed:`, data);
 
         if (data?.completed) {
