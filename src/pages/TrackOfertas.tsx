@@ -168,6 +168,30 @@ const TrackOfertas = () => {
       return;
     }
 
+    // Validate Facebook Ad Library link
+    const link = newOffer.ad_library_link.trim();
+    if (!link.includes('facebook.com/ads/library')) {
+      toast({
+        title: "Link inválido",
+        description: "O link deve ser da Biblioteca de Anúncios do Facebook.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if it's a specific page/ad link, not a keyword search
+    const hasSpecificId = link.includes('id=') && !link.includes('search_type=keyword');
+    const hasPageId = link.includes('view_all_page_id=');
+    
+    if (!hasSpecificId && !hasPageId) {
+      toast({
+        title: "Link inválido",
+        description: "Use o link de uma página ou anúncio específico, não uma busca por palavras-chave.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (offers.length >= 10) {
       toast({
         title: "Limite atingido",
@@ -484,14 +508,15 @@ const TrackOfertas = () => {
                   <Label htmlFor="link" className="text-base">Link da Biblioteca de Anúncios *</Label>
                   <Input
                     id="link"
-                    placeholder="https://www.facebook.com/ads/library/..."
+                    placeholder="https://www.facebook.com/ads/library/?id=..."
                     value={newOffer.ad_library_link}
                     onChange={(e) => setNewOffer({ ...newOffer, ad_library_link: e.target.value })}
                     className="bg-input border-border"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Cole o link completo da biblioteca de anúncios do Facebook
-                  </p>
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p>✅ Use o link de uma <strong>página específica</strong> (com "view_all_page_id=")</p>
+                    <p>❌ Não use links de busca por palavras-chave</p>
+                  </div>
                 </div>
               </div>
               <div className="flex gap-3">
