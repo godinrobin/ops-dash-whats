@@ -112,6 +112,7 @@ export type Database = {
           created_at: string
           date: string
           id: string
+          is_invalid_link: boolean
           offer_id: string
         }
         Insert: {
@@ -119,6 +120,7 @@ export type Database = {
           created_at?: string
           date: string
           id?: string
+          is_invalid_link?: boolean
           offer_id: string
         }
         Update: {
@@ -126,6 +128,7 @@ export type Database = {
           created_at?: string
           date?: string
           id?: string
+          is_invalid_link?: boolean
           offer_id?: string
         }
         Relationships: [

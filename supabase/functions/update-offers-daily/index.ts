@@ -221,6 +221,7 @@ Deno.serve(async (req) => {
               offer_id: offer.id,
               date: today,
               active_ads_count: 0,
+              is_invalid_link: true,
             });
             console.log(`Marked offer ${offer.id} as processed with 0 ads (invalid link)`);
           }
@@ -307,6 +308,7 @@ Deno.serve(async (req) => {
               offer_id: offer.id,
               date: today,
               active_ads_count: activeAdsCount,
+              is_invalid_link: false,
             });
           }
 

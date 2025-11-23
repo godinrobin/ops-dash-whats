@@ -23,6 +23,7 @@ interface TrackedOffer {
 interface OfferMetric {
   date: string;
   active_ads_count: number;
+  is_invalid_link: boolean;
 }
 
 const TrackOfertas = () => {
@@ -399,8 +400,8 @@ const TrackOfertas = () => {
 
   const isInvalidLink = (metrics: OfferMetric[]) => {
     if (metrics.length === 0) return false;
-    // Considera link inválido se a última métrica tem 0 anúncios
-    return metrics[metrics.length - 1].active_ads_count === 0;
+    // Verifica se a última métrica foi marcada como link inválido
+    return metrics[metrics.length - 1].is_invalid_link === true;
   };
 
   return (
@@ -638,7 +639,7 @@ const TrackOfertas = () => {
                           <Alert variant="destructive" className="mb-3 p-2 border-destructive/50">
                             <AlertTriangle className="h-3 w-3" />
                             <AlertDescription className="text-[10px] leading-tight ml-5">
-                              Link inválido. Verifique se o link está correto e aponta para uma página ou anúncio específico.
+                              Link inválido detectado. O link não aponta para uma página ou anúncio específico. Verifique e atualize.
                             </AlertDescription>
                           </Alert>
                         )}
