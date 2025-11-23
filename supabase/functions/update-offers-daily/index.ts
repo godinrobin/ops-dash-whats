@@ -207,6 +207,24 @@ Deno.serve(async (req) => {
         // Validate offer link before processing
         if (!isValidAdLibraryLink(offer.ad_library_link)) {
           console.log(`Skipping offer ${offer.id}: invalid Ad Library link (${offer.ad_library_link.substring(0, 50)}...)`);
+          
+          // Insert a "failed" metric with 0 ads so this offer won't be retried today
+          const { data: existingMetric } = await supabaseClient
+            .from('offer_metrics')
+            .select('id')
+            .eq('offer_id', offer.id)
+            .eq('date', today)
+            .single();
+
+          if (!existingMetric) {
+            await supabaseClient.from('offer_metrics').insert({
+              offer_id: offer.id,
+              date: today,
+              active_ads_count: 0,
+            });
+            console.log(`Marked offer ${offer.id} as processed with 0 ads (invalid link)`);
+          }
+          
           failedCount++;
           
           // Update progress immediately
