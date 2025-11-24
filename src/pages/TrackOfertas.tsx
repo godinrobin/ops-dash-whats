@@ -40,6 +40,8 @@ const TrackOfertas = () => {
   const [newOffer, setNewOffer] = useState({ name: "", ad_library_link: "" });
   const [expandedOffer, setExpandedOffer] = useState<TrackedOffer | null>(null);
   const [updateProgress, setUpdateProgress] = useState({ processed: 0, total: 0, failed: 0 });
+  const [editingOffer, setEditingOffer] = useState<TrackedOffer | null>(null);
+  const [editedOfferName, setEditedOfferName] = useState("");
 
   const loadingMessages = [
     "🚀 Enviando informações para o Meta Ads...",
@@ -233,6 +235,41 @@ const TrackOfertas = () => {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleEditOffer = async () => {
+    if (!editingOffer || !editedOfferName.trim()) {
+      toast({
+        title: "Nome obrigatório",
+        description: "Por favor, preencha o nome da oferta.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("tracked_offers")
+        .update({ name: editedOfferName.trim() })
+        .eq("id", editingOffer.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Oferta atualizada!",
+        description: "O nome da oferta foi atualizado com sucesso.",
+      });
+
+      setEditingOffer(null);
+      setEditedOfferName("");
+      loadOffers();
+    } catch (error: any) {
+      toast({
+        title: "Erro ao atualizar oferta",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -468,17 +505,6 @@ const TrackOfertas = () => {
           </div>
           
           <div className="flex gap-3">
-            <Button
-              onClick={handleManualUpdate}
-              disabled={isDailyUpdateRunning || offers.length === 0}
-              variant="outline"
-              size="lg"
-              className="border-accent text-accent hover:bg-accent/10"
-            >
-              <RefreshCw className={`mr-2 h-5 w-5 ${isDailyUpdateRunning ? 'animate-spin' : ''}`} />
-              Atualizar Agora
-            </Button>
-            
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
                 <Button 
@@ -600,6 +626,17 @@ const TrackOfertas = () => {
                         <div className="flex items-start justify-between gap-2">
                           <CardTitle className="text-sm font-semibold truncate flex-1">{offer.name}</CardTitle>
                           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 hover:bg-blue-500/20"
+                              onClick={() => {
+                                setEditingOffer(offer);
+                                setEditedOfferName(offer.name);
+                              }}
+                            >
+                              <Edit className="h-3 w-3 text-blue-500" />
+                            </Button>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -746,6 +783,53 @@ const TrackOfertas = () => {
           </div>
         )}
       </main>
+
+      {/* Dialog de Edição */}
+      <Dialog open={!!editingOffer} onOpenChange={(open) => {
+        if (!open) {
+          setEditingOffer(null);
+          setEditedOfferName("");
+        }
+      }}>
+        <DialogContent className="sm:max-w-[425px] bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">Editar Oferta</DialogTitle>
+            <DialogDescription>
+              Altere o nome da oferta conforme necessário.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name" className="text-base">Nome da Oferta *</Label>
+              <Input
+                id="edit-name"
+                placeholder="Ex: Produto XYZ - Campanha Verão"
+                value={editedOfferName}
+                onChange={(e) => setEditedOfferName(e.target.value)}
+                className="bg-input border-border"
+              />
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditingOffer(null);
+                setEditedOfferName("");
+              }}
+              className="flex-1"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleEditOffer}
+              className="flex-1 bg-accent hover:bg-accent/90"
+            >
+              Salvar Alterações
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Popup expandido */}
       <Dialog open={!!expandedOffer} onOpenChange={() => setExpandedOffer(null)}>
