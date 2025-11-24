@@ -325,6 +325,30 @@ Deno.serve(async (req) => {
         }
       } catch (error) {
         logSafe('error', 'Failed to process offer', { code: 'PROCESS_001', offerId: offer.id });
+        
+        // Insert a metric with 0 ads to mark this offer as attempted today
+        // This prevents infinite retry loops on the same offer
+        try {
+          const { data: existingMetric } = await supabaseClient
+            .from('offer_metrics')
+            .select('id')
+            .eq('offer_id', offer.id)
+            .eq('date', today)
+            .single();
+
+          if (!existingMetric) {
+            await supabaseClient.from('offer_metrics').insert({
+              offer_id: offer.id,
+              date: today,
+              active_ads_count: 0,
+              is_invalid_link: false,
+            });
+            console.log(`Marked offer ${offer.id} as failed (timeout/error) to prevent retry`);
+          }
+        } catch (insertError) {
+          console.error(`Failed to insert failure metric for ${offer.id}:`, insertError);
+        }
+        
         failedCount++;
       }
 
