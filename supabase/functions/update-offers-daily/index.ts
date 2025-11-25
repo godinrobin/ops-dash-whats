@@ -423,7 +423,15 @@ Deno.serve(async (req) => {
   } catch (error) {
     logSafe('error', 'Critical error in daily update', { code: 'CRITICAL_001', error: error instanceof Error ? error.message : String(error) });
     
-    // CRITICAL: Always mark status as completed even on error
+    return new Response(
+      JSON.stringify({ error: 'Internal server error', completed: true }),
+      { 
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  } finally {
+    // CRITICAL: Always mark status as completed, even on error or timeout
     try {
       const supabaseClient = createClient(
         Deno.env.get('SUPABASE_URL') ?? '',
@@ -448,18 +456,10 @@ Deno.serve(async (req) => {
           })
           .eq('id', runningStatus.id);
         
-        console.log('Marked failed update as completed');
+        console.log('Marked update as completed in finally block');
       }
     } catch (cleanupError) {
-      console.error('Error during cleanup:', cleanupError);
+      console.error('Error during final cleanup:', cleanupError);
     }
-    
-    return new Response(
-      JSON.stringify({ error: 'Internal server error', completed: true }),
-      { 
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
   }
 });
