@@ -93,6 +93,50 @@ const TrackOfertas = () => {
     }
   }, [user]);
 
+  // Detectar e resetar updates travados (5 minutos sem mudança)
+  useEffect(() => {
+    if (!isDailyUpdateRunning) return;
+
+    const timeout = setTimeout(async () => {
+      console.log('⚠️ Atualização travada detectada. Resetando...');
+      
+      try {
+        // Buscar o status atual
+        const { data: currentStatus } = await supabase
+          .from('daily_update_status')
+          .select('*')
+          .eq('is_running', true)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (currentStatus) {
+          // Resetar o status travado
+          const { error } = await supabase
+            .from('daily_update_status')
+            .update({
+              is_running: false,
+              completed_at: new Date().toISOString(),
+            })
+            .eq('id', currentStatus.id);
+
+          if (!error) {
+            setIsDailyUpdateRunning(false);
+            toast({
+              title: "Atualização resetada",
+              description: "A atualização estava travada e foi resetada automaticamente.",
+              variant: "destructive",
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao resetar status travado:', error);
+      }
+    }, 5 * 60 * 1000); // 5 minutos
+
+    return () => clearTimeout(timeout);
+  }, [isDailyUpdateRunning, toast]);
+
   useEffect(() => {
     if (offers.length > 0) {
       loadAllMetrics();
