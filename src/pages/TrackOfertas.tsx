@@ -549,6 +549,17 @@ const TrackOfertas = () => {
           </div>
           
           <div className="flex gap-3">
+            <Button
+              size="lg"
+              variant="outline"
+              onClick={handleManualUpdate}
+              disabled={isDailyUpdateRunning || offers.length === 0}
+              className="border-accent/50 hover:bg-accent/10"
+            >
+              <RefreshCw className={`mr-2 h-5 w-5 ${isDailyUpdateRunning ? 'animate-spin' : ''}`} />
+              Atualizar Agora
+            </Button>
+            
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
                 <Button 
