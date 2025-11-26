@@ -354,9 +354,9 @@ const TrackOfertas = () => {
       setIsDailyUpdateRunning(true);
       let completed = false;
       let attempts = 0;
-      const maxAttempts = 50;
+      const maxAttempts = 100;
       const startTime = Date.now();
-      const maxDuration = 10 * 60 * 1000; // 10 minutos máximo
+      const maxDuration = 30 * 60 * 1000; // 30 minutos máximo
       let consecutiveErrors = 0;
       const maxConsecutiveErrors = 3;
       
@@ -367,7 +367,7 @@ const TrackOfertas = () => {
         
         // Verificar timeout de segurança
         if (Date.now() - startTime > maxDuration) {
-          console.error('❌ Atualização cancelada: tempo máximo excedido (10 min)');
+          console.error('❌ Atualização cancelada: tempo máximo excedido (30 min)');
           throw new Error('Tempo máximo de atualização excedido');
         }
         

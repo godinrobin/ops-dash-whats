@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
     );
 
     const today = new Date().toISOString().split('T')[0];
-    const BATCH_SIZE = 3; // Process 3 offers per execution with longer timeout
+    const BATCH_SIZE = 5; // Process 5 offers per execution
     const APIFY_TIMEOUT = 45000; // 45 seconds timeout for Apify API
 
     console.log('Starting daily update process...');
@@ -346,10 +346,9 @@ Deno.serve(async (req) => {
         })
         .eq('id', statusId);
 
-      // Add 2 second delay between offers to prevent API overload
-      // Add delay between offers to avoid rate limiting and reduce load
+      // Add delay between offers to avoid rate limiting
       if (processedCount + failedCount < batchToProcess.length) {
-        await sleep(3000); // 3 seconds between offers
+        await sleep(1500); // 1.5 seconds between offers
       }
     }
 
