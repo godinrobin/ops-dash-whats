@@ -58,7 +58,8 @@ Deno.serve(async (req) => {
     );
 
     const today = new Date().toISOString().split('T')[0];
-    const BATCH_SIZE = 2; // Process 2 offers per execution to stay within 60s limit
+    const BATCH_SIZE = 3; // Process 3 offers per execution with longer timeout
+    const APIFY_TIMEOUT = 45000; // 45 seconds timeout for Apify API
 
     console.log('Starting daily update process...');
 
@@ -259,9 +260,9 @@ Deno.serve(async (req) => {
 
         console.log(`Calling Apify for offer ${offer.id}...`);
         
-        // Create AbortController with 25s timeout
+        // Create AbortController with 45s timeout
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 25000);
+        const timeoutId = setTimeout(() => controller.abort(), APIFY_TIMEOUT);
         
         try {
           const apifyResponse = await fetch(apifyUrl, {
@@ -326,28 +327,9 @@ Deno.serve(async (req) => {
       } catch (error) {
         logSafe('error', 'Failed to process offer', { code: 'PROCESS_001', offerId: offer.id });
         
-        // Insert a metric with 0 ads to prevent infinite retry loops
-        // This marks the offer as "attempted today" even if it failed
-        try {
-          const { data: existingMetric } = await supabaseClient
-            .from('offer_metrics')
-            .select('id')
-            .eq('offer_id', offer.id)
-            .eq('date', today)
-            .maybeSingle();
-
-          if (!existingMetric) {
-            await supabaseClient.from('offer_metrics').insert({
-              offer_id: offer.id,
-              date: today,
-              active_ads_count: 0,
-              is_invalid_link: false, // API error, not invalid link
-            });
-            console.log(`Marked offer ${offer.id} as failed due to timeout/API error`);
-          }
-        } catch (insertError) {
-          console.error(`Failed to insert failure metric for ${offer.id}:`, insertError);
-        }
+        // Do NOT insert metric on timeout/API errors - allow retry on next run
+        // This ensures offers with temporary failures will be retried
+        console.log(`Offer ${offer.id} will be retried on next run`);
         
         failedCount++;
       }
@@ -365,8 +347,9 @@ Deno.serve(async (req) => {
         .eq('id', statusId);
 
       // Add 2 second delay between offers to prevent API overload
+      // Add delay between offers to avoid rate limiting and reduce load
       if (processedCount + failedCount < batchToProcess.length) {
-        await sleep(2000);
+        await sleep(3000); // 3 seconds between offers
       }
     }
 
