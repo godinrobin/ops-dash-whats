@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
     );
 
     const today = new Date().toISOString().split('T')[0];
-    const BATCH_SIZE = 3; // Process 3 offers per execution to avoid timeout
+    const BATCH_SIZE = 2; // Process 2 offers per execution to stay within 60s limit
 
     console.log('Starting daily update process...');
 
@@ -259,9 +259,9 @@ Deno.serve(async (req) => {
 
         console.log(`Calling Apify for offer ${offer.id}...`);
         
-        // Create AbortController with 30s timeout
+        // Create AbortController with 25s timeout
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        const timeoutId = setTimeout(() => controller.abort(), 25000);
         
         try {
           const apifyResponse = await fetch(apifyUrl, {
