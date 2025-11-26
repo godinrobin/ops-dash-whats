@@ -325,7 +325,30 @@ Deno.serve(async (req) => {
         }
       } catch (error) {
         logSafe('error', 'Failed to process offer', { code: 'PROCESS_001', offerId: offer.id });
-        // Don't insert metric on API errors - allow retry on next run
+        
+        // Insert a metric with 0 ads to prevent infinite retry loops
+        // This marks the offer as "attempted today" even if it failed
+        try {
+          const { data: existingMetric } = await supabaseClient
+            .from('offer_metrics')
+            .select('id')
+            .eq('offer_id', offer.id)
+            .eq('date', today)
+            .maybeSingle();
+
+          if (!existingMetric) {
+            await supabaseClient.from('offer_metrics').insert({
+              offer_id: offer.id,
+              date: today,
+              active_ads_count: 0,
+              is_invalid_link: false, // API error, not invalid link
+            });
+            console.log(`Marked offer ${offer.id} as failed due to timeout/API error`);
+          }
+        } catch (insertError) {
+          console.error(`Failed to insert failure metric for ${offer.id}:`, insertError);
+        }
+        
         failedCount++;
       }
 
