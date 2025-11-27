@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, TrendingUp, TrendingDown, Minus, ExternalLink, Trash2, Edit, Maximize2, X, RefreshCw, AlertTriangle } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Minus, ExternalLink, Trash2, Edit, Maximize2, X, RefreshCw, AlertTriangle, Lock } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -487,8 +487,25 @@ const TrackOfertas = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background relative">
       <Header />
+      
+      {/* Lock overlay for Track Ofertas */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-none">
+        <div className="bg-card border-2 border-accent rounded-2xl p-12 shadow-2xl flex flex-col items-center gap-6 pointer-events-auto">
+          <div className="rounded-full bg-accent/20 p-8">
+            <Lock className="h-20 w-20 text-accent" />
+          </div>
+          <div className="text-center">
+            <h2 className="text-4xl font-bold mb-3 bg-gradient-to-r from-accent to-orange-400 bg-clip-text text-transparent">
+              Em Breve
+            </h2>
+            <p className="text-muted-foreground text-lg">
+              Esta funcionalidade estará disponível em breve
+            </p>
+          </div>
+        </div>
+      </div>
       
       {/* Blur overlay when daily update is running */}
       {isDailyUpdateRunning && (
@@ -539,7 +556,7 @@ const TrackOfertas = () => {
             <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-accent to-orange-400 bg-clip-text text-transparent">
               Track Ofertas
             </h2>
-            <p className="text-muted-foreground mb-3">
+            <p className="text-muted-foreground mb-3 blur-sm select-none">
               Acompanhe a performance dos anúncios ativos das suas ofertas
             </p>
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-orange-400/30 bg-orange-400/5">
