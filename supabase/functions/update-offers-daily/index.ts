@@ -59,8 +59,8 @@ Deno.serve(async (req) => {
 
     const today = new Date().toISOString().split('T')[0];
     const BATCH_SIZE = 8; // Process 8 offers per execution
-    const APIFY_TIMEOUT = 20000; // 20 seconds timeout for Apify API
-    const MAX_EXECUTION_TIME = 120000; // 2 minutes max execution time
+    const APIFY_TIMEOUT = 12000; // 12 seconds timeout for Apify API
+    const MAX_EXECUTION_TIME = 100000; // 100 seconds max execution time
     const executionStartTime = Date.now();
 
     console.log('Starting daily update process...');
