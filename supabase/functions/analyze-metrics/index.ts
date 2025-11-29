@@ -27,10 +27,10 @@ serve(async (req) => {
 Avalie o CPL com base no tipo de campanha do contexto (sem mencionar valores ideais explicitamente).
 
 ⚠️ **PONTOS DE ATENÇÃO**
-Identifique tendências (houve dias bons? quando piorou?).
+Identifique tendências e SEMPRE INFORME AS DATAS específicas quando houver mudanças (ex: "a partir de 15/01", "entre 10/01 e 15/01"). Mencione quando houve dias bons e quando piorou.
 
-💡 **RECOMENDAÇÕES**
-Dê 2-3 ações práticas com base no criativo e campanha do usuário.
+💡 **SUGESTÕES DE MELHORIA**
+Dê 2-3 sugestões práticas com base no criativo e campanha. Deixe claro que são sugestões e insights, não verdades absolutas.
 
 Use emojis moderadamente. Tom direto, profissional mas acessível. Máximo 3-4 parágrafos curtos.`;
     } else if (section === "conversion") {
@@ -40,10 +40,10 @@ Use emojis moderadamente. Tom direto, profissional mas acessível. Máximo 3-4 p
 Avalie a conversão (use benchmarks: >15% bom, <10% baixo).
 
 ⚠️ **PONTOS DE ATENÇÃO**
-Identifique tendências e relação com tipo de campanha.
+Identifique tendências e relação com tipo de campanha. SEMPRE INFORME AS DATAS específicas quando houver problemas (ex: "a partir de 12/01", "no período de 05/01 a 10/01").
 
-💡 **RECOMENDAÇÕES**
-Dê 2-3 ações práticas focadas em alinhamento de funil.
+💡 **SUGESTÕES DE MELHORIA**
+Dê 2-3 sugestões práticas focadas em alinhamento de funil. Deixe claro que são sugestões baseadas na análise, não certezas.
 
 Use emojis moderadamente. Tom direto, profissional mas acessível. Máximo 3-4 parágrafos curtos.`;
     } else if (section === "roas") {
@@ -53,10 +53,10 @@ Use emojis moderadamente. Tom direto, profissional mas acessível. Máximo 3-4 p
 Avalie o ROAS (use benchmarks: >2x bom, <1.5x baixo).
 
 ⚠️ **PONTOS DE ATENÇÃO**
-Relacione CPL + conversão para diagnóstico preciso.
+Relacione CPL + conversão para diagnóstico preciso. SEMPRE INFORME AS DATAS quando houver quedas ou melhorias no ROAS (ex: "ROAS caiu a partir de 20/01").
 
-💡 **RECOMENDAÇÕES**
-Dê 2-3 ações prioritárias para melhorar retorno.
+💡 **SUGESTÕES DE MELHORIA**
+Dê 2-3 sugestões prioritárias para melhorar retorno. Apresente como insights, não como afirmações absolutas.
 
 Use emojis moderadamente. Tom direto, profissional mas acessível. Máximo 3-4 parágrafos curtos.`;
     } else {
@@ -66,10 +66,10 @@ Use emojis moderadamente. Tom direto, profissional mas acessível. Máximo 3-4 p
 A campanha está lucrativa? Vale continuar?
 
 🎯 **DIAGNÓSTICO**
-Principal problema e oportunidade.
+Principal problema e oportunidade. Se houver períodos específicos com problemas, mencione as datas.
 
 🚀 **PRÓXIMOS PASSOS**
-2-3 ações prioritárias imediatas.
+2-3 sugestões prioritárias imediatas. Deixe claro que são recomendações baseadas na análise dos dados.
 
 Use emojis moderadamente. Tom executivo e direto. Máximo 3-4 parágrafos curtos.`;
     }
@@ -85,7 +85,7 @@ Use emojis moderadamente. Tom executivo e direto. Máximo 3-4 parágrafos curtos
         messages: [
           {
             role: "system",
-            content: "Você é um especialista em tráfego pago. Use linguagem de gestor de tráfego - direto, sem formalidades como 'prezado gestor'. Seja profissional mas acessível. Formate com tópicos usando emojis moderadamente (📊, ⚠️, 💡, ✅, 🎯, 🚀). Destaque insights importantes em negrito com **texto**."
+            content: "Você é um especialista em tráfego pago. Use linguagem de gestor de tráfego - direto, sem formalidades. Seja profissional mas acessível. Formate com tópicos usando emojis moderadamente (📊, ⚠️, 💡, ✅, 🎯, 🚀). Destaque insights importantes em negrito com **texto**. IMPORTANTE: Sempre que identificar problemas ou melhorias, mencione as DATAS ESPECÍFICAS dos dados analisados. Deixe claro que suas análises são sugestões e insights baseados nos dados, não verdades absolutas - use termos como 'sugiro', 'pode indicar', 'recomendo considerar'."
           },
           {
             role: "user",
