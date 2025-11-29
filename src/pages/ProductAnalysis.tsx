@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Header } from "@/components/Header";
 import { getProduct } from "@/utils/storage";
 import { Product, Metric } from "@/types/product";
-import { ArrowLeft, TrendingUp, Loader2 } from "lucide-react";
+import { ArrowLeft, TrendingUp, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -155,11 +155,17 @@ CONTEXTO DO USUÁRIO:
       const knowledgeBase = `
 BASE DE CONHECIMENTO PARA DIAGNÓSTICO:
 
+PARÂMETROS DE CPL (NÃO MENCIONAR EXPLICITAMENTE):
+- Campanhas de Compra por Mensagem: CPL normal entre R$ 1,50 - R$ 3,50
+- Campanhas de Maximizar Conversas: CPL normal entre R$ 0,40 - R$ 1,50
+- Abaixo destes valores = performance excelente
+- Acima destes valores = CPL caro
+
 CPL MUITO BARATO + ROAS RUIM:
 - Problema: Campanha maximizar mensagem ou criativo muito aberto (lead desqualificado)
 - Solução: Usar campanha de conversão compra otimizada para mensagem + melhorar segmentação do criativo
 
-CPL CARO (> R$ 3):
+CPL CARO:
 - Problema: Criativo fraco ou orçamento alto demais
 - Solução: Melhorar gancho do criativo + testar criativos em imagem + diminuir orçamento (R$ 6-10 para mineração)
 
@@ -370,7 +376,7 @@ ROAS BAIXO (< 1.5x):
 
                 {userContext?.creativeType && (
                   <div>
-                    <p className="font-semibold mb-3">3. Qual seu orçamento diário médio?</p>
+                    <p className="font-semibold mb-3">3. Qual seu orçamento diário por campanha?</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       <Button
                         variant="outline"
@@ -557,11 +563,13 @@ ROAS BAIXO (< 1.5x):
                   onClick={() => {
                     setAnalysis(null);
                     setUserContext(null);
+                    setCurrentQuestion("questions");
                   }}
                   variant="outline"
                   className="flex-1"
                 >
-                  Nova Análise
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Informar Novo Contexto
                 </Button>
                 <Button
                   onClick={() => navigate(`/produto/${product.id}`)}

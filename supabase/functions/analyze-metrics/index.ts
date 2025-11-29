@@ -21,13 +21,57 @@ serve(async (req) => {
     let prompt = "";
     
     if (section === "cpl") {
-      prompt = `${metricsContext}\n${contextInfo}\n${knowledgeBase}\n\nComo especialista em tráfego pago, analise APENAS o CPL (Custo por Lead) destas métricas. Seja direto, profissional e use linguagem de marketing digital. Identifique:\n1. Performance geral do CPL (use os benchmarks)\n2. Tendências ao longo do tempo (houve dias bons? quando ficou ruim?)\n3. Com base no tipo de campanha e criativo do usuário, dê um diagnóstico preciso\n4. Recomendações práticas e acionáveis\n\nMantenha tom sério mas acessível. Máximo 4 parágrafos curtos.`;
+      prompt = `${metricsContext}\n${contextInfo}\n${knowledgeBase}\n\nAnalise APENAS o CPL (Custo por Lead). Seja direto e use linguagem de gestor de tráfego. Estruture assim:
+
+📊 **PERFORMANCE**
+Avalie o CPL com base no tipo de campanha do contexto (sem mencionar valores ideais explicitamente).
+
+⚠️ **PONTOS DE ATENÇÃO**
+Identifique tendências (houve dias bons? quando piorou?).
+
+💡 **RECOMENDAÇÕES**
+Dê 2-3 ações práticas com base no criativo e campanha do usuário.
+
+Use emojis moderadamente. Tom direto, profissional mas acessível. Máximo 3-4 parágrafos curtos.`;
     } else if (section === "conversion") {
-      prompt = `${metricsContext}\n${contextInfo}\n${knowledgeBase}\n\nComo especialista em tráfego pago, analise APENAS a TAXA DE CONVERSÃO destas métricas. Seja direto, profissional e use linguagem de marketing digital. Identifique:\n1. Performance geral da conversão (use os benchmarks)\n2. Tendências ao longo do tempo\n3. Com base no tipo de campanha e alinhamento de funil, dê um diagnóstico preciso\n4. Recomendações práticas e acionáveis\n\nMantenha tom sério mas acessível. Máximo 4 parágrafos curtos.`;
+      prompt = `${metricsContext}\n${contextInfo}\n${knowledgeBase}\n\nAnalise APENAS a TAXA DE CONVERSÃO. Seja direto e use linguagem de gestor de tráfego. Estruture assim:
+
+📊 **PERFORMANCE**
+Avalie a conversão (use benchmarks: >15% bom, <10% baixo).
+
+⚠️ **PONTOS DE ATENÇÃO**
+Identifique tendências e relação com tipo de campanha.
+
+💡 **RECOMENDAÇÕES**
+Dê 2-3 ações práticas focadas em alinhamento de funil.
+
+Use emojis moderadamente. Tom direto, profissional mas acessível. Máximo 3-4 parágrafos curtos.`;
     } else if (section === "roas") {
-      prompt = `${metricsContext}\n${contextInfo}\n${knowledgeBase}\n\nComo especialista em tráfego pago, analise APENAS o ROAS destas métricas. Seja direto, profissional e use linguagem de marketing digital. Identifique:\n1. Performance geral do ROAS (use os benchmarks)\n2. Relação entre CPL, conversão e ROAS\n3. Diagnóstico preciso com base nas outras métricas\n4. Recomendações práticas para melhorar o retorno\n\nMantenha tom sério mas acessível. Máximo 4 parágrafos curtos.`;
+      prompt = `${metricsContext}\n${contextInfo}\n${knowledgeBase}\n\nAnalise APENAS o ROAS. Seja direto e use linguagem de gestor de tráfego. Estruture assim:
+
+📊 **PERFORMANCE**
+Avalie o ROAS (use benchmarks: >2x bom, <1.5x baixo).
+
+⚠️ **PONTOS DE ATENÇÃO**
+Relacione CPL + conversão para diagnóstico preciso.
+
+💡 **RECOMENDAÇÕES**
+Dê 2-3 ações prioritárias para melhorar retorno.
+
+Use emojis moderadamente. Tom direto, profissional mas acessível. Máximo 3-4 parágrafos curtos.`;
     } else {
-      prompt = `${metricsContext}\n${contextInfo}\n${knowledgeBase}\n\nComo especialista em tráfego pago, faça um RESUMO EXECUTIVO desta campanha. Seja direto e estratégico:\n1. Visão geral da performance (está dando lucro? vale a pena continuar?)\n2. Principal problema identificado\n3. Principal oportunidade de melhoria\n4. Próximos passos recomendados (máximo 3 ações prioritárias)\n\nTom executivo, direto ao ponto. Máximo 4 parágrafos curtos.`;
+      prompt = `${metricsContext}\n${contextInfo}\n${knowledgeBase}\n\nFaça um RESUMO EXECUTIVO. Seja direto e estratégico. Estruture assim:
+
+✅ **VISÃO GERAL**
+A campanha está lucrativa? Vale continuar?
+
+🎯 **DIAGNÓSTICO**
+Principal problema e oportunidade.
+
+🚀 **PRÓXIMOS PASSOS**
+2-3 ações prioritárias imediatas.
+
+Use emojis moderadamente. Tom executivo e direto. Máximo 3-4 parágrafos curtos.`;
     }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -41,7 +85,7 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: "Você é um especialista em tráfego pago e análise de métricas de marketing digital. Seja profissional, direto e use linguagem que conecte com gestores de tráfego. Mantenha seriedade mas seja acessível."
+            content: "Você é um especialista em tráfego pago. Use linguagem de gestor de tráfego - direto, sem formalidades como 'prezado gestor'. Seja profissional mas acessível. Formate com tópicos usando emojis moderadamente (📊, ⚠️, 💡, ✅, 🎯, 🚀). Destaque insights importantes em negrito com **texto**."
           },
           {
             role: "user",
