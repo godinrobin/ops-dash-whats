@@ -2,3 +2,6 @@ project_id = "dcjizoulbggsavizbukq"
 
 [functions.update-offers-daily]
 verify_jwt = false
+
+[functions.analyze-metrics]
+verify_jwt = false
