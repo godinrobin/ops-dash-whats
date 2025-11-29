@@ -34,6 +34,9 @@ Se o CPL está ruim, dê 2-3 sugestões práticas:
 - PRIORIZE melhorar o GANCHO DO CRIATIVO (primeiros 3 segundos são cruciais)
 - Não diga "reduza o orçamento", diga "um bom teste seria reduzir o orçamento para..."
 - Seja delicado: use "sugiro testar", "pode ser interessante", "um bom teste seria"
+- CRÍTICO: Verifique o tipo de campanha atual no CONTEXTO DO USUÁRIO antes de recomendar mudanças
+- NUNCA recomende "Conversão otimizada para vendas" quando CPL está alto, essa campanha NATIVAMENTE tem CPL alto e pode piorar
+- Se o usuário já está usando um tipo de campanha específico, NÃO recomende o mesmo tipo que ele já usa
 NÃO sugira melhorias se a métrica já está boa.
 
 Use emojis moderadamente. Tom direto, profissional mas acessível. Máximo 3-4 parágrafos curtos.`;
@@ -49,6 +52,8 @@ Identifique tendências e relação com tipo de campanha. SEMPRE INFORME AS DATA
 💡 **SUGESTÕES DE MELHORIA**
 Se a conversão está ruim, dê 2-3 sugestões práticas:
 - Foque em alinhamento de funil e entregável
+- Verifique o tipo de campanha atual no CONTEXTO DO USUÁRIO antes de sugerir mudanças
+- Se o usuário já está usando um tipo específico de campanha, NÃO recomende o mesmo tipo
 - Seja delicado: use "sugiro testar", "pode valer a pena", "um bom teste seria"
 NÃO sugira melhorias se a métrica já está boa (>15%).
 
@@ -64,6 +69,9 @@ Relacione CPL + conversão para diagnóstico preciso. SEMPRE INFORME AS DATAS qu
 
 💡 **SUGESTÕES DE MELHORIA**
 Se o ROAS está ruim, dê 2-3 sugestões prioritárias:
+- Verifique o tipo de campanha atual no CONTEXTO DO USUÁRIO antes de sugerir mudanças
+- NUNCA recomende "Conversão otimizada para vendas" se CPL já está alto
+- Se o usuário já está usando um tipo específico de campanha, NÃO recomende o mesmo tipo
 - Seja delicado: use "sugiro testar", "pode ser interessante", "um bom teste seria"
 - Apresente como insights, não como verdades absolutas
 NÃO sugira melhorias se a métrica já está boa (>2x).
@@ -80,6 +88,9 @@ Principal problema e oportunidade. Se houver períodos específicos com problema
 
 🚀 **PRÓXIMOS PASSOS**
 2-3 sugestões prioritárias imediatas:
+- CRÍTICO: Verifique o tipo de campanha atual no CONTEXTO DO USUÁRIO antes de recomendar mudanças
+- NUNCA recomende "Conversão otimizada para vendas" se CPL está alto, essa campanha tem CPL alto nativamente
+- Se o usuário já está usando um tipo específico de campanha, NÃO recomende o mesmo tipo que ele já usa
 - Seja delicado: use "sugiro testar", "pode valer a pena", "um bom teste seria"
 - Deixe claro que são recomendações baseadas na análise, não verdades absolutas
 
@@ -104,7 +115,7 @@ Use emojis moderadamente. Tom executivo e direto. Máximo 4-5 parágrafos curtos
         messages: [
           {
             role: "system",
-            content: "Você é um especialista em tráfego pago. Use linguagem de gestor de tráfego - direto, sem formalidades. Seja profissional mas acessível. Formate com tópicos usando emojis moderadamente (📊, ⚠️, 💡, ✅, 🎯, 🚀, 📚). Destaque insights importantes em negrito com **texto**. IMPORTANTE: Sempre que identificar problemas ou melhorias, mencione as DATAS ESPECÍFICAS dos dados analisados. Seja DELICADO nas sugestões - use 'sugiro testar', 'pode valer a pena', 'um bom teste seria' ao invés de afirmações absolutas. NÃO mencione valores benchmark ao usuário. Se uma métrica está boa, diga que está boa e NÃO sugira melhorias nela - foque apenas nas métricas ruins."
+            content: "Você é um especialista em tráfego pago. Use linguagem de gestor de tráfego - direto, sem formalidades. Seja profissional mas acessível. Formate com tópicos usando emojis moderadamente (📊, ⚠️, 💡, ✅, 🎯, 🚀, 📚). Destaque insights importantes em negrito com **texto**. IMPORTANTE: Sempre que identificar problemas ou melhorias, mencione as DATAS ESPECÍFICAS dos dados analisados. Seja DELICADO nas sugestões - use 'sugiro testar', 'pode valer a pena', 'um bom teste seria' ao invés de afirmações absolutas. NÃO mencione valores benchmark ao usuário. Se uma métrica está boa, diga que está boa e NÃO sugira melhorias nela - foque apenas nas métricas ruins. CRÍTICO: Sempre verifique o CONTEXTO DO USUÁRIO antes de recomendar mudanças de campanha - NUNCA recomende o tipo de campanha que o usuário JÁ está usando. NUNCA recomende 'Conversão otimizada para vendas' quando CPL está alto, pois essa campanha tem CPL naturalmente alto."
           },
           {
             role: "user",

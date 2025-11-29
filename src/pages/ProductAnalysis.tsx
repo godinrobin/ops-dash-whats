@@ -30,25 +30,31 @@ const ProductAnalysis = () => {
 
   useEffect(() => {
     loadProduct();
-    loadSavedAnalysis();
-  }, [productId]);
-
-  const loadSavedAnalysis = () => {
-    if (!productId) return;
-    const saved = localStorage.getItem(`analysis_${productId}`);
-    if (saved) {
-      const { analysis: savedAnalysis, context: savedContext } = JSON.parse(saved);
-      setAnalysis(savedAnalysis);
-      setUserContext(savedContext);
+    // Load saved analysis only once on mount
+    if (productId) {
+      const saved = localStorage.getItem(`analysis_${productId}`);
+      if (saved) {
+        try {
+          const { analysis: savedAnalysis, context: savedContext } = JSON.parse(saved);
+          setAnalysis(savedAnalysis);
+          setUserContext(savedContext);
+        } catch (error) {
+          console.error('Error loading saved analysis:', error);
+        }
+      }
     }
-  };
+  }, [productId]);
 
   const saveAnalysis = (analysisData: any, contextData: any) => {
     if (!productId) return;
-    localStorage.setItem(`analysis_${productId}`, JSON.stringify({
-      analysis: analysisData,
-      context: contextData
-    }));
+    try {
+      localStorage.setItem(`analysis_${productId}`, JSON.stringify({
+        analysis: analysisData,
+        context: contextData
+      }));
+    } catch (error) {
+      console.error('Error saving analysis:', error);
+    }
   };
 
   const loadProduct = async () => {
@@ -178,11 +184,11 @@ CONTEXTO ADICIONAL PARA ANÁLISE:
 BASE DE CONHECIMENTO PARA DIAGNÓSTICO:
 
 PARÂMETROS DE CPL (NÃO MENCIONAR VALORES EXPLICITAMENTE AO USUÁRIO):
-- Campanhas de Compra por Mensagem: CPL normal entre R$ 1,50 - R$ 3,50
+- Campanhas de Compra por Mensagem: CPL aceitável até R$ 3,50 | CPL caro ACIMA de R$ 3,50
 - Campanhas de Maximizar Conversas: CPL normal entre R$ 0,40 - R$ 1,50
-- Campanhas de Conversão otimizada para vendas: CPL normal acima de R$ 3,00 (mais caro é esperado)
+- Campanhas de Conversão otimizada para vendas: CPL normal acima de R$ 3,00 (mais caro é ESPERADO e NORMAL)
 - Abaixo destes valores = performance excelente
-- Acima destes valores = CPL caro (exceto conversão para vendas)
+- Acima destes valores = CPL caro (exceto conversão para vendas que nativamente tem CPL alto)
 
 CPL MUITO BARATO + ROAS RUIM:
 - Problema: Campanha maximizar mensagem ou criativo muito aberto (lead desqualificado)
@@ -190,10 +196,12 @@ CPL MUITO BARATO + ROAS RUIM:
 
 CPL CARO:
 - Problema Principal: GANCHO DO CRIATIVO FRACO (primeiros 3 segundos)
-- Solução: Melhorar gancho do criativo (primeiros 3 segundos são cruciais) + testar criativos em imagem
+- Solução PRIORITÁRIA: Melhorar gancho do criativo (primeiros 3 segundos são cruciais) + testar criativos em imagem
 - Teste de Orçamento: Um bom teste seria reduzir orçamento (R$ 6-10 para mineração de novos criativos)
-- Para conversão otimizada para vendas: foco em melhorar gancho do criativo e qualidade do lead
 - NÃO é necessariamente falta de qualificação, melhorando o gancho já pode diminuir muito o CPL
+- CRÍTICO: VERIFIQUE o tipo de campanha atual do usuário no CONTEXTO DO USUÁRIO
+- NUNCA recomendar trocar para "Conversão otimizada para vendas" quando CPL está alto, pois essa campanha NATIVAMENTE já tem CPL alto e pode piorar ainda mais
+- Se o usuário já está usando um tipo específico de campanha, NÃO recomende o mesmo tipo que ele já usa
 
 CONVERSÃO BAIXA (< 10%):
 - Problema: Campanha maximizar mensagem OU desalinhamento criativo-funil-entregável
