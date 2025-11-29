@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Product } from "@/types/product";
-import { Pencil, Trash2, Check, X } from "lucide-react";
+import { Pencil, Trash2, Check, X, TrendingUp } from "lucide-react";
 import { updateProduct, deleteProduct } from "@/utils/storage";
 import { toast } from "sonner";
 
@@ -95,13 +95,21 @@ export const ProductCard = ({ product, onUpdate }: ProductCardProps) => {
           {product.metrics.length} registro(s)
         </p>
       </CardContent>
-      <CardFooter>
+      <CardFooter className="flex gap-2">
         <Button
           onClick={() => navigate(`/produto/${product.id}`)}
-          className="w-full"
+          className="flex-1"
           variant="default"
         >
           Abrir Métricas
+        </Button>
+        <Button
+          onClick={() => navigate(`/produto/${product.id}/analise`)}
+          className="flex-1"
+          variant="secondary"
+        >
+          <TrendingUp className="h-4 w-4 mr-2" />
+          Análise
         </Button>
       </CardFooter>
     </Card>

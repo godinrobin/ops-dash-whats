@@ -9,6 +9,7 @@ import { AdminRoute } from "@/components/AdminRoute";
 import Home from "./pages/Home";
 import Index from "./pages/Index";
 import ProductMetrics from "./pages/ProductMetrics";
+import ProductAnalysis from "./pages/ProductAnalysis";
 import NumberOrganizer from "./pages/NumberOrganizer";
 import TrackOfertas from "./pages/TrackOfertas";
 import AdminPanel from "./pages/AdminPanel";
@@ -31,6 +32,7 @@ const App = () => (
             <Route path="/organizador-numeros" element={<ProtectedRoute><NumberOrganizer /></ProtectedRoute>} />
             <Route path="/track-ofertas" element={<ProtectedRoute><TrackOfertas /></ProtectedRoute>} />
             <Route path="/produto/:productId" element={<ProtectedRoute><ProductMetrics /></ProtectedRoute>} />
+            <Route path="/produto/:productId/analise" element={<ProtectedRoute><ProductAnalysis /></ProtectedRoute>} />
             <Route path="/bob-admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
