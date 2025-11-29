@@ -25,13 +25,31 @@ const ProductAnalysis = () => {
     campaignType?: string;
     creativeType?: string;
     budget?: string;
-    alignment?: string;
   } | null>(null);
   const [currentQuestion, setCurrentQuestion] = useState<string>("");
 
   useEffect(() => {
     loadProduct();
+    loadSavedAnalysis();
   }, [productId]);
+
+  const loadSavedAnalysis = () => {
+    if (!productId) return;
+    const saved = localStorage.getItem(`analysis_${productId}`);
+    if (saved) {
+      const { analysis: savedAnalysis, context: savedContext } = JSON.parse(saved);
+      setAnalysis(savedAnalysis);
+      setUserContext(savedContext);
+    }
+  };
+
+  const saveAnalysis = (analysisData: any, contextData: any) => {
+    if (!productId) return;
+    localStorage.setItem(`analysis_${productId}`, JSON.stringify({
+      analysis: analysisData,
+      context: contextData
+    }));
+  };
 
   const loadProduct = async () => {
     if (!productId) return;
@@ -148,8 +166,11 @@ Pix: ${m.pixCount} (R$ ${m.pixTotal}) | Conversão: ${m.conversion.toFixed(2)}% 
 CONTEXTO DO USUÁRIO:
 - Tipo de Campanha: ${userContext.campaignType}
 - Tipo de Criativo: ${userContext.creativeType}
-- Orçamento Diário: ${userContext.budget}
-- Alinhamento Funil: ${userContext.alignment}
+- Orçamento Diário por Campanha: ${userContext.budget}
+
+CONTEXTO ADICIONAL PARA ANÁLISE (não mencionar ao usuário):
+- Assume-se alinhamento padrão entre criativo, funil e entregável
+- Se houver problemas de conversão, considerar possível desalinhamento
 `;
 
       const knowledgeBase = `
@@ -158,16 +179,18 @@ BASE DE CONHECIMENTO PARA DIAGNÓSTICO:
 PARÂMETROS DE CPL (NÃO MENCIONAR EXPLICITAMENTE):
 - Campanhas de Compra por Mensagem: CPL normal entre R$ 1,50 - R$ 3,50
 - Campanhas de Maximizar Conversas: CPL normal entre R$ 0,40 - R$ 1,50
+- Campanhas de Conversão otimizada para vendas: CPL normal acima de R$ 3,00 (mais caro é esperado)
 - Abaixo destes valores = performance excelente
-- Acima destes valores = CPL caro
+- Acima destes valores = CPL caro (exceto conversão para vendas)
 
 CPL MUITO BARATO + ROAS RUIM:
 - Problema: Campanha maximizar mensagem ou criativo muito aberto (lead desqualificado)
 - Solução: Usar campanha de conversão compra otimizada para mensagem + melhorar segmentação do criativo
 
 CPL CARO:
-- Problema: Criativo fraco ou orçamento alto demais
+- Problema: Criativo fraco ou orçamento alto demais (exceto se for conversão para vendas, onde CPL mais alto é normal)
 - Solução: Melhorar gancho do criativo + testar criativos em imagem + diminuir orçamento (R$ 6-10 para mineração)
+- Para conversão otimizada para vendas: foco em melhorar criativo e qualidade do lead
 
 CONVERSÃO BAIXA (< 10%):
 - Problema: Campanha maximizar mensagem OU desalinhamento criativo-funil-entregava
@@ -209,6 +232,7 @@ ROAS BAIXO (< 1.5x):
       }
 
       setAnalysis(results);
+      saveAnalysis(results, userContext);
       toast.success("Análise gerada com sucesso!");
     } catch (error) {
       console.error("Erro ao analisar:", error);
@@ -246,7 +270,7 @@ ROAS BAIXO (< 1.5x):
           <header className="mb-8">
             <Button
               variant="secondary"
-              onClick={() => navigate(`/produto/${product.id}`)}
+              onClick={() => navigate("/")}
               className="mb-4"
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
@@ -280,57 +304,41 @@ ROAS BAIXO (< 1.5x):
                   <p className="font-semibold mb-3">1. Qual tipo de campanha você está usando?</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     <Button
-                      variant="outline"
+                      variant={userContext?.campaignType === "Conversão - Compra por Mensagem" ? "default" : "outline"}
                       className="justify-start h-auto py-3 px-4 text-left"
                       onClick={() => {
                         const temp = { ...userContext, campaignType: "Conversão - Compra por Mensagem" };
-                        if (Object.keys(temp).length === 4) {
-                          handleQuestionResponse(temp);
-                        } else {
-                          setUserContext(temp as any);
-                        }
+                        setUserContext(temp as any);
                       }}
                     >
                       Conversão - Compra por Mensagem
                     </Button>
                     <Button
-                      variant="outline"
+                      variant={userContext?.campaignType === "Maximizar Mensagens" ? "default" : "outline"}
                       className="justify-start h-auto py-3 px-4 text-left"
                       onClick={() => {
                         const temp = { ...userContext, campaignType: "Maximizar Mensagens" };
-                        if (Object.keys(temp).length === 4) {
-                          handleQuestionResponse(temp);
-                        } else {
-                          setUserContext(temp as any);
-                        }
+                        setUserContext(temp as any);
                       }}
                     >
                       Maximizar Mensagens
                     </Button>
                     <Button
-                      variant="outline"
+                      variant={userContext?.campaignType === "Conversão otimizada para vendas" ? "default" : "outline"}
                       className="justify-start h-auto py-3 px-4 text-left"
                       onClick={() => {
-                        const temp = { ...userContext, campaignType: "Reconhecimento/Tráfego" };
-                        if (Object.keys(temp).length === 4) {
-                          handleQuestionResponse(temp);
-                        } else {
-                          setUserContext(temp as any);
-                        }
+                        const temp = { ...userContext, campaignType: "Conversão otimizada para vendas" };
+                        setUserContext(temp as any);
                       }}
                     >
-                      Reconhecimento/Tráfego
+                      Conversão otimizada para vendas
                     </Button>
                     <Button
-                      variant="outline"
+                      variant={userContext?.campaignType === "Outro tipo" ? "default" : "outline"}
                       className="justify-start h-auto py-3 px-4 text-left"
                       onClick={() => {
                         const temp = { ...userContext, campaignType: "Outro tipo" };
-                        if (Object.keys(temp).length === 4) {
-                          handleQuestionResponse(temp);
-                        } else {
-                          setUserContext(temp as any);
-                        }
+                        setUserContext(temp as any);
                       }}
                     >
                       Outro tipo
@@ -343,29 +351,21 @@ ROAS BAIXO (< 1.5x):
                     <p className="font-semibold mb-3">2. Qual tipo de criativo você está usando?</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       <Button
-                        variant="outline"
+                        variant={userContext?.creativeType === "Vídeo" ? "default" : "outline"}
                         className="justify-start h-auto py-3 px-4"
                         onClick={() => {
                           const temp = { ...userContext, creativeType: "Vídeo" };
-                          if (Object.keys(temp).length === 4) {
-                            handleQuestionResponse(temp);
-                          } else {
-                            setUserContext(temp as any);
-                          }
+                          setUserContext(temp as any);
                         }}
                       >
                         Vídeo
                       </Button>
                       <Button
-                        variant="outline"
+                        variant={userContext?.creativeType === "Imagem" ? "default" : "outline"}
                         className="justify-start h-auto py-3 px-4"
                         onClick={() => {
                           const temp = { ...userContext, creativeType: "Imagem" };
-                          if (Object.keys(temp).length === 4) {
-                            handleQuestionResponse(temp);
-                          } else {
-                            setUserContext(temp as any);
-                          }
+                          setUserContext(temp as any);
                         }}
                       >
                         Imagem
@@ -379,57 +379,41 @@ ROAS BAIXO (< 1.5x):
                     <p className="font-semibold mb-3">3. Qual seu orçamento diário por campanha?</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       <Button
-                        variant="outline"
+                        variant={userContext?.budget === "Até R$ 10/dia" ? "default" : "outline"}
                         className="justify-start h-auto py-3 px-4"
                         onClick={() => {
                           const temp = { ...userContext, budget: "Até R$ 10/dia" };
-                          if (Object.keys(temp).length === 4) {
-                            handleQuestionResponse(temp);
-                          } else {
-                            setUserContext(temp as any);
-                          }
+                          handleQuestionResponse(temp);
                         }}
                       >
                         Até R$ 10/dia
                       </Button>
                       <Button
-                        variant="outline"
+                        variant={userContext?.budget === "R$ 10 - R$ 50/dia" ? "default" : "outline"}
                         className="justify-start h-auto py-3 px-4"
                         onClick={() => {
                           const temp = { ...userContext, budget: "R$ 10 - R$ 50/dia" };
-                          if (Object.keys(temp).length === 4) {
-                            handleQuestionResponse(temp);
-                          } else {
-                            setUserContext(temp as any);
-                          }
+                          handleQuestionResponse(temp);
                         }}
                       >
                         R$ 10 - R$ 50/dia
                       </Button>
                       <Button
-                        variant="outline"
+                        variant={userContext?.budget === "R$ 50 - R$ 200/dia" ? "default" : "outline"}
                         className="justify-start h-auto py-3 px-4"
                         onClick={() => {
                           const temp = { ...userContext, budget: "R$ 50 - R$ 200/dia" };
-                          if (Object.keys(temp).length === 4) {
-                            handleQuestionResponse(temp);
-                          } else {
-                            setUserContext(temp as any);
-                          }
+                          handleQuestionResponse(temp);
                         }}
                       >
                         R$ 50 - R$ 200/dia
                       </Button>
                       <Button
-                        variant="outline"
+                        variant={userContext?.budget === "Acima de R$ 200/dia" ? "default" : "outline"}
                         className="justify-start h-auto py-3 px-4"
                         onClick={() => {
                           const temp = { ...userContext, budget: "Acima de R$ 200/dia" };
-                          if (Object.keys(temp).length === 4) {
-                            handleQuestionResponse(temp);
-                          } else {
-                            setUserContext(temp as any);
-                          }
+                          handleQuestionResponse(temp);
                         }}
                       >
                         Acima de R$ 200/dia
@@ -438,40 +422,6 @@ ROAS BAIXO (< 1.5x):
                   </div>
                 )}
 
-                {userContext?.budget && (
-                  <div>
-                    <p className="font-semibold mb-3">4. Como está o alinhamento Criativo → Funil → Entregava?</p>
-                    <div className="grid grid-cols-1 gap-2">
-                      <Button
-                        variant="outline"
-                        className="justify-start h-auto py-3 px-4 text-left"
-                        onClick={() => {
-                          handleQuestionResponse({ ...userContext, alignment: "Totalmente alinhado (mesmo mecanismo e visual)" });
-                        }}
-                      >
-                        Totalmente alinhado (mesmo mecanismo e visual)
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="justify-start h-auto py-3 px-4 text-left"
-                        onClick={() => {
-                          handleQuestionResponse({ ...userContext, alignment: "Parcialmente alinhado" });
-                        }}
-                      >
-                        Parcialmente alinhado
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="justify-start h-auto py-3 px-4 text-left"
-                        onClick={() => {
-                          handleQuestionResponse({ ...userContext, alignment: "Desalinhado ou não sei" });
-                        }}
-                      >
-                        Desalinhado ou não sei
-                      </Button>
-                    </div>
-                  </div>
-                )}
               </CardContent>
             </Card>
           ) : !analysis ? (
@@ -502,6 +452,30 @@ ROAS BAIXO (< 1.5x):
             </Card>
           ) : (
             <div className="space-y-6">
+              <div className="flex gap-4 mb-6">
+                <Button
+                  onClick={() => {
+                    setAnalysis(null);
+                    setUserContext(null);
+                    setCurrentQuestion("questions");
+                    if (productId) {
+                      localStorage.removeItem(`analysis_${productId}`);
+                    }
+                  }}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Informar Novo Contexto
+                </Button>
+                <Button
+                  onClick={() => navigate(`/produto/${product.id}`)}
+                  className="flex-1"
+                >
+                  Ver Métricas Detalhadas
+                </Button>
+              </div>
+
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -557,32 +531,11 @@ ROAS BAIXO (< 1.5x):
                   </div>
                 </CardContent>
               </Card>
-
-              <div className="flex gap-4">
-                <Button
-                  onClick={() => {
-                    setAnalysis(null);
-                    setUserContext(null);
-                    setCurrentQuestion("questions");
-                  }}
-                  variant="outline"
-                  className="flex-1"
-                >
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Informar Novo Contexto
-                </Button>
-                <Button
-                  onClick={() => navigate(`/produto/${product.id}`)}
-                  className="flex-1"
-                >
-                  Ver Métricas Detalhadas
-                </Button>
-              </div>
             </div>
           )}
 
           <footer className="mt-16 text-center text-xs text-muted-foreground/50">
-            Criado por <a href="https://instagram.com/joaolucaspss" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground transition-colors">@joaolucaspss</a>
+            Criado por <a href="https://instagram.com/joaolucassps" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground transition-colors">@joaolucassps</a>
           </footer>
         </div>
       </div>
