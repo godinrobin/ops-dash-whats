@@ -526,27 +526,49 @@ RECURSOS GERAIS:
             </Card>
           ) : (
             <div className="space-y-6">
-              <div className="flex gap-4 mb-6">
+              <div className="space-y-3 mb-6">
+                <div className="flex gap-4">
+                  <Button
+                    onClick={() => {
+                      setAnalysis(null);
+                      setUserContext(null);
+                      setCurrentQuestion("questions");
+                      if (productId) {
+                        localStorage.removeItem(`analysis_${productId}`);
+                      }
+                    }}
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Informar Novo Contexto
+                  </Button>
+                  <Button
+                    onClick={() => navigate(`/produto/${product.id}`)}
+                    className="flex-1"
+                  >
+                    Ver Métricas Detalhadas
+                  </Button>
+                </div>
                 <Button
-                  onClick={() => {
-                    setAnalysis(null);
-                    setUserContext(null);
-                    setCurrentQuestion("questions");
-                    if (productId) {
-                      localStorage.removeItem(`analysis_${productId}`);
-                    }
+                  onClick={async () => {
+                    await loadProduct();
+                    await analyzeMetrics();
                   }}
-                  variant="outline"
-                  className="flex-1"
+                  disabled={analyzing}
+                  className="w-full bg-green-500/20 hover:bg-green-500/30 text-green-700 dark:text-green-400 border border-green-500/30"
                 >
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Informar Novo Contexto
-                </Button>
-                <Button
-                  onClick={() => navigate(`/produto/${product.id}`)}
-                  className="flex-1"
-                >
-                  Ver Métricas Detalhadas
+                  {analyzing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Atualizando...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Atualizar Métricas
+                    </>
+                  )}
                 </Button>
               </div>
 
@@ -558,9 +580,10 @@ RECURSOS GERAIS:
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap">
-                    {analysis.cpl}
-                  </div>
+                  <div 
+                    className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap"
+                    dangerouslySetInnerHTML={{ __html: analysis.cpl.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }}
+                  />
                 </CardContent>
               </Card>
 
@@ -572,9 +595,10 @@ RECURSOS GERAIS:
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap">
-                    {analysis.conversion}
-                  </div>
+                  <div 
+                    className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap"
+                    dangerouslySetInnerHTML={{ __html: analysis.conversion.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }}
+                  />
                 </CardContent>
               </Card>
 
@@ -586,9 +610,10 @@ RECURSOS GERAIS:
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap">
-                    {analysis.roas}
-                  </div>
+                  <div 
+                    className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap"
+                    dangerouslySetInnerHTML={{ __html: analysis.roas.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }}
+                  />
                 </CardContent>
               </Card>
 
@@ -600,9 +625,10 @@ RECURSOS GERAIS:
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap font-medium">
-                    {analysis.summary}
-                  </div>
+                  <div 
+                    className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap font-medium"
+                    dangerouslySetInnerHTML={{ __html: analysis.summary.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }}
+                  />
                 </CardContent>
               </Card>
 
