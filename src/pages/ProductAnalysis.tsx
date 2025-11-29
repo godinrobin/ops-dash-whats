@@ -164,11 +164,12 @@ Pix: ${m.pixCount} (R$ ${m.pixTotal}) | Conversão: ${m.conversion.toFixed(2)}% 
 
       const contextInfo = `
 CONTEXTO DO USUÁRIO:
-- Tipo de Campanha: ${userContext.campaignType}
-- Tipo de Criativo: ${userContext.creativeType}
-- Orçamento Diário por Campanha: ${userContext.budget}
+- Tipo de Campanha: ${userContext.campaignType || 'Não informado'}
+- Tipo de Criativo: ${userContext.creativeType || 'Não informado'}
+- Orçamento Diário por Campanha: ${userContext.budget || 'Não informado'}
 
-CONTEXTO ADICIONAL PARA ANÁLISE (não mencionar ao usuário):
+CONTEXTO ADICIONAL PARA ANÁLISE:
+- O orçamento diário informado pelo usuário é INDIVIDUAL POR CAMPANHA, não o total da conta
 - Assume-se alinhamento padrão entre criativo, funil e entregável
 - Se houver problemas de conversão, considerar possível desalinhamento
 `;
@@ -176,7 +177,7 @@ CONTEXTO ADICIONAL PARA ANÁLISE (não mencionar ao usuário):
       const knowledgeBase = `
 BASE DE CONHECIMENTO PARA DIAGNÓSTICO:
 
-PARÂMETROS DE CPL (NÃO MENCIONAR EXPLICITAMENTE):
+PARÂMETROS DE CPL (NÃO MENCIONAR VALORES EXPLICITAMENTE AO USUÁRIO):
 - Campanhas de Compra por Mensagem: CPL normal entre R$ 1,50 - R$ 3,50
 - Campanhas de Maximizar Conversas: CPL normal entre R$ 0,40 - R$ 1,50
 - Campanhas de Conversão otimizada para vendas: CPL normal acima de R$ 3,00 (mais caro é esperado)
@@ -188,16 +189,41 @@ CPL MUITO BARATO + ROAS RUIM:
 - Solução: Usar campanha de conversão compra otimizada para mensagem + melhorar segmentação do criativo
 
 CPL CARO:
-- Problema: Criativo fraco ou orçamento alto demais (exceto se for conversão para vendas, onde CPL mais alto é normal)
-- Solução: Melhorar gancho do criativo + testar criativos em imagem + diminuir orçamento (R$ 6-10 para mineração)
-- Para conversão otimizada para vendas: foco em melhorar criativo e qualidade do lead
+- Problema Principal: GANCHO DO CRIATIVO FRACO (primeiros 3 segundos)
+- Solução: Melhorar gancho do criativo (primeiros 3 segundos são cruciais) + testar criativos em imagem
+- Teste de Orçamento: Um bom teste seria reduzir orçamento (R$ 6-10 para mineração de novos criativos)
+- Para conversão otimizada para vendas: foco em melhorar gancho do criativo e qualidade do lead
+- NÃO é necessariamente falta de qualificação, melhorando o gancho já pode diminuir muito o CPL
 
 CONVERSÃO BAIXA (< 10%):
-- Problema: Campanha maximizar mensagem OU desalinhamento criativo-funil-entregava
+- Problema: Campanha maximizar mensagem OU desalinhamento criativo-funil-entregável
 - Solução: Mudar para conversão compra por mensagem + alinhar foto do Facebook = WhatsApp + mesmo mecanismo no funil
+
+CONVERSÃO BOA (> 15%):
+- Se a conversão está boa, NÃO sugerir melhorias nela
+- Focar apenas nos outros problemas (CPL ou ROAS)
 
 ROAS BAIXO (< 1.5x):
 - Analisar conjuntamente CPL e conversão para diagnóstico preciso
+
+SUGESTÕES DE TREINAMENTO (baseado nos problemas identificados):
+
+Para problemas de CONVERSÃO ou FUNIL:
+- "Automação de WhatsApp" do Starter Whats - criar funil de WhatsApp com mais coerência
+- "Crie seu ebook com IA" do Starter Whats - criar entregável único e coerente
+- "Crie seu entregável em formato de App com IA" do Starter Whats - aumentar valor agregado
+- "Analisando Métricas (Funil)" do Starter Whats - analisar métricas do funil
+
+Para problemas de CPL ou CAMPANHAS:
+- "Subindo ads" do Starter Whats - subir campanhas de forma mais assertiva
+- "Analisando Métricas (Anúncios)" do Starter Whats - analisar métricas de anúncios
+
+Para OTIMIZAÇÃO AVANÇADA:
+- "TRACKEAMENTO ALÉM DA ETIQUETA" do Rataria Digital - enviar eventos de compra para melhor otimização
+- "Como destravar COMPRAR POR MENSAGEM" do Rataria Digital - desbloquear otimização de compra por mensagem
+
+RECURSOS GERAIS:
+- "Funis e Entregáveis" do Starter Whats - acesso a funis e entregáveis validados
 `;
 
       // Fazer 4 análises separadas usando edge function
@@ -304,8 +330,12 @@ ROAS BAIXO (< 1.5x):
                   <p className="font-semibold mb-3">1. Qual tipo de campanha você está usando?</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     <Button
-                      variant={userContext?.campaignType === "Conversão - Compra por Mensagem" ? "default" : "outline"}
-                      className="justify-start h-auto py-3 px-4 text-left"
+                      variant="outline"
+                      className={`justify-start h-auto py-3 px-4 text-left ${
+                        userContext?.campaignType === "Conversão - Compra por Mensagem" 
+                          ? "bg-orange-500 text-white border-orange-500 hover:bg-orange-600 hover:text-white" 
+                          : ""
+                      }`}
                       onClick={() => {
                         const temp = { ...userContext, campaignType: "Conversão - Compra por Mensagem" };
                         setUserContext(temp as any);
@@ -314,8 +344,12 @@ ROAS BAIXO (< 1.5x):
                       Conversão - Compra por Mensagem
                     </Button>
                     <Button
-                      variant={userContext?.campaignType === "Maximizar Mensagens" ? "default" : "outline"}
-                      className="justify-start h-auto py-3 px-4 text-left"
+                      variant="outline"
+                      className={`justify-start h-auto py-3 px-4 text-left ${
+                        userContext?.campaignType === "Maximizar Mensagens" 
+                          ? "bg-orange-500 text-white border-orange-500 hover:bg-orange-600 hover:text-white" 
+                          : ""
+                      }`}
                       onClick={() => {
                         const temp = { ...userContext, campaignType: "Maximizar Mensagens" };
                         setUserContext(temp as any);
@@ -324,8 +358,12 @@ ROAS BAIXO (< 1.5x):
                       Maximizar Mensagens
                     </Button>
                     <Button
-                      variant={userContext?.campaignType === "Conversão otimizada para vendas" ? "default" : "outline"}
-                      className="justify-start h-auto py-3 px-4 text-left"
+                      variant="outline"
+                      className={`justify-start h-auto py-3 px-4 text-left ${
+                        userContext?.campaignType === "Conversão otimizada para vendas" 
+                          ? "bg-orange-500 text-white border-orange-500 hover:bg-orange-600 hover:text-white" 
+                          : ""
+                      }`}
                       onClick={() => {
                         const temp = { ...userContext, campaignType: "Conversão otimizada para vendas" };
                         setUserContext(temp as any);
@@ -334,8 +372,12 @@ ROAS BAIXO (< 1.5x):
                       Conversão otimizada para vendas
                     </Button>
                     <Button
-                      variant={userContext?.campaignType === "Outro tipo" ? "default" : "outline"}
-                      className="justify-start h-auto py-3 px-4 text-left"
+                      variant="outline"
+                      className={`justify-start h-auto py-3 px-4 text-left ${
+                        userContext?.campaignType === "Outro tipo" 
+                          ? "bg-orange-500 text-white border-orange-500 hover:bg-orange-600 hover:text-white" 
+                          : ""
+                      }`}
                       onClick={() => {
                         const temp = { ...userContext, campaignType: "Outro tipo" };
                         setUserContext(temp as any);
@@ -351,8 +393,12 @@ ROAS BAIXO (< 1.5x):
                     <p className="font-semibold mb-3">2. Qual tipo de criativo você está usando?</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       <Button
-                        variant={userContext?.creativeType === "Vídeo" ? "default" : "outline"}
-                        className="justify-start h-auto py-3 px-4"
+                        variant="outline"
+                        className={`justify-start h-auto py-3 px-4 ${
+                          userContext?.creativeType === "Vídeo" 
+                            ? "bg-orange-500 text-white border-orange-500 hover:bg-orange-600 hover:text-white" 
+                            : ""
+                        }`}
                         onClick={() => {
                           const temp = { ...userContext, creativeType: "Vídeo" };
                           setUserContext(temp as any);
@@ -361,8 +407,12 @@ ROAS BAIXO (< 1.5x):
                         Vídeo
                       </Button>
                       <Button
-                        variant={userContext?.creativeType === "Imagem" ? "default" : "outline"}
-                        className="justify-start h-auto py-3 px-4"
+                        variant="outline"
+                        className={`justify-start h-auto py-3 px-4 ${
+                          userContext?.creativeType === "Imagem" 
+                            ? "bg-orange-500 text-white border-orange-500 hover:bg-orange-600 hover:text-white" 
+                            : ""
+                        }`}
                         onClick={() => {
                           const temp = { ...userContext, creativeType: "Imagem" };
                           setUserContext(temp as any);
@@ -379,8 +429,12 @@ ROAS BAIXO (< 1.5x):
                     <p className="font-semibold mb-3">3. Qual seu orçamento diário por campanha?</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       <Button
-                        variant={userContext?.budget === "Até R$ 10/dia" ? "default" : "outline"}
-                        className="justify-start h-auto py-3 px-4"
+                        variant="outline"
+                        className={`justify-start h-auto py-3 px-4 ${
+                          userContext?.budget === "Até R$ 10/dia" 
+                            ? "bg-orange-500 text-white border-orange-500 hover:bg-orange-600 hover:text-white" 
+                            : ""
+                        }`}
                         onClick={() => {
                           const temp = { ...userContext, budget: "Até R$ 10/dia" };
                           handleQuestionResponse(temp);
@@ -389,8 +443,12 @@ ROAS BAIXO (< 1.5x):
                         Até R$ 10/dia
                       </Button>
                       <Button
-                        variant={userContext?.budget === "R$ 10 - R$ 50/dia" ? "default" : "outline"}
-                        className="justify-start h-auto py-3 px-4"
+                        variant="outline"
+                        className={`justify-start h-auto py-3 px-4 ${
+                          userContext?.budget === "R$ 10 - R$ 50/dia" 
+                            ? "bg-orange-500 text-white border-orange-500 hover:bg-orange-600 hover:text-white" 
+                            : ""
+                        }`}
                         onClick={() => {
                           const temp = { ...userContext, budget: "R$ 10 - R$ 50/dia" };
                           handleQuestionResponse(temp);
@@ -399,8 +457,12 @@ ROAS BAIXO (< 1.5x):
                         R$ 10 - R$ 50/dia
                       </Button>
                       <Button
-                        variant={userContext?.budget === "R$ 50 - R$ 200/dia" ? "default" : "outline"}
-                        className="justify-start h-auto py-3 px-4"
+                        variant="outline"
+                        className={`justify-start h-auto py-3 px-4 ${
+                          userContext?.budget === "R$ 50 - R$ 200/dia" 
+                            ? "bg-orange-500 text-white border-orange-500 hover:bg-orange-600 hover:text-white" 
+                            : ""
+                        }`}
                         onClick={() => {
                           const temp = { ...userContext, budget: "R$ 50 - R$ 200/dia" };
                           handleQuestionResponse(temp);
@@ -409,8 +471,12 @@ ROAS BAIXO (< 1.5x):
                         R$ 50 - R$ 200/dia
                       </Button>
                       <Button
-                        variant={userContext?.budget === "Acima de R$ 200/dia" ? "default" : "outline"}
-                        className="justify-start h-auto py-3 px-4"
+                        variant="outline"
+                        className={`justify-start h-auto py-3 px-4 ${
+                          userContext?.budget === "Acima de R$ 200/dia" 
+                            ? "bg-orange-500 text-white border-orange-500 hover:bg-orange-600 hover:text-white" 
+                            : ""
+                        }`}
                         onClick={() => {
                           const temp = { ...userContext, budget: "Acima de R$ 200/dia" };
                           handleQuestionResponse(temp);
@@ -529,6 +595,27 @@ ROAS BAIXO (< 1.5x):
                   <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap font-medium">
                     {analysis.summary}
                   </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-orange-500/50 bg-orange-500/5">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <span className="text-2xl">🎯</span>
+                    Acelere Seus Resultados
+                  </CardTitle>
+                  <CardDescription>
+                    Quer aplicar essas estratégias com apoio de especialistas? Conheça nossos treinamentos completos.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    size="lg"
+                    className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold"
+                    onClick={() => window.open('https://link.joaolucassps.co/', '_blank')}
+                  >
+                    TREINAMENTO X1
+                  </Button>
                 </CardContent>
               </Card>
             </div>
