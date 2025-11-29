@@ -7,6 +7,7 @@ import { getProduct } from "@/utils/storage";
 import { Product, Metric } from "@/types/product";
 import { ArrowLeft, TrendingUp, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const ProductAnalysis = () => {
   const { productId } = useParams<{ productId: string }>();
@@ -170,52 +171,35 @@ ROAS BAIXO (< 1.5x):
 - Analisar conjuntamente CPL e conversão para diagnóstico preciso
 `;
 
-      // Fazer 4 análises separadas
+      // Fazer 4 análises separadas usando edge function
       const sections = ['cpl', 'conversion', 'roas', 'summary'];
       const results: any = {};
 
       for (const section of sections) {
-        let prompt = "";
-        
-        if (section === "cpl") {
-          prompt = `${metricsContext}\n${contextInfo}\n${knowledgeBase}\n\nComo especialista em tráfego pago, analise APENAS o CPL (Custo por Lead) destas métricas. Seja direto, profissional e use linguagem de marketing digital. Identifique:\n1. Performance geral do CPL (use os benchmarks)\n2. Tendências ao longo do tempo (houve dias bons? quando ficou ruim?)\n3. Com base no tipo de campanha e criativo do usuário, dê um diagnóstico preciso\n4. Recomendações práticas e acionáveis\n\nMantenha tom sério mas acessível. Máximo 4 parágrafos curtos.`;
-        } else if (section === "conversion") {
-          prompt = `${metricsContext}\n${contextInfo}\n${knowledgeBase}\n\nComo especialista em tráfego pago, analise APENAS a TAXA DE CONVERSÃO destas métricas. Seja direto, profissional e use linguagem de marketing digital. Identifique:\n1. Performance geral da conversão (use os benchmarks)\n2. Tendências ao longo do tempo\n3. Com base no tipo de campanha e alinhamento de funil, dê um diagnóstico preciso\n4. Recomendações práticas e acionáveis\n\nMantenha tom sério mas acessível. Máximo 4 parágrafos curtos.`;
-        } else if (section === "roas") {
-          prompt = `${metricsContext}\n${contextInfo}\n${knowledgeBase}\n\nComo especialista em tráfego pago, analise APENAS o ROAS destas métricas. Seja direto, profissional e use linguagem de marketing digital. Identifique:\n1. Performance geral do ROAS (use os benchmarks)\n2. Relação entre CPL, conversão e ROAS\n3. Diagnóstico preciso com base nas outras métricas\n4. Recomendações práticas para melhorar o retorno\n\nMantenha tom sério mas acessível. Máximo 4 parágrafos curtos.`;
-        } else {
-          prompt = `${metricsContext}\n${contextInfo}\n${knowledgeBase}\n\nComo especialista em tráfego pago, faça um RESUMO EXECUTIVO desta campanha. Seja direto e estratégico:\n1. Visão geral da performance (está dando lucro? vale a pena continuar?)\n2. Principal problema identificado\n3. Principal oportunidade de melhoria\n4. Próximos passos recomendados (máximo 3 ações prioritárias)\n\nTom executivo, direto ao ponto. Máximo 4 parágrafos curtos.`;
-        }
-
-        const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${import.meta.env.VITE_LOVABLE_API_KEY}`
-          },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
-            messages: [
-              {
-                role: "system",
-                content: "Você é um especialista em tráfego pago e análise de métricas de marketing digital. Seja profissional, direto e use linguagem que conecte com gestores de tráfego. Mantenha seriedade mas seja acessível."
-              },
-              {
-                role: "user",
-                content: prompt
-              }
-            ],
-            temperature: 0.7,
-            max_tokens: 800
-          })
-        });
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-metrics`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`
+            },
+            body: JSON.stringify({
+              metricsContext,
+              contextInfo,
+              knowledgeBase,
+              section
+            })
+          }
+        );
 
         if (!response.ok) {
-          throw new Error("Erro ao gerar análise");
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || "Erro ao gerar análise");
         }
 
         const data = await response.json();
-        results[section] = data.choices[0].message.content;
+        results[section] = data.content;
       }
 
       setAnalysis(results);
@@ -356,7 +340,7 @@ ROAS BAIXO (< 1.5x):
                         variant="outline"
                         className="justify-start h-auto py-3 px-4"
                         onClick={() => {
-                          const temp = { ...userContext, creativeType: "Vídeo (UGC/Testimonial)" };
+                          const temp = { ...userContext, creativeType: "Vídeo" };
                           if (Object.keys(temp).length === 4) {
                             handleQuestionResponse(temp);
                           } else {
@@ -364,13 +348,13 @@ ROAS BAIXO (< 1.5x):
                           }
                         }}
                       >
-                        Vídeo (UGC/Testimonial)
+                        Vídeo
                       </Button>
                       <Button
                         variant="outline"
                         className="justify-start h-auto py-3 px-4"
                         onClick={() => {
-                          const temp = { ...userContext, creativeType: "Imagem estática" };
+                          const temp = { ...userContext, creativeType: "Imagem" };
                           if (Object.keys(temp).length === 4) {
                             handleQuestionResponse(temp);
                           } else {
@@ -378,35 +362,7 @@ ROAS BAIXO (< 1.5x):
                           }
                         }}
                       >
-                        Imagem estática
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="justify-start h-auto py-3 px-4"
-                        onClick={() => {
-                          const temp = { ...userContext, creativeType: "Carrossel" };
-                          if (Object.keys(temp).length === 4) {
-                            handleQuestionResponse(temp);
-                          } else {
-                            setUserContext(temp as any);
-                          }
-                        }}
-                      >
-                        Carrossel
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="justify-start h-auto py-3 px-4"
-                        onClick={() => {
-                          const temp = { ...userContext, creativeType: "Variado" };
-                          if (Object.keys(temp).length === 4) {
-                            handleQuestionResponse(temp);
-                          } else {
-                            setUserContext(temp as any);
-                          }
-                        }}
-                      >
-                        Variado
+                        Imagem
                       </Button>
                     </div>
                   </div>
