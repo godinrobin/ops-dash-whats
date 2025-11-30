@@ -187,11 +187,12 @@ PARÂMETROS DE CPL (NÃO MENCIONAR VALORES EXPLICITAMENTE AO USUÁRIO):
 - Campanhas de Compra por Mensagem: CPL aceitável até R$ 3,50 | CPL caro ACIMA de R$ 3,50
 - Campanhas de Maximizar Conversas: CPL normal entre R$ 0,40 - R$ 1,50
 - Campanhas de Conversão otimizada para vendas: CPL normal acima de R$ 3,00 (mais caro é ESPERADO e NORMAL)
+- Campanhas de Engajamento otimizada para conversa: CPL normal entre R$ 0,40 - R$ 1,50 (lead barato mas conversão normalmente baixa)
 - Abaixo destes valores = performance excelente
 - Acima destes valores = CPL caro (exceto conversão para vendas que nativamente tem CPL alto)
 
 CPL MUITO BARATO + ROAS RUIM:
-- Problema: Campanha maximizar mensagem ou criativo muito aberto (lead desqualificado)
+- Problema: Campanha maximizar mensagem, campanha de engajamento otimizada para conversa, ou criativo muito aberto (lead desqualificado)
 - Solução: Usar campanha de conversão compra otimizada para mensagem + melhorar segmentação do criativo
 
 CPL CARO:
@@ -204,8 +205,9 @@ CPL CARO:
 - Se o usuário já está usando um tipo específico de campanha, NÃO recomende o mesmo tipo que ele já usa
 
 CONVERSÃO BAIXA (< 10%):
-- Problema: Campanha maximizar mensagem OU desalinhamento criativo-funil-entregável
+- Problema: Campanha maximizar mensagem, campanha de engajamento otimizada para conversa, OU desalinhamento criativo-funil-entregável
 - Solução: Mudar para conversão compra por mensagem + alinhar foto do Facebook = WhatsApp + mesmo mecanismo no funil
+- IMPORTANTE: Produtos são INFOPRODUTOS (sempre disponíveis, valores não mudam) - focar em qualidade do lead e alinhamento do funil
 
 CONVERSÃO BOA (> 15%):
 - Se a conversão está boa, NÃO sugerir melhorias nela
@@ -213,6 +215,7 @@ CONVERSÃO BOA (> 15%):
 
 ROAS BAIXO (< 1.5x):
 - Analisar conjuntamente CPL e conversão para diagnóstico preciso
+- IMPORTANTE: Produtos são INFOPRODUTOS (sempre disponíveis) - não sugerir verificar disponibilidade de estoque
 
 SUGESTÕES DE TREINAMENTO (baseado nos problemas identificados):
 
@@ -378,6 +381,34 @@ RECURSOS GERAIS:
                       }}
                     >
                       Conversão otimizada para vendas
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className={`justify-start h-auto py-3 px-4 text-left ${
+                        userContext?.campaignType === "Campanha de Engajamento otimizada para vendas" 
+                          ? "bg-orange-500 text-white border-orange-500 hover:bg-orange-600 hover:text-white" 
+                          : ""
+                      }`}
+                      onClick={() => {
+                        const temp = { ...userContext, campaignType: "Campanha de Engajamento otimizada para vendas" };
+                        setUserContext(temp as any);
+                      }}
+                    >
+                      Campanha de Engajamento otimizada para vendas
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className={`justify-start h-auto py-3 px-4 text-left ${
+                        userContext?.campaignType === "Campanha de engajamento otimizada para conversa" 
+                          ? "bg-orange-500 text-white border-orange-500 hover:bg-orange-600 hover:text-white" 
+                          : ""
+                      }`}
+                      onClick={() => {
+                        const temp = { ...userContext, campaignType: "Campanha de engajamento otimizada para conversa" };
+                        setUserContext(temp as any);
+                      }}
+                    >
+                      Campanha de engajamento otimizada para conversa
                     </Button>
                     <Button
                       variant="outline"
