@@ -98,15 +98,15 @@ export const ProductCard = ({ product, onUpdate }: ProductCardProps) => {
       <CardFooter className="flex gap-2">
         <Button
           onClick={() => navigate(`/produto/${product.id}`)}
-          className="flex-1"
-          variant="default"
+          className="flex-1 border border-orange-500/30 hover:border-orange-500/50"
+          variant="outline"
         >
           Abrir Métricas
         </Button>
         <Button
           onClick={() => navigate(`/produto/${product.id}/analise`)}
-          className="flex-1"
-          variant="secondary"
+          className="flex-1 bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 border-purple-500/20"
+          variant="outline"
         >
           <TrendingUp className="h-4 w-4 mr-2" />
           Análise

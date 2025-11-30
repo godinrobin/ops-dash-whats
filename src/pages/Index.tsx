@@ -54,7 +54,7 @@ const Index = () => {
               size="lg"
               className="bg-accent text-accent-foreground hover:bg-accent/90"
             >
-              + Criar meu primeiro produto
+              + Cadastrar meu primeiro produto
             </Button>
           </div>
         ) : (
@@ -70,7 +70,7 @@ const Index = () => {
                 size="lg"
                 className="bg-accent text-accent-foreground hover:bg-accent/90"
               >
-                + Criar novo produto
+                + Cadastrar novo produto
               </Button>
             </div>
           </>
