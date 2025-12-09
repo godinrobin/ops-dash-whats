@@ -13,6 +13,20 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   try {
+    // Validate Hubla security token
+    const hublaToken = Deno.env.get("HUBLA_WEBHOOK_TOKEN");
+    const requestToken = req.headers.get("x-hubla-token");
+
+    if (!hublaToken || requestToken !== hublaToken) {
+      console.error("Invalid or missing x-hubla-token");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized - invalid token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log("Token validated successfully");
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     
