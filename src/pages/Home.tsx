@@ -4,7 +4,7 @@ import { Header } from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import Autoplay from "embla-carousel-autoplay";
-import { Lock } from "lucide-react";
+
 
 const Home = () => {
   const navigate = useNavigate();
@@ -33,7 +33,7 @@ const Home = () => {
             </p>
           </header>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <Card 
               className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
               onClick={() => navigate("/metricas")}
@@ -75,18 +75,9 @@ const Home = () => {
             </Card>
 
             <Card 
-              className="relative border-2 border-accent overflow-hidden"
+              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
+              onClick={() => navigate("/track-ofertas")}
             >
-              <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] z-10 flex items-center justify-center">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="rounded-full bg-accent/20 p-4">
-                    <Lock className="h-10 w-10 text-accent" />
-                  </div>
-                  <span className="text-xl font-bold bg-gradient-to-r from-accent to-orange-400 bg-clip-text text-transparent">
-                    Em Breve
-                  </span>
-                </div>
-              </div>
               <CardHeader className="text-center">
                 <div className="flex justify-center mb-4">
                   <span className="text-6xl">🎯</span>
@@ -94,13 +85,35 @@ const Home = () => {
                 <CardTitle className="text-2xl bg-gradient-to-r from-accent to-orange-400 bg-clip-text text-transparent">
                   Track Ofertas
                 </CardTitle>
-                <CardDescription className="text-base blur-sm select-none">
+                <CardDescription className="text-base">
                   Acompanhe a performance dos anúncios de seus concorrentes
                 </CardDescription>
               </CardHeader>
               <CardContent className="text-center">
-                <p className="text-sm text-muted-foreground blur-sm select-none">
+                <p className="text-sm text-muted-foreground">
                   Monitore anúncios ativos e tendências diariamente
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card 
+              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
+              onClick={() => navigate("/criador-funil")}
+            >
+              <CardHeader className="text-center">
+                <div className="flex justify-center mb-4">
+                  <span className="text-6xl">💬</span>
+                </div>
+                <CardTitle className="text-2xl bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent">
+                  Criador de Funil
+                </CardTitle>
+                <CardDescription className="text-base">
+                  Crie funis de vendas personalizados para WhatsApp
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="text-center">
+                <p className="text-sm text-muted-foreground">
+                  Gere scripts de vendas completos com IA
                 </p>
               </CardContent>
             </Card>

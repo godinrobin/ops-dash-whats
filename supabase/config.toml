@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.analyze-metrics]
 verify_jwt = false
+
+[functions.generate-whatsapp-funnel]
+verify_jwt = false
