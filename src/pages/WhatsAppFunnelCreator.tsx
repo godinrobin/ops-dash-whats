@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Copy, Wand2, MessageSquare, Mic, Image, Video, FileText, ChevronDown, ChevronUp, Lightbulb, Edit, Plus, Save, Trash2, FolderOpen } from "lucide-react";
+import { TicketTagInput } from "@/components/TicketTagInput";
 
 interface FunnelMessage {
   type: "text" | "audio" | "image" | "video" | "ebook";
@@ -80,13 +81,14 @@ const WhatsAppFunnelCreator = () => {
   const [generatedFunnel, setGeneratedFunnel] = useState<GeneratedFunnel | null>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [showSiteRecommendation, setShowSiteRecommendation] = useState(false);
-  const [showConfig, setShowConfig] = useState(true);
+  const [showConfig, setShowConfig] = useState(false);
   const [savedFunnels, setSavedFunnels] = useState<SavedFunnel[]>([]);
   const [currentFunnelId, setCurrentFunnelId] = useState<string | null>(null);
   const [showSavedFunnels, setShowSavedFunnels] = useState(true);
   const [isLoadingFunnels, setIsLoadingFunnels] = useState(true);
   const [newFunnelName, setNewFunnelName] = useState("");
   const [showNewFunnelDialog, setShowNewFunnelDialog] = useState(false);
+  const [ticketsList, setTicketsList] = useState<string[]>([]);
   
   const [formData, setFormData] = useState({
     niche: "",
@@ -131,7 +133,7 @@ const WhatsAppFunnelCreator = () => {
   };
 
   const handleGenerateFunnel = async () => {
-    if (!formData.niche || !formData.product || !formData.expertName || !formData.angle || !formData.tickets) {
+    if (!formData.niche || !formData.product || !formData.expertName || !formData.angle || ticketsList.length === 0) {
       toast({
         title: "Campos obrigatórios",
         description: "Por favor, preencha todos os campos obrigatórios.",
@@ -160,7 +162,7 @@ const WhatsAppFunnelCreator = () => {
           product: formData.product === "Outro" ? formData.customProduct : formData.product,
           expertName: formData.expertName,
           angle: formData.angle === "Outro" ? formData.customAngle : formData.angle,
-          tickets: formData.tickets,
+          tickets: ticketsList.join(", "),
           pixKey: formData.pixKey,
           pixName: formData.pixName,
           pixBank: formData.pixBank,
@@ -201,6 +203,7 @@ const WhatsAppFunnelCreator = () => {
     if (!user || !generatedFunnel) return;
 
     const productName = formData.product === "Outro" ? formData.customProduct : formData.product;
+    const configToSave = { ...formData, tickets: ticketsList.join(", ") };
     
     try {
       if (currentFunnelId) {
@@ -208,7 +211,7 @@ const WhatsAppFunnelCreator = () => {
         const { error } = await supabase
           .from("saved_funnels")
           .update({
-            config: JSON.parse(JSON.stringify(formData)),
+            config: JSON.parse(JSON.stringify(configToSave)),
             funnel_content: JSON.parse(JSON.stringify(generatedFunnel)),
             updated_at: new Date().toISOString(),
           })
@@ -227,7 +230,7 @@ const WhatsAppFunnelCreator = () => {
           .insert([{
             user_id: user.id,
             name: productName || "Novo Funil",
-            config: JSON.parse(JSON.stringify(formData)),
+            config: JSON.parse(JSON.stringify(configToSave)),
             funnel_content: JSON.parse(JSON.stringify(generatedFunnel)),
           }])
           .select()
@@ -254,6 +257,12 @@ const WhatsAppFunnelCreator = () => {
 
   const handleLoadFunnel = (funnel: SavedFunnel) => {
     setFormData(funnel.config);
+    // Load tickets from config
+    if (funnel.config.tickets) {
+      setTicketsList(funnel.config.tickets.split(", ").filter((t: string) => t.trim()));
+    } else {
+      setTicketsList([]);
+    }
     setGeneratedFunnel(funnel.funnel_content);
     setCurrentFunnelId(funnel.id);
     setShowConfig(false);
@@ -314,10 +323,11 @@ const WhatsAppFunnelCreator = () => {
       bonus: "",
       ebookContent: "",
     });
+    setTicketsList([]);
     setGeneratedFunnel(null);
     setCurrentFunnelId(null);
     setShowConfig(true);
-    setShowSavedFunnels(true);
+    setShowSavedFunnels(false);
   };
 
   const copyToClipboard = (text: string) => {
@@ -502,7 +512,7 @@ const WhatsAppFunnelCreator = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className={`grid gap-8 ${showConfig && !generatedFunnel ? 'max-w-xl mx-auto' : 'grid-cols-1 lg:grid-cols-2'}`}>
           {/* Formulário */}
           {showConfig && (
             <Card className="border-border bg-card/50 backdrop-blur">
@@ -622,13 +632,12 @@ const WhatsAppFunnelCreator = () => {
                 {/* Ticket */}
                 <div className="space-y-2">
                   <Label htmlFor="tickets">Qual ticket de venda? *</Label>
-                  <Input
-                    placeholder="Ex: R$24,99 ou R$47 + R$97 (múltiplos valores)"
-                    value={formData.tickets}
-                    onChange={(e) => setFormData({ ...formData, tickets: e.target.value })}
+                  <TicketTagInput
+                    tickets={ticketsList}
+                    onChange={setTicketsList}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Pode ser um valor único ou múltiplos valores separados por vírgula
+                    Pressione espaço para adicionar. Arraste para reordenar.
                   </p>
                 </div>
 
