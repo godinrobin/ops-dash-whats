@@ -14,9 +14,9 @@ serve(async (req) => {
   }
 
   try {
-    const { niche, product, expertName, angle, tickets, pixKey, pixName, pixBank, pixKeyType, siteUrl, bonus, ebookContent } = await req.json();
+    const { niche, product, expertName, angle, tickets, tone, pixKey, pixName, pixBank, pixKeyType, siteUrl, bonus, ebookContent } = await req.json();
 
-    console.log('Generating funnel for:', { niche, product, expertName, angle, tickets, pixName, pixBank, pixKeyType });
+    console.log('Generating funnel for:', { niche, product, expertName, angle, tickets, tone, pixName, pixBank, pixKeyType });
 
     // Check if niche is religious
     const isReligiousNiche = niche?.toLowerCase().includes('religi') || 
@@ -31,6 +31,16 @@ serve(async (req) => {
     // Parse multiple tickets
     const ticketValues = tickets?.split(/[,+]/).map((t: string) => t.trim()).filter((t: string) => t) || [];
     const hasMultipleTickets = ticketValues.length > 1;
+
+    // Define tone descriptions
+    const toneDescriptions: Record<string, string> = {
+      informal: "Informal e amigável - use gírias leves, seja próximo e descontraído, como uma conversa entre amigos",
+      formal: "Formal e profissional - mantenha educação, respeito e profissionalismo, mas sem ser frio",
+      descontraido: "Descontraído e animado - use humor leve, emojis com mais frequência, seja muito entusiasmado",
+      leve: "Leve e suave - seja gentil, calmo e acolhedor, como um abraço aconchegante",
+    };
+
+    const toneInstruction = toneDescriptions[tone || 'informal'] || toneDescriptions.informal;
 
     const systemPrompt = `Você é um especialista em marketing digital e criação de funis de vendas para WhatsApp. Você cria funis de vendas altamente persuasivos e personalizados para infoprodutos.
 
@@ -52,10 +62,11 @@ Cada mensagem deve ter um tipo:
 REGRAS CRÍTICAS:
 1. Use emojis de forma natural e acolhedora.
 2. Personalize com o nome da expert, produto, nicho e ângulo informados.
-3. O tom deve ser PESSOAL e INFORMAL - lembre-se que é uma conversa de WhatsApp individual, não um broadcast para várias pessoas. Trate como se fosse uma conversa única com UMA pessoa.
-4. NUNCA fale como se estivesse falando com várias pessoas (evite "vocês", "pessoal", "galera").
-5. Use linguagem acolhedora e próxima: "você", "meu amor", "querida", etc.
-6. NÃO repita saudações como "Olá" ou "Oi" em todos os áudios - varie a abordagem.
+3. O TOM DEVE SER: ${toneInstruction}
+4. O tom deve ser PESSOAL - lembre-se que é uma conversa de WhatsApp individual, não um broadcast para várias pessoas. Trate como se fosse uma conversa única com UMA pessoa.
+5. NUNCA fale como se estivesse falando com várias pessoas (evite "vocês", "pessoal", "galera").
+6. Use linguagem acolhedora e próxima: "você", "meu amor", "querida", etc.
+7. NÃO repita saudações como "Olá" ou "Oi" em todos os áudios - varie a abordagem.
 
 REGRAS ESPECIAIS PARA CHAVE PIX:
 - Na seção COBRANÇA, primeiro envie uma mensagem com os dados completos do pagamento incluindo:
@@ -123,6 +134,7 @@ ${bonus ? `- **Bônus oferecido**: ${bonus}` : ''}
 ${ebookContent ? `- **Conteúdo do E-book/Material**: ${ebookContent}` : ''}
 
 LEMBRE-SE: É uma conversa de WhatsApp individual, 1 para 1. Não fale como se fosse para várias pessoas.
+UTILIZE O TOM: ${toneInstruction}
 
 Crie o funil seguindo a estrutura de APRESENTAÇÃO, PRODUTO e COBRANÇA.
 

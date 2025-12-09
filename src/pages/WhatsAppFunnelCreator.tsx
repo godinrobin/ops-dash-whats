@@ -74,6 +74,13 @@ const pixKeyTypeOptions = [
   "Aleatória",
 ];
 
+const toneOptions = [
+  { value: "informal", label: "Informal" },
+  { value: "formal", label: "Formal" },
+  { value: "descontraido", label: "Descontraído" },
+  { value: "leve", label: "Leve" },
+];
+
 const WhatsAppFunnelCreator = () => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -86,9 +93,11 @@ const WhatsAppFunnelCreator = () => {
   const [currentFunnelId, setCurrentFunnelId] = useState<string | null>(null);
   const [showSavedFunnels, setShowSavedFunnels] = useState(true);
   const [isLoadingFunnels, setIsLoadingFunnels] = useState(true);
-  const [newFunnelName, setNewFunnelName] = useState("");
-  const [showNewFunnelDialog, setShowNewFunnelDialog] = useState(false);
   const [ticketsList, setTicketsList] = useState<string[]>([]);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [saveFunnelName, setSaveFunnelName] = useState("");
+  const [editingFunnelId, setEditingFunnelId] = useState<string | null>(null);
+  const [editingFunnelName, setEditingFunnelName] = useState("");
   
   const [formData, setFormData] = useState({
     niche: "",
@@ -99,6 +108,7 @@ const WhatsAppFunnelCreator = () => {
     angle: "",
     customAngle: "",
     tickets: "",
+    tone: "informal",
     pixKey: "",
     pixName: "",
     pixBank: "",
@@ -163,6 +173,7 @@ const WhatsAppFunnelCreator = () => {
           expertName: formData.expertName,
           angle: formData.angle === "Outro" ? formData.customAngle : formData.angle,
           tickets: ticketsList.join(", "),
+          tone: formData.tone,
           pixKey: formData.pixKey,
           pixName: formData.pixName,
           pixBank: formData.pixBank,
@@ -199,10 +210,10 @@ const WhatsAppFunnelCreator = () => {
     }
   };
 
-  const handleSaveFunnel = async () => {
+  const handleSaveFunnel = async (name?: string) => {
     if (!user || !generatedFunnel) return;
 
-    const productName = formData.product === "Outro" ? formData.customProduct : formData.product;
+    const funnelName = name || saveFunnelName || (formData.product === "Outro" ? formData.customProduct : formData.product) || "Novo Funil";
     const configToSave = { ...formData, tickets: ticketsList.join(", ") };
     
     try {
@@ -229,7 +240,7 @@ const WhatsAppFunnelCreator = () => {
           .from("saved_funnels")
           .insert([{
             user_id: user.id,
-            name: productName || "Novo Funil",
+            name: funnelName,
             config: JSON.parse(JSON.stringify(configToSave)),
             funnel_content: JSON.parse(JSON.stringify(generatedFunnel)),
           }])
@@ -245,10 +256,40 @@ const WhatsAppFunnelCreator = () => {
         });
       }
 
+      setShowSaveDialog(false);
+      setSaveFunnelName("");
       loadSavedFunnels();
     } catch (error: any) {
       toast({
         title: "Erro ao salvar funil",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleUpdateFunnelName = async () => {
+    if (!editingFunnelId || !editingFunnelName.trim()) return;
+
+    try {
+      const { error } = await supabase
+        .from("saved_funnels")
+        .update({ name: editingFunnelName.trim() })
+        .eq("id", editingFunnelId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Nome atualizado!",
+        description: "O nome do funil foi alterado com sucesso.",
+      });
+
+      setEditingFunnelId(null);
+      setEditingFunnelName("");
+      loadSavedFunnels();
+    } catch (error: any) {
+      toast({
+        title: "Erro ao atualizar nome",
         description: error.message,
         variant: "destructive",
       });
@@ -315,6 +356,7 @@ const WhatsAppFunnelCreator = () => {
       angle: "",
       customAngle: "",
       tickets: "",
+      tone: "informal",
       pixKey: "",
       pixName: "",
       pixBank: "",
@@ -414,6 +456,53 @@ const WhatsAppFunnelCreator = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Save Funnel Dialog */}
+      <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
+        <DialogContent className="sm:max-w-[400px] bg-card border-accent">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <Save className="h-5 w-5 text-accent" />
+              Salvar Funil
+            </DialogTitle>
+            <DialogDescription className="text-base pt-2">
+              Escolha um nome para identificar seu funil.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              placeholder="Nome do funil"
+              value={saveFunnelName}
+              onChange={(e) => setSaveFunnelName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && saveFunnelName.trim()) {
+                  handleSaveFunnel(saveFunnelName.trim());
+                }
+              }}
+              autoFocus
+            />
+            <div className="flex gap-3 mt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowSaveDialog(false);
+                  setSaveFunnelName("");
+                }}
+                className="flex-1"
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={() => handleSaveFunnel(saveFunnelName.trim())}
+                className="flex-1 bg-accent hover:bg-accent/90"
+                disabled={!saveFunnelName.trim()}
+              >
+                Salvar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
       
       <main className="container mx-auto px-4 pt-20 pb-8">
         <div className="mb-8">
@@ -475,10 +564,46 @@ const WhatsAppFunnelCreator = () => {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {savedFunnels.map((funnel) => (
-                  <Card key={funnel.id} className="border-border bg-card/50 backdrop-blur hover:border-accent/50 transition-colors cursor-pointer group">
+                  <Card key={funnel.id} className="border-border bg-card/50 backdrop-blur hover:border-accent/50 transition-colors group">
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between">
-                        <CardTitle className="text-lg">{funnel.name}</CardTitle>
+                        {editingFunnelId === funnel.id ? (
+                          <div className="flex items-center gap-2 flex-1 mr-2">
+                            <Input
+                              value={editingFunnelName}
+                              onChange={(e) => setEditingFunnelName(e.target.value)}
+                              className="h-8 text-sm"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleUpdateFunnelName();
+                                if (e.key === "Escape") {
+                                  setEditingFunnelId(null);
+                                  setEditingFunnelName("");
+                                }
+                              }}
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 px-2"
+                              onClick={handleUpdateFunnelName}
+                            >
+                              <Save className="h-4 w-4 text-accent" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <CardTitle 
+                            className="text-lg cursor-pointer hover:text-accent transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingFunnelId(funnel.id);
+                              setEditingFunnelName(funnel.name);
+                            }}
+                            title="Clique para editar o nome"
+                          >
+                            {funnel.name}
+                          </CardTitle>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"
@@ -629,6 +754,26 @@ const WhatsAppFunnelCreator = () => {
                   )}
                 </div>
 
+                {/* Tom */}
+                <div className="space-y-2">
+                  <Label htmlFor="tone">Qual tom utilizar no funil? *</Label>
+                  <Select
+                    value={formData.tone}
+                    onValueChange={(value) => setFormData({ ...formData, tone: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o tom" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {toneOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 {/* Ticket */}
                 <div className="space-y-2">
                   <Label htmlFor="tickets">Qual ticket de venda? *</Label>
@@ -765,7 +910,13 @@ const WhatsAppFunnelCreator = () => {
                   Criar Novo Funil
                 </Button>
                 <Button
-                  onClick={handleSaveFunnel}
+                  onClick={() => {
+                    if (currentFunnelId) {
+                      handleSaveFunnel();
+                    } else {
+                      setShowSaveDialog(true);
+                    }
+                  }}
                   className="bg-accent hover:bg-accent/90"
                 >
                   <Save className="mr-2 h-4 w-4" />
