@@ -14,9 +14,9 @@ serve(async (req) => {
   }
 
   try {
-    const { niche, product, expertName, angle, tickets, pixKey, pixName, siteUrl, bonus } = await req.json();
+    const { niche, product, expertName, angle, tickets, pixKey, pixName, siteUrl, bonus, ebookContent } = await req.json();
 
-    console.log('Generating funnel for:', { niche, product, expertName, angle, tickets });
+    console.log('Generating funnel for:', { niche, product, expertName, angle, tickets, pixName });
 
     const systemPrompt = `Você é um especialista em marketing digital e criação de funis de vendas para WhatsApp. Você cria funis de vendas altamente persuasivos e personalizados para infoprodutos.
 
@@ -38,6 +38,17 @@ Cada mensagem deve ter um tipo:
 Use muitos emojis de forma natural e acolhedora.
 Personalize com o nome da expert, produto, nicho e ângulo informados.
 O tom deve ser empático, acolhedor e persuasivo, nunca agressivo.
+
+REGRAS ESPECIAIS PARA CHAVE PIX:
+- Na seção COBRANÇA, SEMPRE adicione uma mensagem separada dizendo "Copie a chave pix abaixo:" 
+- E em seguida, uma mensagem SEPARADA contendo SOMENTE a chave pix (sem texto adicional)
+- Se o nome do PIX for diferente do gênero da expert (ex: expert Maria mas pix no nome de João), adicione uma mensagem explicando que é do marido/esposa que ajuda no negócio
+- Se o nome do PIX parecer ser de empresa (contém LTDA, MEI, DIGITAL, etc), adicione uma mensagem explicando que é da empresa dela
+- Se o nome do PIX for do mesmo gênero da expert, não precisa explicar nada
+
+REGRAS PARA SITE:
+- Se NÃO foi informado site/URL, NÃO inclua mensagens sobre site no funil
+- Se foi informado site, inclua normalmente
 
 Retorne EXATAMENTE neste formato JSON:
 {
@@ -75,8 +86,9 @@ Para mensagens que são instruções (como "enviar vídeo mostrando o produto"),
 - **Ticket(s)**: ${tickets}
 ${pixKey ? `- **Chave Pix**: ${pixKey}` : ''}
 ${pixName ? `- **Nome no Pix**: ${pixName}` : ''}
-${siteUrl ? `- **Site/URL do Produto**: ${siteUrl}` : ''}
+${siteUrl ? `- **Site/URL do Produto**: ${siteUrl}` : '- **Site/URL do Produto**: NÃO INFORMADO (não incluir mensagens sobre site)'}
 ${bonus ? `- **Bônus oferecido**: ${bonus}` : ''}
+${ebookContent ? `- **Conteúdo do E-book/Material**: ${ebookContent}` : ''}
 
 Crie o funil seguindo a estrutura de APRESENTAÇÃO, PRODUTO e COBRANÇA.
 
@@ -85,20 +97,19 @@ Na seção APRESENTAÇÃO:
 - Um áudio de apresentação da expert (escreva o roteiro completo)
 
 Na seção PRODUTO:
-- Mensagens detalhando o que o cliente recebe
+- Mensagens detalhando o que o cliente recebe${ebookContent ? ` (use as informações do conteúdo: ${ebookContent})` : ''}
 - Instrução para enviar vídeo mostrando o produto por dentro
 - Instrução para enviar ebooks/materiais
-- Se tiver site, incluir o link
+${siteUrl ? `- Incluir o link do site: ${siteUrl}` : '- NÃO incluir mensagens sobre site pois não foi informado'}
 
 Na seção COBRANÇA:
-- Dados do Pix (se fornecidos)
+${pixKey ? `- Dados do Pix (chave: ${pixKey})` : '- Use "[SUA CHAVE PIX]" como placeholder para a chave'}
+${pixName ? `- Nome no Pix: ${pixName} - Analise se precisa explicar (diferente gênero da expert ${expertName} ou se é empresa)` : ''}
+- IMPORTANTE: Após enviar os dados do pix, adicione uma mensagem separada dizendo "Copie a chave pix abaixo:" 
+- E uma nova mensagem contendo SOMENTE a chave pix
 - Mensagem empática de cobrança
-- Áudio de cobrança mencionando o bônus (se houver)
+- Áudio de cobrança${bonus ? ` mencionando o bônus: ${bonus}` : ''}
 - Mensagens de follow-up
-
-${!pixKey ? 'Como não foi informada chave Pix, use "[SUA CHAVE PIX]" como placeholder.' : ''}
-${!siteUrl ? 'Como não foi informado site, use "[SEU SITE]" como placeholder.' : ''}
-${!bonus ? 'Não mencione bônus específicos, mas pode mencionar benefícios extras de forma genérica.' : ''}
 
 Retorne APENAS o JSON válido, sem markdown, sem texto adicional.`;
 

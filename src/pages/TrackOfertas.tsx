@@ -8,10 +8,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, TrendingUp, TrendingDown, Minus, ExternalLink, Trash2, Edit, Maximize2, Calendar, Save } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Minus, ExternalLink, Trash2, Edit, Maximize2, RefreshCw, Save } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { format, subDays, parseISO, isToday } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { format, subDays } from "date-fns";
 
 interface TrackedOffer {
   id: string;
@@ -40,10 +39,9 @@ const TrackOfertas = () => {
   const [editingOffer, setEditingOffer] = useState<TrackedOffer | null>(null);
   const [editedOfferName, setEditedOfferName] = useState("");
   
-  // Estados para edição manual de métricas
-  const [editingMetricOffer, setEditingMetricOffer] = useState<TrackedOffer | null>(null);
-  const [editingDate, setEditingDate] = useState("");
-  const [editingValue, setEditingValue] = useState("");
+  // Estados para atualização de métricas
+  const [updateMetricOffer, setUpdateMetricOffer] = useState<TrackedOffer | null>(null);
+  const [updateValue, setUpdateValue] = useState("");
 
   useEffect(() => {
     if (user) {
@@ -275,11 +273,6 @@ const TrackOfertas = () => {
     return { type: "neutral" as const, value: 0 };
   };
 
-  const getTodayMetric = (metrics: OfferMetric[]) => {
-    const today = getTodayDate();
-    return metrics.find(m => m.date === today);
-  };
-
   const getLast7Days = () => {
     const days = [];
     for (let i = 6; i >= 0; i--) {
@@ -287,6 +280,17 @@ const TrackOfertas = () => {
       days.push(format(date, "dd/MM"));
     }
     return days;
+  };
+
+  const getLast7DaysMetrics = (metrics: OfferMetric[]) => {
+    const last7Days = getLast7Days();
+    return last7Days.map(day => {
+      const metric = metrics.find(m => m.date === day);
+      return {
+        date: day,
+        active_ads_count: metric?.active_ads_count ?? 0,
+      };
+    });
   };
 
   return (
@@ -415,7 +419,7 @@ const TrackOfertas = () => {
               {offers.map((offer) => {
                 const metrics = allMetrics[offer.id] || [];
                 const variation = getVariation(metrics);
-                const todayMetric = getTodayMetric(metrics);
+                const last7DaysData = getLast7DaysMetrics(metrics);
                 
                 return (
                   <Card key={offer.id} className="border-border bg-card/50 backdrop-blur relative group">
@@ -469,47 +473,26 @@ const TrackOfertas = () => {
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="px-3 pb-3">
-                        {/* Input para adicionar métrica do dia */}
-                        <div className="mb-3 p-2 bg-secondary/50 rounded-lg">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Calendar className="h-4 w-4 text-accent" />
-                            <span className="text-xs font-medium">Hoje ({getTodayDate()})</span>
-                          </div>
-                          <div className="flex gap-2">
-                            <Input
-                              type="number"
-                              placeholder="Qtd anúncios"
-                              className="h-8 text-sm"
-                              defaultValue={todayMetric?.active_ads_count || ""}
-                              onBlur={(e) => {
-                                if (e.target.value) {
-                                  handleSaveMetric(offer.id, getTodayDate(), parseInt(e.target.value));
-                                }
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' && (e.target as HTMLInputElement).value) {
-                                  handleSaveMetric(offer.id, getTodayDate(), parseInt((e.target as HTMLInputElement).value));
-                                }
-                              }}
-                            />
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-8 px-2"
-                              onClick={() => {
-                                setEditingMetricOffer(offer);
-                                setEditingDate("");
-                                setEditingValue("");
-                              }}
-                            >
-                              <Calendar className="h-3 w-3" />
-                            </Button>
-                          </div>
+                        {/* Botão para atualizar métrica do dia */}
+                        <div className="mb-3">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full h-8 text-xs border-accent/50 hover:bg-accent/10"
+                            onClick={() => {
+                              setUpdateMetricOffer(offer);
+                              const todayMetric = metrics.find(m => m.date === getTodayDate());
+                              setUpdateValue(todayMetric?.active_ads_count?.toString() || "");
+                            }}
+                          >
+                            <RefreshCw className="h-3 w-3 mr-2" />
+                            Atualizar Anúncios ({getTodayDate()})
+                          </Button>
                         </div>
 
                         <div className="h-[100px] mb-2">
                           <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={metrics}>
+                            <LineChart data={last7DaysData}>
                               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
                               <XAxis 
                                 dataKey="date" 
@@ -658,47 +641,31 @@ const TrackOfertas = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de Edição de Métrica de Dia Passado */}
-      <Dialog open={!!editingMetricOffer} onOpenChange={(open) => {
+      {/* Dialog de Atualização de Métrica */}
+      <Dialog open={!!updateMetricOffer} onOpenChange={(open) => {
         if (!open) {
-          setEditingMetricOffer(null);
-          setEditingDate("");
-          setEditingValue("");
+          setUpdateMetricOffer(null);
+          setUpdateValue("");
         }
       }}>
         <DialogContent className="sm:max-w-[425px] bg-card border-border">
           <DialogHeader>
-            <DialogTitle className="text-2xl">Editar Dia Anterior</DialogTitle>
+            <DialogTitle className="text-2xl">Atualizar Anúncios</DialogTitle>
             <DialogDescription>
-              Preencha a quantidade de anúncios de um dia específico.
+              Informe a quantidade de anúncios ativos para hoje ({getTodayDate()}).
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label className="text-base">Selecione o dia</Label>
-              <div className="grid grid-cols-4 gap-2">
-                {getLast7Days().map((day) => (
-                  <Button
-                    key={day}
-                    variant={editingDate === day ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setEditingDate(day)}
-                    className={editingDate === day ? "bg-accent" : ""}
-                  >
-                    {day}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-value" className="text-base">Quantidade de Anúncios</Label>
+              <Label htmlFor="update-value" className="text-base">Quantidade de Anúncios</Label>
               <Input
-                id="edit-value"
+                id="update-value"
                 type="number"
                 placeholder="Ex: 15"
-                value={editingValue}
-                onChange={(e) => setEditingValue(e.target.value)}
-                className="bg-input border-border"
+                value={updateValue}
+                onChange={(e) => setUpdateValue(e.target.value)}
+                className="bg-input border-border text-lg"
+                autoFocus
               />
             </div>
           </div>
@@ -706,9 +673,8 @@ const TrackOfertas = () => {
             <Button
               variant="outline"
               onClick={() => {
-                setEditingMetricOffer(null);
-                setEditingDate("");
-                setEditingValue("");
+                setUpdateMetricOffer(null);
+                setUpdateValue("");
               }}
               className="flex-1"
             >
@@ -716,15 +682,14 @@ const TrackOfertas = () => {
             </Button>
             <Button
               onClick={() => {
-                if (editingMetricOffer && editingDate && editingValue) {
-                  handleSaveMetric(editingMetricOffer.id, editingDate, parseInt(editingValue));
-                  setEditingMetricOffer(null);
-                  setEditingDate("");
-                  setEditingValue("");
+                if (updateMetricOffer && updateValue) {
+                  handleSaveMetric(updateMetricOffer.id, getTodayDate(), parseInt(updateValue));
+                  setUpdateMetricOffer(null);
+                  setUpdateValue("");
                 } else {
                   toast({
-                    title: "Campos obrigatórios",
-                    description: "Selecione um dia e preencha a quantidade.",
+                    title: "Campo obrigatório",
+                    description: "Preencha a quantidade de anúncios.",
                     variant: "destructive",
                   });
                 }
@@ -740,7 +705,7 @@ const TrackOfertas = () => {
 
       {/* Popup expandido */}
       <Dialog open={!!expandedOffer} onOpenChange={() => setExpandedOffer(null)}>
-        <DialogContent className="sm:max-w-[90vw] md:max-w-[800px] bg-card border-2 border-accent">
+        <DialogContent className="sm:max-w-[90vw] md:max-w-[800px] max-h-[90vh] overflow-y-auto bg-card border-2 border-accent">
           <DialogHeader>
             <DialogTitle className="text-2xl">{expandedOffer?.name}</DialogTitle>
             <DialogDescription className="flex items-center gap-2 mt-2">
@@ -758,6 +723,7 @@ const TrackOfertas = () => {
           
           {expandedOffer && allMetrics[expandedOffer.id] && (
             <div className="space-y-6 py-4">
+              {/* Histórico completo */}
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={allMetrics[expandedOffer.id]}>
@@ -790,16 +756,45 @@ const TrackOfertas = () => {
                 </ResponsiveContainer>
               </div>
 
-              {/* Tabela de histórico */}
+              {/* Histórico completo de registros */}
               <div className="space-y-2">
-                <h4 className="font-semibold">Histórico de Registros</h4>
+                <h4 className="font-semibold">Histórico Completo</h4>
+                <div className="grid grid-cols-7 sm:grid-cols-10 gap-2 max-h-[200px] overflow-y-auto">
+                  {allMetrics[expandedOffer.id]?.map((metric) => (
+                    <div key={metric.date} className="p-2 bg-secondary/50 rounded-lg text-center">
+                      <p className="text-xs text-muted-foreground">{metric.date}</p>
+                      <p className="text-lg font-bold">{metric.active_ads_count}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Editar dias anteriores */}
+              <div className="space-y-2 border-t border-border pt-4">
+                <h4 className="font-semibold">Editar Dias Anteriores</h4>
                 <div className="grid grid-cols-7 gap-2">
                   {getLast7Days().map((day) => {
                     const metric = allMetrics[expandedOffer.id]?.find(m => m.date === day);
                     return (
-                      <div key={day} className="p-2 bg-secondary/50 rounded-lg text-center">
-                        <p className="text-xs text-muted-foreground">{day}</p>
-                        <p className="text-lg font-bold">{metric?.active_ads_count ?? 0}</p>
+                      <div key={day} className="space-y-1">
+                        <p className="text-xs text-muted-foreground text-center">{day}</p>
+                        <Input
+                          type="number"
+                          className="h-8 text-center text-sm"
+                          defaultValue={metric?.active_ads_count ?? 0}
+                          onBlur={(e) => {
+                            const value = parseInt(e.target.value) || 0;
+                            if (value !== (metric?.active_ads_count ?? 0)) {
+                              handleSaveMetric(expandedOffer.id, day, value);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              const value = parseInt((e.target as HTMLInputElement).value) || 0;
+                              handleSaveMetric(expandedOffer.id, day, value);
+                            }
+                          }}
+                        />
                       </div>
                     );
                   })}

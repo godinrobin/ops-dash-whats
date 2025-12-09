@@ -2,13 +2,14 @@ import { useState } from "react";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Copy, Wand2, MessageSquare, Mic, Image, Video, FileText, ChevronDown, ChevronUp } from "lucide-react";
+import { Copy, Wand2, MessageSquare, Mic, Image, Video, FileText, ChevronDown, ChevronUp, Lightbulb } from "lucide-react";
 
 interface FunnelMessage {
   type: "text" | "audio" | "image" | "video" | "ebook";
@@ -32,23 +33,15 @@ const nicheOptions = [
   "Religião",
   "Moda e Beleza",
   "Finanças",
-  "Saúde e Bem-estar",
-  "Desenvolvimento Pessoal",
-  "Marketing Digital",
-  "Educação",
   "Outro",
 ];
 
 const productExamples: Record<string, string[]> = {
-  "Artesanato": ["Amigurumi", "Crochê", "Kokedama", "Bordado", "Macramê", "Pintura em Tela"],
+  "Artesanato": ["Amigurumi", "Crochê", "Kokedama", "Bordado", "Macramê"],
   "Receitas": ["Bolos Caseiros", "Marmitas Fit", "Doces Gourmet", "Receitas Low Carb", "Confeitaria"],
-  "Religião": ["Resumo Bíblico", "Devocional Diário", "Estudos Bíblicos", "Orações Guiadas"],
-  "Moda e Beleza": ["Design de Sobrancelhas", "Unhas Decoradas", "Maquiagem", "Corte e Costura"],
-  "Finanças": ["Planilha de Gastos", "Investimentos para Iniciantes", "Renda Extra"],
-  "Saúde e Bem-estar": ["Yoga", "Meditação", "Emagrecimento", "Treino em Casa"],
-  "Desenvolvimento Pessoal": ["Produtividade", "Autoconhecimento", "Liderança", "Comunicação"],
-  "Marketing Digital": ["Tráfego Pago", "Copywriting", "Social Media", "Funis de Venda"],
-  "Educação": ["Inglês", "Matemática", "Redação", "Concursos"],
+  "Religião": ["Resumo Bíblico", "Devocional Diário", "Estudos Bíblicos", "Orações Guiadas", "Teologia Básica"],
+  "Moda e Beleza": ["Design de Sobrancelhas", "Unhas Decoradas", "Maquiagem", "Corte e Costura", "Alongamento de Cílios"],
+  "Finanças": ["Planilha de Gastos", "Investimentos para Iniciantes", "Renda Extra", "Organização Financeira", "Controle de Dívidas"],
   "Outro": [],
 };
 
@@ -68,6 +61,7 @@ const WhatsAppFunnelCreator = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [generatedFunnel, setGeneratedFunnel] = useState<GeneratedFunnel | null>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [showSiteRecommendation, setShowSiteRecommendation] = useState(false);
   
   const [formData, setFormData] = useState({
     niche: "",
@@ -82,6 +76,7 @@ const WhatsAppFunnelCreator = () => {
     pixName: "",
     siteUrl: "",
     bonus: "",
+    ebookContent: "",
   });
 
   const handleGenerateFunnel = async () => {
@@ -94,7 +89,18 @@ const WhatsAppFunnelCreator = () => {
       return;
     }
 
+    // Show site recommendation popup if no site URL
+    if (!formData.siteUrl) {
+      setShowSiteRecommendation(true);
+      return;
+    }
+
+    await generateFunnel();
+  };
+
+  const generateFunnel = async () => {
     setIsLoading(true);
+    setShowSiteRecommendation(false);
 
     try {
       const { data, error } = await supabase.functions.invoke("generate-whatsapp-funnel", {
@@ -108,6 +114,7 @@ const WhatsAppFunnelCreator = () => {
           pixName: formData.pixName,
           siteUrl: formData.siteUrl,
           bonus: formData.bonus,
+          ebookContent: formData.ebookContent,
         },
       });
 
@@ -184,6 +191,41 @@ const WhatsAppFunnelCreator = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
+      
+      {/* Site Recommendation Popup */}
+      <Dialog open={showSiteRecommendation} onOpenChange={setShowSiteRecommendation}>
+        <DialogContent className="sm:max-w-[500px] bg-card border-accent">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <Lightbulb className="h-5 w-5 text-accent" />
+              Recomendação Importante
+            </DialogTitle>
+            <DialogDescription className="text-base pt-2">
+              Para aumentar sua conversão, é altamente recomendado criar um <strong>site do produto em formato de app</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground mb-4">
+              Isso é ensinado no treinamento <strong className="text-accent">Starter Whats</strong>. Um site bem estruturado pode aumentar significativamente suas vendas!
+            </p>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={generateFunnel}
+                className="flex-1"
+              >
+                Continuar sem site
+              </Button>
+              <Button
+                onClick={() => setShowSiteRecommendation(false)}
+                className="flex-1 bg-accent hover:bg-accent/90"
+              >
+                Adicionar site
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
       
       <main className="container mx-auto px-4 pt-20 pb-8">
         <div className="mb-8">
@@ -341,19 +383,38 @@ const WhatsAppFunnelCreator = () => {
                   <div className="space-y-2">
                     <Label htmlFor="pixName">Nome que aparece no Pix</Label>
                     <Input
-                      placeholder="Ex: Maria Silva"
+                      placeholder="Ex: Maria Silva, Empresa XYZ..."
                       value={formData.pixName}
                       onChange={(e) => setFormData({ ...formData, pixName: e.target.value })}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Informe se é nome pessoal, de empresa, ou do cônjuge
+                    </p>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="siteUrl">URL do Site/Produto</Label>
+                    <Label htmlFor="siteUrl">URL do Site/Produto (opcional)</Label>
                     <Input
                       placeholder="Ex: https://meusite.com"
                       value={formData.siteUrl}
                       onChange={(e) => setFormData({ ...formData, siteUrl: e.target.value })}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Se não preencher, a mensagem do site será removida do funil
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="ebookContent">Conteúdo do E-book/Material (opcional)</Label>
+                    <Textarea
+                      placeholder="Ex: 50 receitas de bolos, 20 modelos de crochê, guia completo de estudos bíblicos..."
+                      value={formData.ebookContent}
+                      onChange={(e) => setFormData({ ...formData, ebookContent: e.target.value })}
+                      rows={3}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Descreva o conteúdo do seu material para personalizar melhor o funil
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -456,7 +517,7 @@ const WhatsAppFunnelCreator = () => {
                   </div>
                   <h3 className="text-xl font-semibold mb-2">Seu funil aparecerá aqui</h3>
                   <p className="text-muted-foreground text-center max-w-md">
-                    Preencha as informações ao lado e clique em "Gerar Funil" para criar seu funil de WhatsApp personalizado.
+                    Preencha as informações ao lado e clique em "Gerar Funil" para criar seu funil de vendas personalizado.
                   </p>
                 </CardContent>
               </Card>
