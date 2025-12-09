@@ -161,7 +161,7 @@ const Home = () => {
           </section>
 
           <footer className="mt-16 text-center text-xs text-muted-foreground/50">
-            Criado por <a href="https://www.instagram.com/ojoaolucassps/" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground transition-colors">@ojoaolucassps</a>
+            Criado por <a href="https://instagram.com/joaolucassps" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground transition-colors">@joaolucassps</a>
           </footer>
         </div>
       </div>
