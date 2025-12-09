@@ -200,6 +200,7 @@ const CreativeGenerator = () => {
                     checked={includePrice}
                     onCheckedChange={setIncludePrice}
                     disabled={isGenerating}
+                    className="data-[state=checked]:bg-green-600"
                   />
                 </div>
 
