@@ -117,6 +117,28 @@ const Home = () => {
                 </p>
               </CardContent>
             </Card>
+
+            <Card 
+              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
+              onClick={() => navigate("/gerador-criativos")}
+            >
+              <CardHeader className="text-center">
+                <div className="flex justify-center mb-4">
+                  <span className="text-6xl">🎨</span>
+                </div>
+                <CardTitle className="text-2xl bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
+                  Gerador de Criativos
+                </CardTitle>
+                <CardDescription className="text-base">
+                  Crie imagens profissionais para anúncios com IA
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="text-center">
+                <p className="text-sm text-muted-foreground">
+                  Gere criativos de alta qualidade automaticamente
+                </p>
+              </CardContent>
+            </Card>
           </div>
 
           <section className="mt-16">
