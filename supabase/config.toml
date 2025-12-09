@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.webhook-new-sale]
 verify_jwt = false
+
+[functions.batch-create-users]
+verify_jwt = false
