@@ -216,12 +216,43 @@ export type Database = {
         }
         Relationships: []
       }
+      saved_funnels: {
+        Row: {
+          config: Json
+          created_at: string
+          funnel_content: Json | null
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          config: Json
+          created_at?: string
+          funnel_content?: Json | null
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          funnel_content?: Json | null
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       tracked_offers: {
         Row: {
           ad_library_link: string
           created_at: string
           id: string
           name: string
+          notes: string | null
           user_id: string
         }
         Insert: {
@@ -229,6 +260,7 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          notes?: string | null
           user_id: string
         }
         Update: {
@@ -236,6 +268,7 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          notes?: string | null
           user_id?: string
         }
         Relationships: []

@@ -14,9 +14,23 @@ serve(async (req) => {
   }
 
   try {
-    const { niche, product, expertName, angle, tickets, pixKey, pixName, siteUrl, bonus, ebookContent } = await req.json();
+    const { niche, product, expertName, angle, tickets, pixKey, pixName, pixBank, pixKeyType, siteUrl, bonus, ebookContent } = await req.json();
 
-    console.log('Generating funnel for:', { niche, product, expertName, angle, tickets, pixName });
+    console.log('Generating funnel for:', { niche, product, expertName, angle, tickets, pixName, pixBank, pixKeyType });
+
+    // Check if niche is religious
+    const isReligiousNiche = niche?.toLowerCase().includes('religi') || 
+                            niche?.toLowerCase().includes('bíbli') || 
+                            niche?.toLowerCase().includes('bibli') ||
+                            niche?.toLowerCase().includes('cristã') ||
+                            niche?.toLowerCase().includes('evangél') ||
+                            product?.toLowerCase().includes('bíbli') ||
+                            product?.toLowerCase().includes('bibli') ||
+                            product?.toLowerCase().includes('devocional');
+
+    // Parse multiple tickets
+    const ticketValues = tickets?.split(/[,+]/).map((t: string) => t.trim()).filter((t: string) => t) || [];
+    const hasMultipleTickets = ticketValues.length > 1;
 
     const systemPrompt = `Você é um especialista em marketing digital e criação de funis de vendas para WhatsApp. Você cria funis de vendas altamente persuasivos e personalizados para infoprodutos.
 
@@ -35,16 +49,32 @@ Cada mensagem deve ter um tipo:
 - "video": Instrução para enviar vídeo
 - "ebook": Instrução para enviar PDF/Ebook
 
-Use muitos emojis de forma natural e acolhedora.
-Personalize com o nome da expert, produto, nicho e ângulo informados.
-O tom deve ser empático, acolhedor e persuasivo, nunca agressivo.
+REGRAS CRÍTICAS:
+1. Use emojis de forma natural e acolhedora.
+2. Personalize com o nome da expert, produto, nicho e ângulo informados.
+3. O tom deve ser PESSOAL e INFORMAL - lembre-se que é uma conversa de WhatsApp individual, não um broadcast para várias pessoas. Trate como se fosse uma conversa única com UMA pessoa.
+4. NUNCA fale como se estivesse falando com várias pessoas (evite "vocês", "pessoal", "galera").
+5. Use linguagem acolhedora e próxima: "você", "meu amor", "querida", etc.
+6. NÃO repita saudações como "Olá" ou "Oi" em todos os áudios - varie a abordagem.
 
 REGRAS ESPECIAIS PARA CHAVE PIX:
-- Na seção COBRANÇA, SEMPRE adicione uma mensagem separada dizendo "Copie a chave pix abaixo:" 
-- E em seguida, uma mensagem SEPARADA contendo SOMENTE a chave pix (sem texto adicional)
-- Se o nome do PIX for diferente do gênero da expert (ex: expert Maria mas pix no nome de João), adicione uma mensagem explicando que é do marido/esposa que ajuda no negócio
-- Se o nome do PIX parecer ser de empresa (contém LTDA, MEI, DIGITAL, etc), adicione uma mensagem explicando que é da empresa dela
+- Na seção COBRANÇA, primeiro envie uma mensagem com os dados completos do pagamento incluindo:
+  * Valor do produto
+  * Chave Pix
+  * Nome que aparece no Pix
+  * Banco (se informado)
+  * Tipo de chave (se informado)
+- Depois adicione uma mensagem separada dizendo "Copie a chave pix abaixo:" 
+- E em seguida, uma mensagem SEPARADA contendo SOMENTE a chave pix (sem texto adicional, exatamente como foi informada, sem formatação)
+
+REGRAS PARA NOME DO PIX:
+${isReligiousNiche ? `- Se o nome do PIX for diferente do gênero da expert, diga que é de "alguém da equipe que ajuda no projeto"` : `- Se o nome do PIX parecer ser masculino e a expert for feminina, adicione uma mensagem explicando que é do marido/esposo que ajuda ela no negócio
+- Se o nome do PIX parecer ser feminino e o expert for masculino, adicione uma mensagem explicando que é da esposa que ajuda ele no negócio`}
+- Se o nome do PIX parecer ser de empresa (contém LTDA, MEI, DIGITAL, etc), adicione uma mensagem explicando que é da empresa
 - Se o nome do PIX for do mesmo gênero da expert, não precisa explicar nada
+
+REGRAS PARA MÚLTIPLOS VALORES:
+${hasMultipleTickets ? `- O produto tem múltiplos valores: ${ticketValues.join(', ')}. Na cobrança, crie uma copy dizendo que o cliente pode ajudar o trabalho com ${ticketValues[0]} (valor inicial), mas caso toque no coração, pode ajudar também com os demais valores (${ticketValues.slice(1).join(', ')}).` : ''}
 
 REGRAS PARA SITE:
 - Se NÃO foi informado site/URL, NÃO inclua mensagens sobre site no funil
@@ -84,17 +114,21 @@ Para mensagens que são instruções (como "enviar vídeo mostrando o produto"),
 - **Nome da Expert**: ${expertName}
 - **Ângulo de venda**: ${angle}
 - **Ticket(s)**: ${tickets}
-${pixKey ? `- **Chave Pix**: ${pixKey}` : ''}
+${pixKey ? `- **Chave Pix**: ${pixKey} (mantenha exatamente como está, sem formatar)` : ''}
+${pixKeyType ? `- **Tipo de Chave Pix**: ${pixKeyType}` : ''}
 ${pixName ? `- **Nome no Pix**: ${pixName}` : ''}
+${pixBank ? `- **Banco do Pix**: ${pixBank}` : ''}
 ${siteUrl ? `- **Site/URL do Produto**: ${siteUrl}` : '- **Site/URL do Produto**: NÃO INFORMADO (não incluir mensagens sobre site)'}
 ${bonus ? `- **Bônus oferecido**: ${bonus}` : ''}
 ${ebookContent ? `- **Conteúdo do E-book/Material**: ${ebookContent}` : ''}
 
+LEMBRE-SE: É uma conversa de WhatsApp individual, 1 para 1. Não fale como se fosse para várias pessoas.
+
 Crie o funil seguindo a estrutura de APRESENTAÇÃO, PRODUTO e COBRANÇA.
 
 Na seção APRESENTAÇÃO:
-- Primeira mensagem de texto acolhedora apresentando o conteúdo
-- Um áudio de apresentação da expert (escreva o roteiro completo)
+- Primeira mensagem de texto acolhedora apresentando o conteúdo (sem falar "vocês" ou "pessoal")
+- Um áudio de apresentação da expert (escreva o roteiro completo, começando de forma diferente, sem "Olá" ou "Oi")
 
 Na seção PRODUTO:
 - Mensagens detalhando o que o cliente recebe${ebookContent ? ` (use as informações do conteúdo: ${ebookContent})` : ''}
@@ -103,12 +137,13 @@ Na seção PRODUTO:
 ${siteUrl ? `- Incluir o link do site: ${siteUrl}` : '- NÃO incluir mensagens sobre site pois não foi informado'}
 
 Na seção COBRANÇA:
-${pixKey ? `- Dados do Pix (chave: ${pixKey})` : '- Use "[SUA CHAVE PIX]" como placeholder para a chave'}
-${pixName ? `- Nome no Pix: ${pixName} - Analise se precisa explicar (diferente gênero da expert ${expertName} ou se é empresa)` : ''}
+${pixKey ? `- Mensagem com dados do Pix (chave: ${pixKey}, nome: ${pixName || 'não informado'}${pixBank ? `, banco: ${pixBank}` : ''}${pixKeyType ? `, tipo: ${pixKeyType}` : ''})` : '- Use "[SUA CHAVE PIX]" como placeholder para a chave'}
+${pixName ? `- Analise se precisa explicar sobre o nome (${pixName}) vs expert (${expertName})${isReligiousNiche ? ' - Se diferente, diga que é de alguém da equipe' : ''}` : ''}
 - IMPORTANTE: Após enviar os dados do pix, adicione uma mensagem separada dizendo "Copie a chave pix abaixo:" 
-- E uma nova mensagem contendo SOMENTE a chave pix
-- Mensagem empática de cobrança
-- Áudio de cobrança${bonus ? ` mencionando o bônus: ${bonus}` : ''}
+- E uma nova mensagem contendo SOMENTE a chave pix (${pixKey || '[SUA CHAVE PIX]'})
+${hasMultipleTickets ? `- Mencione que o valor inicial é ${ticketValues[0]}, mas se tocar no coração, pode ajudar com ${ticketValues.slice(1).join(' ou ')} também` : ''}
+- Mensagem empática de cobrança (pessoal, falando com UMA pessoa)
+- Áudio de cobrança${bonus ? ` mencionando o bônus: ${bonus}` : ''} (comece diferente, sem "Olá" ou "Oi")
 - Mensagens de follow-up
 
 Retorne APENAS o JSON válido, sem markdown, sem texto adicional.`;

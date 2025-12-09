@@ -7,16 +7,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, TrendingUp, TrendingDown, Minus, ExternalLink, Trash2, Edit, Maximize2, RefreshCw, Save } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { format, subDays } from "date-fns";
+import { format, subDays, parse, compareAsc } from "date-fns";
 
 interface TrackedOffer {
   id: string;
   name: string;
   ad_library_link: string;
   created_at: string;
+  notes?: string;
 }
 
 interface OfferMetric {
@@ -38,6 +40,7 @@ const TrackOfertas = () => {
   const [expandedOffer, setExpandedOffer] = useState<TrackedOffer | null>(null);
   const [editingOffer, setEditingOffer] = useState<TrackedOffer | null>(null);
   const [editedOfferName, setEditedOfferName] = useState("");
+  const [offerNotes, setOfferNotes] = useState("");
   
   // Estados para atualização de métricas
   const [updateMetricOffer, setUpdateMetricOffer] = useState<TrackedOffer | null>(null);
@@ -54,6 +57,12 @@ const TrackOfertas = () => {
       loadAllMetrics();
     }
   }, [offers]);
+
+  useEffect(() => {
+    if (expandedOffer) {
+      setOfferNotes(expandedOffer.notes || "");
+    }
+  }, [expandedOffer]);
 
   const loadOffers = async () => {
     setIsInitialLoading(true);
@@ -88,7 +97,13 @@ const TrackOfertas = () => {
         .order("date", { ascending: true });
 
       if (!error && data) {
-        metricsData[offer.id] = data;
+        // Sort metrics by date properly (dd/MM format)
+        const sortedData = [...data].sort((a, b) => {
+          const dateA = parse(a.date, "dd/MM", new Date());
+          const dateB = parse(b.date, "dd/MM", new Date());
+          return compareAsc(dateA, dateB);
+        });
+        metricsData[offer.id] = sortedData;
       }
     }
     
@@ -257,15 +272,59 @@ const TrackOfertas = () => {
     }
   };
 
-  const getCurrentCount = (metrics: OfferMetric[]) => {
+  const handleSaveNotes = async () => {
+    if (!expandedOffer) return;
+
+    try {
+      const { error } = await supabase
+        .from("tracked_offers")
+        .update({ notes: offerNotes })
+        .eq("id", expandedOffer.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Observações salvas!",
+        description: "As observações foram atualizadas com sucesso.",
+      });
+
+      // Update local state
+      setOffers(offers.map(o => 
+        o.id === expandedOffer.id ? { ...o, notes: offerNotes } : o
+      ));
+      setExpandedOffer({ ...expandedOffer, notes: offerNotes });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao salvar observações",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const getLastRecordCount = (metrics: OfferMetric[]) => {
     if (metrics.length === 0) return 0;
-    return metrics[metrics.length - 1].active_ads_count;
+    // Get the most recent metric by date
+    const sortedMetrics = [...metrics].sort((a, b) => {
+      const dateA = parse(a.date, "dd/MM", new Date());
+      const dateB = parse(b.date, "dd/MM", new Date());
+      return compareAsc(dateB, dateA); // Descending order
+    });
+    return sortedMetrics[0]?.active_ads_count ?? 0;
   };
 
   const getVariation = (metrics: OfferMetric[]) => {
     if (metrics.length < 2) return { type: "neutral" as const, value: 0 };
-    const current = metrics[metrics.length - 1].active_ads_count;
-    const previous = metrics[metrics.length - 2].active_ads_count;
+    
+    // Sort by date descending to get the two most recent
+    const sortedMetrics = [...metrics].sort((a, b) => {
+      const dateA = parse(a.date, "dd/MM", new Date());
+      const dateB = parse(b.date, "dd/MM", new Date());
+      return compareAsc(dateB, dateA);
+    });
+    
+    const current = sortedMetrics[0].active_ads_count;
+    const previous = sortedMetrics[1].active_ads_count;
     const diff = current - previous;
     
     if (diff > 0) return { type: "up" as const, value: diff };
@@ -290,6 +349,15 @@ const TrackOfertas = () => {
         date: day,
         active_ads_count: metric?.active_ads_count ?? 0,
       };
+    });
+  };
+
+  const getFullHistoryMetrics = (metrics: OfferMetric[]) => {
+    // Sort all metrics by date ascending (oldest first) for the chart
+    return [...metrics].sort((a, b) => {
+      const dateA = parse(a.date, "dd/MM", new Date());
+      const dateB = parse(b.date, "dd/MM", new Date());
+      return compareAsc(dateA, dateB);
     });
   };
 
@@ -580,7 +648,7 @@ const TrackOfertas = () => {
                                 <div className="rounded-full bg-accent/10 p-1">
                                   <span className="text-[10px] font-bold text-accent">📊</span>
                                 </div>
-                                <p className="text-sm font-bold text-foreground">{getCurrentCount(metrics)}</p>
+                                <p className="text-sm font-bold text-foreground">{getLastRecordCount(metrics)}</p>
                               </div>
                             </CardContent>
                           </Card>
@@ -723,10 +791,10 @@ const TrackOfertas = () => {
           
           {expandedOffer && allMetrics[expandedOffer.id] && (
             <div className="space-y-6 py-4">
-              {/* Histórico completo */}
+              {/* Gráfico com histórico completo */}
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={allMetrics[expandedOffer.id]}>
+                  <LineChart data={getFullHistoryMetrics(allMetrics[expandedOffer.id])}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis 
                       dataKey="date" 
@@ -754,19 +822,6 @@ const TrackOfertas = () => {
                     />
                   </LineChart>
                 </ResponsiveContainer>
-              </div>
-
-              {/* Histórico completo de registros */}
-              <div className="space-y-2">
-                <h4 className="font-semibold">Histórico Completo</h4>
-                <div className="grid grid-cols-7 sm:grid-cols-10 gap-2 max-h-[200px] overflow-y-auto">
-                  {allMetrics[expandedOffer.id]?.map((metric) => (
-                    <div key={metric.date} className="p-2 bg-secondary/50 rounded-lg text-center">
-                      <p className="text-xs text-muted-foreground">{metric.date}</p>
-                      <p className="text-lg font-bold">{metric.active_ads_count}</p>
-                    </div>
-                  ))}
-                </div>
               </div>
 
               {/* Editar dias anteriores */}
@@ -864,11 +919,31 @@ const TrackOfertas = () => {
                         <span className="text-2xl">📊</span>
                       </div>
                       <p className="text-3xl font-bold text-foreground">
-                        {getCurrentCount(allMetrics[expandedOffer.id] || [])}
+                        {getLastRecordCount(allMetrics[expandedOffer.id] || [])}
                       </p>
                     </div>
                   </CardContent>
                 </Card>
+              </div>
+
+              {/* Campo de observações */}
+              <div className="space-y-2 border-t border-border pt-4">
+                <h4 className="font-semibold">Observações</h4>
+                <Textarea
+                  placeholder="Adicione observações sobre esta oferta..."
+                  value={offerNotes}
+                  onChange={(e) => setOfferNotes(e.target.value)}
+                  rows={3}
+                  className="bg-secondary/30"
+                />
+                <Button
+                  onClick={handleSaveNotes}
+                  size="sm"
+                  className="bg-accent hover:bg-accent/90"
+                >
+                  <Save className="mr-2 h-4 w-4" />
+                  Salvar Observações
+                </Button>
               </div>
             </div>
           )}
