@@ -81,25 +81,23 @@ export const TicketTagInput = ({ tickets, onChange }: TicketTagInputProps) => {
     })
   );
 
+  const addTicket = () => {
+    const newTicket = inputValue.trim();
+    if (newTicket && !tickets.includes(newTicket)) {
+      onChange([...tickets, newTicket]);
+    }
+    setInputValue("");
+  };
+
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === " " && inputValue.trim()) {
+    if (e.key === " ") {
       e.preventDefault();
-      const newTicket = inputValue.trim();
-      if (!tickets.includes(newTicket)) {
-        onChange([...tickets, newTicket]);
-      }
-      setInputValue("");
+      addTicket();
     } else if (e.key === "Backspace" && !inputValue && tickets.length > 0) {
       onChange(tickets.slice(0, -1));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (inputValue.trim()) {
-        const newTicket = inputValue.trim();
-        if (!tickets.includes(newTicket)) {
-          onChange([...tickets, newTicket]);
-        }
-        setInputValue("");
-      }
+      addTicket();
     }
   };
 
