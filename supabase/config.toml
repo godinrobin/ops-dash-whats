@@ -4,10 +4,10 @@ project_id = "dcjizoulbggsavizbukq"
 verify_jwt = false
 
 [functions.analyze-metrics]
-verify_jwt = false
+verify_jwt = true
 
 [functions.generate-whatsapp-funnel]
-verify_jwt = false
+verify_jwt = true
 
 [functions.webhook-new-sale]
 verify_jwt = false
@@ -16,7 +16,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.generate-audio]
-verify_jwt = false
+verify_jwt = true
 
 [functions.transcribe-audio]
-verify_jwt = false
+verify_jwt = true
