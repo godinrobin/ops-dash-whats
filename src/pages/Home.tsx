@@ -142,6 +142,50 @@ const Home = () => {
             </Card>
 
             <Card 
+              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
+              onClick={() => navigate("/gerador-audio")}
+            >
+              <CardHeader className="text-center p-3 md:p-6">
+                <div className="flex justify-center mb-2 md:mb-4">
+                  <span className="text-3xl md:text-6xl">🎙️</span>
+                </div>
+                <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-red-400 to-orange-500 bg-clip-text text-transparent">
+                  Gerador de Áudio
+                </CardTitle>
+                <CardDescription className="text-xs md:text-base hidden md:block">
+                  Transforme texto em áudio com vozes realistas
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
+                <p className="text-sm text-muted-foreground">
+                  Gere áudios profissionais com IA
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card 
+              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
+              onClick={() => navigate("/transcricao-audio")}
+            >
+              <CardHeader className="text-center p-3 md:p-6">
+                <div className="flex justify-center mb-2 md:mb-4">
+                  <span className="text-3xl md:text-6xl">📝</span>
+                </div>
+                <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-blue-400 to-cyan-500 bg-clip-text text-transparent">
+                  Transcrição de Áudio
+                </CardTitle>
+                <CardDescription className="text-xs md:text-base hidden md:block">
+                  Converta áudios em texto automaticamente
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
+                <p className="text-sm text-muted-foreground">
+                  Transcreva áudios MP3, OGG e OPUS
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card 
               className="relative cursor-not-allowed opacity-70 border-2 border-accent"
             >
               <Badge className="absolute top-2 right-2 bg-accent text-accent-foreground text-xs">
@@ -151,7 +195,7 @@ const Home = () => {
                 <div className="flex justify-center mb-2 md:mb-4">
                   <span className="text-3xl md:text-6xl">🏷️</span>
                 </div>
-                <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-blue-400 to-cyan-500 bg-clip-text text-transparent">
+                <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-teal-400 to-emerald-500 bg-clip-text text-transparent">
                   Tag Whats
                 </CardTitle>
                 <CardDescription className="text-xs md:text-base hidden md:block">

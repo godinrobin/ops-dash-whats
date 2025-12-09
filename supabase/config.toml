@@ -14,3 +14,9 @@ verify_jwt = false
 
 [functions.batch-create-users]
 verify_jwt = false
+
+[functions.generate-audio]
+verify_jwt = false
+
+[functions.transcribe-audio]
+verify_jwt = false

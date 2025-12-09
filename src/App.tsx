@@ -14,6 +14,8 @@ import NumberOrganizer from "./pages/NumberOrganizer";
 import TrackOfertas from "./pages/TrackOfertas";
 import WhatsAppFunnelCreator from "./pages/WhatsAppFunnelCreator";
 import CreativeGenerator from "./pages/CreativeGenerator";
+import AudioGenerator from "./pages/AudioGenerator";
+import AudioTranscriber from "./pages/AudioTranscriber";
 import AdminPanel from "./pages/AdminPanel";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
@@ -35,6 +37,8 @@ const App = () => (
             <Route path="/track-ofertas" element={<ProtectedRoute><TrackOfertas /></ProtectedRoute>} />
             <Route path="/criador-funil" element={<ProtectedRoute><WhatsAppFunnelCreator /></ProtectedRoute>} />
             <Route path="/gerador-criativos" element={<ProtectedRoute><CreativeGenerator /></ProtectedRoute>} />
+            <Route path="/gerador-audio" element={<ProtectedRoute><AudioGenerator /></ProtectedRoute>} />
+            <Route path="/transcricao-audio" element={<ProtectedRoute><AudioTranscriber /></ProtectedRoute>} />
             <Route path="/produto/:productId" element={<ProtectedRoute><ProductMetrics /></ProtectedRoute>} />
             <Route path="/produto/:productId/analise" element={<ProtectedRoute><ProductAnalysis /></ProtectedRoute>} />
             <Route path="/bob-admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
