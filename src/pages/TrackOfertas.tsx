@@ -64,14 +64,22 @@ const TrackOfertas = () => {
   }, [expandedOffer]);
 
   const loadOffers = async () => {
+    if (!user?.id) {
+      setIsInitialLoading(false);
+      return;
+    }
+    
     setIsInitialLoading(true);
+    
+    // RLS already filters by user_id, but we add explicit filter for extra safety
     const { data, error } = await supabase
       .from("tracked_offers")
       .select("*")
-      .eq("user_id", user?.id)
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
     if (error) {
+      console.error("Error loading offers:", error);
       toast({
         title: "Erro ao carregar ofertas",
         description: error.message,
@@ -81,7 +89,9 @@ const TrackOfertas = () => {
       return;
     }
 
-    setOffers(data || []);
+    // Double-check: filter client-side to ensure only user's offers are shown
+    const userOffers = (data || []).filter(offer => offer.user_id === user.id);
+    setOffers(userOffers);
     setIsInitialLoading(false);
   };
 
