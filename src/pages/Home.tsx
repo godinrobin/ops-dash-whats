@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import Autoplay from "embla-carousel-autoplay";
@@ -136,6 +137,30 @@ const Home = () => {
               <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
                 <p className="text-sm text-muted-foreground">
                   Gere criativos de alta qualidade automaticamente
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card 
+              className="relative cursor-not-allowed opacity-70 border-2 border-accent"
+            >
+              <Badge className="absolute top-2 right-2 bg-accent text-accent-foreground text-xs">
+                Em breve
+              </Badge>
+              <CardHeader className="text-center p-3 md:p-6">
+                <div className="flex justify-center mb-2 md:mb-4">
+                  <span className="text-3xl md:text-6xl">🏷️</span>
+                </div>
+                <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-blue-400 to-cyan-500 bg-clip-text text-transparent">
+                  Tag Whats
+                </CardTitle>
+                <CardDescription className="text-xs md:text-base hidden md:block">
+                  Marque vendas do WhatsApp automaticamente
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
+                <p className="text-sm text-muted-foreground">
+                  Sistema automático de marcação de vendas
                 </p>
               </CardContent>
             </Card>
