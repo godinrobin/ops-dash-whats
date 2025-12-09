@@ -6,6 +6,18 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Generate a secure random password
+function generateSecurePassword(): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+  const randomBytes = new Uint8Array(16);
+  crypto.getRandomValues(randomBytes);
+  let password = '';
+  for (let i = 0; i < 16; i++) {
+    password += chars[randomBytes[i] % chars.length];
+  }
+  return password;
+}
+
 serve(async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -90,13 +102,17 @@ serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    // Create user with password 123456
+    // Generate secure random password instead of hardcoded weak password
+    const securePassword = generateSecurePassword();
+
+    // Create user with secure password
     const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
       email: email,
-      password: "123456",
+      password: securePassword,
       email_confirm: true,
       user_metadata: {
         username: name,
+        requires_password_change: true, // Flag to indicate user should change password
       },
     });
 
