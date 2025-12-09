@@ -208,8 +208,8 @@ const WhatsAppFunnelCreator = () => {
         const { error } = await supabase
           .from("saved_funnels")
           .update({
-            config: formData as unknown as Record<string, unknown>,
-            funnel_content: generatedFunnel as unknown as Record<string, unknown>,
+            config: JSON.parse(JSON.stringify(formData)),
+            funnel_content: JSON.parse(JSON.stringify(generatedFunnel)),
             updated_at: new Date().toISOString(),
           })
           .eq("id", currentFunnelId);
@@ -227,8 +227,8 @@ const WhatsAppFunnelCreator = () => {
           .insert([{
             user_id: user.id,
             name: productName || "Novo Funil",
-            config: formData as unknown as Record<string, unknown>,
-            funnel_content: generatedFunnel as unknown as Record<string, unknown>,
+            config: JSON.parse(JSON.stringify(formData)),
+            funnel_content: JSON.parse(JSON.stringify(generatedFunnel)),
           }])
           .select()
           .single();

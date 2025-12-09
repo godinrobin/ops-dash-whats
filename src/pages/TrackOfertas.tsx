@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, TrendingUp, TrendingDown, Minus, ExternalLink, Trash2, Edit, Maximize2, RefreshCw, Save } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { format, subDays, parse, compareAsc } from "date-fns";
+import { format, subDays } from "date-fns";
 
 interface TrackedOffer {
   id: string;
@@ -42,7 +42,6 @@ const TrackOfertas = () => {
   const [editedOfferName, setEditedOfferName] = useState("");
   const [offerNotes, setOfferNotes] = useState("");
   
-  // Estados para atualização de métricas
   const [updateMetricOffer, setUpdateMetricOffer] = useState<TrackedOffer | null>(null);
   const [updateValue, setUpdateValue] = useState("");
 
@@ -97,13 +96,7 @@ const TrackOfertas = () => {
         .order("date", { ascending: true });
 
       if (!error && data) {
-        // Sort metrics by date properly (dd/MM format)
-        const sortedData = [...data].sort((a, b) => {
-          const dateA = parse(a.date, "dd/MM", new Date());
-          const dateB = parse(b.date, "dd/MM", new Date());
-          return compareAsc(dateA, dateB);
-        });
-        metricsData[offer.id] = sortedData;
+        metricsData[offer.id] = data;
       }
     }
     
@@ -124,7 +117,6 @@ const TrackOfertas = () => {
       return;
     }
 
-    // Validate Facebook Ad Library link
     const link = newOffer.ad_library_link.trim();
     if (!link.includes('facebook.com/ads/library')) {
       toast({
@@ -227,7 +219,6 @@ const TrackOfertas = () => {
 
   const handleSaveMetric = async (offerId: string, date: string, value: number) => {
     try {
-      // Check if metric already exists for this date
       const { data: existingMetric } = await supabase
         .from("offer_metrics")
         .select("id")
@@ -236,7 +227,6 @@ const TrackOfertas = () => {
         .maybeSingle();
 
       if (existingMetric) {
-        // Update existing metric
         const { error } = await supabase
           .from("offer_metrics")
           .update({ active_ads_count: value })
@@ -244,7 +234,6 @@ const TrackOfertas = () => {
 
         if (error) throw error;
       } else {
-        // Insert new metric
         const { error } = await supabase
           .from("offer_metrics")
           .insert([{
@@ -288,7 +277,6 @@ const TrackOfertas = () => {
         description: "As observações foram atualizadas com sucesso.",
       });
 
-      // Update local state
       setOffers(offers.map(o => 
         o.id === expandedOffer.id ? { ...o, notes: offerNotes } : o
       ));
@@ -304,27 +292,14 @@ const TrackOfertas = () => {
 
   const getLastRecordCount = (metrics: OfferMetric[]) => {
     if (metrics.length === 0) return 0;
-    // Get the most recent metric by date
-    const sortedMetrics = [...metrics].sort((a, b) => {
-      const dateA = parse(a.date, "dd/MM", new Date());
-      const dateB = parse(b.date, "dd/MM", new Date());
-      return compareAsc(dateB, dateA); // Descending order
-    });
-    return sortedMetrics[0]?.active_ads_count ?? 0;
+    return metrics[metrics.length - 1]?.active_ads_count ?? 0;
   };
 
   const getVariation = (metrics: OfferMetric[]) => {
     if (metrics.length < 2) return { type: "neutral" as const, value: 0 };
     
-    // Sort by date descending to get the two most recent
-    const sortedMetrics = [...metrics].sort((a, b) => {
-      const dateA = parse(a.date, "dd/MM", new Date());
-      const dateB = parse(b.date, "dd/MM", new Date());
-      return compareAsc(dateB, dateA);
-    });
-    
-    const current = sortedMetrics[0].active_ads_count;
-    const previous = sortedMetrics[1].active_ads_count;
+    const current = metrics[metrics.length - 1].active_ads_count;
+    const previous = metrics[metrics.length - 2].active_ads_count;
     const diff = current - previous;
     
     if (diff > 0) return { type: "up" as const, value: diff };
@@ -352,20 +327,10 @@ const TrackOfertas = () => {
     });
   };
 
-  const getFullHistoryMetrics = (metrics: OfferMetric[]) => {
-    // Sort all metrics by date ascending (oldest first) for the chart
-    return [...metrics].sort((a, b) => {
-      const dateA = parse(a.date, "dd/MM", new Date());
-      const dateB = parse(b.date, "dd/MM", new Date());
-      return compareAsc(dateA, dateB);
-    });
-  };
-
   return (
     <div className="min-h-screen bg-background relative">
       <Header />
       
-      {/* Loading inicial */}
       <Dialog open={isInitialLoading}>
         <DialogContent className="sm:max-w-[400px] bg-card border-border text-center">
           <DialogHeader>
@@ -392,72 +357,62 @@ const TrackOfertas = () => {
           <div className="flex gap-3">
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
-                <Button 
-                  size="lg" 
-                  className="bg-accent hover:bg-accent/90"
-                >
+                <Button size="lg" className="bg-accent hover:bg-accent/90">
                   <Plus className="mr-2 h-5 w-5" />
                   Adicionar Oferta
                 </Button>
               </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px] bg-card border-border">
-              <DialogHeader>
-                <DialogTitle className="text-2xl">Cadastrar Nova Oferta</DialogTitle>
-                <DialogDescription>
-                  Preencha os dados abaixo para começar a rastrear uma nova oferta.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-6 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name" className="text-base">Nome da Oferta *</Label>
-                  <Input
-                    id="name"
-                    placeholder="Ex: Produto XYZ - Campanha Verão"
-                    value={newOffer.name}
-                    onChange={(e) => setNewOffer({ ...newOffer, name: e.target.value })}
-                    className="bg-input border-border"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Escolha um nome descritivo para identificar facilmente sua oferta
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="link" className="text-base">Link da Biblioteca de Anúncios *</Label>
-                  <Input
-                    id="link"
-                    placeholder="https://www.facebook.com/ads/library/?id=..."
-                    value={newOffer.ad_library_link}
-                    onChange={(e) => setNewOffer({ ...newOffer, ad_library_link: e.target.value })}
-                    className="bg-input border-border"
-                  />
-                  <div className="text-xs text-muted-foreground space-y-1">
-                    <p>✅ Use o link de uma <strong>página específica</strong> (com "view_all_page_id=")</p>
-                    <p>❌ Não use links de busca por palavras-chave</p>
+              <DialogContent className="sm:max-w-[500px] bg-card border-border">
+                <DialogHeader>
+                  <DialogTitle className="text-2xl">Cadastrar Nova Oferta</DialogTitle>
+                  <DialogDescription>
+                    Preencha os dados abaixo para começar a rastrear uma nova oferta.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-6 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name" className="text-base">Nome da Oferta *</Label>
+                    <Input
+                      id="name"
+                      placeholder="Ex: Produto XYZ - Campanha Verão"
+                      value={newOffer.name}
+                      onChange={(e) => setNewOffer({ ...newOffer, name: e.target.value })}
+                      className="bg-input border-border"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="link" className="text-base">Link da Biblioteca de Anúncios *</Label>
+                    <Input
+                      id="link"
+                      placeholder="https://www.facebook.com/ads/library/?id=..."
+                      value={newOffer.ad_library_link}
+                      onChange={(e) => setNewOffer({ ...newOffer, ad_library_link: e.target.value })}
+                      className="bg-input border-border"
+                    />
                   </div>
                 </div>
-              </div>
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setIsDialogOpen(false);
-                    setNewOffer({ name: "", ad_library_link: "" });
-                  }}
-                  className="flex-1"
-                  disabled={isLoading}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  onClick={handleAddOffer}
-                  disabled={isLoading}
-                  className="flex-1 bg-accent hover:bg-accent/90"
-                >
-                  {isLoading ? "Cadastrando..." : "Cadastrar Oferta"}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsDialogOpen(false);
+                      setNewOffer({ name: "", ad_library_link: "" });
+                    }}
+                    className="flex-1"
+                    disabled={isLoading}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={handleAddOffer}
+                    disabled={isLoading}
+                    className="flex-1 bg-accent hover:bg-accent/90"
+                  >
+                    {isLoading ? "Cadastrando..." : "Cadastrar Oferta"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
 
@@ -471,193 +426,176 @@ const TrackOfertas = () => {
               <p className="text-muted-foreground text-center max-w-md mb-6">
                 Comece cadastrando sua primeira oferta para acompanhar a performance dos anúncios ativos.
               </p>
-              <Button 
-                onClick={() => setIsDialogOpen(true)}
-                size="lg"
-                className="bg-accent hover:bg-accent/90"
-              >
+              <Button onClick={() => setIsDialogOpen(true)} size="lg" className="bg-accent hover:bg-accent/90">
                 <Plus className="mr-2 h-5 w-5" />
                 Cadastrar Primeira Oferta
               </Button>
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {offers.map((offer) => {
-                const metrics = allMetrics[offer.id] || [];
-                const variation = getVariation(metrics);
-                const last7DaysData = getLast7DaysMetrics(metrics);
-                
-                return (
-                  <Card key={offer.id} className="border-border bg-card/50 backdrop-blur relative group">
-                      <CardHeader className="pb-2 px-3 pt-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <CardTitle className="text-sm font-semibold truncate flex-1">{offer.name}</CardTitle>
-                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 hover:bg-blue-500/20"
-                              onClick={() => {
-                                setEditingOffer(offer);
-                                setEditedOfferName(offer.name);
-                              }}
-                            >
-                              <Edit className="h-3 w-3 text-blue-500" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 hover:bg-accent/20"
-                              onClick={() => setExpandedOffer(offer)}
-                            >
-                              <Maximize2 className="h-3 w-3 text-accent" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 hover:bg-destructive/20"
-                              onClick={() => {
-                                if (confirm(`Deseja realmente excluir a oferta "${offer.name}"?`)) {
-                                  handleDeleteOffer(offer.id);
-                                }
-                              }}
-                            >
-                              <Trash2 className="h-3 w-3 text-destructive" />
-                            </Button>
-                          </div>
-                        </div>
-                        <CardDescription className="flex items-center gap-1 text-xs">
-                          <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                          <a 
-                            href={offer.ad_library_link} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="hover:text-accent transition-colors truncate"
-                          >
-                            Ver anúncios
-                          </a>
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="px-3 pb-3">
-                        {/* Botão para atualizar métrica do dia */}
-                        <div className="mb-3">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full h-8 text-xs border-accent/50 hover:bg-accent/10"
-                            onClick={() => {
-                              setUpdateMetricOffer(offer);
-                              const todayMetric = metrics.find(m => m.date === getTodayDate());
-                              setUpdateValue(todayMetric?.active_ads_count?.toString() || "");
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {offers.map((offer) => {
+              const metrics = allMetrics[offer.id] || [];
+              const variation = getVariation(metrics);
+              const last7DaysData = getLast7DaysMetrics(metrics);
+              
+              return (
+                <Card key={offer.id} className="border-border bg-card/50 backdrop-blur relative group">
+                  <CardHeader className="pb-2 px-3 pt-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <CardTitle className="text-sm font-semibold truncate flex-1">{offer.name}</CardTitle>
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 hover:bg-blue-500/20"
+                          onClick={() => {
+                            setEditingOffer(offer);
+                            setEditedOfferName(offer.name);
+                          }}
+                        >
+                          <Edit className="h-3 w-3 text-blue-500" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 hover:bg-accent/20"
+                          onClick={() => setExpandedOffer(offer)}
+                        >
+                          <Maximize2 className="h-3 w-3 text-accent" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 hover:bg-destructive/20"
+                          onClick={() => {
+                            if (confirm(`Deseja realmente excluir a oferta "${offer.name}"?`)) {
+                              handleDeleteOffer(offer.id);
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3 text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                    <CardDescription className="flex items-center gap-1 text-xs">
+                      <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                      <a 
+                        href={offer.ad_library_link} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="hover:text-accent transition-colors truncate"
+                      >
+                        Ver anúncios
+                      </a>
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="px-3 pb-3">
+                    <div className="mb-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full h-8 text-xs border-accent/50 hover:bg-accent/10"
+                        onClick={() => {
+                          setUpdateMetricOffer(offer);
+                          const todayMetric = metrics.find(m => m.date === getTodayDate());
+                          setUpdateValue(todayMetric?.active_ads_count?.toString() || "");
+                        }}
+                      >
+                        <RefreshCw className="h-3 w-3 mr-2" />
+                        Atualizar Anúncios ({getTodayDate()})
+                      </Button>
+                    </div>
+
+                    <div className="h-[100px] mb-2">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={last7DaysData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                          <XAxis 
+                            dataKey="date" 
+                            stroke="hsl(var(--muted-foreground))"
+                            tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 9 }}
+                            height={20}
+                          />
+                          <YAxis 
+                            stroke="hsl(var(--muted-foreground))"
+                            tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 9 }}
+                            width={25}
+                          />
+                          <Tooltip 
+                            contentStyle={{
+                              backgroundColor: "hsl(var(--card))",
+                              border: "1px solid hsl(var(--border))",
+                              borderRadius: "6px",
+                              fontSize: "11px",
+                              padding: "4px 8px",
                             }}
-                          >
-                            <RefreshCw className="h-3 w-3 mr-2" />
-                            Atualizar Anúncios ({getTodayDate()})
-                          </Button>
-                        </div>
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="active_ads_count" 
+                            stroke="hsl(var(--accent))" 
+                            strokeWidth={2}
+                            dot={{ fill: "hsl(var(--accent))", r: 2 }}
+                            name="Anúncios"
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
 
-                        <div className="h-[100px] mb-2">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={last7DaysData}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                              <XAxis 
-                                dataKey="date" 
-                                stroke="hsl(var(--muted-foreground))"
-                                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 9 }}
-                                height={20}
-                              />
-                              <YAxis 
-                                stroke="hsl(var(--muted-foreground))"
-                                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 9 }}
-                                width={25}
-                              />
-                              <Tooltip 
-                                contentStyle={{
-                                  backgroundColor: "hsl(var(--card))",
-                                  border: "1px solid hsl(var(--border))",
-                                  borderRadius: "6px",
-                                  fontSize: "11px",
-                                  padding: "4px 8px",
-                                }}
-                              />
-                              <Line 
-                                type="monotone" 
-                                dataKey="active_ads_count" 
-                                stroke="hsl(var(--accent))" 
-                                strokeWidth={2}
-                                dot={{ fill: "hsl(var(--accent))", r: 2 }}
-                                name="Anúncios"
-                              />
-                            </LineChart>
-                          </ResponsiveContainer>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <Card className="border-border bg-secondary/50">
-                            <CardHeader className="pb-1 px-2 pt-2">
-                              <CardTitle className="text-[10px] font-medium text-muted-foreground">
-                                Variação
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent className="pb-2 px-2">
-                              <div className="flex items-center gap-1">
-                                {variation.type === "up" && (
-                                  <>
-                                    <div className="rounded-full bg-positive/10 p-1">
-                                      <TrendingUp className="h-3 w-3 text-positive" />
-                                    </div>
-                                    <div>
-                                      <p className="text-sm font-bold text-positive">+{variation.value}</p>
-                                    </div>
-                                  </>
-                                )}
-                                {variation.type === "down" && (
-                                  <>
-                                    <div className="rounded-full bg-destructive/10 p-1">
-                                      <TrendingDown className="h-3 w-3 text-destructive" />
-                                    </div>
-                                    <div>
-                                      <p className="text-sm font-bold text-destructive">-{variation.value}</p>
-                                    </div>
-                                  </>
-                                )}
-                                {variation.type === "neutral" && (
-                                  <>
-                                    <div className="rounded-full bg-muted/50 p-1">
-                                      <Minus className="h-3 w-3 text-muted-foreground" />
-                                    </div>
-                                    <div>
-                                      <p className="text-sm font-bold text-muted-foreground">0</p>
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-                            </CardContent>
-                          </Card>
-
-                          <Card className="border-border bg-secondary/50">
-                            <CardHeader className="pb-1 px-2 pt-2">
-                              <CardTitle className="text-[10px] font-medium text-muted-foreground">
-                                Último Registro
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent className="pb-2 px-2">
-                              <div className="flex items-center gap-1">
-                                <div className="rounded-full bg-accent/10 p-1">
-                                  <span className="text-[10px] font-bold text-accent">📊</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Card className="border-border bg-secondary/50">
+                        <CardHeader className="pb-1 px-2 pt-2">
+                          <CardTitle className="text-[10px] font-medium text-muted-foreground">Variação</CardTitle>
+                        </CardHeader>
+                        <CardContent className="pb-2 px-2">
+                          <div className="flex items-center gap-1">
+                            {variation.type === "up" && (
+                              <>
+                                <div className="rounded-full bg-positive/10 p-1">
+                                  <TrendingUp className="h-3 w-3 text-positive" />
                                 </div>
-                                <p className="text-sm font-bold text-foreground">{getLastRecordCount(metrics)}</p>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
+                                <p className="text-sm font-bold text-positive">+{variation.value}</p>
+                              </>
+                            )}
+                            {variation.type === "down" && (
+                              <>
+                                <div className="rounded-full bg-destructive/10 p-1">
+                                  <TrendingDown className="h-3 w-3 text-destructive" />
+                                </div>
+                                <p className="text-sm font-bold text-destructive">-{variation.value}</p>
+                              </>
+                            )}
+                            {variation.type === "neutral" && (
+                              <>
+                                <div className="rounded-full bg-muted/50 p-1">
+                                  <Minus className="h-3 w-3 text-muted-foreground" />
+                                </div>
+                                <p className="text-sm font-bold text-muted-foreground">0</p>
+                              </>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card className="border-border bg-secondary/50">
+                        <CardHeader className="pb-1 px-2 pt-2">
+                          <CardTitle className="text-[10px] font-medium text-muted-foreground">Último Registro</CardTitle>
+                        </CardHeader>
+                        <CardContent className="pb-2 px-2">
+                          <div className="flex items-center gap-1">
+                            <div className="rounded-full bg-accent/10 p-1">
+                              <span className="text-[10px] font-bold text-accent">📊</span>
+                            </div>
+                            <p className="text-sm font-bold text-foreground">{getLastRecordCount(metrics)}</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </main>
@@ -672,9 +610,7 @@ const TrackOfertas = () => {
         <DialogContent className="sm:max-w-[425px] bg-card border-border">
           <DialogHeader>
             <DialogTitle className="text-2xl">Editar Oferta</DialogTitle>
-            <DialogDescription>
-              Altere o nome da oferta conforme necessário.
-            </DialogDescription>
+            <DialogDescription>Altere o nome da oferta conforme necessário.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -689,20 +625,10 @@ const TrackOfertas = () => {
             </div>
           </div>
           <div className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setEditingOffer(null);
-                setEditedOfferName("");
-              }}
-              className="flex-1"
-            >
+            <Button variant="outline" onClick={() => { setEditingOffer(null); setEditedOfferName(""); }} className="flex-1">
               Cancelar
             </Button>
-            <Button
-              onClick={handleEditOffer}
-              className="flex-1 bg-accent hover:bg-accent/90"
-            >
+            <Button onClick={handleEditOffer} className="flex-1 bg-accent hover:bg-accent/90">
               Salvar Alterações
             </Button>
           </div>
@@ -719,9 +645,7 @@ const TrackOfertas = () => {
         <DialogContent className="sm:max-w-[425px] bg-card border-border">
           <DialogHeader>
             <DialogTitle className="text-2xl">Atualizar Anúncios</DialogTitle>
-            <DialogDescription>
-              Informe a quantidade de anúncios ativos para hoje ({getTodayDate()}).
-            </DialogDescription>
+            <DialogDescription>Informe a quantidade de anúncios ativos para hoje ({getTodayDate()}).</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -738,14 +662,7 @@ const TrackOfertas = () => {
             </div>
           </div>
           <div className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setUpdateMetricOffer(null);
-                setUpdateValue("");
-              }}
-              className="flex-1"
-            >
+            <Button variant="outline" onClick={() => { setUpdateMetricOffer(null); setUpdateValue(""); }} className="flex-1">
               Cancelar
             </Button>
             <Button
@@ -778,12 +695,7 @@ const TrackOfertas = () => {
             <DialogTitle className="text-2xl">{expandedOffer?.name}</DialogTitle>
             <DialogDescription className="flex items-center gap-2 mt-2">
               <ExternalLink className="h-4 w-4" />
-              <a 
-                href={expandedOffer?.ad_library_link} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="hover:text-accent transition-colors"
-              >
+              <a href={expandedOffer?.ad_library_link} target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">
                 Ver biblioteca de anúncios
               </a>
             </DialogDescription>
@@ -794,32 +706,12 @@ const TrackOfertas = () => {
               {/* Gráfico com histórico completo */}
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={getFullHistoryMetrics(allMetrics[expandedOffer.id])}>
+                  <LineChart data={allMetrics[expandedOffer.id]}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis 
-                      dataKey="date" 
-                      stroke="hsl(var(--muted-foreground))"
-                      tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
-                    />
-                    <YAxis 
-                      stroke="hsl(var(--muted-foreground))"
-                      tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
-                    />
-                    <Tooltip 
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="active_ads_count" 
-                      stroke="hsl(var(--accent))" 
-                      strokeWidth={3}
-                      dot={{ fill: "hsl(var(--accent))", r: 4 }}
-                      name="Anúncios Ativos"
-                    />
+                    <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
+                    <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }} />
+                    <Line type="monotone" dataKey="active_ads_count" stroke="hsl(var(--accent))" strokeWidth={3} dot={{ fill: "hsl(var(--accent))", r: 4 }} name="Anúncios Ativos" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -859,9 +751,7 @@ const TrackOfertas = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Card className="border-border bg-secondary/50">
                   <CardHeader>
-                    <CardTitle className="text-sm font-medium text-muted-foreground">
-                      Variação vs. Dia Anterior
-                    </CardTitle>
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Variação vs. Dia Anterior</CardTitle>
                   </CardHeader>
                   <CardContent>
                     {(() => {
@@ -909,25 +799,21 @@ const TrackOfertas = () => {
 
                 <Card className="border-border bg-secondary/50">
                   <CardHeader>
-                    <CardTitle className="text-sm font-medium text-muted-foreground">
-                      Último Registro
-                    </CardTitle>
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Último Registro</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center gap-3">
                       <div className="rounded-full bg-accent/10 p-3">
                         <span className="text-2xl">📊</span>
                       </div>
-                      <p className="text-3xl font-bold text-foreground">
-                        {getLastRecordCount(allMetrics[expandedOffer.id] || [])}
-                      </p>
+                      <p className="text-3xl font-bold text-foreground">{getLastRecordCount(allMetrics[expandedOffer.id] || [])}</p>
                     </div>
                   </CardContent>
                 </Card>
               </div>
 
               {/* Campo de observações */}
-              <div className="space-y-2 border-t border-border pt-4">
+              <div className="space-y-3 border-t border-border pt-4">
                 <h4 className="font-semibold">Observações</h4>
                 <Textarea
                   placeholder="Adicione observações sobre esta oferta..."
@@ -936,14 +822,12 @@ const TrackOfertas = () => {
                   rows={3}
                   className="bg-secondary/30"
                 />
-                <Button
-                  onClick={handleSaveNotes}
-                  size="sm"
-                  className="bg-accent hover:bg-accent/90"
-                >
-                  <Save className="mr-2 h-4 w-4" />
-                  Salvar Observações
-                </Button>
+                <div className="flex justify-center">
+                  <Button onClick={handleSaveNotes} size="sm" className="bg-green-600 hover:bg-green-700">
+                    <Save className="mr-2 h-4 w-4" />
+                    Salvar Observações
+                  </Button>
+                </div>
               </div>
             </div>
           )}
