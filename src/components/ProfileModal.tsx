@@ -99,10 +99,6 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
               <Label className="text-muted-foreground text-sm">Email</Label>
               <p className="font-medium">{user?.email}</p>
             </div>
-            <div>
-              <Label className="text-muted-foreground text-sm">ID do usuário</Label>
-              <p className="font-mono text-sm text-muted-foreground">{user?.id}</p>
-            </div>
           </div>
 
           {/* Change Password Form */}
