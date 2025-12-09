@@ -8,10 +8,10 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, TrendingUp, TrendingDown, Minus, ExternalLink, Trash2, Edit, Maximize2, X, RefreshCw, AlertTriangle, Lock } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Progress } from "@/components/ui/progress";
+import { Plus, TrendingUp, TrendingDown, Minus, ExternalLink, Trash2, Edit, Maximize2, Calendar, Save } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { format, subDays, parseISO, isToday } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 interface TrackedOffer {
   id: string;
@@ -21,6 +21,7 @@ interface TrackedOffer {
 }
 
 interface OfferMetric {
+  id?: string;
   date: string;
   active_ads_count: number;
   is_invalid_link: boolean;
@@ -30,112 +31,25 @@ const TrackOfertas = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [offers, setOffers] = useState<TrackedOffer[]>([]);
-  const [selectedOffer, setSelectedOffer] = useState<TrackedOffer | null>(null);
   const [allMetrics, setAllMetrics] = useState<Record<string, OfferMetric[]>>({});
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [isDailyUpdateRunning, setIsDailyUpdateRunning] = useState(false);
-  const [loadingMessage, setLoadingMessage] = useState("");
   const [newOffer, setNewOffer] = useState({ name: "", ad_library_link: "" });
   const [expandedOffer, setExpandedOffer] = useState<TrackedOffer | null>(null);
-  const [updateProgress, setUpdateProgress] = useState({ processed: 0, total: 0, failed: 0 });
   const [editingOffer, setEditingOffer] = useState<TrackedOffer | null>(null);
   const [editedOfferName, setEditedOfferName] = useState("");
-
-  const loadingMessages = [
-    "🚀 Enviando informações para o Meta Ads...",
-    "🕵️ Seu concorrente não vai gostar disso...",
-    "📊 Analisando biblioteca de anúncios...",
-    "⚡ Está quase lá...",
-    "🎯 Coletando dados de performance...",
-    "🔥 Descobrindo os segredos da concorrência..."
-  ];
+  
+  // Estados para edição manual de métricas
+  const [editingMetricOffer, setEditingMetricOffer] = useState<TrackedOffer | null>(null);
+  const [editingDate, setEditingDate] = useState("");
+  const [editingValue, setEditingValue] = useState("");
 
   useEffect(() => {
     if (user) {
       loadOffers();
-      checkDailyUpdateStatus();
-      
-      // Subscribe to update status changes
-      const channel = supabase
-        .channel('daily-update-status')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'daily_update_status',
-          },
-          (payload) => {
-            console.log('Update status changed:', payload);
-            if (payload.new && typeof payload.new === 'object' && 'is_running' in payload.new) {
-              setIsDailyUpdateRunning(payload.new.is_running as boolean);
-              
-              // Update progress data
-              const processed = (payload.new as any).processed_offers || 0;
-              const total = (payload.new as any).total_offers || 0;
-              const failed = (payload.new as any).failed_offers || 0;
-              setUpdateProgress({ processed, total, failed });
-              
-              if (!payload.new.is_running) {
-                // Update completed, refresh all data
-                loadOffers();
-              }
-            }
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
     }
   }, [user]);
-
-  // Detectar e resetar updates travados (5 minutos sem mudança)
-  useEffect(() => {
-    if (!isDailyUpdateRunning) return;
-
-    const timeout = setTimeout(async () => {
-      console.log('⚠️ Atualização travada detectada. Resetando...');
-      
-      try {
-        // Buscar o status atual
-        const { data: currentStatus } = await supabase
-          .from('daily_update_status')
-          .select('*')
-          .eq('is_running', true)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (currentStatus) {
-          // Resetar o status travado
-          const { error } = await supabase
-            .from('daily_update_status')
-            .update({
-              is_running: false,
-              completed_at: new Date().toISOString(),
-            })
-            .eq('id', currentStatus.id);
-
-          if (!error) {
-            setIsDailyUpdateRunning(false);
-            toast({
-              title: "Atualização resetada",
-              description: "A atualização estava travada e foi resetada automaticamente.",
-              variant: "destructive",
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Erro ao resetar status travado:', error);
-      }
-    }, 5 * 60 * 1000); // 5 minutos
-
-    return () => clearTimeout(timeout);
-  }, [isDailyUpdateRunning, toast]);
 
   useEffect(() => {
     if (offers.length > 0) {
@@ -165,29 +79,6 @@ const TrackOfertas = () => {
     setIsInitialLoading(false);
   };
 
-  const checkDailyUpdateStatus = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('daily_update_status')
-        .select('is_running, processed_offers, total_offers, failed_offers')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (error) throw error;
-      if (data) {
-        setIsDailyUpdateRunning(data.is_running);
-        setUpdateProgress({
-          processed: data.processed_offers || 0,
-          total: data.total_offers || 0,
-          failed: data.failed_offers || 0,
-        });
-      }
-    } catch (error) {
-      console.error('Error checking update status:', error);
-    }
-  };
-
   const loadAllMetrics = async () => {
     const metricsData: Record<string, OfferMetric[]> = {};
     
@@ -204,6 +95,10 @@ const TrackOfertas = () => {
     }
     
     setAllMetrics(metricsData);
+  };
+
+  const getTodayDate = () => {
+    return format(new Date(), "dd/MM");
   };
 
   const handleAddOffer = async () => {
@@ -227,32 +122,9 @@ const TrackOfertas = () => {
       return;
     }
 
-    // Check if it's a specific page/ad link, not a keyword search
-    const hasSpecificId = link.includes('id=') && !link.includes('search_type=keyword');
-    const hasPageId = link.includes('view_all_page_id=');
-    
-    if (!hasSpecificId && !hasPageId) {
-      toast({
-        title: "Link inválido",
-        description: "Use o link de uma página ou anúncio específico, não uma busca por palavras-chave.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (offers.length >= 10) {
-      toast({
-        title: "Limite atingido",
-        description: "Você já possui 10 ofertas cadastradas. Exclua uma oferta para adicionar outra.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setIsLoading(true);
 
     try {
-      // Inserir oferta no banco (sem buscar métricas)
       const { error: offerError } = await supabase
         .from("tracked_offers")
         .insert([{
@@ -265,7 +137,7 @@ const TrackOfertas = () => {
 
       toast({
         title: "Oferta cadastrada!",
-        description: "Os dados dos anúncios serão atualizados até às 08:00.",
+        description: "Agora você pode inserir os dados de anúncios manualmente.",
       });
 
       setNewOffer({ name: "", ad_library_link: "" });
@@ -340,125 +212,48 @@ const TrackOfertas = () => {
     loadOffers();
   };
 
-  const handleManualUpdate = async () => {
-    if (offers.length === 0) {
-      toast({
-        title: "Nenhuma oferta cadastrada",
-        description: "Cadastre ofertas antes de atualizar.",
-        variant: "destructive",
-      });
-      return;
-    }
-
+  const handleSaveMetric = async (offerId: string, date: string, value: number) => {
     try {
-      setIsDailyUpdateRunning(true);
-      let completed = false;
-      let attempts = 0;
-      const maxAttempts = 100;
-      const startTime = Date.now();
-      const maxDuration = 30 * 60 * 1000; // 30 minutos máximo
-      let consecutiveErrors = 0;
-      const maxConsecutiveErrors = 3;
-      
-      console.log('🚀 Iniciando atualização manual de ofertas...');
-      
-      while (!completed && attempts < maxAttempts) {
-        attempts++;
-        
-        // Verificar timeout de segurança
-        if (Date.now() - startTime > maxDuration) {
-          console.error('❌ Atualização cancelada: tempo máximo excedido (30 min)');
-          throw new Error('Tempo máximo de atualização excedido');
-        }
-        
-        console.log(`📡 [${attempts}/${maxAttempts}] Chamando edge function...`);
-        
-        try {
-          const response = await fetch(
-            `https://dcjizoulbggsavizbukq.supabase.co/functions/v1/update-offers-daily`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-              },
-              body: JSON.stringify({ manual_trigger: true })
-            }
-          );
+      // Check if metric already exists for this date
+      const { data: existingMetric } = await supabase
+        .from("offer_metrics")
+        .select("id")
+        .eq("offer_id", offerId)
+        .eq("date", date)
+        .maybeSingle();
 
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`❌ HTTP ${response.status}:`, errorText);
-            consecutiveErrors++;
-            
-            if (consecutiveErrors >= maxConsecutiveErrors) {
-              throw new Error(`Muitos erros consecutivos (${consecutiveErrors}). Último: HTTP ${response.status}`);
-            }
-            
-            console.warn(`⚠️ Tentando novamente após erro... (${consecutiveErrors}/${maxConsecutiveErrors})`);
-            await new Promise(resolve => setTimeout(resolve, 5000));
-            continue;
-          }
+      if (existingMetric) {
+        // Update existing metric
+        const { error } = await supabase
+          .from("offer_metrics")
+          .update({ active_ads_count: value })
+          .eq("id", existingMetric.id);
 
-          const data = await response.json();
-          console.log(`✅ Lote ${attempts} processado:`, JSON.stringify(data));
-          
-          // Reset error counter on success
-          consecutiveErrors = 0;
+        if (error) throw error;
+      } else {
+        // Insert new metric
+        const { error } = await supabase
+          .from("offer_metrics")
+          .insert([{
+            offer_id: offerId,
+            date: date,
+            active_ads_count: value,
+            is_invalid_link: false,
+          }]);
 
-          // Verificar se completou
-          if (data?.completed === true) {
-            console.log('🎉 Atualização completa! Total processado:', data.processed);
-            completed = true;
-            break;
-          } 
-          
-          // Verificar se há mais para processar
-          if (data?.remaining !== undefined && data.remaining > 0) {
-            console.log(`⏳ Aguardando 3s... (Restantes: ${data.remaining}/${data.total})`);
-            await new Promise(resolve => setTimeout(resolve, 3000));
-            continue;
-          }
-          
-          // Se chegou aqui, resposta inesperada
-          console.warn('⚠️ Resposta sem "completed" ou "remaining". Assumindo conclusão:', data);
-          completed = true;
-          
-        } catch (fetchError: any) {
-          console.error(`❌ Erro na tentativa ${attempts}:`, fetchError);
-          consecutiveErrors++;
-          
-          if (consecutiveErrors >= maxConsecutiveErrors) {
-            throw new Error(`Muitos erros consecutivos (${consecutiveErrors}). Último: ${fetchError.message}`);
-          }
-          
-          console.warn(`⚠️ Tentando novamente após erro... (${consecutiveErrors}/${maxConsecutiveErrors})`);
-          await new Promise(resolve => setTimeout(resolve, 5000));
-        }
+        if (error) throw error;
       }
 
-      if (attempts >= maxAttempts) {
-        console.warn('⚠️ Limite de tentativas atingido');
-        throw new Error(`Limite de ${maxAttempts} tentativas atingido`);
-      }
-
-      console.log('🔄 Recarregando dados...');
-      setTimeout(() => {
-        loadOffers();
-        setIsDailyUpdateRunning(false);
-      }, 2000);
-      
       toast({
-        title: "Atualização concluída",
-        description: "As ofertas foram atualizadas com sucesso.",
+        title: "Métrica salva!",
+        description: `Anúncios do dia ${date} atualizados com sucesso.`,
       });
-      
+
+      loadAllMetrics();
     } catch (error: any) {
-      console.error('💥 Erro fatal na atualização:', error);
-      setIsDailyUpdateRunning(false);
       toast({
-        title: "Erro ao atualizar",
-        description: error.message || "Ocorreu um erro ao processar a atualização.",
+        title: "Erro ao salvar métrica",
+        description: error.message,
         variant: "destructive",
       });
     }
@@ -480,62 +275,23 @@ const TrackOfertas = () => {
     return { type: "neutral" as const, value: 0 };
   };
 
-  const isInvalidLink = (metrics: OfferMetric[]) => {
-    if (metrics.length === 0) return false;
-    // Verifica se a última métrica foi marcada como link inválido
-    return metrics[metrics.length - 1].is_invalid_link === true;
+  const getTodayMetric = (metrics: OfferMetric[]) => {
+    const today = getTodayDate();
+    return metrics.find(m => m.date === today);
+  };
+
+  const getLast7Days = () => {
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const date = subDays(new Date(), i);
+      days.push(format(date, "dd/MM"));
+    }
+    return days;
   };
 
   return (
     <div className="min-h-screen bg-background relative">
       <Header />
-      
-      {/* Lock overlay for Track Ofertas */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-none">
-        <div className="bg-card border-2 border-accent rounded-2xl p-12 shadow-2xl flex flex-col items-center gap-6 pointer-events-auto">
-          <div className="rounded-full bg-accent/20 p-8">
-            <Lock className="h-20 w-20 text-accent" />
-          </div>
-          <div className="text-center">
-            <h2 className="text-4xl font-bold mb-3 bg-gradient-to-r from-accent to-orange-400 bg-clip-text text-transparent">
-              Em Breve
-            </h2>
-            <p className="text-muted-foreground text-lg">
-              Esta funcionalidade estará disponível em breve
-            </p>
-          </div>
-        </div>
-      </div>
-      
-      {/* Blur overlay when daily update is running */}
-      {isDailyUpdateRunning && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
-          <div className="bg-card p-8 rounded-lg border-2 border-accent max-w-md mx-4">
-            <div className="flex flex-col items-center gap-6">
-              <div className="animate-spin rounded-full h-16 w-16 border-4 border-accent border-t-transparent"></div>
-              <div className="text-center w-full">
-                <h3 className="text-2xl font-semibold mb-2">Atualizando ofertas...</h3>
-                <p className="text-muted-foreground mb-4">
-                  Estamos atualizando os dados de todas as ofertas. Isso pode levar alguns minutos.
-                </p>
-                {updateProgress.total > 0 && (
-                  <div className="space-y-3 mt-6">
-                    <Progress 
-                      value={(updateProgress.processed / updateProgress.total) * 100} 
-                      className="h-3"
-                    />
-                    <div className="flex justify-center text-sm">
-                      <span className="text-accent font-semibold text-lg">
-                        {Math.round((updateProgress.processed / updateProgress.total) * 100)}%
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       
       {/* Loading inicial */}
       <Dialog open={isInitialLoading}>
@@ -556,37 +312,20 @@ const TrackOfertas = () => {
             <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-accent to-orange-400 bg-clip-text text-transparent">
               Track Ofertas
             </h2>
-            <p className="text-muted-foreground mb-3 blur-sm select-none">
+            <p className="text-muted-foreground mb-3">
               Acompanhe a performance dos anúncios ativos das suas ofertas
             </p>
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-orange-400/30 bg-orange-400/5">
-              <span className="text-sm text-muted-foreground">
-                ℹ️ Os resultados dos anúncios são atualizados diariamente às 08:00
-              </span>
-            </div>
           </div>
           
           <div className="flex gap-3">
-            <Button
-              size="lg"
-              variant="outline"
-              onClick={handleManualUpdate}
-              disabled={isDailyUpdateRunning || offers.length === 0}
-              className="border-accent/50 hover:bg-accent/10"
-            >
-              <RefreshCw className={`mr-2 h-5 w-5 ${isDailyUpdateRunning ? 'animate-spin' : ''}`} />
-              Atualizar Agora
-            </Button>
-            
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
                 <Button 
                   size="lg" 
                   className="bg-accent hover:bg-accent/90"
-                  disabled={offers.length >= 10}
                 >
                   <Plus className="mr-2 h-5 w-5" />
-                  Adicionar Oferta {offers.length}/10
+                  Adicionar Oferta
                 </Button>
               </DialogTrigger>
             <DialogContent className="sm:max-w-[500px] bg-card border-border">
@@ -594,7 +333,6 @@ const TrackOfertas = () => {
                 <DialogTitle className="text-2xl">Cadastrar Nova Oferta</DialogTitle>
                 <DialogDescription>
                   Preencha os dados abaixo para começar a rastrear uma nova oferta.
-                  O sistema buscará automaticamente a quantidade de anúncios ativos.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-6 py-4">
@@ -649,19 +387,6 @@ const TrackOfertas = () => {
             </DialogContent>
           </Dialog>
           </div>
-
-          {/* Loading Dialog */}
-          <Dialog open={isLoading}>
-            <DialogContent className="sm:max-w-[400px] bg-card border-border text-center">
-              <DialogHeader>
-                <DialogTitle className="sr-only">Carregando</DialogTitle>
-              </DialogHeader>
-              <div className="flex flex-col items-center gap-4 py-6">
-                <div className="animate-spin rounded-full h-16 w-16 border-4 border-accent border-t-transparent"></div>
-                <p className="text-lg font-medium text-foreground">{loadingMessage}</p>
-              </div>
-            </DialogContent>
-          </Dialog>
         </div>
 
         {offers.length === 0 ? (
@@ -686,12 +411,11 @@ const TrackOfertas = () => {
           </Card>
         ) : (
           <div className="space-y-4">
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {offers.map((offer) => {
                 const metrics = allMetrics[offer.id] || [];
                 const variation = getVariation(metrics);
-                const hasInvalidLink = isInvalidLink(metrics);
+                const todayMetric = getTodayMetric(metrics);
                 
                 return (
                   <Card key={offer.id} className="border-border bg-card/50 backdrop-blur relative group">
@@ -745,15 +469,45 @@ const TrackOfertas = () => {
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="px-3 pb-3">
-                        {hasInvalidLink && (
-                          <Alert variant="destructive" className="mb-3 p-2 border-destructive/50">
-                            <AlertTriangle className="h-3 w-3" />
-                            <AlertDescription className="text-[10px] leading-tight ml-5">
-                              Link inválido detectado. O link não aponta para uma página ou anúncio específico. Verifique e atualize.
-                            </AlertDescription>
-                          </Alert>
-                        )}
-                        <div className="h-[120px] mb-2">
+                        {/* Input para adicionar métrica do dia */}
+                        <div className="mb-3 p-2 bg-secondary/50 rounded-lg">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Calendar className="h-4 w-4 text-accent" />
+                            <span className="text-xs font-medium">Hoje ({getTodayDate()})</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <Input
+                              type="number"
+                              placeholder="Qtd anúncios"
+                              className="h-8 text-sm"
+                              defaultValue={todayMetric?.active_ads_count || ""}
+                              onBlur={(e) => {
+                                if (e.target.value) {
+                                  handleSaveMetric(offer.id, getTodayDate(), parseInt(e.target.value));
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && (e.target as HTMLInputElement).value) {
+                                  handleSaveMetric(offer.id, getTodayDate(), parseInt((e.target as HTMLInputElement).value));
+                                }
+                              }}
+                            />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 px-2"
+                              onClick={() => {
+                                setEditingMetricOffer(offer);
+                                setEditingDate("");
+                                setEditingValue("");
+                              }}
+                            >
+                              <Calendar className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="h-[100px] mb-2">
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={metrics}>
                               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
@@ -835,7 +589,7 @@ const TrackOfertas = () => {
                           <Card className="border-border bg-secondary/50">
                             <CardHeader className="pb-1 px-2 pt-2">
                               <CardTitle className="text-[10px] font-medium text-muted-foreground">
-                                Total Hoje
+                                Último Registro
                               </CardTitle>
                             </CardHeader>
                             <CardContent className="pb-2 px-2">
@@ -857,7 +611,7 @@ const TrackOfertas = () => {
         )}
       </main>
 
-      {/* Dialog de Edição */}
+      {/* Dialog de Edição de Nome */}
       <Dialog open={!!editingOffer} onOpenChange={(open) => {
         if (!open) {
           setEditingOffer(null);
@@ -904,6 +658,86 @@ const TrackOfertas = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Dialog de Edição de Métrica de Dia Passado */}
+      <Dialog open={!!editingMetricOffer} onOpenChange={(open) => {
+        if (!open) {
+          setEditingMetricOffer(null);
+          setEditingDate("");
+          setEditingValue("");
+        }
+      }}>
+        <DialogContent className="sm:max-w-[425px] bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">Editar Dia Anterior</DialogTitle>
+            <DialogDescription>
+              Preencha a quantidade de anúncios de um dia específico.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-base">Selecione o dia</Label>
+              <div className="grid grid-cols-4 gap-2">
+                {getLast7Days().map((day) => (
+                  <Button
+                    key={day}
+                    variant={editingDate === day ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setEditingDate(day)}
+                    className={editingDate === day ? "bg-accent" : ""}
+                  >
+                    {day}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-value" className="text-base">Quantidade de Anúncios</Label>
+              <Input
+                id="edit-value"
+                type="number"
+                placeholder="Ex: 15"
+                value={editingValue}
+                onChange={(e) => setEditingValue(e.target.value)}
+                className="bg-input border-border"
+              />
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditingMetricOffer(null);
+                setEditingDate("");
+                setEditingValue("");
+              }}
+              className="flex-1"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                if (editingMetricOffer && editingDate && editingValue) {
+                  handleSaveMetric(editingMetricOffer.id, editingDate, parseInt(editingValue));
+                  setEditingMetricOffer(null);
+                  setEditingDate("");
+                  setEditingValue("");
+                } else {
+                  toast({
+                    title: "Campos obrigatórios",
+                    description: "Selecione um dia e preencha a quantidade.",
+                    variant: "destructive",
+                  });
+                }
+              }}
+              className="flex-1 bg-accent hover:bg-accent/90"
+            >
+              <Save className="mr-2 h-4 w-4" />
+              Salvar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Popup expandido */}
       <Dialog open={!!expandedOffer} onOpenChange={() => setExpandedOffer(null)}>
         <DialogContent className="sm:max-w-[90vw] md:max-w-[800px] bg-card border-2 border-accent">
@@ -921,15 +755,6 @@ const TrackOfertas = () => {
               </a>
             </DialogDescription>
           </DialogHeader>
-          
-          {expandedOffer && isInvalidLink(allMetrics[expandedOffer.id] || []) && (
-            <Alert variant="destructive" className="border-destructive/50">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription className="ml-6">
-                <strong>Link inválido detectado.</strong> O link desta oferta não aponta para uma página ou anúncio específico da Biblioteca de Anúncios do Facebook. Por favor, verifique se o link está correto e atualize a oferta.
-              </AlertDescription>
-            </Alert>
-          )}
           
           {expandedOffer && allMetrics[expandedOffer.id] && (
             <div className="space-y-6 py-4">
@@ -963,6 +788,22 @@ const TrackOfertas = () => {
                     />
                   </LineChart>
                 </ResponsiveContainer>
+              </div>
+
+              {/* Tabela de histórico */}
+              <div className="space-y-2">
+                <h4 className="font-semibold">Histórico de Registros</h4>
+                <div className="grid grid-cols-7 gap-2">
+                  {getLast7Days().map((day) => {
+                    const metric = allMetrics[expandedOffer.id]?.find(m => m.date === day);
+                    return (
+                      <div key={day} className="p-2 bg-secondary/50 rounded-lg text-center">
+                        <p className="text-xs text-muted-foreground">{day}</p>
+                        <p className="text-lg font-bold">{metric?.active_ads_count ?? 0}</p>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1019,7 +860,7 @@ const TrackOfertas = () => {
                 <Card className="border-border bg-secondary/50">
                   <CardHeader>
                     <CardTitle className="text-sm font-medium text-muted-foreground">
-                      Total de Anúncios Ativos Hoje
+                      Último Registro
                     </CardTitle>
                   </CardHeader>
                   <CardContent>

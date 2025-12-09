@@ -12,6 +12,7 @@ import ProductMetrics from "./pages/ProductMetrics";
 import ProductAnalysis from "./pages/ProductAnalysis";
 import NumberOrganizer from "./pages/NumberOrganizer";
 import TrackOfertas from "./pages/TrackOfertas";
+import WhatsAppFunnelCreator from "./pages/WhatsAppFunnelCreator";
 import AdminPanel from "./pages/AdminPanel";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
@@ -31,6 +32,7 @@ const App = () => (
             <Route path="/metricas" element={<ProtectedRoute><Index /></ProtectedRoute>} />
             <Route path="/organizador-numeros" element={<ProtectedRoute><NumberOrganizer /></ProtectedRoute>} />
             <Route path="/track-ofertas" element={<ProtectedRoute><TrackOfertas /></ProtectedRoute>} />
+            <Route path="/criador-funil" element={<ProtectedRoute><WhatsAppFunnelCreator /></ProtectedRoute>} />
             <Route path="/produto/:productId" element={<ProtectedRoute><ProductMetrics /></ProtectedRoute>} />
             <Route path="/produto/:productId/analise" element={<ProtectedRoute><ProductAnalysis /></ProtectedRoute>} />
             <Route path="/bob-admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />

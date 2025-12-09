@@ -51,7 +51,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         return { error: { message: "Nome de usuário já existe" } };
       }
 
-      const email = `${username.toLowerCase().trim()}@metricas.local`;
+      // Check if username is already an email format
+      const isEmail = username.includes('@') && username.includes('.');
+      const email = isEmail ? username.toLowerCase().trim() : `${username.toLowerCase().trim()}@metricas.local`;
       const redirectUrl = `${window.location.origin}/`;
 
       const { data, error } = await supabase.auth.signUp({
@@ -84,7 +86,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signIn = async (username: string, password: string) => {
     try {
-      const email = `${username.toLowerCase().trim()}@metricas.local`;
+      // Check if username is already an email format
+      const isEmail = username.includes('@') && username.includes('.');
+      const email = isEmail ? username.toLowerCase().trim() : `${username.toLowerCase().trim()}@metricas.local`;
+      
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
