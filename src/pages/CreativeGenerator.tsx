@@ -12,6 +12,9 @@ import { Loader2, Download, ArrowLeft, Image as ImageIcon, Check } from "lucide-
 import { useNavigate } from "react-router-dom";
 import creativeModel1 from "@/assets/creative-model-1.png";
 import creativeModel2 from "@/assets/creative-model-2.png";
+import creativeModel3 from "@/assets/creative-model-3.png";
+import creativeModel4 from "@/assets/creative-model-4.png";
+import creativeModel5 from "@/assets/creative-model-5.png";
 
 const modelOptions = [
   {
@@ -25,6 +28,24 @@ const modelOptions = [
     name: "Modelo 2 - Curso Criativo",
     description: "Layout dividido com produto artesanal e texto promocional de curso",
     preview: creativeModel2,
+  },
+  {
+    id: "cartoon-cristao",
+    name: "Modelo 3 - Cartoon Cristão",
+    description: "Ilustração infantil cristã estilo chibi com cores quentes",
+    preview: creativeModel3,
+  },
+  {
+    id: "estudo-cinematico",
+    name: "Modelo 4 - Estudo Cinematográfico",
+    description: "Anúncio profissional estilo cinematográfico com pessoa estudando",
+    preview: creativeModel4,
+  },
+  {
+    id: "vintage-religioso",
+    name: "Modelo 5 - Vintage Religioso",
+    description: "Arte promocional estilo vintage com estética bíblica dourada",
+    preview: creativeModel5,
   },
 ];
 
@@ -128,39 +149,39 @@ const CreativeGenerator = () => {
                 {/* Model Selection */}
                 <div className="space-y-3">
                   <Label>Modelo *</Label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                     {modelOptions.map((model) => (
                       <div
                         key={model.id}
                         onClick={() => !isGenerating && setSelectedModel(model.id)}
-                        className={`relative cursor-pointer rounded-lg border-2 p-3 transition-all ${
+                        className={`relative cursor-pointer rounded-lg border-2 p-2 transition-all ${
                           selectedModel === model.id
                             ? "border-accent bg-accent/10"
                             : "border-border hover:border-accent/50"
                         } ${isGenerating ? "opacity-50 cursor-not-allowed" : ""}`}
                       >
                         {selectedModel === model.id && (
-                          <div className="absolute top-2 right-2 bg-accent text-accent-foreground rounded-full p-1">
-                            <Check className="h-3 w-3" />
+                          <div className="absolute top-1 right-1 bg-accent text-accent-foreground rounded-full p-0.5 z-10">
+                            <Check className="h-2.5 w-2.5" />
                           </div>
                         )}
                         <img
                           src={model.preview}
                           alt={model.name}
-                          className="w-full h-32 object-cover rounded-md mb-2"
+                          className="w-full aspect-square object-cover rounded-md mb-1.5"
                         />
-                        <p className="font-medium text-sm">{model.name}</p>
-                        <p className="text-xs text-muted-foreground">{model.description}</p>
+                        <p className="font-medium text-xs leading-tight">{model.name}</p>
+                        <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{model.description}</p>
                       </div>
                     ))}
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="productName">Nome do Produto *</Label>
+                  <Label htmlFor="productName">Nome do Produto / Tema *</Label>
                   <Input
                     id="productName"
-                    placeholder="Ex: Bolsas de Crochê, Resina Epóxi, Tapetes Artesanais..."
+                    placeholder="Ex: Bolsas de Crochê, Memorize a Bíblia, Livros para Colorir..."
                     value={productName}
                     onChange={(e) => setProductName(e.target.value)}
                     disabled={isGenerating}
@@ -210,7 +231,7 @@ const CreativeGenerator = () => {
                 <Button
                   onClick={handleGenerate}
                   disabled={isGenerating || !productName.trim()}
-                  className="w-full"
+                  className="w-full bg-green-600 hover:bg-green-700 text-white"
                   size="lg"
                 >
                   {isGenerating ? (
@@ -246,7 +267,7 @@ const CreativeGenerator = () => {
                   </div>
                   <Button
                     onClick={handleDownload}
-                    className="w-full"
+                    className="w-full bg-green-600 hover:bg-green-700 text-white"
                     size="lg"
                   >
                     <Download className="h-4 w-4 mr-2" />
