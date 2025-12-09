@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { productName, includePrice, price, observation, creativeType } = await req.json();
+    const { productName, includePrice, price, observation, modelType } = await req.json();
 
     const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
     if (!openAIApiKey) {
@@ -21,17 +21,57 @@ serve(async (req) => {
 
     let priceInstruction = '';
     if (includePrice && price) {
-      priceInstruction = `
-- Adicione uma tag de preço elegante perto dos produtos mostrando "R$ ${price}" em uma fonte moderna e legível.`;
+      priceInstruction = `\n- Include a price tag showing "R$ ${price}" prominently in the design with elegant typography.`;
     }
 
     let observationInstruction = '';
     if (observation && observation.trim()) {
-      observationInstruction = `
-- Consideração adicional do usuário: ${observation}`;
+      observationInstruction = `\n- Additional user instruction: ${observation}`;
     }
 
-    const prompt = `Create a highly realistic product photography advertisement image with the following specifications:
+    let prompt = '';
+
+    if (modelType === 'curso-criativo') {
+      // Model 2 - Creative Course Style
+      prompt = `Create a highly realistic square advertisement image (1:1 aspect ratio) with the following specifications:
+
+LEFT SIDE – PRODUCT PHOTOGRAPHY:
+– Photography of a handmade artisan object made with ${productName}, positioned on a light wooden table.
+– The object should be centered on the left area, with natural shadows and diffused light, like late afternoon window light.
+– Background with soft beige wall, minimalist style, without distractions.
+– Include delicate elements around the product, such as dried flowers, small leaves and artisan details, to reinforce the creative and handmade atmosphere.
+– Realistic photographic style, warm colors and pastel tones.
+– High sharpness on the main object and slight blur in the background (shallow depth of field).
+
+RIGHT SIDE – ORGANIZED TEXT AS ADVERTISEMENT:
+Create a clean, well-organized white area with the following style:
+– Large and eye-catching title in two colors, with strong contrast:
+"TRANSFORME ${productName.toUpperCase()} EM UMA RENDA EXTRA!"
+– Subtitle explaining that the user will learn everything in the complete course.
+– List of topics with delicate icons like ✨, 🌿, 💐, 🎁, emphasizing what will be learned.
+– Examples:
+  – Como criar lembrancinhas
+  – Técnicas especiais
+  – Moldes, fornecedores e materiais
+  – Projetos artesanais passo a passo
+– Visual highlight for the product name written in vibrant color (red, pink or lilac).
+– Footer with simple icons representing:
+  – Aulas em vídeo
+  – Certificado de participação
+– All typography should be balanced, feminine and modern, following tones: black, pink, green and lilac.
+${priceInstruction}
+
+OVERALL AESTHETIC:
+– Soft palette: white, beige, light pink, soft green, and details in red or lilac for highlight.
+– Elegant, clean and artisanal visual.
+– Square proportion (1:1), ideal for social networks.
+– Style similar to creative course ads sold on Instagram.
+${observationInstruction}
+
+Produce in high resolution, realistic style, premium editorial photography.`;
+    } else {
+      // Model 1 - Calm Beige Editorial (default)
+      prompt = `Create a highly realistic product photography advertisement image with the following specifications:
 
 – Interior scene (living room) with "calm beige" aesthetic, warm, comfortable and soft tones.
 – Blurred background with soft bokeh, containing a beige sofa on the left and a plant in a clay pot on the right, slightly out of focus.
@@ -52,8 +92,10 @@ ${priceInstruction}
 ${observationInstruction}
 
 Produce in high resolution (4K), realistic style, premium editorial photography. Square format 1:1 aspect ratio.`;
+    }
 
-    console.log('Generating creative image with prompt:', prompt);
+    console.log('Generating creative image with model:', modelType);
+    console.log('Prompt:', prompt);
 
     const response = await fetch('https://api.openai.com/v1/images/generations', {
       method: 'POST',

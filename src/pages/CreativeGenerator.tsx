@@ -8,21 +8,29 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Download, ArrowLeft, Image as ImageIcon } from "lucide-react";
+import { Loader2, Download, ArrowLeft, Image as ImageIcon, Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import creativeModel1 from "@/assets/creative-model-1.png";
+import creativeModel2 from "@/assets/creative-model-2.png";
 
-const creativeTemplates = [
+const modelOptions = [
   {
     id: "calm-beige",
-    name: "Calm Beige Editorial",
-    description: "Estilo editorial com tons quentes e aconchegantes, perfeito para produtos artesanais",
-    preview: "🏠",
+    name: "Modelo 1 - Calm Beige Editorial",
+    description: "Estilo editorial com tons quentes, 3 produtos sobre mesa de madeira",
+    preview: creativeModel1,
+  },
+  {
+    id: "curso-criativo",
+    name: "Modelo 2 - Curso Criativo",
+    description: "Layout dividido com produto artesanal e texto promocional de curso",
+    preview: creativeModel2,
   },
 ];
 
 const CreativeGenerator = () => {
   const navigate = useNavigate();
-  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState("calm-beige");
   const [productName, setProductName] = useState("");
   const [includePrice, setIncludePrice] = useState(false);
   const [price, setPrice] = useState("");
@@ -51,7 +59,7 @@ const CreativeGenerator = () => {
           includePrice,
           price: price.trim(),
           observation: observation.trim(),
-          creativeType: selectedTemplate,
+          modelType: selectedModel,
         },
       });
 
@@ -83,15 +91,6 @@ const CreativeGenerator = () => {
     toast.success("Download iniciado!");
   };
 
-  const handleBack = () => {
-    if (selectedTemplate) {
-      setSelectedTemplate(null);
-      setGeneratedImage(null);
-    } else {
-      navigate("/");
-    }
-  };
-
   return (
     <>
       <Header />
@@ -100,7 +99,7 @@ const CreativeGenerator = () => {
         <div className="container mx-auto max-w-4xl">
           <Button
             variant="ghost"
-            onClick={handleBack}
+            onClick={() => navigate("/")}
             className="mb-6"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
@@ -114,138 +113,149 @@ const CreativeGenerator = () => {
             </p>
           </header>
 
-          {!selectedTemplate ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {creativeTemplates.map((template) => (
-                <Card
-                  key={template.id}
-                  className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
-                  onClick={() => setSelectedTemplate(template.id)}
+          <div className="space-y-6">
+            <Card className="border-2 border-accent">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ImageIcon className="h-5 w-5" />
+                  Configurar Criativo
+                </CardTitle>
+                <CardDescription>
+                  Preencha as informações abaixo para gerar seu criativo
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Model Selection */}
+                <div className="space-y-3">
+                  <Label>Modelo *</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {modelOptions.map((model) => (
+                      <div
+                        key={model.id}
+                        onClick={() => !isGenerating && setSelectedModel(model.id)}
+                        className={`relative cursor-pointer rounded-lg border-2 p-3 transition-all ${
+                          selectedModel === model.id
+                            ? "border-accent bg-accent/10"
+                            : "border-border hover:border-accent/50"
+                        } ${isGenerating ? "opacity-50 cursor-not-allowed" : ""}`}
+                      >
+                        {selectedModel === model.id && (
+                          <div className="absolute top-2 right-2 bg-accent text-accent-foreground rounded-full p-1">
+                            <Check className="h-3 w-3" />
+                          </div>
+                        )}
+                        <img
+                          src={model.preview}
+                          alt={model.name}
+                          className="w-full h-32 object-cover rounded-md mb-2"
+                        />
+                        <p className="font-medium text-sm">{model.name}</p>
+                        <p className="text-xs text-muted-foreground">{model.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="productName">Nome do Produto *</Label>
+                  <Input
+                    id="productName"
+                    placeholder="Ex: Bolsas de Crochê, Resina Epóxi, Tapetes Artesanais..."
+                    value={productName}
+                    onChange={(e) => setProductName(e.target.value)}
+                    disabled={isGenerating}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="includePrice">Deseja informar o valor no criativo?</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Adicione o preço do produto na imagem
+                    </p>
+                  </div>
+                  <Switch
+                    id="includePrice"
+                    checked={includePrice}
+                    onCheckedChange={setIncludePrice}
+                    disabled={isGenerating}
+                  />
+                </div>
+
+                {includePrice && (
+                  <div className="space-y-2">
+                    <Label htmlFor="price">Valor do Produto</Label>
+                    <Input
+                      id="price"
+                      placeholder="Ex: 29,90"
+                      value={price}
+                      onChange={(e) => setPrice(e.target.value)}
+                      disabled={isGenerating}
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="observation">Observação (opcional)</Label>
+                  <Textarea
+                    id="observation"
+                    placeholder="Adicione instruções extras para personalizar seu criativo..."
+                    value={observation}
+                    onChange={(e) => setObservation(e.target.value)}
+                    disabled={isGenerating}
+                    rows={3}
+                  />
+                </div>
+
+                <Button
+                  onClick={handleGenerate}
+                  disabled={isGenerating || !productName.trim()}
+                  className="w-full"
+                  size="lg"
                 >
-                  <CardHeader className="text-center">
-                    <div className="flex justify-center mb-4">
-                      <span className="text-6xl">{template.preview}</span>
-                    </div>
-                    <CardTitle className="text-xl">{template.name}</CardTitle>
-                    <CardDescription>{template.description}</CardDescription>
-                  </CardHeader>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-6">
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Gerando criativo...
+                    </>
+                  ) : (
+                    <>
+                      <ImageIcon className="h-4 w-4 mr-2" />
+                      Gerar Criativo
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {generatedImage && (
               <Card className="border-2 border-accent">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <ImageIcon className="h-5 w-5" />
-                    Configurar Criativo
-                  </CardTitle>
+                  <CardTitle>Criativo Gerado</CardTitle>
                   <CardDescription>
-                    Preencha as informações abaixo para gerar seu criativo
+                    Seu criativo está pronto! Clique para baixar.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="productName">Nome do Produto *</Label>
-                    <Input
-                      id="productName"
-                      placeholder="Ex: Bolsas de Crochê, Tapetes Artesanais..."
-                      value={productName}
-                      onChange={(e) => setProductName(e.target.value)}
-                      disabled={isGenerating}
+                <CardContent className="space-y-4">
+                  <div className="relative rounded-lg overflow-hidden border border-border">
+                    <img
+                      src={generatedImage}
+                      alt="Criativo gerado"
+                      className="w-full h-auto"
                     />
                   </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="includePrice">Deseja informar o valor no criativo?</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Adicione o preço do produto na imagem
-                      </p>
-                    </div>
-                    <Switch
-                      id="includePrice"
-                      checked={includePrice}
-                      onCheckedChange={setIncludePrice}
-                      disabled={isGenerating}
-                    />
-                  </div>
-
-                  {includePrice && (
-                    <div className="space-y-2">
-                      <Label htmlFor="price">Valor do Produto</Label>
-                      <Input
-                        id="price"
-                        placeholder="Ex: 29,90"
-                        value={price}
-                        onChange={(e) => setPrice(e.target.value)}
-                        disabled={isGenerating}
-                      />
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <Label htmlFor="observation">Observação (opcional)</Label>
-                    <Textarea
-                      id="observation"
-                      placeholder="Adicione instruções extras para personalizar seu criativo..."
-                      value={observation}
-                      onChange={(e) => setObservation(e.target.value)}
-                      disabled={isGenerating}
-                      rows={3}
-                    />
-                  </div>
-
                   <Button
-                    onClick={handleGenerate}
-                    disabled={isGenerating || !productName.trim()}
+                    onClick={handleDownload}
                     className="w-full"
                     size="lg"
                   >
-                    {isGenerating ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Gerando criativo...
-                      </>
-                    ) : (
-                      <>
-                        <ImageIcon className="h-4 w-4 mr-2" />
-                        Gerar Criativo
-                      </>
-                    )}
+                    <Download className="h-4 w-4 mr-2" />
+                    Baixar Criativo
                   </Button>
                 </CardContent>
               </Card>
-
-              {generatedImage && (
-                <Card className="border-2 border-accent">
-                  <CardHeader>
-                    <CardTitle>Criativo Gerado</CardTitle>
-                    <CardDescription>
-                      Seu criativo está pronto! Clique para baixar.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="relative rounded-lg overflow-hidden border border-border">
-                      <img
-                        src={generatedImage}
-                        alt="Criativo gerado"
-                        className="w-full h-auto"
-                      />
-                    </div>
-                    <Button
-                      onClick={handleDownload}
-                      className="w-full"
-                      size="lg"
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Baixar Criativo
-                    </Button>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          )}
+            )}
+          </div>
 
           <footer className="mt-16 text-center text-xs text-muted-foreground/50">
             Criado por <a href="https://instagram.com/joaolucassps" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground transition-colors">@joaolucassps</a>
