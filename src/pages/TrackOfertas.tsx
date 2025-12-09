@@ -706,7 +706,21 @@ const TrackOfertas = () => {
               {/* Gráfico com histórico completo */}
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={allMetrics[expandedOffer.id]}>
+                  <LineChart data={(() => {
+                    const metrics = allMetrics[expandedOffer.id] || [];
+                    // Sort by date: parse DD/MM format and compare
+                    return [...metrics].sort((a, b) => {
+                      const [dayA, monthA] = a.date.split('/').map(Number);
+                      const [dayB, monthB] = b.date.split('/').map(Number);
+                      // Handle year boundary (December to January)
+                      const currentMonth = new Date().getMonth() + 1;
+                      const yearA = monthA > currentMonth ? -1 : 0;
+                      const yearB = monthB > currentMonth ? -1 : 0;
+                      if (yearA !== yearB) return yearA - yearB;
+                      if (monthA !== monthB) return monthA - monthB;
+                      return dayA - dayB;
+                    });
+                  })()}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
                     <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
