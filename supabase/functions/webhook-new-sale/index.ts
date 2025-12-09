@@ -30,20 +30,28 @@ serve(async (req: Request): Promise<Response> => {
     let email: string | null = null;
     let name: string | null = null;
 
+    // Handle array format (some platforms send as array)
+    const payload = Array.isArray(body) ? body[0]?.body || body[0] : body;
+
+    // Hubla format: body.event.userEmail
+    if (payload.event?.userEmail) {
+      email = payload.event.userEmail;
+      name = payload.event.userName || payload.event.userEmail.split("@")[0];
+    }
     // Standard format
-    if (body.email) {
-      email = body.email;
-      name = body.name || body.email.split("@")[0];
+    else if (payload.email) {
+      email = payload.email;
+      name = payload.name || payload.email.split("@")[0];
     }
     // Kiwify format
-    else if (body.Customer?.email) {
-      email = body.Customer.email;
-      name = body.Customer.full_name || body.Customer.email.split("@")[0];
+    else if (payload.Customer?.email) {
+      email = payload.Customer.email;
+      name = payload.Customer.full_name || payload.Customer.email.split("@")[0];
     }
     // Hotmart format
-    else if (body.data?.buyer?.email) {
-      email = body.data.buyer.email;
-      name = body.data.buyer.name || body.data.buyer.email.split("@")[0];
+    else if (payload.data?.buyer?.email) {
+      email = payload.data.buyer.email;
+      name = payload.data.buyer.name || payload.data.buyer.email.split("@")[0];
     }
 
     if (!email) {
