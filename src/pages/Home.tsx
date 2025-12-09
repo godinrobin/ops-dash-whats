@@ -33,21 +33,21 @@ const Home = () => {
             </p>
           </header>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-3 gap-3 md:gap-6">
             <Card 
               className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
               onClick={() => navigate("/metricas")}
             >
-              <CardHeader className="text-center">
-                <div className="flex justify-center mb-4">
-                  <span className="text-6xl">📊</span>
+              <CardHeader className="text-center p-3 md:p-6">
+                <div className="flex justify-center mb-2 md:mb-4">
+                  <span className="text-3xl md:text-6xl">📊</span>
                 </div>
-                <CardTitle className="text-2xl">Sistema de Métricas</CardTitle>
-                <CardDescription className="text-base">
+                <CardTitle className="text-sm md:text-2xl">Sistema de Métricas</CardTitle>
+                <CardDescription className="text-xs md:text-base hidden md:block">
                   Gerencie suas métricas de produtos e acompanhe resultados
                 </CardDescription>
               </CardHeader>
-              <CardContent className="text-center">
+              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
                 <p className="text-sm text-muted-foreground">
                   Acompanhe investimentos, leads, conversões e ROAS
                 </p>
@@ -58,16 +58,16 @@ const Home = () => {
               className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
               onClick={() => navigate("/organizador-numeros")}
             >
-              <CardHeader className="text-center">
-                <div className="flex justify-center mb-4">
-                  <span className="text-6xl">📱</span>
+              <CardHeader className="text-center p-3 md:p-6">
+                <div className="flex justify-center mb-2 md:mb-4">
+                  <span className="text-3xl md:text-6xl">📱</span>
                 </div>
-                <CardTitle className="text-2xl">Organizador de Números</CardTitle>
-                <CardDescription className="text-base">
+                <CardTitle className="text-sm md:text-2xl">Organizador de Números</CardTitle>
+                <CardDescription className="text-xs md:text-base hidden md:block">
                   Organize e gerencie seus números de trabalho
                 </CardDescription>
               </CardHeader>
-              <CardContent className="text-center">
+              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
                 <p className="text-sm text-muted-foreground">
                   Mantenha controle de números, status e operações
                 </p>
@@ -78,18 +78,18 @@ const Home = () => {
               className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
               onClick={() => navigate("/track-ofertas")}
             >
-              <CardHeader className="text-center">
-                <div className="flex justify-center mb-4">
-                  <span className="text-6xl">🎯</span>
+              <CardHeader className="text-center p-3 md:p-6">
+                <div className="flex justify-center mb-2 md:mb-4">
+                  <span className="text-3xl md:text-6xl">🎯</span>
                 </div>
-                <CardTitle className="text-2xl bg-gradient-to-r from-accent to-orange-400 bg-clip-text text-transparent">
+                <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-accent to-orange-400 bg-clip-text text-transparent">
                   Track Ofertas
                 </CardTitle>
-                <CardDescription className="text-base">
+                <CardDescription className="text-xs md:text-base hidden md:block">
                   Acompanhe a performance dos anúncios de seus concorrentes
                 </CardDescription>
               </CardHeader>
-              <CardContent className="text-center">
+              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
                 <p className="text-sm text-muted-foreground">
                   Monitore anúncios ativos e tendências diariamente
                 </p>
@@ -100,18 +100,18 @@ const Home = () => {
               className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
               onClick={() => navigate("/criador-funil")}
             >
-              <CardHeader className="text-center">
-                <div className="flex justify-center mb-4">
-                  <span className="text-6xl">💬</span>
+              <CardHeader className="text-center p-3 md:p-6">
+                <div className="flex justify-center mb-2 md:mb-4">
+                  <span className="text-3xl md:text-6xl">💬</span>
                 </div>
-                <CardTitle className="text-2xl bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent">
+                <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent">
                   Criador de Funil
                 </CardTitle>
-                <CardDescription className="text-base">
+                <CardDescription className="text-xs md:text-base hidden md:block">
                   Crie funis de vendas personalizados para WhatsApp
                 </CardDescription>
               </CardHeader>
-              <CardContent className="text-center">
+              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
                 <p className="text-sm text-muted-foreground">
                   Gere scripts de vendas completos com IA
                 </p>
@@ -122,18 +122,18 @@ const Home = () => {
               className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
               onClick={() => navigate("/gerador-criativos")}
             >
-              <CardHeader className="text-center">
-                <div className="flex justify-center mb-4">
-                  <span className="text-6xl">🎨</span>
+              <CardHeader className="text-center p-3 md:p-6">
+                <div className="flex justify-center mb-2 md:mb-4">
+                  <span className="text-3xl md:text-6xl">🎨</span>
                 </div>
-                <CardTitle className="text-2xl bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
+                <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
                   Gerador de Criativos
                 </CardTitle>
-                <CardDescription className="text-base">
+                <CardDescription className="text-xs md:text-base hidden md:block">
                   Crie imagens profissionais para anúncios com IA
                 </CardDescription>
               </CardHeader>
-              <CardContent className="text-center">
+              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
                 <p className="text-sm text-muted-foreground">
                   Gere criativos de alta qualidade automaticamente
                 </p>
