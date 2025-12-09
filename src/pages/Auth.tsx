@@ -57,7 +57,7 @@ const Auth = () => {
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold text-center">Zapdata</CardTitle>
           <CardDescription className="text-center">
-            Faça login para acessar a plataforma
+            Faça login para acessar a plataforma com seu email de compra
           </CardDescription>
         </CardHeader>
         <CardContent>
