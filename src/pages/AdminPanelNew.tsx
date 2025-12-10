@@ -236,11 +236,10 @@ const AdminPanelNew = () => {
   };
 
   const getUserProducts = (userId: string) => {
-    const userMetrics = metrics.filter(m => m.user_id === userId);
-    const productIds = [...new Set(userMetrics.map(m => m.product_id))];
-    return productIds.map(pid => ({
-      id: pid,
-      name: userMetrics.find(m => m.product_id === pid)?.product_name || "Sem nome"
+    // Get products from the products data, not from metrics
+    return products.filter(p => p.user_id === userId).map(p => ({
+      id: p.id,
+      name: p.product_name
     }));
   };
 
