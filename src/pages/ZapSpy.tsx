@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { ExternalLink, Plus, Pencil, Trash2, EyeOff, Eye, Search, Flame, Calendar, X, Star } from "lucide-react";
+import { ExternalLink, Plus, Pencil, Trash2, EyeOff, Eye, Search, Flame, Calendar, X, Star, Bookmark } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
@@ -52,6 +52,48 @@ const ZapSpy = () => {
   const [submitting, setSubmitting] = useState(false);
   const [nicheSuggestions, setNicheSuggestions] = useState<string[]>([]);
   const [showNicheSuggestions, setShowNicheSuggestions] = useState(false);
+  const [savingOfferId, setSavingOfferId] = useState<string | null>(null);
+
+  // Helper function to get ad count color
+  const getAdCountColor = (count: number) => {
+    if (count >= 100) return 'text-red-500';
+    if (count >= 50) return 'text-green-500';
+    return 'text-orange-400';
+  };
+
+  // Save offer to Track Ofertas
+  const handleSaveOfferToTrack = async (offer: ZapSpyOffer) => {
+    if (!user) {
+      toast.error("Você precisa estar logado para salvar ofertas");
+      return;
+    }
+    
+    setSavingOfferId(offer.id);
+    try {
+      const { error } = await supabase
+        .from("tracked_offers")
+        .insert({
+          user_id: user.id,
+          name: offer.name,
+          ad_library_link: offer.ad_library_link
+        });
+
+      if (error) {
+        if (error.code === '23505') {
+          toast.error("Você já salvou esta oferta");
+        } else {
+          throw error;
+        }
+      } else {
+        toast.success("Oferta salva no Track Ofertas!");
+      }
+    } catch (err) {
+      console.error("Error saving offer:", err);
+      toast.error("Erro ao salvar oferta");
+    } finally {
+      setSavingOfferId(null);
+    }
+  };
 
   // Get unique niches from offers
   const availableNiches = useMemo(() => {
@@ -496,6 +538,7 @@ const ZapSpy = () => {
                         id="featured-toggle"
                         checked={formIsFeatured}
                         onCheckedChange={setFormIsFeatured}
+                        className="data-[state=checked]:bg-green-500"
                       />
                     </div>
                   </div>
@@ -522,22 +565,20 @@ const ZapSpy = () => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredOffers.map((offer) => (
-                <Card key={offer.id} className={`border-2 border-accent ${offer.is_hidden ? 'opacity-50' : ''} relative`}>
+                <Card key={offer.id} className={`border-2 border-accent ${offer.is_hidden ? 'opacity-50' : ''} relative overflow-hidden`}>
                   {offer.is_featured && (
-                    <div className="absolute top-0 left-0 right-0 z-10">
-                      <div className="bg-gradient-to-r from-yellow-500 to-orange-500 text-black text-center py-1 px-2 text-xs font-bold flex items-center justify-center gap-1 rounded-t-lg">
-                        <Star className="h-3 w-3 fill-current" />
-                        OFERTA FODA
-                        <Star className="h-3 w-3 fill-current" />
-                      </div>
+                    <div className="bg-gradient-to-r from-yellow-500 to-orange-500 text-black text-center py-1 px-2 text-xs font-bold flex items-center justify-center gap-1">
+                      <Star className="h-3 w-3 fill-current" />
+                      OFERTA FODA
+                      <Star className="h-3 w-3 fill-current" />
                     </div>
                   )}
                   {offer.image_url && (
-                    <div className={`w-full h-40 overflow-hidden ${offer.is_featured ? '' : 'rounded-t-lg'}`}>
+                    <div className="w-full h-40 overflow-hidden">
                       <img 
                         src={offer.image_url} 
                         alt={offer.name} 
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover object-top"
                       />
                     </div>
                   )}
@@ -577,11 +618,12 @@ const ZapSpy = () => {
                       <Badge className="bg-accent/20 text-accent border-accent/50 w-fit">
                         {offer.niche}
                       </Badge>
-                      {offer.active_ads_count > 0 && (
-                        <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/50 flex items-center gap-1">
-                          <Flame className="h-3 w-3" />
-                          {offer.active_ads_count} anúncios
-                        </Badge>
+                      {(offer.active_ads_count || 0) > 0 && (
+                        <div className={`flex items-center gap-1 font-bold text-lg ${getAdCountColor(offer.active_ads_count || 0)}`}>
+                          <Flame className="h-5 w-5" />
+                          <span className="text-xl">{offer.active_ads_count}</span>
+                          <span className="text-sm font-normal">anúncios</span>
+                        </div>
                       )}
                     </div>
                     {offer.start_date && (
@@ -591,13 +633,22 @@ const ZapSpy = () => {
                       </p>
                     )}
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="space-y-2">
                     <Button
                       className="w-full bg-accent hover:bg-accent/90"
                       onClick={() => window.open(offer.ad_library_link, "_blank")}
                     >
                       <ExternalLink className="h-4 w-4 mr-2" />
                       Ver Anúncios
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full border-accent/50 hover:bg-accent/10"
+                      onClick={() => handleSaveOfferToTrack(offer)}
+                      disabled={savingOfferId === offer.id}
+                    >
+                      <Bookmark className="h-4 w-4 mr-2" />
+                      {savingOfferId === offer.id ? "Salvando..." : "Salvar Oferta"}
                     </Button>
                   </CardContent>
                 </Card>
@@ -712,6 +763,7 @@ const ZapSpy = () => {
                 id="featured-toggle-edit"
                 checked={formIsFeatured}
                 onCheckedChange={setFormIsFeatured}
+                className="data-[state=checked]:bg-green-500"
               />
             </div>
           </div>
