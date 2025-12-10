@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.78.0";
+import { decode } from "https://deno.land/x/djwt@v3.0.1/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -35,11 +36,20 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     
-    if (authError || !user) {
+    // Decode the JWT to get the user ID
+    let userId: string;
+    try {
+      const [_header, payload, _signature] = decode(token);
+      userId = (payload as any).sub;
+      
+      if (!userId) {
+        throw new Error("No user ID in token");
+      }
+    } catch (decodeError) {
+      console.log("Failed to decode JWT:", decodeError);
       return new Response(
-        JSON.stringify({ error: "Invalid or expired token" }),
+        JSON.stringify({ error: "Invalid token format" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -48,7 +58,7 @@ serve(async (req: Request): Promise<Response> => {
     const { data: roleData, error: roleError } = await supabase
       .from("user_roles")
       .select("role")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .eq("role", "admin")
       .single();
 
