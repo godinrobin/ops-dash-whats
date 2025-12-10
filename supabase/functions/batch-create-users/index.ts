@@ -6,17 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Generate a secure random password
-function generateSecurePassword(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
-  const randomBytes = new Uint8Array(16);
-  crypto.getRandomValues(randomBytes);
-  let password = '';
-  for (let i = 0; i < 16; i++) {
-    password += chars[randomBytes[i] % chars.length];
-  }
-  return password;
-}
+// Default password for new users
+const DEFAULT_PASSWORD = "123456";
 
 serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
@@ -83,7 +74,7 @@ serve(async (req: Request): Promise<Response> => {
     
     console.log(`Processing ${uniqueEmails.length} unique emails`);
 
-    const results: { email: string; status: string; password?: string; error?: string }[] = [];
+    const results: { email: string; status: string; error?: string }[] = [];
 
     for (const email of uniqueEmails) {
       try {
@@ -97,17 +88,13 @@ serve(async (req: Request): Promise<Response> => {
           continue;
         }
 
-        // Generate secure random password for each user
-        const securePassword = generateSecurePassword();
-
-        // Create user with secure password
+        // Create user with default password
         const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
           email: email,
-          password: securePassword,
+          password: DEFAULT_PASSWORD,
           email_confirm: true,
           user_metadata: {
             username: email.split("@")[0],
-            requires_password_change: true,
           },
         });
 
@@ -116,8 +103,7 @@ serve(async (req: Request): Promise<Response> => {
           results.push({ email, status: "error", error: createError.message });
         } else {
           console.log(`User created: ${email} (${newUser.user.id})`);
-          // Return the generated password so admin can share it with the user
-          results.push({ email, status: "created", password: securePassword });
+          results.push({ email, status: "created" });
         }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : "Unknown error";
