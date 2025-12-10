@@ -22,6 +22,7 @@ interface ZapSpyOffer {
   created_at: string;
   active_ads_count: number;
   start_date: string | null;
+  image_url: string | null;
 }
 
 const ZapSpy = () => {
@@ -43,6 +44,8 @@ const ZapSpy = () => {
   const [formNiche, setFormNiche] = useState("");
   const [formActiveAds, setFormActiveAds] = useState<number>(0);
   const [formStartDate, setFormStartDate] = useState("");
+  const [formImagePreview, setFormImagePreview] = useState<string | null>(null);
+  const [formImageFile, setFormImageFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [nicheSuggestions, setNicheSuggestions] = useState<string[]>([]);
   const [showNicheSuggestions, setShowNicheSuggestions] = useState(false);
@@ -89,6 +92,26 @@ const ZapSpy = () => {
 
     setSubmitting(true);
     try {
+      let imageUrl: string | null = null;
+      
+      // Upload image if exists
+      if (formImageFile) {
+        const fileExt = formImageFile.name.split('.').pop() || 'png';
+        const fileName = `${crypto.randomUUID()}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('offer-images')
+          .upload(fileName, formImageFile);
+          
+        if (uploadError) throw uploadError;
+        
+        const { data: { publicUrl } } = supabase.storage
+          .from('offer-images')
+          .getPublicUrl(fileName);
+          
+        imageUrl = publicUrl;
+      }
+      
       const { error } = await supabase
         .from("zap_spy_offers")
         .insert({
@@ -97,6 +120,7 @@ const ZapSpy = () => {
           niche: formNiche.trim(),
           active_ads_count: formActiveAds || 0,
           start_date: formStartDate || null,
+          image_url: imageUrl,
           created_by: user?.id
         });
 
@@ -122,6 +146,26 @@ const ZapSpy = () => {
 
     setSubmitting(true);
     try {
+      let imageUrl = selectedOffer.image_url;
+      
+      // Upload new image if exists
+      if (formImageFile) {
+        const fileExt = formImageFile.name.split('.').pop() || 'png';
+        const fileName = `${crypto.randomUUID()}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('offer-images')
+          .upload(fileName, formImageFile);
+          
+        if (uploadError) throw uploadError;
+        
+        const { data: { publicUrl } } = supabase.storage
+          .from('offer-images')
+          .getPublicUrl(fileName);
+          
+        imageUrl = publicUrl;
+      }
+      
       const { error } = await supabase
         .from("zap_spy_offers")
         .update({
@@ -129,7 +173,8 @@ const ZapSpy = () => {
           ad_library_link: formLink.trim(),
           niche: formNiche.trim(),
           active_ads_count: formActiveAds || 0,
-          start_date: formStartDate || null
+          start_date: formStartDate || null,
+          image_url: imageUrl
         })
         .eq("id", selectedOffer.id);
 
@@ -194,6 +239,34 @@ const ZapSpy = () => {
     setFormNiche("");
     setFormActiveAds(0);
     setFormStartDate("");
+    setFormImagePreview(null);
+    setFormImageFile(null);
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          setFormImageFile(file);
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            setFormImagePreview(event.target?.result as string);
+          };
+          reader.readAsDataURL(file);
+          toast.success("Imagem colada!");
+        }
+        break;
+      }
+    }
+  };
+
+  const removeImage = () => {
+    setFormImagePreview(null);
+    setFormImageFile(null);
   };
 
   const openEditDialog = (offer: ZapSpyOffer) => {
@@ -203,6 +276,8 @@ const ZapSpy = () => {
     setFormNiche(offer.niche);
     setFormActiveAds(offer.active_ads_count || 0);
     setFormStartDate(offer.start_date || "");
+    setFormImagePreview(offer.image_url);
+    setFormImageFile(null);
     setEditDialogOpen(true);
   };
 
@@ -307,11 +382,40 @@ const ZapSpy = () => {
                     Cadastrar Oferta
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="border-accent">
+                <DialogContent className="border-accent" onPaste={handlePaste}>
                   <DialogHeader>
                     <DialogTitle>Cadastrar Nova Oferta</DialogTitle>
                   </DialogHeader>
                   <div className="space-y-4">
+                    <div>
+                      <Label>Imagem de Prévia (Cole com Ctrl+V)</Label>
+                      <div 
+                        className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-accent transition-colors"
+                        onClick={() => {}}
+                      >
+                        {formImagePreview ? (
+                          <div className="relative">
+                            <img 
+                              src={formImagePreview} 
+                              alt="Preview" 
+                              className="max-h-32 mx-auto rounded-lg object-cover"
+                            />
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              className="absolute top-0 right-0 h-6 w-6"
+                              onClick={(e) => { e.stopPropagation(); removeImage(); }}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <p className="text-muted-foreground text-sm">
+                            Cole uma imagem aqui (Ctrl+V)
+                          </p>
+                        )}
+                      </div>
+                    </div>
                     <div>
                       <Label>Nome da Oferta *</Label>
                       <Input
@@ -401,6 +505,15 @@ const ZapSpy = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredOffers.map((offer) => (
                 <Card key={offer.id} className={`border-2 border-accent ${offer.is_hidden ? 'opacity-50' : ''}`}>
+                  {offer.image_url && (
+                    <div className="w-full h-40 overflow-hidden rounded-t-lg">
+                      <img 
+                        src={offer.image_url} 
+                        alt={offer.name} 
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between gap-2">
                       <CardTitle className="text-lg line-clamp-2">{offer.name}</CardTitle>
@@ -469,11 +582,39 @@ const ZapSpy = () => {
 
       {/* Edit Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="border-accent">
+        <DialogContent className="border-accent" onPaste={handlePaste}>
           <DialogHeader>
             <DialogTitle>Editar Oferta</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <div>
+              <Label>Imagem de Prévia (Cole com Ctrl+V)</Label>
+              <div 
+                className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-accent transition-colors"
+              >
+                {formImagePreview ? (
+                  <div className="relative">
+                    <img 
+                      src={formImagePreview} 
+                      alt="Preview" 
+                      className="max-h-32 mx-auto rounded-lg object-cover"
+                    />
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-0 right-0 h-6 w-6"
+                      onClick={(e) => { e.stopPropagation(); removeImage(); }}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm">
+                    Cole uma imagem aqui (Ctrl+V)
+                  </p>
+                )}
+              </div>
+            </div>
             <div>
               <Label>Nome da Oferta *</Label>
               <Input
