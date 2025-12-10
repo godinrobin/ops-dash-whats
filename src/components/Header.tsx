@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdminStatus } from "@/hooks/useAdminStatus";
 import { Button } from "@/components/ui/button";
-import { LogOut, ArrowLeft, User } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { LogOut, ArrowLeft, User, Shield, Settings } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ProfileModal } from "./ProfileModal";
 
 export const Header = () => {
   const { signOut } = useAuth();
+  const { isAdmin } = useAdminStatus();
   const navigate = useNavigate();
   const location = useLocation();
   const [profileOpen, setProfileOpen] = useState(false);
@@ -40,6 +43,28 @@ export const Header = () => {
               <User className="h-4 w-4" />
               <span className="hidden sm:inline">Perfil</span>
             </Button>
+            
+            {isAdmin && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="flex items-center gap-2 text-accent"
+                  >
+                    <Shield className="h-4 w-4" />
+                    <span className="hidden sm:inline">Admin</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="border-accent">
+                  <DropdownMenuItem onClick={() => navigate("/admin-panel")}>
+                    <Settings className="h-4 w-4 mr-2" />
+                    Painel Administrativo
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+
             <Button
               variant="outline"
               size="sm"

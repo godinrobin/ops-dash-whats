@@ -16,7 +16,8 @@ import WhatsAppFunnelCreator from "./pages/WhatsAppFunnelCreator";
 import CreativeGenerator from "./pages/CreativeGenerator";
 import AudioGenerator from "./pages/AudioGenerator";
 import AudioTranscriber from "./pages/AudioTranscriber";
-import AdminPanel from "./pages/AdminPanel";
+import ZapSpy from "./pages/ZapSpy";
+import AdminPanelNew from "./pages/AdminPanelNew";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -39,9 +40,10 @@ const App = () => (
             <Route path="/gerador-criativos" element={<ProtectedRoute><CreativeGenerator /></ProtectedRoute>} />
             <Route path="/gerador-audio" element={<ProtectedRoute><AudioGenerator /></ProtectedRoute>} />
             <Route path="/transcricao-audio" element={<ProtectedRoute><AudioTranscriber /></ProtectedRoute>} />
+            <Route path="/zap-spy" element={<ProtectedRoute><ZapSpy /></ProtectedRoute>} />
             <Route path="/produto/:productId" element={<ProtectedRoute><ProductMetrics /></ProtectedRoute>} />
             <Route path="/produto/:productId/analise" element={<ProtectedRoute><ProductAnalysis /></ProtectedRoute>} />
-            <Route path="/bob-admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
+            <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

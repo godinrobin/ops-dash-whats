@@ -186,6 +186,28 @@ const Home = () => {
             </Card>
 
             <Card 
+              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
+              onClick={() => navigate("/zap-spy")}
+            >
+              <CardHeader className="text-center p-3 md:p-6">
+                <div className="flex justify-center mb-2 md:mb-4">
+                  <span className="text-3xl md:text-6xl">🔍</span>
+                </div>
+                <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-accent to-yellow-400 bg-clip-text text-transparent">
+                  Zap Spy
+                </CardTitle>
+                <CardDescription className="text-xs md:text-base hidden md:block">
+                  Acesse as ofertas mais escaladas de X1
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
+                <p className="text-sm text-muted-foreground">
+                  Encontre ofertas validadas por nicho
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card
               className="relative cursor-not-allowed opacity-70 border-2 border-accent"
             >
               <Badge className="absolute top-2 right-2 bg-accent text-accent-foreground text-xs">

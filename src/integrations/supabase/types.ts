@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_user_rankings: {
+        Row: {
+          id: string
+          notes: string | null
+          ranking: number | null
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          notes?: string | null
+          ranking?: number | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          id?: string
+          notes?: string | null
+          ranking?: number | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       daily_update_status: {
         Row: {
           completed_at: string | null
@@ -249,6 +276,7 @@ export type Database = {
       tracked_offers: {
         Row: {
           ad_library_link: string
+          admin_status: Database["public"]["Enums"]["admin_offer_status"] | null
           created_at: string
           id: string
           name: string
@@ -257,6 +285,9 @@ export type Database = {
         }
         Insert: {
           ad_library_link: string
+          admin_status?:
+            | Database["public"]["Enums"]["admin_offer_status"]
+            | null
           created_at?: string
           id?: string
           name: string
@@ -265,6 +296,9 @@ export type Database = {
         }
         Update: {
           ad_library_link?: string
+          admin_status?:
+            | Database["public"]["Enums"]["admin_offer_status"]
+            | null
           created_at?: string
           id?: string
           name?: string
@@ -291,6 +325,36 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      zap_spy_offers: {
+        Row: {
+          ad_library_link: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_hidden: boolean
+          name: string
+          niche: Database["public"]["Enums"]["offer_niche"]
+        }
+        Insert: {
+          ad_library_link: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_hidden?: boolean
+          name: string
+          niche: Database["public"]["Enums"]["offer_niche"]
+        }
+        Update: {
+          ad_library_link?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_hidden?: boolean
+          name?: string
+          niche?: Database["public"]["Enums"]["offer_niche"]
         }
         Relationships: []
       }
@@ -335,7 +399,19 @@ export type Database = {
       }
     }
     Enums: {
+      admin_offer_status: "minerada" | "ruim" | "boa"
       app_role: "admin" | "user"
+      offer_niche:
+        | "emagrecimento"
+        | "renda_extra"
+        | "relacionamento"
+        | "saude"
+        | "beleza"
+        | "educacao"
+        | "financeiro"
+        | "religioso"
+        | "pets"
+        | "outros"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -463,7 +539,20 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      admin_offer_status: ["minerada", "ruim", "boa"],
       app_role: ["admin", "user"],
+      offer_niche: [
+        "emagrecimento",
+        "renda_extra",
+        "relacionamento",
+        "saude",
+        "beleza",
+        "educacao",
+        "financeiro",
+        "religioso",
+        "pets",
+        "outros",
+      ],
     },
   },
 } as const
