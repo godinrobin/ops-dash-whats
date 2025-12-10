@@ -104,17 +104,19 @@ Deno.serve(async (req) => {
       }
     }) || []
 
-    // Buscar ofertas
+    // Buscar ofertas com admin_status
     const { data: offersData } = await supabaseClient
       .from('tracked_offers')
-      .select('name, ad_library_link, user_id')
+      .select('id, name, ad_library_link, user_id, admin_status')
 
     const offers = offersData?.map(offer => {
       const authUser = authUsers.users.find(u => u.id === offer.user_id)
       return {
+        id: offer.id,
         user_email: authUser?.email || 'N/A',
-        offer_name: offer.name,
+        name: offer.name,
         ad_library_link: offer.ad_library_link,
+        admin_status: offer.admin_status,
       }
     }) || []
 
