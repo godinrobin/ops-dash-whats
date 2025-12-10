@@ -87,6 +87,7 @@ const AdminPanelNew = () => {
   // Offers sorting and filtering
   const [offerSortBy, setOfferSortBy] = useState<'recent' | 'status'>('recent');
   const [offerStatusFilter, setOfferStatusFilter] = useState<string>('all');
+  const [offerLinkSearch, setOfferLinkSearch] = useState("");
   
   // Search and sorting for users
   const [userSearch, setUserSearch] = useState("");
@@ -251,6 +252,15 @@ const AdminPanelNew = () => {
   // Get sorted and filtered offers
   const getSortedFilteredOffers = () => {
     let filtered = [...offers];
+    
+    // Filter by link search
+    if (offerLinkSearch.trim()) {
+      const search = offerLinkSearch.toLowerCase();
+      filtered = filtered.filter(o => 
+        o.ad_library_link.toLowerCase().includes(search) ||
+        o.name.toLowerCase().includes(search)
+      );
+    }
     
     // Filter by status
     if (offerStatusFilter !== 'all') {
@@ -476,6 +486,25 @@ const AdminPanelNew = () => {
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <CardTitle>Ofertas</CardTitle>
                     <div className="flex flex-wrap gap-2">
+                      <div className="relative flex-1 md:flex-none">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Buscar por link ou nome..."
+                          value={offerLinkSearch}
+                          onChange={(e) => setOfferLinkSearch(e.target.value)}
+                          className="pl-9 w-full md:w-64"
+                        />
+                        {offerLinkSearch && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6"
+                            onClick={() => setOfferLinkSearch("")}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
                       <Select value={offerSortBy} onValueChange={(v) => setOfferSortBy(v as 'recent' | 'status')}>
                         <SelectTrigger className="w-40">
                           <ArrowUpDown className="h-4 w-4 mr-2" />
