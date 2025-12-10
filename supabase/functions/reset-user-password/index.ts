@@ -40,21 +40,27 @@ serve(async (req: Request): Promise<Response> => {
 
     const token = authHeader.replace("Bearer ", "");
     
-    // Create a client with the user's token to verify their identity
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+    // Verify the JWT token by calling Supabase auth API directly
+    const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'apikey': supabaseAnonKey,
       },
     });
     
-    const { data: { user }, error: authError } = await userClient.auth.getUser();
+    if (!authResponse.ok) {
+      console.log("Invalid token: API returned", authResponse.status);
+      return new Response(
+        JSON.stringify({ error: "Invalid or expired token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     
-    console.log("Auth check - user:", user?.id, "error:", authError?.message);
+    const user = await authResponse.json();
+    console.log("Auth check - user:", user?.id);
     
-    if (authError || !user) {
-      console.log("Invalid token:", authError?.message);
+    if (!user) {
+      console.log("No user found in token");
       return new Response(
         JSON.stringify({ error: "Invalid or expired token" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
