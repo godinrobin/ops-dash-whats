@@ -88,8 +88,9 @@ const AdminPanelNew = () => {
   const [offerSortBy, setOfferSortBy] = useState<'recent' | 'status'>('recent');
   const [offerStatusFilter, setOfferStatusFilter] = useState<string>('all');
   
-  // Search
+  // Search and sorting for users
   const [userSearch, setUserSearch] = useState("");
+  const [userSortBy, setUserSortBy] = useState<'name' | 'invested' | 'favorites'>('name');
 
   useEffect(() => {
     loadAllData();
@@ -218,15 +219,34 @@ const AdminPanelNew = () => {
     return numbers.filter(n => n.user_email === userEmail);
   };
 
-  // Filter users by search
+  // Filter and sort users
   const filteredUsers = useMemo(() => {
-    if (!userSearch.trim()) return users;
-    const search = userSearch.toLowerCase();
-    return users.filter(u => 
-      u.username?.toLowerCase().includes(search) || 
-      u.email?.toLowerCase().includes(search)
-    );
-  }, [users, userSearch]);
+    let result = [...users];
+    
+    // Filter by search
+    if (userSearch.trim()) {
+      const search = userSearch.toLowerCase();
+      result = result.filter(u => 
+        u.username?.toLowerCase().includes(search) || 
+        u.email?.toLowerCase().includes(search)
+      );
+    }
+    
+    // Sort
+    if (userSortBy === 'invested') {
+      result.sort((a, b) => b.totalInvested - a.totalInvested);
+    } else if (userSortBy === 'favorites') {
+      result.sort((a, b) => {
+        if (favorites.has(a.id) && !favorites.has(b.id)) return -1;
+        if (!favorites.has(a.id) && favorites.has(b.id)) return 1;
+        return b.totalInvested - a.totalInvested;
+      });
+    } else {
+      result.sort((a, b) => (a.username || a.email).localeCompare(b.username || b.email));
+    }
+    
+    return result;
+  }, [users, userSearch, userSortBy, favorites]);
 
   // Get sorted and filtered offers
   const getSortedFilteredOffers = () => {
@@ -289,7 +309,7 @@ const AdminPanelNew = () => {
             {/* MÉTRICAS USUÁRIOS */}
             <TabsContent value="metrics">
               <div className="space-y-4">
-                <div className="flex items-center gap-2 mb-4">
+                <div className="flex flex-wrap items-center gap-2 mb-4">
                   <Search className="h-5 w-5 text-muted-foreground" />
                   <Input
                     placeholder="Buscar por nome ou email..."
@@ -297,7 +317,17 @@ const AdminPanelNew = () => {
                     onChange={(e) => setUserSearch(e.target.value)}
                     className="max-w-md"
                   />
-                  <span className="text-sm text-muted-foreground">
+                  <Select value={userSortBy} onValueChange={(v) => setUserSortBy(v as typeof userSortBy)}>
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="Ordenar por" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="name">Nome</SelectItem>
+                      <SelectItem value="invested">Total Investido</SelectItem>
+                      <SelectItem value="favorites">Favoritos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span className="text-sm text-muted-foreground ml-auto">
                     {filteredUsers.length} de {users.length} usuários
                   </span>
                 </div>
@@ -368,7 +398,19 @@ const AdminPanelNew = () => {
             {/* NÚMEROS USUÁRIOS */}
             <TabsContent value="numbers">
               <div className="space-y-4">
-                {users.map((u) => {
+                <div className="flex flex-wrap items-center gap-2 mb-4">
+                  <Select value={userSortBy} onValueChange={(v) => setUserSortBy(v as typeof userSortBy)}>
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="Ordenar por" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="name">Nome</SelectItem>
+                      <SelectItem value="invested">Total Investido</SelectItem>
+                      <SelectItem value="favorites">Favoritos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {filteredUsers.map((u) => {
                   const userNumbers = getUserNumbers(u.email);
                   if (userNumbers.length === 0) return null;
                   

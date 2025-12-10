@@ -299,6 +299,7 @@ export type Database = {
           ad_library_link: string
           admin_status: Database["public"]["Enums"]["admin_offer_status"] | null
           created_at: string
+          funnel_number: string | null
           id: string
           name: string
           notes: string | null
@@ -310,6 +311,7 @@ export type Database = {
             | Database["public"]["Enums"]["admin_offer_status"]
             | null
           created_at?: string
+          funnel_number?: string | null
           id?: string
           name: string
           notes?: string | null
@@ -321,6 +323,7 @@ export type Database = {
             | Database["public"]["Enums"]["admin_offer_status"]
             | null
           created_at?: string
+          funnel_number?: string | null
           id?: string
           name?: string
           notes?: string | null
@@ -357,6 +360,7 @@ export type Database = {
           created_by: string | null
           id: string
           image_url: string | null
+          is_featured: boolean
           is_hidden: boolean
           name: string
           niche: string
@@ -369,6 +373,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           image_url?: string | null
+          is_featured?: boolean
           is_hidden?: boolean
           name: string
           niche: string
@@ -381,6 +386,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           image_url?: string | null
+          is_featured?: boolean
           is_hidden?: boolean
           name?: string
           niche?: string
