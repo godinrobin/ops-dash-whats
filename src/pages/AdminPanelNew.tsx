@@ -207,14 +207,27 @@ const AdminPanelNew = () => {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
 
-      const response = await supabase.functions.invoke("reset-user-password", {
+      if (!token) {
+        toast.error("Você precisa estar logado para resetar senhas");
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("reset-user-password", {
         body: { email: resetEmail.trim(), password: resetPassword.trim() },
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (response.error) throw response.error;
+      if (error) {
+        // Try to parse error message from response
+        const errorMessage = data?.error || error.message || "Erro ao redefinir senha";
+        throw new Error(errorMessage);
+      }
 
-      toast.success(response.data?.message || "Senha redefinida com sucesso!");
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      toast.success(data?.message || "Senha redefinida com sucesso!");
       setResetEmail("");
       setResetPassword("");
     } catch (err: any) {
