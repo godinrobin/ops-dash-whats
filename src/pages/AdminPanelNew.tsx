@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X, Key, Loader2 } from "lucide-react";
+import { Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X, Key, Loader2, UserPlus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -97,6 +97,11 @@ const AdminPanelNew = () => {
   const [resetEmail, setResetEmail] = useState("");
   const [resetPassword, setResetPassword] = useState("");
   const [resettingPassword, setResettingPassword] = useState(false);
+
+  // Create user state
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("123456");
+  const [creatingUser, setCreatingUser] = useState(false);
 
   useEffect(() => {
     loadAllData();
@@ -238,6 +243,65 @@ const AdminPanelNew = () => {
     }
   };
 
+  const handleCreateUser = async () => {
+    if (!newUserEmail.trim()) {
+      toast.error("Preencha o email do usuário");
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newUserEmail.trim())) {
+      toast.error("Email inválido");
+      return;
+    }
+
+    setCreatingUser(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      if (!token) {
+        toast.error("Você precisa estar logado para criar usuários");
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("batch-create-users", {
+        body: { emails: [newUserEmail.trim().toLowerCase()], password: newUserPassword },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (error) {
+        const errorMessage = data?.error || error.message || "Erro ao criar usuário";
+        throw new Error(errorMessage);
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      // Check the results
+      const results = data?.results || [];
+      const created = results.filter((r: any) => r.status === 'created');
+      const existing = results.filter((r: any) => r.status === 'exists');
+
+      if (created.length > 0) {
+        toast.success(`Usuário criado com sucesso! Senha: ${newUserPassword}`);
+        setNewUserEmail("");
+        loadAllData(); // Reload to show new user
+      } else if (existing.length > 0) {
+        toast.warning("Este email já está cadastrado");
+      } else {
+        toast.error("Erro ao criar usuário");
+      }
+    } catch (err: any) {
+      console.error("Error creating user:", err);
+      toast.error(err?.message || "Erro ao criar usuário");
+    } finally {
+      setCreatingUser(false);
+    }
+  };
+
   const getStatusBadge = (status: AdminOfferStatus) => {
     switch (status) {
       case "boa":
@@ -357,11 +421,12 @@ const AdminPanelNew = () => {
           </header>
 
           <Tabs defaultValue="metrics" className="w-full">
-            <TabsList className="grid w-full grid-cols-4 mb-6">
+            <TabsList className="grid w-full grid-cols-5 mb-6">
               <TabsTrigger value="metrics">Métricas Usuários</TabsTrigger>
               <TabsTrigger value="numbers">Números Usuários</TabsTrigger>
               <TabsTrigger value="offers">Ofertas Usuários</TabsTrigger>
               <TabsTrigger value="passwords">Resetar Senhas</TabsTrigger>
+              <TabsTrigger value="create-user">Criar Usuário</TabsTrigger>
             </TabsList>
 
             {/* MÉTRICAS USUÁRIOS */}
@@ -687,6 +752,61 @@ const AdminPanelNew = () => {
                   </div>
                   <p className="text-sm text-muted-foreground mt-4">
                     A nova senha será aplicada imediatamente. O usuário poderá fazer login com a nova senha.
+                  </p>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* CRIAR USUÁRIO */}
+            <TabsContent value="create-user">
+              <Card className="border-2 border-accent">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <UserPlus className="h-5 w-5 text-accent" />
+                    Criar Novo Usuário
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="max-w-md space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Email do usuário</label>
+                      <Input
+                        type="email"
+                        placeholder="usuario@email.com"
+                        value={newUserEmail}
+                        onChange={(e) => setNewUserEmail(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Senha</label>
+                      <Input
+                        type="text"
+                        placeholder="Senha do usuário"
+                        value={newUserPassword}
+                        onChange={(e) => setNewUserPassword(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">Padrão: 123456</p>
+                    </div>
+                    <Button 
+                      onClick={handleCreateUser}
+                      disabled={creatingUser || !newUserEmail.trim()}
+                      className="w-full"
+                    >
+                      {creatingUser ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Criando...
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus className="mr-2 h-4 w-4" />
+                          Criar Usuário
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-4">
+                    O usuário poderá fazer login imediatamente com o email e senha informados.
                   </p>
                 </CardContent>
               </Card>
