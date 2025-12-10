@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,48 +7,22 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { ExternalLink, Plus, Pencil, Trash2, EyeOff, Eye, Search } from "lucide-react";
+import { ExternalLink, Plus, Pencil, Trash2, EyeOff, Eye, Search, Flame, Calendar, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
 import { toast } from "sonner";
 
-type OfferNiche = 'emagrecimento' | 'renda_extra' | 'relacionamento' | 'saude' | 'beleza' | 'educacao' | 'financeiro' | 'religioso' | 'pets' | 'outros';
-
 interface ZapSpyOffer {
   id: string;
   name: string;
   ad_library_link: string;
-  niche: OfferNiche;
+  niche: string;
   is_hidden: boolean;
   created_at: string;
+  active_ads_count: number;
+  start_date: string | null;
 }
-
-const nicheLabels: Record<OfferNiche, string> = {
-  emagrecimento: "Emagrecimento",
-  renda_extra: "Renda Extra",
-  relacionamento: "Relacionamento",
-  saude: "Saúde",
-  beleza: "Beleza",
-  educacao: "Educação",
-  financeiro: "Financeiro",
-  religioso: "Religioso",
-  pets: "Pets",
-  outros: "Outros"
-};
-
-const nicheColors: Record<OfferNiche, string> = {
-  emagrecimento: "bg-green-500/20 text-green-400 border-green-500/50",
-  renda_extra: "bg-yellow-500/20 text-yellow-400 border-yellow-500/50",
-  relacionamento: "bg-pink-500/20 text-pink-400 border-pink-500/50",
-  saude: "bg-blue-500/20 text-blue-400 border-blue-500/50",
-  beleza: "bg-purple-500/20 text-purple-400 border-purple-500/50",
-  educacao: "bg-cyan-500/20 text-cyan-400 border-cyan-500/50",
-  financeiro: "bg-emerald-500/20 text-emerald-400 border-emerald-500/50",
-  religioso: "bg-amber-500/20 text-amber-400 border-amber-500/50",
-  pets: "bg-orange-500/20 text-orange-400 border-orange-500/50",
-  outros: "bg-gray-500/20 text-gray-400 border-gray-500/50"
-};
 
 const ZapSpy = () => {
   const { user } = useAuth();
@@ -57,6 +31,7 @@ const ZapSpy = () => {
   const [loading, setLoading] = useState(true);
   const [selectedNiche, setSelectedNiche] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<'none' | 'most_scaled' | 'oldest'>('none');
   
   // Admin form state
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -65,8 +40,18 @@ const ZapSpy = () => {
   const [selectedOffer, setSelectedOffer] = useState<ZapSpyOffer | null>(null);
   const [formName, setFormName] = useState("");
   const [formLink, setFormLink] = useState("");
-  const [formNiche, setFormNiche] = useState<OfferNiche>("outros");
+  const [formNiche, setFormNiche] = useState("");
+  const [formActiveAds, setFormActiveAds] = useState<number>(0);
+  const [formStartDate, setFormStartDate] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [nicheSuggestions, setNicheSuggestions] = useState<string[]>([]);
+  const [showNicheSuggestions, setShowNicheSuggestions] = useState(false);
+
+  // Get unique niches from offers
+  const availableNiches = useMemo(() => {
+    const niches = [...new Set(offers.map(o => o.niche))].filter(Boolean);
+    return niches.sort();
+  }, [offers]);
 
   useEffect(() => {
     loadOffers();
@@ -84,6 +69,10 @@ const ZapSpy = () => {
 
       if (error) throw error;
       setOffers((data || []) as ZapSpyOffer[]);
+      
+      // Set niche suggestions from existing offers
+      const niches = [...new Set((data || []).map((o: any) => o.niche))].filter(Boolean) as string[];
+      setNicheSuggestions(niches);
     } catch (err) {
       console.error("Error loading offers:", err);
       toast.error("Erro ao carregar ofertas");
@@ -93,8 +82,8 @@ const ZapSpy = () => {
   };
 
   const handleAddOffer = async () => {
-    if (!formName.trim() || !formLink.trim()) {
-      toast.error("Preencha todos os campos");
+    if (!formName.trim() || !formLink.trim() || !formNiche.trim()) {
+      toast.error("Preencha todos os campos obrigatórios");
       return;
     }
 
@@ -105,7 +94,9 @@ const ZapSpy = () => {
         .insert({
           name: formName.trim(),
           ad_library_link: formLink.trim(),
-          niche: formNiche,
+          niche: formNiche.trim(),
+          active_ads_count: formActiveAds || 0,
+          start_date: formStartDate || null,
           created_by: user?.id
         });
 
@@ -113,9 +104,7 @@ const ZapSpy = () => {
 
       toast.success("Oferta cadastrada com sucesso!");
       setAddDialogOpen(false);
-      setFormName("");
-      setFormLink("");
-      setFormNiche("outros");
+      resetForm();
       loadOffers();
     } catch (err) {
       console.error("Error adding offer:", err);
@@ -126,8 +115,8 @@ const ZapSpy = () => {
   };
 
   const handleEditOffer = async () => {
-    if (!selectedOffer || !formName.trim() || !formLink.trim()) {
-      toast.error("Preencha todos os campos");
+    if (!selectedOffer || !formName.trim() || !formLink.trim() || !formNiche.trim()) {
+      toast.error("Preencha todos os campos obrigatórios");
       return;
     }
 
@@ -138,7 +127,9 @@ const ZapSpy = () => {
         .update({
           name: formName.trim(),
           ad_library_link: formLink.trim(),
-          niche: formNiche
+          niche: formNiche.trim(),
+          active_ads_count: formActiveAds || 0,
+          start_date: formStartDate || null
         })
         .eq("id", selectedOffer.id);
 
@@ -197,11 +188,21 @@ const ZapSpy = () => {
     }
   };
 
+  const resetForm = () => {
+    setFormName("");
+    setFormLink("");
+    setFormNiche("");
+    setFormActiveAds(0);
+    setFormStartDate("");
+  };
+
   const openEditDialog = (offer: ZapSpyOffer) => {
     setSelectedOffer(offer);
     setFormName(offer.name);
     setFormLink(offer.ad_library_link);
     setFormNiche(offer.niche);
+    setFormActiveAds(offer.active_ads_count || 0);
+    setFormStartDate(offer.start_date || "");
     setEditDialogOpen(true);
   };
 
@@ -210,11 +211,36 @@ const ZapSpy = () => {
     setDeleteDialogOpen(true);
   };
 
-  const filteredOffers = offers.filter(offer => {
-    const matchesNiche = selectedNiche === "all" || offer.niche === selectedNiche;
-    const matchesSearch = offer.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesNiche && matchesSearch;
-  });
+  const filteredNicheSuggestions = formNiche
+    ? nicheSuggestions.filter(n => n.toLowerCase().includes(formNiche.toLowerCase()) && n !== formNiche)
+    : nicheSuggestions;
+
+  const filteredOffers = useMemo(() => {
+    let result = offers.filter(offer => {
+      const matchesNiche = selectedNiche === "all" || offer.niche === selectedNiche;
+      const matchesSearch = offer.name.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesNiche && matchesSearch;
+    });
+
+    // Apply sorting
+    if (sortBy === 'most_scaled') {
+      result = [...result].sort((a, b) => (b.active_ads_count || 0) - (a.active_ads_count || 0));
+    } else if (sortBy === 'oldest') {
+      result = [...result].sort((a, b) => {
+        if (!a.start_date) return 1;
+        if (!b.start_date) return -1;
+        return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
+      });
+    }
+
+    return result;
+  }, [offers, selectedNiche, searchQuery, sortBy]);
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
 
   return (
     <>
@@ -250,11 +276,28 @@ const ZapSpy = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos os nichos</SelectItem>
-                {Object.entries(nicheLabels).map(([key, label]) => (
-                  <SelectItem key={key} value={key}>{label}</SelectItem>
+                {availableNiches.map((niche) => (
+                  <SelectItem key={niche} value={niche}>{niche}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
+
+            <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+              <SelectTrigger className="w-full md:w-48">
+                <SelectValue placeholder="Ordenar por" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sem ordenação</SelectItem>
+                <SelectItem value="most_scaled">Mais escaladas</SelectItem>
+                <SelectItem value="oldest">Mais antigas</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {sortBy !== 'none' && (
+              <Button variant="ghost" size="icon" onClick={() => setSortBy('none')}>
+                <X className="h-4 w-4" />
+              </Button>
+            )}
 
             {isAdmin && (
               <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
@@ -270,7 +313,7 @@ const ZapSpy = () => {
                   </DialogHeader>
                   <div className="space-y-4">
                     <div>
-                      <Label>Nome da Oferta</Label>
+                      <Label>Nome da Oferta *</Label>
                       <Input
                         value={formName}
                         onChange={(e) => setFormName(e.target.value)}
@@ -278,29 +321,64 @@ const ZapSpy = () => {
                       />
                     </div>
                     <div>
-                      <Label>Link da Biblioteca de Anúncios</Label>
+                      <Label>Link da Biblioteca de Anúncios *</Label>
                       <Input
                         value={formLink}
                         onChange={(e) => setFormLink(e.target.value)}
                         placeholder="https://www.facebook.com/ads/library/..."
                       />
                     </div>
-                    <div>
-                      <Label>Nicho</Label>
-                      <Select value={formNiche} onValueChange={(v) => setFormNiche(v as OfferNiche)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(nicheLabels).map(([key, label]) => (
-                            <SelectItem key={key} value={key}>{label}</SelectItem>
+                    <div className="relative">
+                      <Label>Nicho *</Label>
+                      <Input
+                        value={formNiche}
+                        onChange={(e) => {
+                          setFormNiche(e.target.value);
+                          setShowNicheSuggestions(true);
+                        }}
+                        onFocus={() => setShowNicheSuggestions(true)}
+                        onBlur={() => setTimeout(() => setShowNicheSuggestions(false), 200)}
+                        placeholder="Digite o nicho..."
+                      />
+                      {showNicheSuggestions && filteredNicheSuggestions.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-background border border-border rounded-md shadow-lg max-h-40 overflow-auto">
+                          {filteredNicheSuggestions.map((niche) => (
+                            <button
+                              key={niche}
+                              type="button"
+                              className="w-full px-3 py-2 text-left hover:bg-accent/10 transition-colors"
+                              onClick={() => {
+                                setFormNiche(niche);
+                                setShowNicheSuggestions(false);
+                              }}
+                            >
+                              {niche}
+                            </button>
                           ))}
-                        </SelectContent>
-                      </Select>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <Label>Total de Anúncios Ativos</Label>
+                      <Input
+                        type="number"
+                        value={formActiveAds}
+                        onChange={(e) => setFormActiveAds(parseInt(e.target.value) || 0)}
+                        placeholder="0"
+                        min={0}
+                      />
+                    </div>
+                    <div>
+                      <Label>Data de Início</Label>
+                      <Input
+                        type="date"
+                        value={formStartDate}
+                        onChange={(e) => setFormStartDate(e.target.value)}
+                      />
                     </div>
                   </div>
                   <DialogFooter>
-                    <Button variant="outline" onClick={() => setAddDialogOpen(false)}>Cancelar</Button>
+                    <Button variant="outline" onClick={() => { setAddDialogOpen(false); resetForm(); }}>Cancelar</Button>
                     <Button onClick={handleAddOffer} disabled={submitting} className="bg-accent hover:bg-accent/90">
                       {submitting ? "Salvando..." : "Salvar"}
                     </Button>
@@ -355,9 +433,23 @@ const ZapSpy = () => {
                         </div>
                       )}
                     </div>
-                    <Badge className={`w-fit ${nicheColors[offer.niche]}`}>
-                      {nicheLabels[offer.niche]}
-                    </Badge>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge className="bg-accent/20 text-accent border-accent/50 w-fit">
+                        {offer.niche}
+                      </Badge>
+                      {offer.active_ads_count > 0 && (
+                        <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/50 flex items-center gap-1">
+                          <Flame className="h-3 w-3" />
+                          {offer.active_ads_count} anúncios
+                        </Badge>
+                      )}
+                    </div>
+                    {offer.start_date && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                        <Calendar className="h-3 w-3" />
+                        Início: {formatDate(offer.start_date)}
+                      </p>
+                    )}
                   </CardHeader>
                   <CardContent>
                     <Button
@@ -383,31 +475,65 @@ const ZapSpy = () => {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Nome da Oferta</Label>
+              <Label>Nome da Oferta *</Label>
               <Input
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
               />
             </div>
             <div>
-              <Label>Link da Biblioteca de Anúncios</Label>
+              <Label>Link da Biblioteca de Anúncios *</Label>
               <Input
                 value={formLink}
                 onChange={(e) => setFormLink(e.target.value)}
               />
             </div>
-            <div>
-              <Label>Nicho</Label>
-              <Select value={formNiche} onValueChange={(v) => setFormNiche(v as OfferNiche)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(nicheLabels).map(([key, label]) => (
-                    <SelectItem key={key} value={key}>{label}</SelectItem>
+            <div className="relative">
+              <Label>Nicho *</Label>
+              <Input
+                value={formNiche}
+                onChange={(e) => {
+                  setFormNiche(e.target.value);
+                  setShowNicheSuggestions(true);
+                }}
+                onFocus={() => setShowNicheSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowNicheSuggestions(false), 200)}
+                placeholder="Digite o nicho..."
+              />
+              {showNicheSuggestions && filteredNicheSuggestions.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-background border border-border rounded-md shadow-lg max-h-40 overflow-auto">
+                  {filteredNicheSuggestions.map((niche) => (
+                    <button
+                      key={niche}
+                      type="button"
+                      className="w-full px-3 py-2 text-left hover:bg-accent/10 transition-colors"
+                      onClick={() => {
+                        setFormNiche(niche);
+                        setShowNicheSuggestions(false);
+                      }}
+                    >
+                      {niche}
+                    </button>
                   ))}
-                </SelectContent>
-              </Select>
+                </div>
+              )}
+            </div>
+            <div>
+              <Label>Total de Anúncios Ativos</Label>
+              <Input
+                type="number"
+                value={formActiveAds}
+                onChange={(e) => setFormActiveAds(parseInt(e.target.value) || 0)}
+                min={0}
+              />
+            </div>
+            <div>
+              <Label>Data de Início</Label>
+              <Input
+                type="date"
+                value={formStartDate}
+                onChange={(e) => setFormStartDate(e.target.value)}
+              />
             </div>
           </div>
           <DialogFooter>

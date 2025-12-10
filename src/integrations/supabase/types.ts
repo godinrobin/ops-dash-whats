@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_favorite_users: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       admin_user_rankings: {
         Row: {
           id: string
@@ -330,31 +351,37 @@ export type Database = {
       }
       zap_spy_offers: {
         Row: {
+          active_ads_count: number | null
           ad_library_link: string
           created_at: string
           created_by: string | null
           id: string
           is_hidden: boolean
           name: string
-          niche: Database["public"]["Enums"]["offer_niche"]
+          niche: string
+          start_date: string | null
         }
         Insert: {
+          active_ads_count?: number | null
           ad_library_link: string
           created_at?: string
           created_by?: string | null
           id?: string
           is_hidden?: boolean
           name: string
-          niche: Database["public"]["Enums"]["offer_niche"]
+          niche: string
+          start_date?: string | null
         }
         Update: {
+          active_ads_count?: number | null
           ad_library_link?: string
           created_at?: string
           created_by?: string | null
           id?: string
           is_hidden?: boolean
           name?: string
-          niche?: Database["public"]["Enums"]["offer_niche"]
+          niche?: string
+          start_date?: string | null
         }
         Relationships: []
       }
@@ -401,17 +428,6 @@ export type Database = {
     Enums: {
       admin_offer_status: "minerada" | "ruim" | "boa"
       app_role: "admin" | "user"
-      offer_niche:
-        | "emagrecimento"
-        | "renda_extra"
-        | "relacionamento"
-        | "saude"
-        | "beleza"
-        | "educacao"
-        | "financeiro"
-        | "religioso"
-        | "pets"
-        | "outros"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -541,18 +557,6 @@ export const Constants = {
     Enums: {
       admin_offer_status: ["minerada", "ruim", "boa"],
       app_role: ["admin", "user"],
-      offer_niche: [
-        "emagrecimento",
-        "renda_extra",
-        "relacionamento",
-        "saude",
-        "beleza",
-        "educacao",
-        "financeiro",
-        "religioso",
-        "pets",
-        "outros",
-      ],
     },
   },
 } as const

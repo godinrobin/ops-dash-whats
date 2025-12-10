@@ -4,10 +4,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Copy, Star, ExternalLink } from "lucide-react";
+import { Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -18,11 +17,13 @@ interface UserData {
   id: string;
   email: string;
   username: string;
-  ranking?: number;
+  totalInvested: number;
+  isFavorite: boolean;
 }
 
 interface NumberData {
   id: string;
+  user_id: string;
   user_email: string;
   numero: string;
   celular: string;
@@ -42,6 +43,7 @@ interface MetricData {
   id: string;
   product_id: string;
   product_name: string;
+  user_id: string;
   user_email: string;
   date: string;
   invested: number;
@@ -57,16 +59,10 @@ interface MetricData {
 
 interface OfferData {
   id: string;
-  user_email: string;
   name: string;
   ad_library_link: string;
   admin_status: AdminOfferStatus;
-}
-
-interface RankingData {
-  user_id: string;
-  ranking: number;
-  notes: string;
+  created_at: string;
 }
 
 const AdminPanelNew = () => {
@@ -77,7 +73,16 @@ const AdminPanelNew = () => {
   const [products, setProducts] = useState<ProductData[]>([]);
   const [metrics, setMetrics] = useState<MetricData[]>([]);
   const [offers, setOffers] = useState<OfferData[]>([]);
-  const [rankings, setRankings] = useState<Record<string, RankingData>>({});
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+
+  // UI State for hierarchical navigation
+  const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
+  const [expandedUserNumbers, setExpandedUserNumbers] = useState<string | null>(null);
+
+  // Offers sorting and filtering
+  const [offerSortBy, setOfferSortBy] = useState<'recent' | 'status'>('recent');
+  const [offerStatusFilter, setOfferStatusFilter] = useState<string>('all');
 
   useEffect(() => {
     loadAllData();
@@ -92,12 +97,15 @@ const AdminPanelNew = () => {
       
       if (error) throw error;
 
-      setUsers(data.users || []);
-      setNumbers(data.numbers || []);
-      setProducts(data.products || []);
-      setOffers(data.offers || []);
+      // Load favorites
+      const { data: favoritesData } = await supabase
+        .from("admin_favorite_users")
+        .select("user_id");
+      
+      const favSet = new Set(favoritesData?.map(f => f.user_id) || []);
+      setFavorites(favSet);
 
-      // Load metrics separately from the view
+      // Load metrics to calculate totals
       const { data: metricsData, error: metricsError } = await supabase
         .from("metrics")
         .select(`
@@ -118,28 +126,40 @@ const AdminPanelNew = () => {
         `)
         .order("date", { ascending: false });
 
+      // Map users with total invested
+      const userTotals: Record<string, number> = {};
+      const userProductMap: Record<string, Set<string>> = {};
+      
       if (!metricsError && metricsData) {
+        metricsData.forEach((m: any) => {
+          const userId = m.products?.user_id;
+          if (userId) {
+            userTotals[userId] = (userTotals[userId] || 0) + (m.invested || 0);
+            if (!userProductMap[userId]) userProductMap[userId] = new Set();
+            userProductMap[userId].add(m.product_id);
+          }
+        });
+
         // Map user emails to metrics
-        const userMap = new Map(data.users?.map((u: UserData) => [u.id, u.email]) || []);
+        const userMap = new Map(data.users?.map((u: any) => [u.id, u.email]) || []);
         const metricsWithEmail = metricsData.map((m: any) => ({
           ...m,
+          user_id: m.products?.user_id,
           user_email: userMap.get(m.products?.user_id) || "Desconhecido"
         }));
         setMetrics(metricsWithEmail);
       }
 
-      // Load rankings
-      const { data: rankingsData, error: rankingsError } = await supabase
-        .from("admin_user_rankings")
-        .select("*");
+      const usersWithTotals = (data.users || []).map((u: any) => ({
+        ...u,
+        totalInvested: userTotals[u.id] || 0,
+        isFavorite: favSet.has(u.id)
+      }));
 
-      if (!rankingsError && rankingsData) {
-        const rankingsMap: Record<string, RankingData> = {};
-        rankingsData.forEach((r: any) => {
-          rankingsMap[r.user_id] = r;
-        });
-        setRankings(rankingsMap);
-      }
+      setUsers(usersWithTotals);
+      setNumbers(data.numbers || []);
+      setProducts(data.products || []);
+      setOffers(data.offers || []);
     } catch (err) {
       console.error("Error loading admin data:", err);
       toast.error("Erro ao carregar dados administrativos");
@@ -148,34 +168,32 @@ const AdminPanelNew = () => {
     }
   };
 
-  const updateUserRanking = async (userId: string, ranking: number) => {
+  const toggleFavorite = async (userId: string) => {
     try {
-      const existing = rankings[userId];
-      
-      if (existing) {
+      if (favorites.has(userId)) {
         const { error } = await supabase
-          .from("admin_user_rankings")
-          .update({ ranking, updated_at: new Date().toISOString(), updated_by: user?.id })
+          .from("admin_favorite_users")
+          .delete()
           .eq("user_id", userId);
-        
         if (error) throw error;
+        setFavorites(prev => {
+          const next = new Set(prev);
+          next.delete(userId);
+          return next;
+        });
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, isFavorite: false } : u));
       } else {
         const { error } = await supabase
-          .from("admin_user_rankings")
-          .insert({ user_id: userId, ranking, updated_by: user?.id });
-        
+          .from("admin_favorite_users")
+          .insert({ user_id: userId, created_by: user?.id });
         if (error) throw error;
+        setFavorites(prev => new Set(prev).add(userId));
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, isFavorite: true } : u));
       }
-
-      setRankings(prev => ({
-        ...prev,
-        [userId]: { user_id: userId, ranking, notes: existing?.notes || "" }
-      }));
-      
-      toast.success("Ranking atualizado");
+      toast.success("Favorito atualizado");
     } catch (err) {
-      console.error("Error updating ranking:", err);
-      toast.error("Erro ao atualizar ranking");
+      console.error("Error toggling favorite:", err);
+      toast.error("Erro ao atualizar favorito");
     }
   };
 
@@ -217,6 +235,47 @@ const AdminPanelNew = () => {
     }
   };
 
+  const getUserProducts = (userId: string) => {
+    const userMetrics = metrics.filter(m => m.user_id === userId);
+    const productIds = [...new Set(userMetrics.map(m => m.product_id))];
+    return productIds.map(pid => ({
+      id: pid,
+      name: userMetrics.find(m => m.product_id === pid)?.product_name || "Sem nome"
+    }));
+  };
+
+  const getProductMetrics = (productId: string) => {
+    return metrics.filter(m => m.product_id === productId);
+  };
+
+  const getUserNumbers = (userEmail: string) => {
+    return numbers.filter(n => n.user_email === userEmail);
+  };
+
+  // Get sorted and filtered offers
+  const getSortedFilteredOffers = () => {
+    let filtered = [...offers];
+    
+    // Filter by status
+    if (offerStatusFilter !== 'all') {
+      if (offerStatusFilter === 'none') {
+        filtered = filtered.filter(o => !o.admin_status);
+      } else {
+        filtered = filtered.filter(o => o.admin_status === offerStatusFilter);
+      }
+    }
+
+    // Sort
+    if (offerSortBy === 'recent') {
+      filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    } else if (offerSortBy === 'status') {
+      const statusOrder = { boa: 1, minerada: 2, ruim: 3, null: 4 };
+      filtered.sort((a, b) => (statusOrder[a.admin_status || 'null'] || 4) - (statusOrder[b.admin_status || 'null'] || 4));
+    }
+
+    return filtered;
+  };
+
   if (loading) {
     return (
       <>
@@ -253,150 +312,213 @@ const AdminPanelNew = () => {
 
             {/* MÉTRICAS USUÁRIOS */}
             <TabsContent value="metrics">
-              <div className="space-y-6">
-                {/* User Rankings */}
-                <Card className="border-2 border-accent">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Star className="h-5 w-5 text-accent" />
-                      Ranking de Usuários
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Usuário</TableHead>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Ranking</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {users.map((u) => (
-                            <TableRow key={u.id}>
-                              <TableCell className="font-medium">{u.username}</TableCell>
-                              <TableCell>{u.email}</TableCell>
-                              <TableCell>
-                                <Input
-                                  type="number"
-                                  className="w-20"
-                                  value={rankings[u.id]?.ranking || 0}
-                                  onChange={(e) => updateUserRanking(u.id, parseInt(e.target.value) || 0)}
-                                  min={0}
-                                  max={10}
-                                />
-                              </TableCell>
-                            </TableRow>
+              <div className="space-y-4">
+                {users.map((u) => (
+                  <Card key={u.id} className="border-2 border-accent">
+                    <CardHeader 
+                      className="cursor-pointer hover:bg-accent/5 transition-colors"
+                      onClick={() => setExpandedUser(expandedUser === u.id ? null : u.id)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          {expandedUser === u.id ? (
+                            <ChevronDown className="h-5 w-5 text-accent" />
+                          ) : (
+                            <ChevronRight className="h-5 w-5 text-accent" />
+                          )}
+                          <div>
+                            <CardTitle className="text-lg">{u.username || u.email}</CardTitle>
+                            <p className="text-sm text-muted-foreground">
+                              Total investido: <span className="text-accent font-semibold">R$ {u.totalInvested.toFixed(2)}</span>
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleFavorite(u.id);
+                          }}
+                        >
+                          <Star className={`h-5 w-5 ${favorites.has(u.id) ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}`} />
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    
+                    {expandedUser === u.id && (
+                      <CardContent>
+                        <div className="space-y-3 pl-8">
+                          {getUserProducts(u.id).map((product) => (
+                            <Card key={product.id} className="border border-border">
+                              <CardHeader 
+                                className="py-3 cursor-pointer hover:bg-accent/5 transition-colors"
+                                onClick={() => setExpandedProduct(expandedProduct === product.id ? null : product.id)}
+                              >
+                                <div className="flex items-center gap-2">
+                                  {expandedProduct === product.id ? (
+                                    <ChevronDown className="h-4 w-4 text-accent" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4 text-accent" />
+                                  )}
+                                  <span className="font-medium">{product.name}</span>
+                                </div>
+                              </CardHeader>
+                              
+                              {expandedProduct === product.id && (
+                                <CardContent className="pt-0">
+                                  <div className="overflow-x-auto">
+                                    <Table>
+                                      <TableHeader>
+                                        <TableRow>
+                                          <TableHead>Data</TableHead>
+                                          <TableHead>Investido</TableHead>
+                                          <TableHead>Leads</TableHead>
+                                          <TableHead>CPL</TableHead>
+                                          <TableHead>Vendas</TableHead>
+                                          <TableHead>Faturamento</TableHead>
+                                          <TableHead>ROAS</TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {getProductMetrics(product.id).map((m) => (
+                                          <TableRow key={m.id}>
+                                            <TableCell>{m.date}</TableCell>
+                                            <TableCell>R$ {m.invested.toFixed(2)}</TableCell>
+                                            <TableCell>{m.leads}</TableCell>
+                                            <TableCell>R$ {m.cpl.toFixed(2)}</TableCell>
+                                            <TableCell>{m.pix_count}</TableCell>
+                                            <TableCell>R$ {m.pix_total.toFixed(2)}</TableCell>
+                                            <TableCell>{m.roas.toFixed(2)}x</TableCell>
+                                          </TableRow>
+                                        ))}
+                                      </TableBody>
+                                    </Table>
+                                  </div>
+                                </CardContent>
+                              )}
+                            </Card>
                           ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Metrics by User */}
-                <Card className="border-2 border-accent">
-                  <CardHeader>
-                    <CardTitle>Métricas por Usuário</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Usuário</TableHead>
-                            <TableHead>Produto</TableHead>
-                            <TableHead>Data</TableHead>
-                            <TableHead>Investido</TableHead>
-                            <TableHead>Leads</TableHead>
-                            <TableHead>CPL</TableHead>
-                            <TableHead>Vendas</TableHead>
-                            <TableHead>Faturamento</TableHead>
-                            <TableHead>ROAS</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {metrics.slice(0, 100).map((m) => (
-                            <TableRow key={m.id}>
-                              <TableCell>{m.user_email}</TableCell>
-                              <TableCell>{m.product_name}</TableCell>
-                              <TableCell>{m.date}</TableCell>
-                              <TableCell>R$ {m.invested.toFixed(2)}</TableCell>
-                              <TableCell>{m.leads}</TableCell>
-                              <TableCell>R$ {m.cpl.toFixed(2)}</TableCell>
-                              <TableCell>{m.pix_count}</TableCell>
-                              <TableCell>R$ {m.pix_total.toFixed(2)}</TableCell>
-                              <TableCell>{m.roas.toFixed(2)}x</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </CardContent>
-                </Card>
+                          {getUserProducts(u.id).length === 0 && (
+                            <p className="text-muted-foreground text-sm">Nenhum produto cadastrado</p>
+                          )}
+                        </div>
+                      </CardContent>
+                    )}
+                  </Card>
+                ))}
               </div>
             </TabsContent>
 
             {/* NÚMEROS USUÁRIOS */}
             <TabsContent value="numbers">
-              <Card className="border-2 border-accent">
-                <CardHeader>
-                  <CardTitle>Números por Usuário</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Usuário</TableHead>
-                          <TableHead>Número</TableHead>
-                          <TableHead>Celular</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Operação</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {numbers.map((n) => (
-                          <TableRow key={n.id}>
-                            <TableCell>{n.user_email}</TableCell>
-                            <TableCell>{n.numero}</TableCell>
-                            <TableCell>{n.celular}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline">{n.status}</Badge>
-                            </TableCell>
-                            <TableCell>{n.operacao}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
+              <div className="space-y-4">
+                {users.map((u) => {
+                  const userNumbers = getUserNumbers(u.email);
+                  if (userNumbers.length === 0) return null;
+                  
+                  return (
+                    <Card key={u.id} className="border-2 border-accent">
+                      <CardHeader 
+                        className="cursor-pointer hover:bg-accent/5 transition-colors"
+                        onClick={() => setExpandedUserNumbers(expandedUserNumbers === u.id ? null : u.id)}
+                      >
+                        <div className="flex items-center gap-3">
+                          {expandedUserNumbers === u.id ? (
+                            <ChevronDown className="h-5 w-5 text-accent" />
+                          ) : (
+                            <ChevronRight className="h-5 w-5 text-accent" />
+                          )}
+                          <div>
+                            <CardTitle className="text-lg">{u.username || u.email}</CardTitle>
+                            <p className="text-sm text-muted-foreground">
+                              {userNumbers.length} número{userNumbers.length !== 1 ? 's' : ''} cadastrado{userNumbers.length !== 1 ? 's' : ''}
+                            </p>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      
+                      {expandedUserNumbers === u.id && (
+                        <CardContent>
+                          <div className="overflow-x-auto">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Número</TableHead>
+                                  <TableHead>Celular</TableHead>
+                                  <TableHead>Status</TableHead>
+                                  <TableHead>Operação</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {userNumbers.map((n) => (
+                                  <TableRow key={n.id}>
+                                    <TableCell>{n.numero}</TableCell>
+                                    <TableCell>{n.celular}</TableCell>
+                                    <TableCell>
+                                      <Badge variant="outline">{n.status}</Badge>
+                                    </TableCell>
+                                    <TableCell>{n.operacao}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </CardContent>
+                      )}
+                    </Card>
+                  );
+                })}
+              </div>
             </TabsContent>
 
             {/* OFERTAS USUÁRIOS */}
             <TabsContent value="offers">
               <Card className="border-2 border-accent">
                 <CardHeader>
-                  <CardTitle>Ofertas por Usuário</CardTitle>
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <CardTitle>Ofertas</CardTitle>
+                    <div className="flex flex-wrap gap-2">
+                      <Select value={offerSortBy} onValueChange={(v) => setOfferSortBy(v as 'recent' | 'status')}>
+                        <SelectTrigger className="w-40">
+                          <ArrowUpDown className="h-4 w-4 mr-2" />
+                          <SelectValue placeholder="Ordenar" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="recent">Mais recentes</SelectItem>
+                          <SelectItem value="status">Por status</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={offerStatusFilter} onValueChange={setOfferStatusFilter}>
+                        <SelectTrigger className="w-40">
+                          <Filter className="h-4 w-4 mr-2" />
+                          <SelectValue placeholder="Filtrar status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todos</SelectItem>
+                          <SelectItem value="boa">Boa</SelectItem>
+                          <SelectItem value="minerada">Minerada</SelectItem>
+                          <SelectItem value="ruim">Ruim</SelectItem>
+                          <SelectItem value="none">Sem status</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Usuário</TableHead>
                           <TableHead>Nome da Oferta</TableHead>
                           <TableHead>Link</TableHead>
                           <TableHead>Status Admin</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {offers.map((o) => (
+                        {getSortedFilteredOffers().map((o) => (
                           <TableRow key={o.id}>
-                            <TableCell>{o.user_email}</TableCell>
-                            <TableCell>{o.name}</TableCell>
+                            <TableCell className="font-medium">{o.name}</TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 <Button
