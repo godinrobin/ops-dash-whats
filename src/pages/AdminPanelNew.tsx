@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -78,8 +79,10 @@ const AdminPanelNew = () => {
 
   // UI State for hierarchical navigation
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
-  const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
   const [expandedUserNumbers, setExpandedUserNumbers] = useState<string | null>(null);
+  
+  // Modal state for product metrics
+  const [selectedProductForMetrics, setSelectedProductForMetrics] = useState<{id: string; name: string} | null>(null);
 
   // Offers sorting and filtering
   const [offerSortBy, setOfferSortBy] = useState<'recent' | 'status'>('recent');
@@ -109,36 +112,9 @@ const AdminPanelNew = () => {
       const favSet = new Set(favoritesData?.map(f => f.user_id) || []);
       setFavorites(favSet);
 
-      // Load metrics for product details
-      const { data: metricsData, error: metricsError } = await supabase
-        .from("metrics")
-        .select(`
-          id,
-          product_id,
-          product_name,
-          date,
-          invested,
-          leads,
-          pix_count,
-          pix_total,
-          cpl,
-          conversion,
-          result,
-          roas,
-          structure,
-          products!inner(user_id)
-        `)
-        .order("date", { ascending: false });
-
-      // Map user emails to metrics
-      if (!metricsError && metricsData) {
-        const userMap = new Map(data.users?.map((u: any) => [u.id, u.email]) || []);
-        const metricsWithEmail = metricsData.map((m: any) => ({
-          ...m,
-          user_id: m.products?.user_id,
-          user_email: userMap.get(m.products?.user_id) || "Desconhecido"
-        }));
-        setMetrics(metricsWithEmail);
+      // Load metrics from edge function data
+      if (data.metrics) {
+        setMetrics(data.metrics);
       }
 
       // Users already come with totalInvested from the API
@@ -362,53 +338,20 @@ const AdminPanelNew = () => {
                       <CardContent>
                         <div className="space-y-3 pl-8">
                           {getUserProducts(u.id).map((product) => (
-                            <Card key={product.id} className="border border-border">
-                              <CardHeader 
-                                className="py-3 cursor-pointer hover:bg-accent/5 transition-colors"
-                                onClick={() => setExpandedProduct(expandedProduct === product.id ? null : product.id)}
-                              >
+                            <Card 
+                              key={product.id} 
+                              className="border border-border cursor-pointer hover:bg-accent/5 transition-colors"
+                              onClick={() => setSelectedProductForMetrics({ id: product.id, name: product.name })}
+                            >
+                              <CardHeader className="py-3">
                                 <div className="flex items-center gap-2">
-                                  {expandedProduct === product.id ? (
-                                    <ChevronDown className="h-4 w-4 text-accent" />
-                                  ) : (
-                                    <ChevronRight className="h-4 w-4 text-accent" />
-                                  )}
+                                  <ChevronRight className="h-4 w-4 text-accent" />
                                   <span className="font-medium">{product.name}</span>
+                                  <Badge variant="outline" className="ml-auto text-xs">
+                                    {getProductMetrics(product.id).length} métricas
+                                  </Badge>
                                 </div>
                               </CardHeader>
-                              
-                              {expandedProduct === product.id && (
-                                <CardContent className="pt-0">
-                                  <div className="overflow-x-auto">
-                                    <Table>
-                                      <TableHeader>
-                                        <TableRow>
-                                          <TableHead>Data</TableHead>
-                                          <TableHead>Investido</TableHead>
-                                          <TableHead>Leads</TableHead>
-                                          <TableHead>CPL</TableHead>
-                                          <TableHead>Vendas</TableHead>
-                                          <TableHead>Faturamento</TableHead>
-                                          <TableHead>ROAS</TableHead>
-                                        </TableRow>
-                                      </TableHeader>
-                                      <TableBody>
-                                        {getProductMetrics(product.id).map((m) => (
-                                          <TableRow key={m.id}>
-                                            <TableCell>{m.date}</TableCell>
-                                            <TableCell>R$ {m.invested.toFixed(2)}</TableCell>
-                                            <TableCell>{m.leads}</TableCell>
-                                            <TableCell>R$ {m.cpl.toFixed(2)}</TableCell>
-                                            <TableCell>{m.pix_count}</TableCell>
-                                            <TableCell>R$ {m.pix_total.toFixed(2)}</TableCell>
-                                            <TableCell>{m.roas.toFixed(2)}x</TableCell>
-                                          </TableRow>
-                                        ))}
-                                      </TableBody>
-                                    </Table>
-                                  </div>
-                                </CardContent>
-                              )}
                             </Card>
                           ))}
                           {getUserProducts(u.id).length === 0 && (
@@ -578,6 +521,61 @@ const AdminPanelNew = () => {
           </Tabs>
         </div>
       </div>
+
+      {/* Modal de Métricas do Produto */}
+      <Dialog 
+        open={!!selectedProductForMetrics} 
+        onOpenChange={(open) => !open && setSelectedProductForMetrics(null)}
+      >
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto border-accent">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <span>Métricas: {selectedProductForMetrics?.name}</span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Estrutura</TableHead>
+                  <TableHead>Investido</TableHead>
+                  <TableHead>Leads</TableHead>
+                  <TableHead>CPL</TableHead>
+                  <TableHead>Vendas</TableHead>
+                  <TableHead>Faturamento</TableHead>
+                  <TableHead>Resultado</TableHead>
+                  <TableHead>ROAS</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {selectedProductForMetrics && getProductMetrics(selectedProductForMetrics.id).map((m) => (
+                  <TableRow key={m.id}>
+                    <TableCell>{m.date}</TableCell>
+                    <TableCell className="max-w-[150px] truncate">{m.structure}</TableCell>
+                    <TableCell>R$ {m.invested.toFixed(2)}</TableCell>
+                    <TableCell>{m.leads}</TableCell>
+                    <TableCell>R$ {m.cpl.toFixed(2)}</TableCell>
+                    <TableCell>{m.pix_count}</TableCell>
+                    <TableCell>R$ {m.pix_total.toFixed(2)}</TableCell>
+                    <TableCell className={m.result >= 0 ? 'text-green-500' : 'text-red-500'}>
+                      R$ {m.result.toFixed(2)}
+                    </TableCell>
+                    <TableCell>{m.roas.toFixed(2)}x</TableCell>
+                  </TableRow>
+                ))}
+                {selectedProductForMetrics && getProductMetrics(selectedProductForMetrics.id).length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center text-muted-foreground">
+                      Nenhuma métrica cadastrada para este produto
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };

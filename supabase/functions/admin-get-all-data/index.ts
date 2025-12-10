@@ -84,24 +84,51 @@ Deno.serve(async (req) => {
       .from('profiles')
       .select('id, username')
 
-    // Buscar métricas com user_id dos produtos para calcular totais
+    // Buscar todas as métricas com dados completos
     const { data: metricsData } = await supabaseClient
       .from('metrics')
       .select(`
         id,
         product_id,
+        product_name,
+        date,
         invested,
+        leads,
+        pix_count,
+        pix_total,
+        cpl,
+        conversion,
+        result,
+        roas,
+        structure,
         products!inner(user_id)
       `)
+      .order('date', { ascending: false })
     
-    // Calcular total investido por usuário
+    // Calcular total investido por usuário e mapear métricas
     const userTotals: Record<string, number> = {}
-    metricsData?.forEach((m: any) => {
+    const metrics = metricsData?.map((m: any) => {
       const userId = m.products?.user_id
       if (userId) {
         userTotals[userId] = (userTotals[userId] || 0) + (m.invested || 0)
       }
-    })
+      return {
+        id: m.id,
+        product_id: m.product_id,
+        product_name: m.product_name,
+        user_id: userId,
+        date: m.date,
+        invested: m.invested,
+        leads: m.leads,
+        pix_count: m.pix_count,
+        pix_total: m.pix_total,
+        cpl: m.cpl,
+        conversion: m.conversion,
+        result: m.result,
+        roas: m.roas,
+        structure: m.structure,
+      }
+    }) || []
 
     // Mapear usuários com emails e totais investidos
     const users = authUsers.users.map(authUser => {
@@ -167,7 +194,7 @@ Deno.serve(async (req) => {
     }) || []
 
     return new Response(
-      JSON.stringify({ users, numbers, products, offers }),
+      JSON.stringify({ users, numbers, products, offers, metrics }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (error) {
