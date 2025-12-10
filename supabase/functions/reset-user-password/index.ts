@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.78.0";
+import { decode } from "https://deno.land/x/djwt@v3.0.1/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,7 +26,7 @@ serve(async (req: Request): Promise<Response> => {
       },
     });
 
-    // Get user from Authorization header (JWT is verified by Supabase when verify_jwt = true)
+    // Get user from Authorization header
     const authHeader = req.headers.get("Authorization");
     console.log("Auth header present:", !!authHeader);
     
@@ -39,15 +40,20 @@ serve(async (req: Request): Promise<Response> => {
 
     const token = authHeader.replace("Bearer ", "");
     
-    // Use the admin client to verify the user token
-    const { data: { user }, error: authError } = await adminClient.auth.getUser(token);
-    
-    console.log("Auth check - user:", user?.id, "error:", authError?.message);
-    
-    if (authError || !user) {
-      console.log("Invalid token:", authError?.message);
+    // Decode the JWT to get the user ID
+    let userId: string;
+    try {
+      const [_header, payload, _signature] = decode(token);
+      userId = (payload as any).sub;
+      console.log("Decoded JWT - userId:", userId);
+      
+      if (!userId) {
+        throw new Error("No user ID in token");
+      }
+    } catch (decodeError) {
+      console.log("Failed to decode JWT:", decodeError);
       return new Response(
-        JSON.stringify({ error: "Invalid or expired token" }),
+        JSON.stringify({ error: "Invalid token format" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -56,7 +62,7 @@ serve(async (req: Request): Promise<Response> => {
     const { data: roleData, error: roleError } = await adminClient
       .from("user_roles")
       .select("role")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .eq("role", "admin")
       .single();
 
