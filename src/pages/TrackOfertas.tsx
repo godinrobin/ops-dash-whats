@@ -19,6 +19,7 @@ interface TrackedOffer {
   ad_library_link: string;
   created_at: string;
   notes?: string;
+  funnel_number?: string;
 }
 
 interface OfferMetric {
@@ -36,7 +37,7 @@ const TrackOfertas = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [newOffer, setNewOffer] = useState({ name: "", ad_library_link: "" });
+  const [newOffer, setNewOffer] = useState({ name: "", ad_library_link: "", funnel_number: "" });
   const [expandedOffer, setExpandedOffer] = useState<TrackedOffer | null>(null);
   const [editingOffer, setEditingOffer] = useState<TrackedOffer | null>(null);
   const [editedOfferName, setEditedOfferName] = useState("");
@@ -146,6 +147,7 @@ const TrackOfertas = () => {
           user_id: user?.id,
           name: newOffer.name,
           ad_library_link: newOffer.ad_library_link,
+          funnel_number: newOffer.funnel_number || null,
         }]);
 
       if (offerError) throw offerError;
@@ -155,7 +157,7 @@ const TrackOfertas = () => {
         description: "Agora você pode inserir os dados de anúncios manualmente.",
       });
 
-      setNewOffer({ name: "", ad_library_link: "" });
+      setNewOffer({ name: "", ad_library_link: "", funnel_number: "" });
       setIsDialogOpen(false);
       loadOffers();
     } catch (error: any) {
@@ -400,13 +402,23 @@ const TrackOfertas = () => {
                       className="bg-input border-border"
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="funnel_number" className="text-base">Número do Funil (opcional)</Label>
+                    <Input
+                      id="funnel_number"
+                      placeholder="Ex: Funil 01, F1, Campanha A..."
+                      value={newOffer.funnel_number}
+                      onChange={(e) => setNewOffer({ ...newOffer, funnel_number: e.target.value })}
+                      className="bg-input border-border"
+                    />
+                  </div>
                 </div>
                 <div className="flex gap-3">
                   <Button
                     variant="outline"
                     onClick={() => {
                       setIsDialogOpen(false);
-                      setNewOffer({ name: "", ad_library_link: "" });
+                      setNewOffer({ name: "", ad_library_link: "", funnel_number: "" });
                     }}
                     className="flex-1"
                     disabled={isLoading}

@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { ExternalLink, Plus, Pencil, Trash2, EyeOff, Eye, Search, Flame, Calendar, X } from "lucide-react";
+import { ExternalLink, Plus, Pencil, Trash2, EyeOff, Eye, Search, Flame, Calendar, X, Star } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
@@ -23,6 +24,7 @@ interface ZapSpyOffer {
   active_ads_count: number;
   start_date: string | null;
   image_url: string | null;
+  is_featured: boolean;
 }
 
 const ZapSpy = () => {
@@ -46,6 +48,7 @@ const ZapSpy = () => {
   const [formStartDate, setFormStartDate] = useState("");
   const [formImagePreview, setFormImagePreview] = useState<string | null>(null);
   const [formImageFile, setFormImageFile] = useState<File | null>(null);
+  const [formIsFeatured, setFormIsFeatured] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [nicheSuggestions, setNicheSuggestions] = useState<string[]>([]);
   const [showNicheSuggestions, setShowNicheSuggestions] = useState(false);
@@ -121,6 +124,7 @@ const ZapSpy = () => {
           active_ads_count: formActiveAds || 0,
           start_date: formStartDate || null,
           image_url: imageUrl,
+          is_featured: formIsFeatured,
           created_by: user?.id
         });
 
@@ -174,7 +178,8 @@ const ZapSpy = () => {
           niche: formNiche.trim(),
           active_ads_count: formActiveAds || 0,
           start_date: formStartDate || null,
-          image_url: imageUrl
+          image_url: imageUrl,
+          is_featured: formIsFeatured
         })
         .eq("id", selectedOffer.id);
 
@@ -241,6 +246,7 @@ const ZapSpy = () => {
     setFormStartDate("");
     setFormImagePreview(null);
     setFormImageFile(null);
+    setFormIsFeatured(false);
   };
 
   const handlePaste = (e: React.ClipboardEvent) => {
@@ -278,6 +284,7 @@ const ZapSpy = () => {
     setFormStartDate(offer.start_date || "");
     setFormImagePreview(offer.image_url);
     setFormImageFile(null);
+    setFormIsFeatured(offer.is_featured || false);
     setEditDialogOpen(true);
   };
 
@@ -480,6 +487,17 @@ const ZapSpy = () => {
                         onChange={(e) => setFormStartDate(e.target.value)}
                       />
                     </div>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="featured-toggle" className="flex items-center gap-2">
+                        <Star className="h-4 w-4 text-yellow-500" />
+                        OFERTA FODA
+                      </Label>
+                      <Switch
+                        id="featured-toggle"
+                        checked={formIsFeatured}
+                        onCheckedChange={setFormIsFeatured}
+                      />
+                    </div>
                   </div>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => { setAddDialogOpen(false); resetForm(); }}>Cancelar</Button>
@@ -504,9 +522,18 @@ const ZapSpy = () => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredOffers.map((offer) => (
-                <Card key={offer.id} className={`border-2 border-accent ${offer.is_hidden ? 'opacity-50' : ''}`}>
+                <Card key={offer.id} className={`border-2 border-accent ${offer.is_hidden ? 'opacity-50' : ''} relative`}>
+                  {offer.is_featured && (
+                    <div className="absolute top-0 left-0 right-0 z-10">
+                      <div className="bg-gradient-to-r from-yellow-500 to-orange-500 text-black text-center py-1 px-2 text-xs font-bold flex items-center justify-center gap-1 rounded-t-lg">
+                        <Star className="h-3 w-3 fill-current" />
+                        OFERTA FODA
+                        <Star className="h-3 w-3 fill-current" />
+                      </div>
+                    </div>
+                  )}
                   {offer.image_url && (
-                    <div className="w-full h-40 overflow-hidden rounded-t-lg">
+                    <div className={`w-full h-40 overflow-hidden ${offer.is_featured ? '' : 'rounded-t-lg'}`}>
                       <img 
                         src={offer.image_url} 
                         alt={offer.name} 
@@ -674,6 +701,17 @@ const ZapSpy = () => {
                 type="date"
                 value={formStartDate}
                 onChange={(e) => setFormStartDate(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="featured-toggle-edit" className="flex items-center gap-2">
+                <Star className="h-4 w-4 text-yellow-500" />
+                OFERTA FODA
+              </Label>
+              <Switch
+                id="featured-toggle-edit"
+                checked={formIsFeatured}
+                onCheckedChange={setFormIsFeatured}
               />
             </div>
           </div>
