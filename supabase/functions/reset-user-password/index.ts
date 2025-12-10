@@ -16,7 +16,6 @@ serve(async (req: Request): Promise<Response> => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     
     // Create admin client for operations
     const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
@@ -26,7 +25,7 @@ serve(async (req: Request): Promise<Response> => {
       },
     });
 
-    // Verify admin authorization via JWT
+    // Get user from Authorization header (JWT is verified by Supabase when verify_jwt = true)
     const authHeader = req.headers.get("Authorization");
     console.log("Auth header present:", !!authHeader);
     
@@ -40,27 +39,13 @@ serve(async (req: Request): Promise<Response> => {
 
     const token = authHeader.replace("Bearer ", "");
     
-    // Verify the JWT token by calling Supabase auth API directly
-    const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'apikey': supabaseAnonKey,
-      },
-    });
+    // Use the admin client to verify the user token
+    const { data: { user }, error: authError } = await adminClient.auth.getUser(token);
     
-    if (!authResponse.ok) {
-      console.log("Invalid token: API returned", authResponse.status);
-      return new Response(
-        JSON.stringify({ error: "Invalid or expired token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    console.log("Auth check - user:", user?.id, "error:", authError?.message);
     
-    const user = await authResponse.json();
-    console.log("Auth check - user:", user?.id);
-    
-    if (!user) {
-      console.log("No user found in token");
+    if (authError || !user) {
+      console.log("Invalid token:", authError?.message);
       return new Response(
         JSON.stringify({ error: "Invalid or expired token" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
