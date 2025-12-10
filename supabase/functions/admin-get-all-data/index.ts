@@ -77,11 +77,13 @@ Deno.serve(async (req) => {
     // Buscar números organizados
     const { data: numbersData } = await supabaseClient
       .from('organized_numbers')
-      .select('numero, celular, status, operacao, user_id')
+      .select('id, numero, celular, status, operacao, user_id')
 
     const numbers = numbersData?.map(num => {
       const authUser = authUsers.users.find(u => u.id === num.user_id)
       return {
+        id: num.id,
+        user_id: num.user_id,
         user_email: authUser?.email || 'N/A',
         numero: num.numero,
         celular: num.celular,
@@ -107,7 +109,8 @@ Deno.serve(async (req) => {
     // Buscar ofertas com admin_status
     const { data: offersData } = await supabaseClient
       .from('tracked_offers')
-      .select('id, name, ad_library_link, user_id, admin_status')
+      .select('id, name, ad_library_link, user_id, admin_status, created_at')
+      .order('created_at', { ascending: false })
 
     const offers = offersData?.map(offer => {
       const authUser = authUsers.users.find(u => u.id === offer.user_id)
@@ -117,6 +120,7 @@ Deno.serve(async (req) => {
         name: offer.name,
         ad_library_link: offer.ad_library_link,
         admin_status: offer.admin_status,
+        created_at: offer.created_at,
       }
     }) || []
 
