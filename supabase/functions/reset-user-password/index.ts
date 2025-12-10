@@ -16,8 +16,10 @@ serve(async (req: Request): Promise<Response> => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+    // Create admin client for operations
+    const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false,
@@ -37,7 +39,17 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    // Create a client with the user's token to verify their identity
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    });
+    
+    const { data: { user }, error: authError } = await userClient.auth.getUser();
     
     console.log("Auth check - user:", user?.id, "error:", authError?.message);
     
@@ -50,7 +62,7 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     // Check if user has admin role
-    const { data: roleData, error: roleError } = await supabase
+    const { data: roleData, error: roleError } = await adminClient
       .from("user_roles")
       .select("role")
       .eq("user_id", user.id)
@@ -83,12 +95,12 @@ serve(async (req: Request): Promise<Response> => {
     // Find user by email using pagination to handle large user lists
     console.log("Searching for user:", email);
     
-    let targetUser = null;
+    let targetUser: { id: string; email?: string } | null = null;
     let page = 1;
     const perPage = 1000;
     
     while (!targetUser) {
-      const { data: usersPage, error: listError } = await supabase.auth.admin.listUsers({
+      const { data: usersPage, error: listError } = await adminClient.auth.admin.listUsers({
         page,
         perPage,
       });
@@ -103,7 +115,7 @@ serve(async (req: Request): Promise<Response> => {
       
       console.log(`Page ${page}: found ${usersPage.users.length} users`);
       
-      targetUser = usersPage.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
+      targetUser = usersPage.users.find(u => u.email?.toLowerCase() === email.toLowerCase()) || null;
       
       if (usersPage.users.length < perPage) {
         break; // Last page
@@ -123,7 +135,7 @@ serve(async (req: Request): Promise<Response> => {
     console.log("Found user:", targetUser.id, targetUser.email);
 
     // Update password
-    const { error: updateError } = await supabase.auth.admin.updateUserById(
+    const { error: updateError } = await adminClient.auth.admin.updateUserById(
       targetUser.id,
       { password }
     );
