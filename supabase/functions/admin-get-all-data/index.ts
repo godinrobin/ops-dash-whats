@@ -95,11 +95,13 @@ Deno.serve(async (req) => {
     // Buscar produtos
     const { data: productsData } = await supabaseClient
       .from('products')
-      .select('name, last_update, user_id')
+      .select('id, name, last_update, user_id')
 
     const products = productsData?.map(prod => {
       const authUser = authUsers.users.find(u => u.id === prod.user_id)
       return {
+        id: prod.id,
+        user_id: prod.user_id,
         user_email: authUser?.email || 'N/A',
         product_name: prod.name,
         last_update: prod.last_update,
