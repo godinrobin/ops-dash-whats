@@ -403,10 +403,10 @@ const TrackOfertas = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="funnel_number" className="text-base">Número do Funil (opcional)</Label>
+                    <Label htmlFor="funnel_number" className="text-base">Número de WhatsApp da oferta (opcional)</Label>
                     <Input
                       id="funnel_number"
-                      placeholder="Ex: Funil 01, F1, Campanha A..."
+                      placeholder="Ex: 5511999999999"
                       value={newOffer.funnel_number}
                       onChange={(e) => setNewOffer({ ...newOffer, funnel_number: e.target.value })}
                       className="bg-input border-border"
