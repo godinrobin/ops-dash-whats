@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X } from "lucide-react";
+import { Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X, Key, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -92,6 +92,11 @@ const AdminPanelNew = () => {
   // Search and sorting for users
   const [userSearch, setUserSearch] = useState("");
   const [userSortBy, setUserSortBy] = useState<'name' | 'invested' | 'favorites'>('name');
+
+  // Password reset state
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [resettingPassword, setResettingPassword] = useState(false);
 
   useEffect(() => {
     loadAllData();
@@ -189,6 +194,35 @@ const AdminPanelNew = () => {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success("Link copiado!");
+  };
+
+  const resetUserPassword = async () => {
+    if (!resetEmail.trim() || !resetPassword.trim()) {
+      toast.error("Preencha email e senha");
+      return;
+    }
+
+    setResettingPassword(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      const response = await supabase.functions.invoke("reset-user-password", {
+        body: { email: resetEmail.trim(), password: resetPassword.trim() },
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+
+      if (response.error) throw response.error;
+
+      toast.success(response.data?.message || "Senha redefinida com sucesso!");
+      setResetEmail("");
+      setResetPassword("");
+    } catch (err: any) {
+      console.error("Error resetting password:", err);
+      toast.error(err?.message || "Erro ao redefinir senha");
+    } finally {
+      setResettingPassword(false);
+    }
   };
 
   const getStatusBadge = (status: AdminOfferStatus) => {
@@ -310,10 +344,11 @@ const AdminPanelNew = () => {
           </header>
 
           <Tabs defaultValue="metrics" className="w-full">
-            <TabsList className="grid w-full grid-cols-3 mb-6">
+            <TabsList className="grid w-full grid-cols-4 mb-6">
               <TabsTrigger value="metrics">Métricas Usuários</TabsTrigger>
               <TabsTrigger value="numbers">Números Usuários</TabsTrigger>
               <TabsTrigger value="offers">Ofertas Usuários</TabsTrigger>
+              <TabsTrigger value="passwords">Resetar Senhas</TabsTrigger>
             </TabsList>
 
             {/* MÉTRICAS USUÁRIOS */}
@@ -586,6 +621,60 @@ const AdminPanelNew = () => {
                       </TableBody>
                     </Table>
                   </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* RESETAR SENHAS */}
+            <TabsContent value="passwords">
+              <Card className="border-2 border-accent">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Key className="h-5 w-5 text-accent" />
+                    Redefinir Senha de Usuário
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="max-w-md space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Email do usuário</label>
+                      <Input
+                        type="email"
+                        placeholder="usuario@email.com"
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Nova senha</label>
+                      <Input
+                        type="text"
+                        placeholder="Nova senha"
+                        value={resetPassword}
+                        onChange={(e) => setResetPassword(e.target.value)}
+                      />
+                    </div>
+                    <Button 
+                      onClick={resetUserPassword}
+                      disabled={resettingPassword || !resetEmail.trim() || !resetPassword.trim()}
+                      className="w-full"
+                    >
+                      {resettingPassword ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Redefinindo...
+                        </>
+                      ) : (
+                        <>
+                          <Key className="mr-2 h-4 w-4" />
+                          Redefinir Senha
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-4">
+                    A nova senha será aplicada imediatamente. O usuário poderá fazer login com a nova senha.
+                  </p>
                 </CardContent>
               </Card>
             </TabsContent>
