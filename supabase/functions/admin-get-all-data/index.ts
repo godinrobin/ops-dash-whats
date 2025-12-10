@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { decode } from "https://deno.land/x/djwt@v3.0.1/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -31,14 +32,20 @@ Deno.serve(async (req) => {
     
     const token = authHeader.replace('Bearer ', '')
     
-    // Use the admin client to verify the user token
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token)
-    
-    console.log('Auth check - user:', user?.id, 'error:', userError?.message)
-
-    if (userError || !user) {
+    // Decode the JWT to get the user ID
+    let userId: string
+    try {
+      const [_header, payload, _signature] = decode(token)
+      userId = (payload as any).sub
+      console.log('Decoded JWT - userId:', userId)
+      
+      if (!userId) {
+        throw new Error('No user ID in token')
+      }
+    } catch (decodeError) {
+      console.log('Failed to decode JWT:', decodeError)
       return new Response(
-        JSON.stringify({ error: 'Não autorizado' }),
+        JSON.stringify({ error: 'Token inválido' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
       )
     }
@@ -47,7 +54,7 @@ Deno.serve(async (req) => {
     const { data: roleData } = await supabaseClient
       .from('user_roles')
       .select('role')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('role', 'admin')
       .maybeSingle()
 
@@ -118,15 +125,15 @@ Deno.serve(async (req) => {
     // Calcular total investido por usuário e mapear métricas
     const userTotals: Record<string, number> = {}
     const metrics = metricsData?.map((m: any) => {
-      const userId = m.products?.user_id
-      if (userId) {
-        userTotals[userId] = (userTotals[userId] || 0) + (m.invested || 0)
+      const metricUserId = m.products?.user_id
+      if (metricUserId) {
+        userTotals[metricUserId] = (userTotals[metricUserId] || 0) + (m.invested || 0)
       }
       return {
         id: m.id,
         product_id: m.product_id,
         product_name: m.product_name,
-        user_id: userId,
+        user_id: metricUserId,
         date: m.date,
         invested: m.invested,
         leads: m.leads,
