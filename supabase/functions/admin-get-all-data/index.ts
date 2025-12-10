@@ -48,29 +48,69 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Buscar todos os usuários
-    const { data: authUsers, error: authError } = await supabaseClient.auth.admin.listUsers()
+    // Buscar todos os usuários com paginação
+    let allAuthUsers: any[] = []
+    let page = 1
+    const perPage = 1000
     
-    if (authError) {
-      console.error('Erro ao buscar usuários:', authError)
-      return new Response(
-        JSON.stringify({ error: 'Erro ao buscar usuários' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-      )
+    while (true) {
+      const { data: pageData, error: authError } = await supabaseClient.auth.admin.listUsers({
+        page: page,
+        perPage: perPage
+      })
+      
+      if (authError) {
+        console.error('Erro ao buscar usuários:', authError)
+        return new Response(
+          JSON.stringify({ error: 'Erro ao buscar usuários' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        )
+      }
+      
+      if (!pageData.users || pageData.users.length === 0) break
+      
+      allAuthUsers = [...allAuthUsers, ...pageData.users]
+      
+      // If we got fewer users than perPage, we've reached the end
+      if (pageData.users.length < perPage) break
+      
+      page++
     }
+    
+    const authUsers = { users: allAuthUsers }
 
     // Buscar perfis
     const { data: profiles } = await supabaseClient
       .from('profiles')
       .select('id, username')
 
-    // Mapear usuários com emails
+    // Buscar métricas com user_id dos produtos para calcular totais
+    const { data: metricsData } = await supabaseClient
+      .from('metrics')
+      .select(`
+        id,
+        product_id,
+        invested,
+        products!inner(user_id)
+      `)
+    
+    // Calcular total investido por usuário
+    const userTotals: Record<string, number> = {}
+    metricsData?.forEach((m: any) => {
+      const userId = m.products?.user_id
+      if (userId) {
+        userTotals[userId] = (userTotals[userId] || 0) + (m.invested || 0)
+      }
+    })
+
+    // Mapear usuários com emails e totais investidos
     const users = authUsers.users.map(authUser => {
       const profile = profiles?.find(p => p.id === authUser.id)
       return {
         id: authUser.id,
         email: authUser.email || 'N/A',
         username: profile?.username || 'N/A',
+        totalInvested: userTotals[authUser.id] || 0,
       }
     })
 

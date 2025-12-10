@@ -1,12 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Header } from "@/components/Header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter } from "lucide-react";
+import { Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -83,6 +84,9 @@ const AdminPanelNew = () => {
   // Offers sorting and filtering
   const [offerSortBy, setOfferSortBy] = useState<'recent' | 'status'>('recent');
   const [offerStatusFilter, setOfferStatusFilter] = useState<string>('all');
+  
+  // Search
+  const [userSearch, setUserSearch] = useState("");
 
   useEffect(() => {
     loadAllData();
@@ -105,7 +109,7 @@ const AdminPanelNew = () => {
       const favSet = new Set(favoritesData?.map(f => f.user_id) || []);
       setFavorites(favSet);
 
-      // Load metrics to calculate totals
+      // Load metrics for product details
       const { data: metricsData, error: metricsError } = await supabase
         .from("metrics")
         .select(`
@@ -126,21 +130,8 @@ const AdminPanelNew = () => {
         `)
         .order("date", { ascending: false });
 
-      // Map users with total invested
-      const userTotals: Record<string, number> = {};
-      const userProductMap: Record<string, Set<string>> = {};
-      
+      // Map user emails to metrics
       if (!metricsError && metricsData) {
-        metricsData.forEach((m: any) => {
-          const userId = m.products?.user_id;
-          if (userId) {
-            userTotals[userId] = (userTotals[userId] || 0) + (m.invested || 0);
-            if (!userProductMap[userId]) userProductMap[userId] = new Set();
-            userProductMap[userId].add(m.product_id);
-          }
-        });
-
-        // Map user emails to metrics
         const userMap = new Map(data.users?.map((u: any) => [u.id, u.email]) || []);
         const metricsWithEmail = metricsData.map((m: any) => ({
           ...m,
@@ -150,13 +141,13 @@ const AdminPanelNew = () => {
         setMetrics(metricsWithEmail);
       }
 
-      const usersWithTotals = (data.users || []).map((u: any) => ({
+      // Users already come with totalInvested from the API
+      const usersWithFavorites = (data.users || []).map((u: any) => ({
         ...u,
-        totalInvested: userTotals[u.id] || 0,
         isFavorite: favSet.has(u.id)
       }));
 
-      setUsers(usersWithTotals);
+      setUsers(usersWithFavorites);
       setNumbers(data.numbers || []);
       setProducts(data.products || []);
       setOffers(data.offers || []);
@@ -251,6 +242,16 @@ const AdminPanelNew = () => {
     return numbers.filter(n => n.user_email === userEmail);
   };
 
+  // Filter users by search
+  const filteredUsers = useMemo(() => {
+    if (!userSearch.trim()) return users;
+    const search = userSearch.toLowerCase();
+    return users.filter(u => 
+      u.username?.toLowerCase().includes(search) || 
+      u.email?.toLowerCase().includes(search)
+    );
+  }, [users, userSearch]);
+
   // Get sorted and filtered offers
   const getSortedFilteredOffers = () => {
     let filtered = [...offers];
@@ -312,7 +313,19 @@ const AdminPanelNew = () => {
             {/* MÉTRICAS USUÁRIOS */}
             <TabsContent value="metrics">
               <div className="space-y-4">
-                {users.map((u) => (
+                <div className="flex items-center gap-2 mb-4">
+                  <Search className="h-5 w-5 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por nome ou email..."
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                    className="max-w-md"
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    {filteredUsers.length} de {users.length} usuários
+                  </span>
+                </div>
+                {filteredUsers.map((u) => (
                   <Card key={u.id} className="border-2 border-accent">
                     <CardHeader 
                       className="cursor-pointer hover:bg-accent/5 transition-colors"
