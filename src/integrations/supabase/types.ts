@@ -14,6 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_announcements: {
+        Row: {
+          clicks_count: number
+          content: string
+          created_at: string
+          created_by: string | null
+          id: string
+          image_url: string | null
+          is_active: boolean
+          redirect_button_text: string | null
+          redirect_system: string | null
+          redirect_type: Database["public"]["Enums"]["announcement_redirect_type"]
+          redirect_url: string | null
+          title: string | null
+          views_count: number
+        }
+        Insert: {
+          clicks_count?: number
+          content: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          redirect_button_text?: string | null
+          redirect_system?: string | null
+          redirect_type?: Database["public"]["Enums"]["announcement_redirect_type"]
+          redirect_url?: string | null
+          title?: string | null
+          views_count?: number
+        }
+        Update: {
+          clicks_count?: number
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          redirect_button_text?: string | null
+          redirect_system?: string | null
+          redirect_type?: Database["public"]["Enums"]["announcement_redirect_type"]
+          redirect_url?: string | null
+          title?: string | null
+          views_count?: number
+        }
+        Relationships: []
+      }
       admin_favorite_users: {
         Row: {
           created_at: string | null
@@ -355,6 +403,38 @@ export type Database = {
         }
         Relationships: []
       }
+      user_announcement_views: {
+        Row: {
+          announcement_id: string
+          clicked: boolean
+          id: string
+          user_id: string
+          viewed_at: string
+        }
+        Insert: {
+          announcement_id: string
+          clicked?: boolean
+          id?: string
+          user_id: string
+          viewed_at?: string
+        }
+        Update: {
+          announcement_id?: string
+          clicked?: boolean
+          id?: string
+          user_id?: string
+          viewed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_announcement_views_announcement_id_fkey"
+            columns: ["announcement_id"]
+            isOneToOne: false
+            referencedRelation: "admin_announcements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string | null
@@ -460,6 +540,7 @@ export type Database = {
     }
     Enums: {
       admin_offer_status: "minerada" | "ruim" | "boa"
+      announcement_redirect_type: "none" | "custom_link" | "system"
       app_role: "admin" | "user"
     }
     CompositeTypes: {
@@ -589,6 +670,7 @@ export const Constants = {
   public: {
     Enums: {
       admin_offer_status: ["minerada", "ruim", "boa"],
+      announcement_redirect_type: ["none", "custom_link", "system"],
       app_role: ["admin", "user"],
     },
   },

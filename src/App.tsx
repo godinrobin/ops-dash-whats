@@ -6,6 +6,7 @@ import { HashRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
+import { AnnouncementPopup } from "@/components/AnnouncementPopup";
 import Home from "./pages/Home";
 import Index from "./pages/Index";
 import ProductMetrics from "./pages/ProductMetrics";
@@ -30,6 +31,7 @@ const App = () => (
       <Sonner />
       <HashRouter>
         <AuthProvider>
+          <AnnouncementPopup />
           <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
