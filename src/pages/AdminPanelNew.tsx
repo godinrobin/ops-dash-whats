@@ -156,6 +156,7 @@ const AdminPanelNew = () => {
   const [newAnnouncementSystems, setNewAnnouncementSystems] = useState<string[]>([]);
   const [uploadingAnnouncementImage, setUploadingAnnouncementImage] = useState(false);
   const [creatingAnnouncement, setCreatingAnnouncement] = useState(false);
+  const [showAnnouncementPreview, setShowAnnouncementPreview] = useState(false);
 
   useEffect(() => {
     loadAllData();
@@ -1197,23 +1198,34 @@ const AdminPanelNew = () => {
                       </div>
                     )}
 
-                    <Button
-                      onClick={createAnnouncement}
-                      disabled={creatingAnnouncement || !newAnnouncementContent.trim()}
-                      className="w-full"
-                    >
-                      {creatingAnnouncement ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Criando...
-                        </>
-                      ) : (
-                        <>
-                          <Megaphone className="mr-2 h-4 w-4" />
-                          Publicar Aviso
-                        </>
-                      )}
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowAnnouncementPreview(true)}
+                        disabled={!newAnnouncementContent.trim()}
+                        className="flex-1"
+                      >
+                        <Eye className="mr-2 h-4 w-4" />
+                        Visualizar
+                      </Button>
+                      <Button
+                        onClick={createAnnouncement}
+                        disabled={creatingAnnouncement || !newAnnouncementContent.trim()}
+                        className="flex-1"
+                      >
+                        {creatingAnnouncement ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Criando...
+                          </>
+                        ) : (
+                          <>
+                            <Megaphone className="mr-2 h-4 w-4" />
+                            Publicar
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
 
@@ -1351,6 +1363,84 @@ const AdminPanelNew = () => {
                 )}
               </TableBody>
             </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Preview do Aviso */}
+      <Dialog open={showAnnouncementPreview} onOpenChange={setShowAnnouncementPreview}>
+        <DialogContent className="max-w-lg border-accent">
+          <DialogHeader>
+            {newAnnouncementTitle && (
+              <DialogTitle className="text-xl text-center">
+                {newAnnouncementTitle}
+              </DialogTitle>
+            )}
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Imagem */}
+            {newAnnouncementImage && (
+              <div className="w-full rounded-lg overflow-hidden">
+                <img 
+                  src={newAnnouncementImage} 
+                  alt="Preview" 
+                  className="w-full h-auto object-contain max-h-64"
+                />
+              </div>
+            )}
+
+            {/* Conteúdo */}
+            <p className="text-center text-muted-foreground whitespace-pre-wrap">
+              {newAnnouncementContent || "Conteúdo do aviso..."}
+            </p>
+
+            {/* Sistemas */}
+            {newAnnouncementRedirectType === 'system' && newAnnouncementSystems.length > 0 && (
+              <div className="flex flex-wrap justify-center gap-3 pt-2">
+                {newAnnouncementSystems.map(systemId => {
+                  const system = SYSTEMS.find(s => s.id === systemId);
+                  if (!system) return null;
+                  return (
+                    <Button
+                      key={systemId}
+                      variant="outline"
+                      className="flex flex-col items-center gap-1 h-auto py-3 px-4 border-accent hover:bg-accent/10"
+                      onClick={() => {}}
+                    >
+                      <span className="text-2xl">{system.emoji}</span>
+                      <span className="text-xs">{system.name}</span>
+                    </Button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Botão de redirecionamento */}
+            {newAnnouncementRedirectType === 'custom_link' && newAnnouncementRedirectUrl && (
+              <div className="flex justify-center pt-2">
+                <Button className="bg-accent hover:bg-accent/90 text-accent-foreground">
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  {newAnnouncementButtonText || "Acessar"}
+                </Button>
+              </div>
+            )}
+
+            {/* Botão Fechar */}
+            <div className="flex justify-center pt-2">
+              <Button
+                variant="ghost"
+                onClick={() => setShowAnnouncementPreview(false)}
+                className="text-muted-foreground"
+              >
+                <X className="mr-2 h-4 w-4" />
+                Fechar
+              </Button>
+            </div>
+          </div>
+
+          <div className="text-center text-xs text-muted-foreground border-t pt-3 mt-3">
+            Este é um preview. O aviso ainda não foi publicado.
           </div>
         </DialogContent>
       </Dialog>
