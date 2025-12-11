@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X, Key, Loader2, UserPlus } from "lucide-react";
+import { Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X, Key, Loader2, UserPlus, Activity } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -67,6 +67,16 @@ interface OfferData {
   created_at: string;
 }
 
+interface ActivityData {
+  id: string;
+  user_id: string;
+  user_email: string;
+  username: string;
+  activity_type: string;
+  activity_name: string;
+  created_at: string;
+}
+
 const AdminPanelNew = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -75,6 +85,7 @@ const AdminPanelNew = () => {
   const [products, setProducts] = useState<ProductData[]>([]);
   const [metrics, setMetrics] = useState<MetricData[]>([]);
   const [offers, setOffers] = useState<OfferData[]>([]);
+  const [activities, setActivities] = useState<ActivityData[]>([]);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
 
   // UI State for hierarchical navigation
@@ -139,6 +150,7 @@ const AdminPanelNew = () => {
       setNumbers(data.numbers || []);
       setProducts(data.products || []);
       setOffers(data.offers || []);
+      setActivities(data.activities || []);
     } catch (err) {
       console.error("Error loading admin data:", err);
       toast.error("Erro ao carregar dados administrativos");
@@ -421,12 +433,13 @@ const AdminPanelNew = () => {
           </header>
 
           <Tabs defaultValue="metrics" className="w-full">
-            <TabsList className="grid w-full grid-cols-5 mb-6">
-              <TabsTrigger value="metrics">Métricas Usuários</TabsTrigger>
-              <TabsTrigger value="numbers">Números Usuários</TabsTrigger>
-              <TabsTrigger value="offers">Ofertas Usuários</TabsTrigger>
-              <TabsTrigger value="passwords">Resetar Senhas</TabsTrigger>
-              <TabsTrigger value="create-user">Criar Usuário</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-6 mb-6">
+              <TabsTrigger value="metrics">Métricas</TabsTrigger>
+              <TabsTrigger value="numbers">Números</TabsTrigger>
+              <TabsTrigger value="offers">Ofertas</TabsTrigger>
+              <TabsTrigger value="activities">Atividades</TabsTrigger>
+              <TabsTrigger value="passwords">Senhas</TabsTrigger>
+              <TabsTrigger value="create-user">Criar</TabsTrigger>
             </TabsList>
 
             {/* MÉTRICAS USUÁRIOS */}
@@ -696,6 +709,61 @@ const AdminPanelNew = () => {
                             </TableCell>
                           </TableRow>
                         ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* ATIVIDADES */}
+            <TabsContent value="activities">
+              <Card className="border-2 border-accent">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-accent" />
+                    Histórico de Atividades
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Usuário</TableHead>
+                          <TableHead>Sistema</TableHead>
+                          <TableHead>Data/Hora</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {activities.map((activity) => (
+                          <TableRow key={activity.id}>
+                            <TableCell className="font-medium">
+                              {activity.username !== 'N/A' ? activity.username : activity.user_email}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="border-accent/50">
+                                {activity.activity_name}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {new Date(activity.created_at).toLocaleString('pt-BR', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {activities.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={3} className="text-center text-muted-foreground">
+                              Nenhuma atividade registrada
+                            </TableCell>
+                          </TableRow>
+                        )}
                       </TableBody>
                     </Table>
                   </div>

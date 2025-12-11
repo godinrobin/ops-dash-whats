@@ -210,8 +210,29 @@ Deno.serve(async (req) => {
       }
     }) || []
 
+    // Buscar atividades dos usuários
+    const { data: activitiesData } = await supabaseClient
+      .from('user_activities')
+      .select('id, user_id, activity_type, activity_name, created_at')
+      .order('created_at', { ascending: false })
+      .limit(500)
+
+    const activities = activitiesData?.map(activity => {
+      const authUser = authUsers.users.find(u => u.id === activity.user_id)
+      const profile = profiles?.find(p => p.id === activity.user_id)
+      return {
+        id: activity.id,
+        user_id: activity.user_id,
+        user_email: authUser?.email || 'N/A',
+        username: profile?.username || 'N/A',
+        activity_type: activity.activity_type,
+        activity_name: activity.activity_name,
+        created_at: activity.created_at,
+      }
+    }) || []
+
     return new Response(
-      JSON.stringify({ users, numbers, products, offers, metrics }),
+      JSON.stringify({ users, numbers, products, offers, metrics, activities }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (error) {

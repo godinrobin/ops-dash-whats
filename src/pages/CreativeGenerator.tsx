@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, Download, ArrowLeft, Image as ImageIcon, Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 import creativeModel1 from "@/assets/creative-model-1.png";
 import creativeModel2 from "@/assets/creative-model-2.png";
 import creativeModel3 from "@/assets/creative-model-3.png";
@@ -50,6 +51,7 @@ const modelOptions = [
 ];
 
 const CreativeGenerator = () => {
+  useActivityTracker("page_visit", "Gerador de Criativo");
   const navigate = useNavigate();
   const [selectedModel, setSelectedModel] = useState("calm-beige");
   const [productName, setProductName] = useState("");

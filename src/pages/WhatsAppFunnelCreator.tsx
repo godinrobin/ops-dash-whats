@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Copy, Wand2, MessageSquare, Mic, Image, Video, FileText, ChevronDown, ChevronUp, Lightbulb, Edit, Plus, Save, Trash2, FolderOpen } from "lucide-react";
 import { TicketTagInput } from "@/components/TicketTagInput";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 
 interface FunnelMessage {
   type: "text" | "audio" | "image" | "video" | "ebook";
@@ -82,6 +83,7 @@ const toneOptions = [
 ];
 
 const WhatsAppFunnelCreator = () => {
+  useActivityTracker("page_visit", "Criador de Funil");
   const { user } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
