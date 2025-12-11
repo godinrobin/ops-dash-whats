@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, TrendingUp, TrendingDown, Minus, ExternalLink, Trash2, Edit, Maximize2, RefreshCw, Save } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { format, subDays } from "date-fns";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 
 interface TrackedOffer {
   id: string;
@@ -30,6 +31,7 @@ interface OfferMetric {
 }
 
 const TrackOfertas = () => {
+  useActivityTracker("page_visit", "Track Ofertas");
   const { user } = useAuth();
   const { toast } = useToast();
   const [offers, setOffers] = useState<TrackedOffer[]>([]);

@@ -2,25 +2,37 @@ import { useState } from "react";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Download, Play, Pause, Volume2 } from "lucide-react";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 
-const voices = [
-  { id: "Zg3wohd4gJs8guTdTXPb", name: "Voz de Mulher (35-40 anos)" },
-  { id: "d7rzPRu3dVSLsvbWCCts", name: "Voz de Mulher (Professora)" },
-  { id: "1O6NYpDRqdJzusqK717R", name: "Voz de Mulher Velha" },
-  { id: "4vbXGL1xAN936MeSCtyJ", name: "Voz de Pastor Na igreja" },
-  { id: "33GOY7Am9tnpSKYpFVxM", name: "Voz de Mulher Choramingando" },
-  { id: "6r7vE9xvBmx115WCR9tR", name: "Voz do FreiGilson" },
-  { id: "lXxITBwRsXFiIjsjn60h", name: "Voz de Carioca" },
-  { id: "ZA5HAcCWFlMQVFIL9S9a", name: "Voz de Homem (35-40 anos)" },
-  { id: "RMB4btomRahyVcqXwrav", name: "Voz de Homem Velho" },
+interface Voice {
+  id: string;
+  name: string;
+  category: 'mulher' | 'homem' | 'famosos' | 'bonus';
+}
+
+const voices: Voice[] = [
+  // Mulher
+  { id: "Zg3wohd4gJs8guTdTXPb", name: "Voz de Mulher (35-40 anos)", category: "mulher" },
+  { id: "d7rzPRu3dVSLsvbWCCts", name: "Voz de Mulher (Professora)", category: "mulher" },
+  { id: "1O6NYpDRqdJzusqK717R", name: "Voz de Mulher Velha", category: "mulher" },
+  { id: "33GOY7Am9tnpSKYpFVxM", name: "Voz de Mulher Choramingando", category: "mulher" },
+  // Homem
+  { id: "ZA5HAcCWFlMQVFIL9S9a", name: "Voz de Homem (35-40 anos)", category: "homem" },
+  { id: "RMB4btomRahyVcqXwrav", name: "Voz de Homem Velho", category: "homem" },
+  { id: "4vbXGL1xAN936MeSCtyJ", name: "Voz de Pastor Na igreja", category: "homem" },
+  // Famosos
+  { id: "6r7vE9xvBmx115WCR9tR", name: "Voz do FreiGilson", category: "famosos" },
+  // Bônus
+  { id: "lXxITBwRsXFiIjsjn60h", name: "Voz de Carioca", category: "bonus" },
 ];
 
 const AudioGenerator = () => {
+  useActivityTracker("page_visit", "Gerador de Áudio");
   const { toast } = useToast();
   const [text, setText] = useState("");
   const [selectedVoice, setSelectedVoice] = useState("");
@@ -147,11 +159,38 @@ const AudioGenerator = () => {
                     <SelectValue placeholder="Escolha uma voz..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {voices.map((voice) => (
-                      <SelectItem key={voice.id} value={voice.id}>
-                        {voice.name}
-                      </SelectItem>
-                    ))}
+                    <SelectGroup>
+                      <SelectLabel>👩 Mulher</SelectLabel>
+                      {voices.filter(v => v.category === 'mulher').map((voice) => (
+                        <SelectItem key={voice.id} value={voice.id}>
+                          {voice.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                    <SelectGroup>
+                      <SelectLabel>👨 Homem</SelectLabel>
+                      {voices.filter(v => v.category === 'homem').map((voice) => (
+                        <SelectItem key={voice.id} value={voice.id}>
+                          {voice.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                    <SelectGroup>
+                      <SelectLabel>⭐ Famosos</SelectLabel>
+                      {voices.filter(v => v.category === 'famosos').map((voice) => (
+                        <SelectItem key={voice.id} value={voice.id}>
+                          {voice.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                    <SelectGroup>
+                      <SelectLabel>🎁 Bônus</SelectLabel>
+                      {voices.filter(v => v.category === 'bonus').map((voice) => (
+                        <SelectItem key={voice.id} value={voice.id}>
+                          {voice.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </div>

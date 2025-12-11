@@ -8,11 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { ExternalLink, Plus, Pencil, Trash2, EyeOff, Eye, Search, Flame, Calendar, X, Star, Bookmark } from "lucide-react";
+import { ExternalLink, Plus, Pencil, Trash2, EyeOff, Eye, Search, Flame, Calendar, X, Star, Bookmark, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
 import { toast } from "sonner";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 
 interface ZapSpyOffer {
   id: string;
@@ -28,13 +29,15 @@ interface ZapSpyOffer {
 }
 
 const ZapSpy = () => {
+  useActivityTracker("page_visit", "Zap Spy");
   const { user } = useAuth();
   const { isAdmin } = useAdminStatus();
   const [offers, setOffers] = useState<ZapSpyOffer[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedNiche, setSelectedNiche] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<'none' | 'most_scaled' | 'oldest'>('none');
+  const [sortBy, setSortBy] = useState<'none' | 'most_scaled' | 'oldest'>('most_scaled');
+  const [savedOfferLinks, setSavedOfferLinks] = useState<Set<string>>(new Set());
   
   // Admin form state
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -68,6 +71,12 @@ const ZapSpy = () => {
       return;
     }
     
+    // Check if already saved
+    if (savedOfferLinks.has(offer.ad_library_link)) {
+      toast.info("Você já salvou esta oferta");
+      return;
+    }
+    
     setSavingOfferId(offer.id);
     try {
       const { error } = await supabase
@@ -80,18 +89,39 @@ const ZapSpy = () => {
 
       if (error) {
         if (error.code === '23505') {
-          toast.error("Você já salvou esta oferta");
+          toast.info("Você já salvou esta oferta");
+          setSavedOfferLinks(prev => new Set(prev).add(offer.ad_library_link));
         } else {
           throw error;
         }
       } else {
         toast.success("Oferta salva no Track Ofertas!");
+        setSavedOfferLinks(prev => new Set(prev).add(offer.ad_library_link));
       }
     } catch (err) {
       console.error("Error saving offer:", err);
       toast.error("Erro ao salvar oferta");
     } finally {
       setSavingOfferId(null);
+    }
+  };
+
+  // Load user's saved offers to check which are already saved
+  const loadSavedOffers = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from("tracked_offers")
+        .select("ad_library_link")
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+      
+      const links = new Set((data || []).map(o => o.ad_library_link));
+      setSavedOfferLinks(links);
+    } catch (err) {
+      console.error("Error loading saved offers:", err);
     }
   };
 
@@ -103,6 +133,7 @@ const ZapSpy = () => {
 
   useEffect(() => {
     loadOffers();
+    loadSavedOffers();
   }, [user]);
 
   const loadOffers = async () => {
@@ -642,13 +673,25 @@ const ZapSpy = () => {
                       Ver Anúncios
                     </Button>
                     <Button
-                      variant="outline"
-                      className="w-full border-accent/50 hover:bg-accent/10"
+                      variant={savedOfferLinks.has(offer.ad_library_link) ? "default" : "outline"}
+                      className={savedOfferLinks.has(offer.ad_library_link) 
+                        ? "w-full bg-green-600 hover:bg-green-700 text-white" 
+                        : "w-full border-accent/50 hover:bg-accent/10"
+                      }
                       onClick={() => handleSaveOfferToTrack(offer)}
                       disabled={savingOfferId === offer.id}
                     >
-                      <Bookmark className="h-4 w-4 mr-2" />
-                      {savingOfferId === offer.id ? "Salvando..." : "Salvar Oferta"}
+                      {savedOfferLinks.has(offer.ad_library_link) ? (
+                        <>
+                          <Check className="h-4 w-4 mr-2" />
+                          Oferta Salva
+                        </>
+                      ) : (
+                        <>
+                          <Bookmark className="h-4 w-4 mr-2" />
+                          {savingOfferId === offer.id ? "Salvando..." : "Salvar Oferta"}
+                        </>
+                      )}
                     </Button>
                   </CardContent>
                 </Card>
