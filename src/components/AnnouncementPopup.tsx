@@ -15,6 +15,7 @@ interface Announcement {
   redirect_url: string | null;
   redirect_system: string | null;
   redirect_button_text: string | null;
+  scheduled_at: string | null;
 }
 
 // Mapeamento dos sistemas disponíveis
@@ -64,8 +65,14 @@ export const AnnouncementPopup = () => {
 
       const viewedIds = new Set(views?.map(v => v.announcement_id) || []);
 
-      // Encontrar o primeiro aviso não visto
-      const unseenAnnouncement = announcements.find(a => !viewedIds.has(a.id));
+      // Encontrar o primeiro aviso não visto que não está agendado para o futuro
+      const now = new Date();
+      const unseenAnnouncement = announcements.find(a => {
+        if (viewedIds.has(a.id)) return false;
+        // Se tem scheduled_at e ainda não chegou a hora, não mostrar
+        if (a.scheduled_at && new Date(a.scheduled_at) > now) return false;
+        return true;
+      });
 
       if (unseenAnnouncement) {
         setAnnouncement(unseenAnnouncement as Announcement);
@@ -225,18 +232,6 @@ export const AnnouncementPopup = () => {
               </Button>
             </div>
           )}
-
-          {/* Botão Fechar */}
-          <div className="flex justify-center pt-2">
-            <Button
-              variant="ghost"
-              onClick={handleClose}
-              className="text-muted-foreground"
-            >
-              <X className="mr-2 h-4 w-4" />
-              Fechar
-            </Button>
-          </div>
         </div>
       </DialogContent>
     </Dialog>
