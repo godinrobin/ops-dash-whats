@@ -27,6 +27,7 @@ export type Database = {
           redirect_system: string | null
           redirect_type: Database["public"]["Enums"]["announcement_redirect_type"]
           redirect_url: string | null
+          scheduled_at: string | null
           title: string | null
           views_count: number
         }
@@ -42,6 +43,7 @@ export type Database = {
           redirect_system?: string | null
           redirect_type?: Database["public"]["Enums"]["announcement_redirect_type"]
           redirect_url?: string | null
+          scheduled_at?: string | null
           title?: string | null
           views_count?: number
         }
@@ -57,6 +59,7 @@ export type Database = {
           redirect_system?: string | null
           redirect_type?: Database["public"]["Enums"]["announcement_redirect_type"]
           redirect_url?: string | null
+          scheduled_at?: string | null
           title?: string | null
           views_count?: number
         }

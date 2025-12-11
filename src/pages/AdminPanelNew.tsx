@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X, Key, Loader2, UserPlus, Activity, Megaphone, Eye, MousePointer, Trash2, Image } from "lucide-react";
+import { Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X, Key, Loader2, UserPlus, Activity, Megaphone, Eye, MousePointer, Trash2, Image, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -44,6 +44,7 @@ interface AnnouncementData {
   views_count: number;
   clicks_count: number;
   created_at: string;
+  scheduled_at: string | null;
 }
 
 interface UserData {
@@ -157,6 +158,9 @@ const AdminPanelNew = () => {
   const [uploadingAnnouncementImage, setUploadingAnnouncementImage] = useState(false);
   const [creatingAnnouncement, setCreatingAnnouncement] = useState(false);
   const [showAnnouncementPreview, setShowAnnouncementPreview] = useState(false);
+  const [newAnnouncementScheduled, setNewAnnouncementScheduled] = useState(false);
+  const [newAnnouncementScheduleDate, setNewAnnouncementScheduleDate] = useState("");
+  const [newAnnouncementScheduleTime, setNewAnnouncementScheduleTime] = useState("");
 
   useEffect(() => {
     loadAllData();
@@ -261,6 +265,16 @@ const AdminPanelNew = () => {
       return;
     }
 
+    // Validar agendamento
+    let scheduledAt: string | null = null;
+    if (newAnnouncementScheduled) {
+      if (!newAnnouncementScheduleDate || !newAnnouncementScheduleTime) {
+        toast.error("Preencha a data e hora do agendamento");
+        return;
+      }
+      scheduledAt = `${newAnnouncementScheduleDate}T${newAnnouncementScheduleTime}:00`;
+    }
+
     setCreatingAnnouncement(true);
     try {
       const announcementData = {
@@ -272,6 +286,8 @@ const AdminPanelNew = () => {
         redirect_url: newAnnouncementRedirectType === 'custom_link' ? newAnnouncementRedirectUrl.trim() : null,
         redirect_system: newAnnouncementRedirectType === 'system' ? newAnnouncementSystems.join(",") : null,
         redirect_button_text: newAnnouncementRedirectType === 'custom_link' ? newAnnouncementButtonText.trim() || null : null,
+        scheduled_at: scheduledAt,
+        is_active: !newAnnouncementScheduled, // Se agendado, começa inativo
       };
 
       const { error } = await supabase
@@ -280,7 +296,9 @@ const AdminPanelNew = () => {
 
       if (error) throw error;
 
-      toast.success("Aviso criado com sucesso!");
+      toast.success(newAnnouncementScheduled 
+        ? "Aviso agendado com sucesso!" 
+        : "Aviso publicado com sucesso!");
       
       // Reset form
       setNewAnnouncementTitle("");
@@ -290,6 +308,9 @@ const AdminPanelNew = () => {
       setNewAnnouncementRedirectUrl("");
       setNewAnnouncementButtonText("");
       setNewAnnouncementSystems([]);
+      setNewAnnouncementScheduled(false);
+      setNewAnnouncementScheduleDate("");
+      setNewAnnouncementScheduleTime("");
       
       loadAnnouncements();
     } catch (err) {
@@ -1198,6 +1219,42 @@ const AdminPanelNew = () => {
                       </div>
                     )}
 
+                    {/* Agendamento */}
+                    <div className="space-y-3 p-3 rounded-lg border border-border">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="schedule-announcement"
+                          checked={newAnnouncementScheduled}
+                          onCheckedChange={(checked) => setNewAnnouncementScheduled(checked === true)}
+                        />
+                        <Label htmlFor="schedule-announcement" className="cursor-pointer">
+                          Agendar publicação
+                        </Label>
+                      </div>
+                      
+                      {newAnnouncementScheduled && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Data</Label>
+                            <Input
+                              type="date"
+                              value={newAnnouncementScheduleDate}
+                              onChange={(e) => setNewAnnouncementScheduleDate(e.target.value)}
+                              min={new Date().toISOString().split('T')[0]}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Hora</Label>
+                            <Input
+                              type="time"
+                              value={newAnnouncementScheduleTime}
+                              onChange={(e) => setNewAnnouncementScheduleTime(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
@@ -1216,12 +1273,12 @@ const AdminPanelNew = () => {
                         {creatingAnnouncement ? (
                           <>
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Criando...
+                            {newAnnouncementScheduled ? "Agendando..." : "Publicando..."}
                           </>
                         ) : (
                           <>
                             <Megaphone className="mr-2 h-4 w-4" />
-                            Publicar
+                            {newAnnouncementScheduled ? "Agendar" : "Publicar"}
                           </>
                         )}
                       </Button>
@@ -1268,10 +1325,21 @@ const AdminPanelNew = () => {
                                     </span>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-2 mt-2">
+                                <div className="flex flex-wrap items-center gap-2 mt-2">
                                   <Badge variant={announcement.is_active ? "default" : "secondary"}>
                                     {announcement.is_active ? "Ativo" : "Inativo"}
                                   </Badge>
+                                  {announcement.scheduled_at && !announcement.is_active && (
+                                    <Badge variant="outline" className="border-accent text-accent">
+                                      <Clock className="h-3 w-3 mr-1" />
+                                      {new Date(announcement.scheduled_at).toLocaleString('pt-BR', {
+                                        day: '2-digit',
+                                        month: '2-digit',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })}
+                                    </Badge>
+                                  )}
                                   <span className="text-xs text-muted-foreground">
                                     {new Date(announcement.created_at).toLocaleDateString('pt-BR')}
                                   </span>
@@ -1425,18 +1493,6 @@ const AdminPanelNew = () => {
                 </Button>
               </div>
             )}
-
-            {/* Botão Fechar */}
-            <div className="flex justify-center pt-2">
-              <Button
-                variant="ghost"
-                onClick={() => setShowAnnouncementPreview(false)}
-                className="text-muted-foreground"
-              >
-                <X className="mr-2 h-4 w-4" />
-                Fechar
-              </Button>
-            </div>
           </div>
 
           <div className="text-center text-xs text-muted-foreground border-t pt-3 mt-3">
