@@ -1,19 +1,50 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Header } from "@/components/Header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X, Key, Loader2, UserPlus, Activity } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X, Key, Loader2, UserPlus, Activity, Megaphone, Eye, MousePointer, Trash2, Image } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 type AdminOfferStatus = 'minerada' | 'ruim' | 'boa' | null;
+type AnnouncementRedirectType = 'none' | 'custom_link' | 'system';
+
+// Sistemas disponíveis para redirecionamento
+const SYSTEMS = [
+  { id: "metricas", name: "Sistema de Métricas", emoji: "📊" },
+  { id: "organizador-numeros", name: "Organizador de Números", emoji: "📱" },
+  { id: "track-ofertas", name: "Track Ofertas", emoji: "🎯" },
+  { id: "criador-funil", name: "Criador de Funil", emoji: "💬" },
+  { id: "gerador-criativos", name: "Gerador de Criativos", emoji: "🎨" },
+  { id: "gerador-audio", name: "Gerador de Áudio", emoji: "🎙️" },
+  { id: "transcricao-audio", name: "Transcrição de Áudio", emoji: "📝" },
+  { id: "zap-spy", name: "Zap Spy", emoji: "🔍" },
+];
+
+interface AnnouncementData {
+  id: string;
+  title: string | null;
+  content: string;
+  image_url: string | null;
+  redirect_type: AnnouncementRedirectType;
+  redirect_url: string | null;
+  redirect_system: string | null;
+  redirect_button_text: string | null;
+  is_active: boolean;
+  views_count: number;
+  clicks_count: number;
+  created_at: string;
+}
 
 interface UserData {
   id: string;
@@ -114,8 +145,21 @@ const AdminPanelNew = () => {
   const [newUserPassword, setNewUserPassword] = useState("123456");
   const [creatingUser, setCreatingUser] = useState(false);
 
+  // Announcements state
+  const [announcements, setAnnouncements] = useState<AnnouncementData[]>([]);
+  const [newAnnouncementTitle, setNewAnnouncementTitle] = useState("");
+  const [newAnnouncementContent, setNewAnnouncementContent] = useState("");
+  const [newAnnouncementImage, setNewAnnouncementImage] = useState<string | null>(null);
+  const [newAnnouncementRedirectType, setNewAnnouncementRedirectType] = useState<AnnouncementRedirectType>("none");
+  const [newAnnouncementRedirectUrl, setNewAnnouncementRedirectUrl] = useState("");
+  const [newAnnouncementButtonText, setNewAnnouncementButtonText] = useState("");
+  const [newAnnouncementSystems, setNewAnnouncementSystems] = useState<string[]>([]);
+  const [uploadingAnnouncementImage, setUploadingAnnouncementImage] = useState(false);
+  const [creatingAnnouncement, setCreatingAnnouncement] = useState(false);
+
   useEffect(() => {
     loadAllData();
+    loadAnnouncements();
   }, [user]);
 
   const loadAllData = async () => {
@@ -157,6 +201,142 @@ const AdminPanelNew = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadAnnouncements = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("admin_announcements")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setAnnouncements((data || []) as AnnouncementData[]);
+    } catch (err) {
+      console.error("Error loading announcements:", err);
+    }
+  };
+
+  // Handle image paste for announcements
+  const handleAnnouncementImagePaste = useCallback(async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+
+        setUploadingAnnouncementImage(true);
+        try {
+          const fileName = `announcement-${Date.now()}.${file.type.split('/')[1]}`;
+          const { data, error } = await supabase.storage
+            .from('announcement-images')
+            .upload(fileName, file);
+
+          if (error) throw error;
+
+          const { data: urlData } = supabase.storage
+            .from('announcement-images')
+            .getPublicUrl(data.path);
+
+          setNewAnnouncementImage(urlData.publicUrl);
+          toast.success("Imagem colada com sucesso!");
+        } catch (err) {
+          console.error("Error uploading image:", err);
+          toast.error("Erro ao fazer upload da imagem");
+        } finally {
+          setUploadingAnnouncementImage(false);
+        }
+        break;
+      }
+    }
+  }, []);
+
+  const createAnnouncement = async () => {
+    if (!newAnnouncementContent.trim()) {
+      toast.error("O conteúdo do aviso é obrigatório");
+      return;
+    }
+
+    setCreatingAnnouncement(true);
+    try {
+      const announcementData = {
+        created_by: user?.id,
+        title: newAnnouncementTitle.trim() || null,
+        content: newAnnouncementContent.trim(),
+        image_url: newAnnouncementImage,
+        redirect_type: newAnnouncementRedirectType,
+        redirect_url: newAnnouncementRedirectType === 'custom_link' ? newAnnouncementRedirectUrl.trim() : null,
+        redirect_system: newAnnouncementRedirectType === 'system' ? newAnnouncementSystems.join(",") : null,
+        redirect_button_text: newAnnouncementRedirectType === 'custom_link' ? newAnnouncementButtonText.trim() || null : null,
+      };
+
+      const { error } = await supabase
+        .from("admin_announcements")
+        .insert(announcementData);
+
+      if (error) throw error;
+
+      toast.success("Aviso criado com sucesso!");
+      
+      // Reset form
+      setNewAnnouncementTitle("");
+      setNewAnnouncementContent("");
+      setNewAnnouncementImage(null);
+      setNewAnnouncementRedirectType("none");
+      setNewAnnouncementRedirectUrl("");
+      setNewAnnouncementButtonText("");
+      setNewAnnouncementSystems([]);
+      
+      loadAnnouncements();
+    } catch (err) {
+      console.error("Error creating announcement:", err);
+      toast.error("Erro ao criar aviso");
+    } finally {
+      setCreatingAnnouncement(false);
+    }
+  };
+
+  const toggleAnnouncementActive = async (id: string, currentActive: boolean) => {
+    try {
+      const { error } = await supabase
+        .from("admin_announcements")
+        .update({ is_active: !currentActive })
+        .eq("id", id);
+
+      if (error) throw error;
+      toast.success(currentActive ? "Aviso desativado" : "Aviso ativado");
+      loadAnnouncements();
+    } catch (err) {
+      console.error("Error toggling announcement:", err);
+      toast.error("Erro ao alterar status do aviso");
+    }
+  };
+
+  const deleteAnnouncement = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from("admin_announcements")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+      toast.success("Aviso excluído");
+      loadAnnouncements();
+    } catch (err) {
+      console.error("Error deleting announcement:", err);
+      toast.error("Erro ao excluir aviso");
+    }
+  };
+
+  const toggleSystemSelection = (systemId: string) => {
+    setNewAnnouncementSystems(prev => 
+      prev.includes(systemId) 
+        ? prev.filter(s => s !== systemId)
+        : [...prev, systemId]
+    );
   };
 
   const toggleFavorite = async (userId: string) => {
@@ -433,11 +613,12 @@ const AdminPanelNew = () => {
           </header>
 
           <Tabs defaultValue="metrics" className="w-full">
-            <TabsList className="grid w-full grid-cols-6 mb-6">
+            <TabsList className="grid w-full grid-cols-7 mb-6">
               <TabsTrigger value="metrics">Métricas</TabsTrigger>
               <TabsTrigger value="numbers">Números</TabsTrigger>
               <TabsTrigger value="offers">Ofertas</TabsTrigger>
               <TabsTrigger value="activities">Atividades</TabsTrigger>
+              <TabsTrigger value="announcements">Avisos</TabsTrigger>
               <TabsTrigger value="passwords">Senhas</TabsTrigger>
               <TabsTrigger value="create-user">Criar</TabsTrigger>
             </TabsList>
@@ -878,6 +1059,242 @@ const AdminPanelNew = () => {
                   </p>
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            {/* AVISOS */}
+            <TabsContent value="announcements">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Criar Novo Aviso */}
+                <Card className="border-2 border-accent">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Megaphone className="h-5 w-5 text-accent" />
+                      Criar Novo Aviso
+                    </CardTitle>
+                    <CardDescription>
+                      O aviso será exibido uma única vez para cada usuário
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Título (opcional)</Label>
+                      <Input
+                        placeholder="Título do aviso"
+                        value={newAnnouncementTitle}
+                        onChange={(e) => setNewAnnouncementTitle(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Conteúdo *</Label>
+                      <Textarea
+                        placeholder="Escreva o conteúdo do aviso..."
+                        value={newAnnouncementContent}
+                        onChange={(e) => setNewAnnouncementContent(e.target.value)}
+                        onPaste={handleAnnouncementImagePaste}
+                        rows={4}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Imagem (opcional) - Cole com Ctrl+V</Label>
+                      <div 
+                        className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-accent/50 transition-colors"
+                        onPaste={handleAnnouncementImagePaste}
+                        tabIndex={0}
+                      >
+                        {uploadingAnnouncementImage ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                            <span>Fazendo upload...</span>
+                          </div>
+                        ) : newAnnouncementImage ? (
+                          <div className="relative">
+                            <img 
+                              src={newAnnouncementImage} 
+                              alt="Preview" 
+                              className="max-h-40 mx-auto rounded"
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="absolute top-0 right-0 h-6 w-6 bg-destructive/80 hover:bg-destructive"
+                              onClick={() => setNewAnnouncementImage(null)}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                            <Image className="h-8 w-8" />
+                            <span className="text-sm">Clique aqui e cole uma imagem (Ctrl+V)</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Tipo de Redirecionamento</Label>
+                      <Select 
+                        value={newAnnouncementRedirectType} 
+                        onValueChange={(v) => setNewAnnouncementRedirectType(v as AnnouncementRedirectType)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Nenhum (apenas informativo)</SelectItem>
+                          <SelectItem value="custom_link">Link personalizado</SelectItem>
+                          <SelectItem value="system">Sistemas da plataforma</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {newAnnouncementRedirectType === 'custom_link' && (
+                      <>
+                        <div className="space-y-2">
+                          <Label>URL do Link</Label>
+                          <Input
+                            placeholder="https://exemplo.com"
+                            value={newAnnouncementRedirectUrl}
+                            onChange={(e) => setNewAnnouncementRedirectUrl(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Texto do Botão (opcional)</Label>
+                          <Input
+                            placeholder="Acessar"
+                            value={newAnnouncementButtonText}
+                            onChange={(e) => setNewAnnouncementButtonText(e.target.value)}
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {newAnnouncementRedirectType === 'system' && (
+                      <div className="space-y-2">
+                        <Label>Selecione os Sistemas</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {SYSTEMS.map(system => (
+                            <div
+                              key={system.id}
+                              className={`flex items-center gap-2 p-2 rounded border cursor-pointer transition-colors ${
+                                newAnnouncementSystems.includes(system.id)
+                                  ? 'border-accent bg-accent/10'
+                                  : 'border-border hover:border-accent/50'
+                              }`}
+                              onClick={() => toggleSystemSelection(system.id)}
+                            >
+                              <Checkbox
+                                checked={newAnnouncementSystems.includes(system.id)}
+                                onCheckedChange={() => toggleSystemSelection(system.id)}
+                              />
+                              <span className="text-lg">{system.emoji}</span>
+                              <span className="text-sm truncate">{system.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <Button
+                      onClick={createAnnouncement}
+                      disabled={creatingAnnouncement || !newAnnouncementContent.trim()}
+                      className="w-full"
+                    >
+                      {creatingAnnouncement ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Criando...
+                        </>
+                      ) : (
+                        <>
+                          <Megaphone className="mr-2 h-4 w-4" />
+                          Publicar Aviso
+                        </>
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                {/* Histórico de Avisos */}
+                <Card className="border-2 border-accent">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Activity className="h-5 w-5 text-accent" />
+                      Histórico de Avisos
+                    </CardTitle>
+                    <CardDescription>
+                      {announcements.length} aviso{announcements.length !== 1 ? 's' : ''} cadastrado{announcements.length !== 1 ? 's' : ''}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                      {announcements.map(announcement => (
+                        <Card key={announcement.id} className={`border ${announcement.is_active ? 'border-green-500/50' : 'border-muted'}`}>
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                {announcement.title && (
+                                  <h4 className="font-semibold truncate">{announcement.title}</h4>
+                                )}
+                                <p className="text-sm text-muted-foreground line-clamp-2">
+                                  {announcement.content}
+                                </p>
+                                <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                                  <span className="flex items-center gap-1">
+                                    <Eye className="h-3 w-3" />
+                                    {announcement.views_count}
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <MousePointer className="h-3 w-3" />
+                                    {announcement.clicks_count}
+                                  </span>
+                                  {announcement.views_count > 0 && (
+                                    <span>
+                                      ({((announcement.clicks_count / announcement.views_count) * 100).toFixed(1)}% CTR)
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <Badge variant={announcement.is_active ? "default" : "secondary"}>
+                                    {announcement.is_active ? "Ativo" : "Inativo"}
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    {new Date(announcement.created_at).toLocaleDateString('pt-BR')}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => toggleAnnouncementActive(announcement.id, announcement.is_active)}
+                                >
+                                  {announcement.is_active ? "Desativar" : "Ativar"}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => deleteAnnouncement(announcement.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                      {announcements.length === 0 && (
+                        <p className="text-center text-muted-foreground py-8">
+                          Nenhum aviso criado ainda
+                        </p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </TabsContent>
           </Tabs>
         </div>
