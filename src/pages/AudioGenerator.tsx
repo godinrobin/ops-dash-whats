@@ -17,18 +17,18 @@ interface Voice {
 
 const voices: Voice[] = [
   // Mulher
-  { id: "Zg3wohd4gJs8guTdTXPb", name: "Voz de Mulher (35-40 anos)", category: "mulher" },
-  { id: "d7rzPRu3dVSLsvbWCCts", name: "Voz de Mulher (Professora)", category: "mulher" },
+  { id: "Zg3wohd4gJs8guTdTXPb", name: "Voz de Taróloga", category: "mulher" },
+  { id: "d7rzPRu3dVSLsvbWCCts", name: "Voz para Atividade Infantil", category: "mulher" },
   { id: "1O6NYpDRqdJzusqK717R", name: "Voz de Mulher Velha", category: "mulher" },
-  { id: "33GOY7Am9tnpSKYpFVxM", name: "Voz de Mulher Choramingando", category: "mulher" },
+  { id: "EvpLGWrX1AwQb1i7PLlO", name: "Voz de Influencer", category: "mulher" },
+  { id: "rRfxJNvibLZ8tabPQWMQ", name: "Voz de Tiktok", category: "mulher" },
+  { id: "TU0AKFEDB4rOIzrirWl0", name: "Voz de IA", category: "mulher" },
   // Homem
-  { id: "ZA5HAcCWFlMQVFIL9S9a", name: "Voz de Homem (35-40 anos)", category: "homem" },
+  { id: "4vbXGL1xAN936MeSCtyJ", name: "Voz de Pastor na Igreja", category: "homem" },
+  { id: "ZA5HAcCWFlMQVFIL9S9a", name: "Voz de Homem Séria", category: "homem" },
   { id: "RMB4btomRahyVcqXwrav", name: "Voz de Homem Velho", category: "homem" },
-  { id: "4vbXGL1xAN936MeSCtyJ", name: "Voz de Pastor Na igreja", category: "homem" },
-  // Famosos
-  { id: "6r7vE9xvBmx115WCR9tR", name: "Voz do FreiGilson", category: "famosos" },
   // Bônus
-  { id: "lXxITBwRsXFiIjsjn60h", name: "Voz de Carioca", category: "bonus" },
+  { id: "6r7vE9xvBmx115WCR9tR", name: "Voz do Frei Gilson", category: "bonus" },
 ];
 
 const AudioGenerator = () => {
@@ -170,14 +170,6 @@ const AudioGenerator = () => {
                     <SelectGroup>
                       <SelectLabel>👨 Homem</SelectLabel>
                       {voices.filter(v => v.category === 'homem').map((voice) => (
-                        <SelectItem key={voice.id} value={voice.id}>
-                          {voice.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                    <SelectGroup>
-                      <SelectLabel>⭐ Famosos</SelectLabel>
-                      {voices.filter(v => v.category === 'famosos').map((voice) => (
                         <SelectItem key={voice.id} value={voice.id}>
                           {voice.name}
                         </SelectItem>

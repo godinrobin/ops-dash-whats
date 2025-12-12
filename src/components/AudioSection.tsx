@@ -44,15 +44,19 @@ interface Voice {
 }
 
 const voices: Voice[] = [
-  { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Mulher 35-40 anos', category: 'mulher' },
-  { id: 'FGY2WhTYpPnrIDTdsKH5', name: 'Mulher Professor', category: 'mulher' },
-  { id: 'XB0fDUnXU5powFXDhCwa', name: 'Mulher Idosa', category: 'mulher' },
-  { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Homem 35-40 anos', category: 'homem' },
-  { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Homem Idoso', category: 'homem' },
-  { id: 'nPczCjzI2devNBz1zQrb', name: 'Pastor na Igreja', category: 'famosos' },
-  { id: 'cjVigY5qzO86Huf0OWal', name: 'FreiGilson', category: 'famosos' },
-  { id: 'cgSgspJ2msm6clMCkdW9', name: 'Mulher Choramingando', category: 'bonus' },
-  { id: 'bIHbv24MWmeRgasZH58o', name: 'Carioca', category: 'bonus' },
+  // Mulher
+  { id: 'Zg3wohd4gJs8guTdTXPb', name: 'Voz de Taróloga', category: 'mulher' },
+  { id: 'd7rzPRu3dVSLsvbWCCts', name: 'Voz para Atividade Infantil', category: 'mulher' },
+  { id: '1O6NYpDRqdJzusqK717R', name: 'Voz de Mulher Velha', category: 'mulher' },
+  { id: 'EvpLGWrX1AwQb1i7PLlO', name: 'Voz de Influencer', category: 'mulher' },
+  { id: 'rRfxJNvibLZ8tabPQWMQ', name: 'Voz de Tiktok', category: 'mulher' },
+  { id: 'TU0AKFEDB4rOIzrirWl0', name: 'Voz de IA', category: 'mulher' },
+  // Homem
+  { id: '4vbXGL1xAN936MeSCtyJ', name: 'Voz de Pastor na Igreja', category: 'homem' },
+  { id: 'ZA5HAcCWFlMQVFIL9S9a', name: 'Voz de Homem Séria', category: 'homem' },
+  { id: 'RMB4btomRahyVcqXwrav', name: 'Voz de Homem Velho', category: 'homem' },
+  // Bônus
+  { id: '6r7vE9xvBmx115WCR9tR', name: 'Voz do Frei Gilson', category: 'bonus' },
 ];
 
 const PREVIEW_TEXT = "Esta é a voz selecionada, gostou?";
@@ -867,12 +871,11 @@ export function AudioSection({
                   
                   {/* Voice list with preview buttons */}
                   <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                    {['mulher', 'homem', 'famosos', 'bonus'].map((category) => (
+                    {['mulher', 'homem', 'bonus'].map((category) => (
                       <div key={category} className="space-y-1">
                         <p className="text-xs font-semibold text-muted-foreground uppercase px-2">
-                          {category === 'mulher' ? 'Mulher' : 
-                           category === 'homem' ? 'Homem' : 
-                           category === 'famosos' ? 'Famosos' : 'Bônus'}
+                          {category === 'mulher' ? '👩 Voz de Mulher' : 
+                           category === 'homem' ? '👨 Voz de Homem' : '🎁 Bônus'}
                         </p>
                         {voices.filter(v => v.category === category).map(voice => (
                           <div 
