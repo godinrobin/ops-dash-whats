@@ -21,7 +21,8 @@ import {
   XCircle,
   Loader2,
   Archive,
-  Eye
+  Eye,
+  Pause
 } from "lucide-react";
 
 interface VideoClip {
@@ -50,6 +51,7 @@ export default function VideoVariationGenerator() {
   const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>([]);
   const [previewVideo, setPreviewVideo] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
 
   const totalVariations = hookVideos.length * bodyVideos.length * ctaVideos.length;
   const estimatedTimeMinutes = totalVariations * 2; // ~2 min per video
@@ -192,6 +194,8 @@ export default function VideoVariationGenerator() {
 
   // Poll for status updates
   useEffect(() => {
+    if (isPaused) return;
+
     const pendingVideos = generatedVideos.filter(v => 
       v.status === 'queued' || v.status === 'rendering'
     );
@@ -199,11 +203,13 @@ export default function VideoVariationGenerator() {
     if (pendingVideos.length === 0) return;
 
     const interval = setInterval(() => {
-      pendingVideos.forEach(v => checkVideoStatus(v.renderId));
+      if (!isPaused) {
+        pendingVideos.forEach(v => checkVideoStatus(v.renderId));
+      }
     }, 10000); // Check every 10 seconds
 
     return () => clearInterval(interval);
-  }, [generatedVideos, checkVideoStatus]);
+  }, [generatedVideos, checkVideoStatus, isPaused]);
 
   const downloadVideo = async (url: string, name: string) => {
     try {
@@ -422,6 +428,26 @@ export default function VideoVariationGenerator() {
                         <XCircle className="h-4 w-4 text-destructive" />
                         <span>{failedCount}</span>
                       </div>
+                    )}
+                    {pendingCount > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsPaused(!isPaused)}
+                        className={isPaused ? "border-green-500 text-green-500" : "border-destructive text-destructive"}
+                      >
+                        {isPaused ? (
+                          <>
+                            <Play className="mr-2 h-4 w-4" />
+                            Continuar
+                          </>
+                        ) : (
+                          <>
+                            <Pause className="mr-2 h-4 w-4" />
+                            Pausar
+                          </>
+                        )}
+                      </Button>
                     )}
                     {completedCount > 0 && (
                       <Button
