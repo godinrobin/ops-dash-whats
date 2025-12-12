@@ -144,53 +144,54 @@ export default function VideoVariationGenerator() {
     };
   }, []);
 
-  // Recovery: check for pending jobs on page load and resume polling
+  // Recovery: load all jobs (pending + completed) on page load
   useEffect(() => {
-    const recoverPendingJobs = async () => {
+    const loadExistingJobs = async () => {
       if (!user) return;
 
       try {
-        // Fetch jobs from last 2 hours that are still queued or processing
-        const { data: pendingJobs, error } = await supabase
+        // Fetch all jobs from last 24 hours (completed, pending, and failed)
+        const { data: allJobs, error } = await supabase
           .from('video_generation_jobs')
           .select('*')
           .eq('user_id', user.id)
-          .in('status', ['queued', 'processing'])
-          .gte('created_at', new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString())
+          .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
           .order('created_at', { ascending: true });
 
         if (error) {
-          console.error('Error fetching pending jobs:', error);
+          console.error('Error fetching jobs:', error);
           return;
         }
 
-        if (pendingJobs && pendingJobs.length > 0) {
-          console.log(`Recovering ${pendingJobs.length} pending jobs`);
+        if (allJobs && allJobs.length > 0) {
+          console.log(`Loading ${allJobs.length} existing jobs`);
           
           // Convert database jobs to GeneratedVideo format
-          const recoveredVideos: GeneratedVideo[] = pendingJobs.map((job, index) => ({
+          const existingVideos: GeneratedVideo[] = allJobs.map((job) => ({
             id: job.id,
             name: job.variation_name,
-            status: job.status as 'queued' | 'processing',
+            status: job.status as 'queued' | 'processing' | 'done' | 'failed',
             requestId: job.render_id,
             responseUrl: `https://queue.fal.run/fal-ai/ffmpeg-api/requests/${job.render_id}`,
             url: job.video_url || undefined
           }));
 
-          setGeneratedVideos(recoveredVideos);
-          setIsGenerating(true);
+          setGeneratedVideos(existingVideos);
           
-          // Start polling to check status of recovered jobs
-          setTimeout(() => startPolling(), 1000);
-          
-          toast.info(`Recuperando ${pendingJobs.length} vídeos em processamento...`);
+          // Check if there are pending jobs to poll
+          const hasPending = allJobs.some(job => job.status === 'queued' || job.status === 'processing');
+          if (hasPending) {
+            setIsGenerating(true);
+            setTimeout(() => startPolling(), 1000);
+            toast.info(`Verificando ${allJobs.filter(j => j.status === 'queued' || j.status === 'processing').length} vídeos em processamento...`);
+          }
         }
       } catch (err) {
-        console.error('Error recovering pending jobs:', err);
+        console.error('Error loading existing jobs:', err);
       }
     };
 
-    recoverPendingJobs();
+    loadExistingJobs();
   }, [user]);
 
   const uploadVideoToStorage = async (file: File): Promise<string | null> => {
@@ -358,12 +359,25 @@ export default function VideoVariationGenerator() {
     }
   };
 
-  const clearAll = () => {
+  const clearAll = async () => {
     // Clear all uploaded videos and audios
     hookVideos.forEach(v => URL.revokeObjectURL(v.url));
     bodyVideos.forEach(v => URL.revokeObjectURL(v.url));
     ctaVideos.forEach(v => URL.revokeObjectURL(v.url));
     audioClips.forEach(a => { if (a.url.startsWith('blob:')) URL.revokeObjectURL(a.url); });
+    
+    // Delete all jobs from database for this user (last 24 hours)
+    if (user) {
+      try {
+        await supabase
+          .from('video_generation_jobs')
+          .delete()
+          .eq('user_id', user.id)
+          .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+      } catch (err) {
+        console.error('Error deleting jobs from database:', err);
+      }
+    }
     
     setHookVideos([]);
     setBodyVideos([]);
@@ -376,6 +390,8 @@ export default function VideoVariationGenerator() {
       clearInterval(pollingRef.current);
       pollingRef.current = null;
     }
+    
+    toast.success('Tudo limpo! Pronto para gerar novas variações.');
   };
 
   const uploadAudioToStorage = async (file: File): Promise<string | null> => {
@@ -571,6 +587,7 @@ export default function VideoVariationGenerator() {
       clearInterval(pollingRef.current);
     }
 
+    // Use faster polling interval for better responsiveness
     pollingRef.current = setInterval(async () => {
       // Use ref to get current state, avoiding stale closure
       const currentVideos = generatedVideosRef.current;
@@ -589,25 +606,40 @@ export default function VideoVariationGenerator() {
           pollingRef.current = null;
         }
         setIsGenerating(false);
+        toast.success('Todos os vídeos foram processados!');
         return;
       }
 
-      for (const video of pendingVideos) {
-        if (!video.requestId) continue;
+      console.log(`Checking status for ${pendingVideos.length} pending videos...`);
+
+      // Check all pending videos in parallel
+      const statusChecks = pendingVideos.map(async (video) => {
+        if (!video.requestId) return null;
 
         const result = await checkVideoStatus(video.requestId, video.responseUrl);
-        
-        if (result.status === 'done' && result.videoUrl) {
-          setGeneratedVideos(prev => prev.map(v => 
-            v.id === video.id ? { ...v, status: 'done', url: result.videoUrl } : v
-          ));
-        } else if (result.status === 'failed') {
-          setGeneratedVideos(prev => prev.map(v => 
-            v.id === video.id ? { ...v, status: 'failed' } : v
-          ));
+        return { video, result };
+      });
+
+      const results = await Promise.all(statusChecks);
+
+      // Update all statuses at once
+      setGeneratedVideos(prev => {
+        const updated = [...prev];
+        for (const item of results) {
+          if (!item) continue;
+          const { video, result } = item;
+          const index = updated.findIndex(v => v.id === video.id);
+          if (index === -1) continue;
+
+          if (result.status === 'done' && result.videoUrl) {
+            updated[index] = { ...updated[index], status: 'done', url: result.videoUrl };
+          } else if (result.status === 'failed') {
+            updated[index] = { ...updated[index], status: 'failed' };
+          }
         }
-      }
-    }, 5000);
+        return updated;
+      });
+    }, 3000); // Poll every 3 seconds for faster feedback
   };
 
   const downloadVideo = async (url: string, name: string) => {
