@@ -58,6 +58,7 @@ export default function VideoVariationGenerator() {
   
   const pauseRef = useRef(false);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const generatedVideosRef = useRef<GeneratedVideo[]>([]);
 
   const totalVariations = hookVideos.length * bodyVideos.length * ctaVideos.length;
   const estimatedTimeSeconds = totalVariations * 60; // ~1 min per video on cloud
@@ -65,6 +66,11 @@ export default function VideoVariationGenerator() {
   useEffect(() => {
     pauseRef.current = isPaused;
   }, [isPaused]);
+
+  // Keep ref in sync with state for polling
+  useEffect(() => {
+    generatedVideosRef.current = generatedVideos;
+  }, [generatedVideos]);
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -279,11 +285,21 @@ export default function VideoVariationGenerator() {
     }
 
     pollingRef.current = setInterval(async () => {
-      const pendingVideos = generatedVideos.filter(
+      // Use ref to get current state, avoiding stale closure
+      const currentVideos = generatedVideosRef.current;
+      const pendingVideos = currentVideos.filter(
         v => v.requestId && (v.status === 'processing' || v.status === 'queued')
       );
 
+      console.log(`Polling: ${pendingVideos.length} pending videos out of ${currentVideos.length} total`);
+
       if (pendingVideos.length === 0) {
+        // Check if we have any videos at all
+        if (currentVideos.length === 0) {
+          console.log('No videos yet, continuing to poll...');
+          return;
+        }
+        
         if (pollingRef.current) {
           clearInterval(pollingRef.current);
           pollingRef.current = null;
@@ -296,7 +312,9 @@ export default function VideoVariationGenerator() {
       for (const video of pendingVideos) {
         if (!video.requestId) continue;
 
+        console.log(`Checking status for: ${video.name} (${video.requestId})`);
         const result = await checkVideoStatus(video.requestId, video.responseUrl);
+        console.log(`Status result for ${video.name}:`, result);
         
         if (result.status === 'done' && result.videoUrl) {
           setGeneratedVideos(prev => prev.map(v => 
@@ -310,13 +328,6 @@ export default function VideoVariationGenerator() {
       }
     }, 5000); // Poll every 5 seconds
   };
-
-  // Re-start polling when generatedVideos changes
-  useEffect(() => {
-    if (isGenerating && generatedVideos.some(v => v.requestId && v.status === 'processing')) {
-      startPolling();
-    }
-  }, [generatedVideos, isGenerating]);
 
   const downloadVideo = async (url: string, name: string) => {
     try {
