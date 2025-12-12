@@ -38,9 +38,9 @@ serve(async (req) => {
       throw new Error('FAL_KEY not configured');
     }
 
-    // Always construct the correct merge-videos endpoint URL
-    // Do NOT use the responseUrl from Fal.ai as it may return a generic path
-    const fetchUrl = `https://queue.fal.run/fal-ai/ffmpeg-api/merge-videos/requests/${requestId}`;
+    // Use the response_url provided by Fal.ai - it's the correct endpoint
+    // Note: Fal.ai returns response_url as fal-ai/ffmpeg-api/requests/{id} (without merge-videos in path)
+    const fetchUrl = responseUrl || `https://queue.fal.run/fal-ai/ffmpeg-api/requests/${requestId}`;
     
     console.log(`Fetching result from: ${fetchUrl}`);
     
