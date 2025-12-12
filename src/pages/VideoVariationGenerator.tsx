@@ -334,22 +334,60 @@ export default function VideoVariationGenerator() {
       return;
     }
 
+    // Check if all audios have storage URLs (if any)
+    const missingAudioUploads = audioClips.filter(a => !a.storageUrl);
+    if (missingAudioUploads.length > 0) {
+      toast.error('Alguns áudios ainda estão sendo enviados. Aguarde.');
+      return;
+    }
+
     setIsGenerating(true);
 
-    // Generate all variation combinations
-    const variations: { hook: VideoClip; body: VideoClip; cta: VideoClip; name: string }[] = [];
+    const hasAudio = audioClips.length > 0;
+
+    // Generate all video variation combinations
+    interface VideoVariation {
+      hook: VideoClip;
+      body: VideoClip;
+      cta: VideoClip;
+      audio?: AudioClip;
+      name: string;
+    }
     
+    const variations: VideoVariation[] = [];
     let count = 1;
-    for (let h = 0; h < hookVideos.length; h++) {
-      for (let b = 0; b < bodyVideos.length; b++) {
-        for (let c = 0; c < ctaVideos.length; c++) {
-          variations.push({
-            hook: hookVideos[h],
-            body: bodyVideos[b],
-            cta: ctaVideos[c],
-            name: `Criativo ${count}`
-          });
-          count++;
+
+    if (hasAudio) {
+      // Generate combinations with audio
+      for (let h = 0; h < hookVideos.length; h++) {
+        for (let b = 0; b < bodyVideos.length; b++) {
+          for (let c = 0; c < ctaVideos.length; c++) {
+            for (let a = 0; a < audioClips.length; a++) {
+              variations.push({
+                hook: hookVideos[h],
+                body: bodyVideos[b],
+                cta: ctaVideos[c],
+                audio: audioClips[a],
+                name: `Criativo ${count}`
+              });
+              count++;
+            }
+          }
+        }
+      }
+    } else {
+      // Generate combinations without audio
+      for (let h = 0; h < hookVideos.length; h++) {
+        for (let b = 0; b < bodyVideos.length; b++) {
+          for (let c = 0; c < ctaVideos.length; c++) {
+            variations.push({
+              hook: hookVideos[h],
+              body: bodyVideos[b],
+              cta: ctaVideos[c],
+              name: `Criativo ${count}`
+            });
+            count++;
+          }
         }
       }
     }
@@ -358,7 +396,8 @@ export default function VideoVariationGenerator() {
     const initialVideos: GeneratedVideo[] = variations.map((v, i) => ({
       id: `video-${i}-${Date.now()}`,
       name: v.name,
-      status: 'queued'
+      status: 'queued',
+      hasAudio: !!v.audio
     }));
     setGeneratedVideos(initialVideos);
 
@@ -373,29 +412,58 @@ export default function VideoVariationGenerator() {
       ));
 
       try {
-        const { data, error } = await supabase.functions.invoke('merge-videos', {
-          body: {
-            videoUrls: [
-              variation.hook.storageUrl,
-              variation.body.storageUrl,
-              variation.cta.storageUrl
-            ],
-            variationName: variation.name
+        if (variation.audio && variation.audio.storageUrl) {
+          // With audio: use merge-videos-with-audio endpoint
+          const { data, error } = await supabase.functions.invoke('merge-videos', {
+            body: {
+              videoUrls: [
+                variation.hook.storageUrl,
+                variation.body.storageUrl,
+                variation.cta.storageUrl
+              ],
+              audioUrl: variation.audio.storageUrl,
+              variationName: variation.name
+            }
+          });
+
+          if (error || !data?.success) {
+            console.error('Error submitting job with audio:', error || data?.error);
+            setGeneratedVideos(prev => prev.map((v, idx) => 
+              idx === i ? { ...v, status: 'failed' } : v
+            ));
+            continue;
           }
-        });
 
-        if (error || !data?.success) {
-          console.error('Error submitting job:', error || data?.error);
+          // Store request ID and response URL for polling
           setGeneratedVideos(prev => prev.map((v, idx) => 
-            idx === i ? { ...v, status: 'failed' } : v
+            idx === i ? { ...v, requestId: data.requestId, responseUrl: data.responseUrl } : v
           ));
-          continue;
-        }
+        } else {
+          // Without audio: use regular merge-videos endpoint
+          const { data, error } = await supabase.functions.invoke('merge-videos', {
+            body: {
+              videoUrls: [
+                variation.hook.storageUrl,
+                variation.body.storageUrl,
+                variation.cta.storageUrl
+              ],
+              variationName: variation.name
+            }
+          });
 
-        // Store request ID and response URL for polling
-        setGeneratedVideos(prev => prev.map((v, idx) => 
-          idx === i ? { ...v, requestId: data.requestId, responseUrl: data.responseUrl } : v
-        ));
+          if (error || !data?.success) {
+            console.error('Error submitting job:', error || data?.error);
+            setGeneratedVideos(prev => prev.map((v, idx) => 
+              idx === i ? { ...v, status: 'failed' } : v
+            ));
+            continue;
+          }
+
+          // Store request ID and response URL for polling
+          setGeneratedVideos(prev => prev.map((v, idx) => 
+            idx === i ? { ...v, requestId: data.requestId, responseUrl: data.responseUrl } : v
+          ));
+        }
 
       } catch (error) {
         console.error(`Error processing ${variation.name}:`, error);
