@@ -167,24 +167,41 @@ const AudioTranscriber = () => {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="font-medium">Transcrição</h3>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleCopy}
-                      className="border-accent text-accent hover:bg-accent hover:text-accent-foreground"
-                    >
-                      {copied ? (
-                        <>
-                          <Check className="w-4 h-4 mr-1" />
-                          Copiado
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-4 h-4 mr-1" />
-                          Copiar
-                        </>
-                      )}
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setTranscription("");
+                          setFileName("");
+                          if (fileInputRef.current) {
+                            fileInputRef.current.value = "";
+                          }
+                        }}
+                        className="border-accent text-accent hover:bg-accent hover:text-accent-foreground"
+                      >
+                        <Upload className="w-4 h-4 mr-1" />
+                        Novo Áudio
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCopy}
+                        className="border-accent text-accent hover:bg-accent hover:text-accent-foreground"
+                      >
+                        {copied ? (
+                          <>
+                            <Check className="w-4 h-4 mr-1" />
+                            Copiado
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4 mr-1" />
+                            Copiar
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
                   <Textarea
                     value={transcription}

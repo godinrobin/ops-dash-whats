@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { AudioSection } from "@/components/AudioSection";
 import { 
   Upload, 
   Trash2, 
@@ -23,7 +24,8 @@ import {
   Archive,
   Eye,
   RotateCcw,
-  Sparkles
+  Sparkles,
+  Music
 } from "lucide-react";
 
 interface VideoClip {
@@ -34,6 +36,16 @@ interface VideoClip {
   storageUrl?: string;
 }
 
+interface AudioClip {
+  id: string;
+  file?: File;
+  url: string;
+  name: string;
+  storageUrl?: string;
+  isGenerated?: boolean;
+  copy?: string;
+}
+
 interface GeneratedVideo {
   id: string;
   name: string;
@@ -41,6 +53,7 @@ interface GeneratedVideo {
   url?: string;
   requestId?: string;
   responseUrl?: string;
+  hasAudio?: boolean;
 }
 
 interface VideoAnalysis {
@@ -62,6 +75,7 @@ export default function VideoVariationGenerator() {
   const [hookVideos, setHookVideos] = useState<VideoClip[]>([]);
   const [bodyVideos, setBodyVideos] = useState<VideoClip[]>([]);
   const [ctaVideos, setCtaVideos] = useState<VideoClip[]>([]);
+  const [audioClips, setAudioClips] = useState<AudioClip[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>([]);
   const [previewVideo, setPreviewVideo] = useState<string | null>(null);
@@ -78,7 +92,9 @@ export default function VideoVariationGenerator() {
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const generatedVideosRef = useRef<GeneratedVideo[]>([]);
 
-  const totalVariations = hookVideos.length * bodyVideos.length * ctaVideos.length;
+  const canShowAudioSection = hookVideos.length > 0 && bodyVideos.length > 0 && ctaVideos.length > 0;
+  const videoVariations = hookVideos.length * bodyVideos.length * ctaVideos.length;
+  const totalVariations = audioClips.length > 0 ? videoVariations * audioClips.length : videoVariations;
   const estimatedTimeSeconds = totalVariations * 60;
 
   // Keep ref in sync with state for polling
@@ -261,14 +277,16 @@ export default function VideoVariationGenerator() {
   };
 
   const clearAll = () => {
-    // Clear all uploaded videos
+    // Clear all uploaded videos and audios
     hookVideos.forEach(v => URL.revokeObjectURL(v.url));
     bodyVideos.forEach(v => URL.revokeObjectURL(v.url));
     ctaVideos.forEach(v => URL.revokeObjectURL(v.url));
+    audioClips.forEach(a => { if (a.url.startsWith('blob:')) URL.revokeObjectURL(a.url); });
     
     setHookVideos([]);
     setBodyVideos([]);
     setCtaVideos([]);
+    setAudioClips([]);
     setGeneratedVideos([]);
     setIsGenerating(false);
     
@@ -276,6 +294,30 @@ export default function VideoVariationGenerator() {
       clearInterval(pollingRef.current);
       pollingRef.current = null;
     }
+  };
+
+  const uploadAudioToStorage = async (file: File): Promise<string | null> => {
+    if (!user) return null;
+    
+    const fileName = `${user.id}/audio-${Date.now()}-${file.name}`;
+    
+    const { data, error } = await supabase.storage
+      .from('video-clips')
+      .upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (error) {
+      console.error('Audio upload error:', error);
+      return null;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('video-clips')
+      .getPublicUrl(data.path);
+
+    return urlData.publicUrl;
   };
 
   const generateVariations = async () => {
@@ -621,6 +663,16 @@ export default function VideoVariationGenerator() {
             />
           </div>
 
+          {/* Audio Section - Only shows when all video sections have at least 1 video */}
+          {canShowAudioSection && (
+            <AudioSection
+              audioClips={audioClips}
+              setAudioClips={setAudioClips}
+              isGenerating={isGenerating}
+              onUploadToStorage={uploadAudioToStorage}
+            />
+          )}
+
           {/* Stats and Generate Button */}
           <Card className="bg-background/95 border-2 border-accent">
             <CardContent className="pt-6">
@@ -628,6 +680,16 @@ export default function VideoVariationGenerator() {
                 <div className="flex flex-wrap gap-4 text-sm">
                   <div className="flex items-center gap-2">
                     <FileVideo className="h-4 w-4 text-accent" />
+                    <span>Vídeos: <strong>{videoVariations}</strong></span>
+                  </div>
+                  {audioClips.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <Music className="h-4 w-4 text-purple-500" />
+                      <span>Áudios: <strong>{audioClips.length}</strong></span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <FileVideo className="h-4 w-4 text-green-500" />
                     <span>Total de variações: <strong>{totalVariations}</strong></span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -637,7 +699,7 @@ export default function VideoVariationGenerator() {
                 </div>
                 <Button
                   onClick={generateVariations}
-                  disabled={isGenerating || totalVariations === 0 || isUploading}
+                  disabled={isGenerating || videoVariations === 0 || isUploading}
                   className="bg-accent hover:bg-accent/90 text-accent-foreground"
                 >
                   {isGenerating ? (
