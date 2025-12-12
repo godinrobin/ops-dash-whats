@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,8 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
-import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { fetchFile, toBlobURL } from "@ffmpeg/util";
+import { supabase } from "@/integrations/supabase/client";
 import { 
   Upload, 
   Trash2, 
@@ -24,7 +23,7 @@ import {
   Archive,
   Eye,
   Pause,
-  RefreshCw
+  Cloud
 } from "lucide-react";
 
 interface VideoClip {
@@ -32,6 +31,7 @@ interface VideoClip {
   file: File;
   url: string;
   name: string;
+  storageUrl?: string;
 }
 
 interface GeneratedVideo {
@@ -39,10 +39,8 @@ interface GeneratedVideo {
   name: string;
   status: 'queued' | 'processing' | 'done' | 'failed';
   url?: string;
-  blob?: Blob;
+  requestId?: string;
 }
-
-const MAX_VIDEO_DURATION_MINUTES = 4;
 
 export default function VideoVariationGenerator() {
   const { user } = useAuth();
@@ -54,97 +52,100 @@ export default function VideoVariationGenerator() {
   const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>([]);
   const [previewVideo, setPreviewVideo] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
-  const [ffmpegLoading, setFfmpegLoading] = useState(false);
-  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [currentProcessing, setCurrentProcessing] = useState<string | null>(null);
   
-  const ffmpegRef = useRef<FFmpeg | null>(null);
   const pauseRef = useRef(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   const totalVariations = hookVideos.length * bodyVideos.length * ctaVideos.length;
-  const estimatedTimeSeconds = totalVariations * 30; // ~30 sec per video locally
+  const estimatedTimeSeconds = totalVariations * 60; // ~1 min per video on cloud
 
-  // Load FFmpeg function - using single-threaded version (UMD) for better browser compatibility
-  const loadFFmpeg = useCallback(async () => {
-    if (ffmpegRef.current) return;
-    
-    setFfmpegLoading(true);
-    setLoadError(null);
-    setLoadingProgress(0);
-    
-    try {
-      const ffmpeg = new FFmpeg();
-      
-      ffmpeg.on("progress", ({ progress }) => {
-        setLoadingProgress(Math.round(progress * 100));
-      });
-
-      ffmpeg.on("log", ({ message }) => {
-        console.log("[FFmpeg]", message);
-      });
-
-      // Use single-threaded UMD version - works without SharedArrayBuffer/COOP/COEP headers
-      const baseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd";
-      
-      await ffmpeg.load({
-        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
-      });
-
-      ffmpegRef.current = ffmpeg;
-      setFfmpegLoaded(true);
-      toast.success("FFmpeg carregado com sucesso!");
-    } catch (error) {
-      console.error("Error loading FFmpeg:", error);
-      const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
-      setLoadError(errorMessage);
-      toast.error("Erro ao carregar FFmpeg. Clique em 'Tentar Novamente'.");
-    } finally {
-      setFfmpegLoading(false);
-    }
-  }, []);
-
-  // Load FFmpeg on mount
-  useEffect(() => {
-    loadFFmpeg();
-  }, [loadFFmpeg]);
-
-  // Sync pause state with ref
   useEffect(() => {
     pauseRef.current = isPaused;
   }, [isPaused]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+      }
+    };
+  }, []);
+
+  const uploadVideoToStorage = async (file: File): Promise<string | null> => {
+    if (!user) return null;
+    
+    const fileName = `${user.id}/${Date.now()}-${file.name}`;
+    
+    const { data, error } = await supabase.storage
+      .from('video-clips')
+      .upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (error) {
+      console.error('Upload error:', error);
+      return null;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('video-clips')
+      .getPublicUrl(data.path);
+
+    return urlData.publicUrl;
+  };
 
   const handleFileUpload = async (
     files: FileList | null,
     section: 'hook' | 'body' | 'cta',
     setVideos: React.Dispatch<React.SetStateAction<VideoClip[]>>
   ) => {
-    if (!files) return;
+    if (!files || !user) return;
 
     setIsUploading(true);
+    setUploadProgress(0);
+    
     try {
-      for (const file of Array.from(files)) {
+      const fileArray = Array.from(files);
+      let uploaded = 0;
+      
+      for (const file of fileArray) {
         if (!file.type.startsWith('video/')) {
           toast.error(`${file.name} não é um vídeo válido`);
           continue;
         }
 
-        const url = URL.createObjectURL(file);
+        // Upload to Supabase Storage
+        const storageUrl = await uploadVideoToStorage(file);
+        
+        if (!storageUrl) {
+          toast.error(`Erro ao fazer upload de ${file.name}`);
+          continue;
+        }
+
+        const localUrl = URL.createObjectURL(file);
         setVideos(prev => [...prev, {
           id: Date.now().toString() + Math.random(),
           file,
-          url,
-          name: file.name
+          url: localUrl,
+          name: file.name,
+          storageUrl
         }]);
+        
+        uploaded++;
+        setUploadProgress((uploaded / fileArray.length) * 100);
       }
-      toast.success('Vídeos adicionados com sucesso!');
+      
+      toast.success('Vídeos enviados com sucesso!');
     } catch (error) {
       console.error('Upload error:', error);
       toast.error('Erro ao adicionar vídeos');
     } finally {
       setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -158,66 +159,33 @@ export default function VideoVariationGenerator() {
     });
   };
 
-  const concatenateVideos = async (
-    hookFile: File,
-    bodyFile: File,
-    ctaFile: File,
-    outputName: string
-  ): Promise<Blob | null> => {
-    const ffmpeg = ffmpegRef.current;
-    if (!ffmpeg) return null;
+  const checkVideoStatus = async (requestId: string): Promise<{ status: string; videoUrl?: string }> => {
+    const { data, error } = await supabase.functions.invoke('check-fal-status', {
+      body: { requestId }
+    });
 
-    try {
-      // Write input files to FFmpeg virtual filesystem
-      await ffmpeg.writeFile("hook.mp4", await fetchFile(hookFile));
-      await ffmpeg.writeFile("body.mp4", await fetchFile(bodyFile));
-      await ffmpeg.writeFile("cta.mp4", await fetchFile(ctaFile));
-
-      // Create concat list file
-      const concatList = "file 'hook.mp4'\nfile 'body.mp4'\nfile 'cta.mp4'";
-      await ffmpeg.writeFile("list.txt", concatList);
-
-      // Execute concatenation with re-encoding for compatibility
-      await ffmpeg.exec([
-        "-f", "concat",
-        "-safe", "0",
-        "-i", "list.txt",
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "23",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-movflags", "+faststart",
-        "output.mp4"
-      ]);
-
-      // Read output file
-      const data = await ffmpeg.readFile("output.mp4");
-      const uint8Array = new Uint8Array(data as Uint8Array);
-      const blob = new Blob([uint8Array], { type: "video/mp4" });
-
-      // Cleanup
-      await ffmpeg.deleteFile("hook.mp4");
-      await ffmpeg.deleteFile("body.mp4");
-      await ffmpeg.deleteFile("cta.mp4");
-      await ffmpeg.deleteFile("list.txt");
-      await ffmpeg.deleteFile("output.mp4");
-
-      return blob;
-    } catch (error) {
-      console.error("Concatenation error:", error);
-      return null;
+    if (error) {
+      console.error('Status check error:', error);
+      return { status: 'failed' };
     }
+
+    return {
+      status: data.status,
+      videoUrl: data.videoUrl
+    };
   };
 
   const generateVariations = async () => {
-    if (!ffmpegLoaded) {
-      toast.error("FFmpeg ainda está carregando. Aguarde.");
+    if (hookVideos.length === 0 || bodyVideos.length === 0 || ctaVideos.length === 0) {
+      toast.error('Adicione pelo menos um vídeo em cada seção');
       return;
     }
 
-    if (hookVideos.length === 0 || bodyVideos.length === 0 || ctaVideos.length === 0) {
-      toast.error('Adicione pelo menos um vídeo em cada seção');
+    // Check if all videos have storage URLs
+    const allVideos = [...hookVideos, ...bodyVideos, ...ctaVideos];
+    const missingUploads = allVideos.filter(v => !v.storageUrl);
+    if (missingUploads.length > 0) {
+      toast.error('Alguns vídeos ainda estão sendo enviados. Aguarde.');
       return;
     }
 
@@ -249,7 +217,7 @@ export default function VideoVariationGenerator() {
     }));
     setGeneratedVideos(initialVideos);
 
-    // Process each variation sequentially
+    // Submit all jobs to Fal.ai
     for (let i = 0; i < variations.length; i++) {
       // Check if paused
       while (pauseRef.current) {
@@ -265,23 +233,30 @@ export default function VideoVariationGenerator() {
       ));
 
       try {
-        const blob = await concatenateVideos(
-          variation.hook.file,
-          variation.body.file,
-          variation.cta.file,
-          variation.name
-        );
+        const { data, error } = await supabase.functions.invoke('merge-videos', {
+          body: {
+            videoUrls: [
+              variation.hook.storageUrl,
+              variation.body.storageUrl,
+              variation.cta.storageUrl
+            ],
+            variationName: variation.name
+          }
+        });
 
-        if (blob) {
-          const url = URL.createObjectURL(blob);
-          setGeneratedVideos(prev => prev.map((v, idx) => 
-            idx === i ? { ...v, status: 'done', url, blob } : v
-          ));
-        } else {
+        if (error || !data?.success) {
+          console.error('Error submitting job:', error || data?.error);
           setGeneratedVideos(prev => prev.map((v, idx) => 
             idx === i ? { ...v, status: 'failed' } : v
           ));
+          continue;
         }
+
+        // Store request ID for polling
+        setGeneratedVideos(prev => prev.map((v, idx) => 
+          idx === i ? { ...v, requestId: data.requestId } : v
+        ));
+
       } catch (error) {
         console.error(`Error processing ${variation.name}:`, error);
         setGeneratedVideos(prev => prev.map((v, idx) => 
@@ -291,17 +266,74 @@ export default function VideoVariationGenerator() {
     }
 
     setCurrentProcessing(null);
-    setIsGenerating(false);
-    toast.success("Todas as variações foram processadas!");
+    toast.info("Jobs enviados! Verificando status...");
+
+    // Start polling for results
+    startPolling();
   };
 
-  const downloadVideo = (url: string, name: string) => {
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${name}.mp4`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  const startPolling = () => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+    }
+
+    pollingRef.current = setInterval(async () => {
+      const pendingVideos = generatedVideos.filter(
+        v => v.requestId && (v.status === 'processing' || v.status === 'queued')
+      );
+
+      if (pendingVideos.length === 0) {
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+        setIsGenerating(false);
+        toast.success("Todas as variações foram processadas!");
+        return;
+      }
+
+      for (const video of pendingVideos) {
+        if (!video.requestId) continue;
+
+        const result = await checkVideoStatus(video.requestId);
+        
+        if (result.status === 'done' && result.videoUrl) {
+          setGeneratedVideos(prev => prev.map(v => 
+            v.id === video.id ? { ...v, status: 'done', url: result.videoUrl } : v
+          ));
+        } else if (result.status === 'failed') {
+          setGeneratedVideos(prev => prev.map(v => 
+            v.id === video.id ? { ...v, status: 'failed' } : v
+          ));
+        }
+      }
+    }, 5000); // Poll every 5 seconds
+  };
+
+  // Re-start polling when generatedVideos changes
+  useEffect(() => {
+    if (isGenerating && generatedVideos.some(v => v.requestId && v.status === 'processing')) {
+      startPolling();
+    }
+  }, [generatedVideos, isGenerating]);
+
+  const downloadVideo = async (url: string, name: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `${name}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error('Download error:', error);
+      toast.error('Erro ao baixar vídeo');
+    }
   };
 
   const downloadAllAsZip = async () => {
@@ -315,8 +347,8 @@ export default function VideoVariationGenerator() {
     
     for (const video of completedVideos) {
       if (video.url) {
-        downloadVideo(video.url, video.name);
-        await new Promise(resolve => setTimeout(resolve, 500)); // Small delay between downloads
+        await downloadVideo(video.url, video.name);
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
   };
@@ -379,6 +411,11 @@ export default function VideoVariationGenerator() {
               >
                 <FileVideo className="h-5 w-5 text-accent" />
                 <span className="text-sm truncate flex-1">{video.name}</span>
+                {video.storageUrl ? (
+                  <Cloud className="h-4 w-4 text-green-500" />
+                ) : (
+                  <Loader2 className="h-4 w-4 animate-spin text-accent" />
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -419,56 +456,20 @@ export default function VideoVariationGenerator() {
               Crie múltiplas variações de anúncios combinando diferentes hooks, corpos e CTAs
             </p>
             <p className="text-sm text-accent mt-2">
-              ⚠️ Processamento local no navegador - mantenha a aba aberta
+              ☁️ Processamento na nuvem - vídeos mesclados via Fal.ai
             </p>
           </div>
 
-          {/* FFmpeg Loading Status */}
-          {!ffmpegLoaded && (
+          {/* Upload Progress */}
+          {isUploading && (
             <Card className="bg-background/95 border-2 border-accent">
               <CardContent className="pt-6">
-                <div className="flex items-center gap-4">
-                  {ffmpegLoading ? (
-                    <Loader2 className="h-6 w-6 animate-spin text-accent" />
-                  ) : loadError ? (
-                    <XCircle className="h-6 w-6 text-destructive" />
-                  ) : (
-                    <Loader2 className="h-6 w-6 animate-spin text-accent" />
-                  )}
-                  <div className="flex-1">
-                    {loadError ? (
-                      <>
-                        <p className="text-sm font-medium text-destructive">Erro ao carregar FFmpeg</p>
-                        <p className="text-xs text-muted-foreground">
-                          {loadError}
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-sm font-medium">Carregando FFmpeg...</p>
-                        <p className="text-xs text-muted-foreground">
-                          Isso pode levar alguns segundos na primeira vez (~31MB)
-                        </p>
-                      </>
-                    )}
-                    {ffmpegLoading && (
-                      <Progress value={loadingProgress} className="h-2 mt-2" />
-                    )}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-5 w-5 animate-spin text-accent" />
+                    <span className="text-sm">Enviando vídeos para a nuvem...</span>
                   </div>
-                  {loadError && (
-                    <Button
-                      onClick={() => {
-                        ffmpegRef.current = null;
-                        loadFFmpeg();
-                      }}
-                      variant="outline"
-                      size="sm"
-                      className="border-accent"
-                    >
-                      <RefreshCw className="mr-2 h-4 w-4" />
-                      Tentar Novamente
-                    </Button>
-                  )}
+                  <Progress value={uploadProgress} className="h-2" />
                 </div>
               </CardContent>
             </Card>
@@ -515,7 +516,7 @@ export default function VideoVariationGenerator() {
                 </div>
                 <Button
                   onClick={generateVariations}
-                  disabled={isGenerating || totalVariations === 0 || !ffmpegLoaded}
+                  disabled={isGenerating || totalVariations === 0 || isUploading}
                   className="bg-accent hover:bg-accent/90 text-accent-foreground"
                 >
                   {isGenerating ? (
@@ -621,7 +622,7 @@ export default function VideoVariationGenerator() {
                         }
                       >
                         {video.status === 'queued' && 'Na fila'}
-                        {video.status === 'processing' && 'Processando...'}
+                        {video.status === 'processing' && 'Processando na nuvem...'}
                         {video.status === 'done' && 'Concluído'}
                         {video.status === 'failed' && 'Falhou'}
                       </Badge>

@@ -32,3 +32,9 @@ verify_jwt = true
 
 [functions.generate-video-variations]
 verify_jwt = true
+
+[functions.merge-videos]
+verify_jwt = true
+
+[functions.check-fal-status]
+verify_jwt = true
