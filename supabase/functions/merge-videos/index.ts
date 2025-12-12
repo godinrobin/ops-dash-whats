@@ -8,8 +8,8 @@ const corsHeaders = {
 };
 
 const FAL_KEY = Deno.env.get('FAL_KEY');
-// Using the compose API which is more robust for different video formats
-const FAL_API_URL = 'https://queue.fal.run/fal-ai/ffmpeg-api/compose';
+// Using merge-videos API with video_urls array
+const FAL_API_URL = 'https://queue.fal.run/fal-ai/ffmpeg-api/merge-videos';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -44,36 +44,32 @@ serve(async (req) => {
       throw new Error('At least 2 video URLs are required');
     }
 
-    // Build keyframes array for the compose API
-    // Each video becomes a keyframe in a single video track
-    const keyframes = videoUrls.map((url: string, index: number) => ({
-      url: url,
-      start: index // Sequential order
-    }));
+    // Submit the job to Fal.ai merge-videos API
+    // According to docs: video_urls is a list<string> of video URLs to merge in order
+    const requestBody = {
+      video_urls: videoUrls
+    };
+    
+    console.log('Request body:', JSON.stringify(requestBody));
 
-    // Submit the job to Fal.ai compose API
     const submitResponse = await fetch(FAL_API_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Key ${FAL_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        tracks: [{
-          id: "main_video",
-          type: "video",
-          keyframes: keyframes
-        }]
-      })
+      body: JSON.stringify(requestBody)
     });
 
+    const responseText = await submitResponse.text();
+    console.log('Fal.ai raw response:', responseText);
+
     if (!submitResponse.ok) {
-      const errorText = await submitResponse.text();
-      console.error('Fal.ai submit error:', errorText);
-      throw new Error(`Fal.ai error: ${submitResponse.status} - ${errorText}`);
+      console.error('Fal.ai submit error:', responseText);
+      throw new Error(`Fal.ai error: ${submitResponse.status} - ${responseText}`);
     }
 
-    const submitResult = await submitResponse.json();
+    const submitResult = JSON.parse(responseText);
     console.log('Fal.ai submit result:', submitResult);
 
     const requestId = submitResult.request_id;
