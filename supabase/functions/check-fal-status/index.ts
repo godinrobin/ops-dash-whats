@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 const FAL_KEY = Deno.env.get('FAL_KEY');
-const FAL_STATUS_URL = 'https://queue.fal.run/fal-ai/ffmpeg-api/concat-videos/requests';
+const FAL_STATUS_URL = 'https://queue.fal.run/fal-ai/ffmpeg-api/requests';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
