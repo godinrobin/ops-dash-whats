@@ -29,3 +29,6 @@ verify_jwt = true
 
 [functions.admin-get-all-data]
 verify_jwt = true
+
+[functions.generate-video-variations]
+verify_jwt = true
