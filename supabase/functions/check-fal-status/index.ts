@@ -38,6 +38,39 @@ serve(async (req) => {
       throw new Error('FAL_KEY not configured');
     }
 
+    // First, check if the job exists and get its creation time
+    const { data: jobData } = await supabaseClient
+      .from('video_generation_jobs')
+      .select('created_at, status')
+      .eq('render_id', requestId)
+      .eq('user_id', user.id)
+      .single();
+
+    // If job is older than 1 hour and still queued, mark as expired/failed
+    if (jobData) {
+      const createdAt = new Date(jobData.created_at);
+      const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      
+      if (createdAt < hourAgo && (jobData.status === 'queued' || jobData.status === 'processing')) {
+        console.log(`Job ${requestId} expired (created at ${createdAt.toISOString()})`);
+        await supabaseClient
+          .from('video_generation_jobs')
+          .update({ status: 'failed', updated_at: new Date().toISOString() })
+          .eq('render_id', requestId)
+          .eq('user_id', user.id);
+        
+        return new Response(JSON.stringify({ 
+          success: true, 
+          status: 'failed',
+          videoUrl: null,
+          requestId,
+          reason: 'expired'
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     // Use the response_url provided by Fal.ai - it's the correct endpoint
     // Note: Fal.ai returns response_url as fal-ai/ffmpeg-api/requests/{id} (without merge-videos in path)
     const fetchUrl = responseUrl || `https://queue.fal.run/fal-ai/ffmpeg-api/requests/${requestId}`;
