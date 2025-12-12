@@ -8,7 +8,6 @@ const corsHeaders = {
 };
 
 const FAL_KEY = Deno.env.get('FAL_KEY');
-const FAL_STATUS_URL = 'https://queue.fal.run/fal-ai/ffmpeg-api/requests';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -39,63 +38,83 @@ serve(async (req) => {
       throw new Error('FAL_KEY not configured');
     }
 
-    // Check job status
-    const statusResponse = await fetch(`${FAL_STATUS_URL}/${requestId}/status`, {
+    // Fetch result directly from the response URL (not status URL)
+    // The response URL returns the result if completed, or status info if still processing
+    const responseUrl = `https://queue.fal.run/fal-ai/ffmpeg-api/requests/${requestId}`;
+    
+    const resultResponse = await fetch(responseUrl, {
       method: 'GET',
       headers: {
         'Authorization': `Key ${FAL_KEY}`,
+        'Content-Type': 'application/json',
       },
     });
 
-    if (!statusResponse.ok) {
-      const errorText = await statusResponse.text();
-      console.error('Fal.ai status error:', errorText);
-      throw new Error(`Fal.ai error: ${statusResponse.status}`);
+    console.log(`Fal.ai response status: ${resultResponse.status}`);
+
+    if (resultResponse.status === 202) {
+      // Still processing
+      console.log('Job still processing');
+      return new Response(JSON.stringify({ 
+        success: true, 
+        status: 'processing',
+        videoUrl: null,
+        requestId
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
-    const statusResult = await statusResponse.json();
-    console.log('Fal.ai status result:', statusResult);
-
-    // Map Fal.ai status to our status
-    let status = statusResult.status?.toLowerCase() || 'queued';
-    let videoUrl = null;
-
-    // If completed, fetch the result
-    if (status === 'completed') {
-      const resultResponse = await fetch(`${FAL_STATUS_URL}/${requestId}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Key ${FAL_KEY}`,
-        },
-      });
-
-      if (resultResponse.ok) {
-        const resultData = await resultResponse.json();
-        console.log('Fal.ai result:', resultData);
-        videoUrl = resultData.video?.url || resultData.output?.url;
-        status = 'done';
-
-        // Update database
-        if (videoUrl) {
-          await supabaseClient
-            .from('video_generation_jobs')
-            .update({ status: 'done', video_url: videoUrl, updated_at: new Date().toISOString() })
-            .eq('render_id', requestId)
-            .eq('user_id', user.id);
-        }
-      }
-    } else if (status === 'failed') {
+    if (!resultResponse.ok) {
+      const errorText = await resultResponse.text();
+      console.error('Fal.ai error:', errorText);
+      
+      // Mark as failed in database
       await supabaseClient
         .from('video_generation_jobs')
         .update({ status: 'failed', updated_at: new Date().toISOString() })
         .eq('render_id', requestId)
         .eq('user_id', user.id);
+      
+      return new Response(JSON.stringify({ 
+        success: true, 
+        status: 'failed',
+        videoUrl: null,
+        requestId
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
+    const resultData = await resultResponse.json();
+    console.log('Fal.ai result:', JSON.stringify(resultData));
+
+    // Check if we have a video URL in the result
+    const videoUrl = resultData.video?.url || resultData.output?.url || resultData.data?.video?.url;
+    
+    if (videoUrl) {
+      // Job completed successfully
+      await supabaseClient
+        .from('video_generation_jobs')
+        .update({ status: 'done', video_url: videoUrl, updated_at: new Date().toISOString() })
+        .eq('render_id', requestId)
+        .eq('user_id', user.id);
+
+      return new Response(JSON.stringify({ 
+        success: true, 
+        status: 'done',
+        videoUrl,
+        requestId
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // If no video URL but response is OK, it might still be processing
     return new Response(JSON.stringify({ 
       success: true, 
-      status,
-      videoUrl,
+      status: 'processing',
+      videoUrl: null,
       requestId
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
