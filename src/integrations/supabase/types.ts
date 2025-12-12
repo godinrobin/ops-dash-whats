@@ -549,6 +549,30 @@ export type Database = {
         }
         Relationships: []
       }
+      voice_previews: {
+        Row: {
+          audio_base64: string
+          created_at: string
+          id: string
+          voice_id: string
+          voice_name: string
+        }
+        Insert: {
+          audio_base64: string
+          created_at?: string
+          id?: string
+          voice_id: string
+          voice_name: string
+        }
+        Update: {
+          audio_base64?: string
+          created_at?: string
+          id?: string
+          voice_id?: string
+          voice_name?: string
+        }
+        Relationships: []
+      }
       zap_spy_offers: {
         Row: {
           active_ads_count: number | null

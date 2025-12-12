@@ -125,10 +125,10 @@ const Home = () => {
             >
               <CardHeader className="text-center p-3 md:p-6">
                 <div className="flex justify-center mb-2 md:mb-4">
-                  <span className="text-3xl md:text-6xl">🎨</span>
+                  <span className="text-3xl md:text-6xl">🖼️</span>
                 </div>
                 <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
-                  Gerador de Criativos
+                  Gerador de Criativos em Imagem
                 </CardTitle>
                 <CardDescription className="text-xs md:text-base hidden md:block">
                   Crie imagens profissionais para anúncios com IA
@@ -150,7 +150,7 @@ const Home = () => {
                   <span className="text-3xl md:text-6xl">🎬</span>
                 </div>
                 <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-violet-400 to-fuchsia-500 bg-clip-text text-transparent">
-                  Variações de Vídeo
+                  Gerador de Criativos em Vídeo
                 </CardTitle>
                 <CardDescription className="text-xs md:text-base hidden md:block">
                   Crie variações de anúncios combinando vídeos
