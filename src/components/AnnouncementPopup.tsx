@@ -24,7 +24,8 @@ const SYSTEMS = [
   { id: "organizador-numeros", name: "Organizador de Números", emoji: "📱", route: "/organizador-numeros" },
   { id: "track-ofertas", name: "Track Ofertas", emoji: "🎯", route: "/track-ofertas" },
   { id: "criador-funil", name: "Criador de Funil", emoji: "💬", route: "/criador-funil" },
-  { id: "gerador-criativos", name: "Gerador de Criativos", emoji: "🎨", route: "/gerador-criativos" },
+  { id: "gerador-criativos-imagem", name: "Gerador de Criativos em Imagem", emoji: "🖼️", route: "/gerador-criativos" },
+  { id: "gerador-criativos-video", name: "Gerador de Criativos em Vídeo", emoji: "🎬", route: "/gerador-video" },
   { id: "gerador-audio", name: "Gerador de Áudio", emoji: "🎙️", route: "/gerador-audio" },
   { id: "transcricao-audio", name: "Transcrição de Áudio", emoji: "📝", route: "/transcricao-audio" },
   { id: "zap-spy", name: "Zap Spy", emoji: "🔍", route: "/zap-spy" },
@@ -87,7 +88,7 @@ export const AnnouncementPopup = () => {
 
   const registerView = async (announcementId: string) => {
     try {
-      // Inserir visualização
+      // Inserir visualização (registra usuário único)
       await supabase
         .from("user_announcement_views")
         .insert({
@@ -95,25 +96,17 @@ export const AnnouncementPopup = () => {
           announcement_id: announcementId,
         });
 
-      // Incrementar contador de visualizações (usando RPC ou update simples)
+      // Contar total de usuários únicos que viram este aviso
+      const { count: viewsCount } = await supabase
+        .from("user_announcement_views")
+        .select("*", { count: "exact", head: true })
+        .eq("announcement_id", announcementId);
+
+      // Atualizar contador com contagem real de usuários únicos
       await supabase
         .from("admin_announcements")
-        .update({ views_count: supabase.rpc ? undefined : 1 }) // Placeholder, será atualizado abaixo
+        .update({ views_count: viewsCount || 0 })
         .eq("id", announcementId);
-
-      // Buscar e atualizar o contador atual
-      const { data: current } = await supabase
-        .from("admin_announcements")
-        .select("views_count")
-        .eq("id", announcementId)
-        .single();
-
-      if (current) {
-        await supabase
-          .from("admin_announcements")
-          .update({ views_count: (current.views_count || 0) + 1 })
-          .eq("id", announcementId);
-      }
     } catch (err) {
       console.error("Error registering view:", err);
     }
@@ -123,26 +116,25 @@ export const AnnouncementPopup = () => {
     if (!announcement) return;
 
     try {
-      // Atualizar que houve clique
+      // Atualizar que houve clique para este usuário
       await supabase
         .from("user_announcement_views")
         .update({ clicked: true })
         .eq("user_id", user?.id)
         .eq("announcement_id", announcement.id);
 
-      // Incrementar contador de cliques
-      const { data: current } = await supabase
-        .from("admin_announcements")
-        .select("clicks_count")
-        .eq("id", announcement.id)
-        .single();
+      // Contar total de usuários únicos que clicaram
+      const { count: clicksCount } = await supabase
+        .from("user_announcement_views")
+        .select("*", { count: "exact", head: true })
+        .eq("announcement_id", announcement.id)
+        .eq("clicked", true);
 
-      if (current) {
-        await supabase
-          .from("admin_announcements")
-          .update({ clicks_count: (current.clicks_count || 0) + 1 })
-          .eq("id", announcement.id);
-      }
+      // Atualizar contador com contagem real de usuários únicos que clicaram
+      await supabase
+        .from("admin_announcements")
+        .update({ clicks_count: clicksCount || 0 })
+        .eq("id", announcement.id);
     } catch (err) {
       console.error("Error registering click:", err);
     }
