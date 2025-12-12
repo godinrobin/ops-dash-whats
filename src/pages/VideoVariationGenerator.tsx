@@ -111,6 +111,28 @@ export default function VideoVariationGenerator() {
     };
   }, []);
 
+  // Restart polling when tab becomes visible again
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const currentVideos = generatedVideosRef.current;
+        const hasPending = currentVideos.some(
+          v => v.requestId && (v.status === 'processing' || v.status === 'queued')
+        );
+        
+        if (hasPending && !pollingRef.current) {
+          console.log('Tab visible again, restarting polling...');
+          startPolling();
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
   // Recovery: check for pending jobs on page load and resume polling
   useEffect(() => {
     const recoverPendingJobs = async () => {
