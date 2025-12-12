@@ -51,7 +51,7 @@ serve(async (req) => {
         const bodyUrl = bodyVideos[bodyIndex];
         const ctaUrl = ctaVideos[ctaIndex];
 
-        // Create timeline with clips in sequence
+        // Create timeline with clips in sequence on a single track
         const timeline = {
           tracks: [
             {
@@ -63,11 +63,7 @@ serve(async (req) => {
                   },
                   start: 0,
                   length: "auto"
-                }
-              ]
-            },
-            {
-              clips: [
+                },
                 {
                   asset: {
                     type: "video",
@@ -75,11 +71,7 @@ serve(async (req) => {
                   },
                   start: "auto",
                   length: "auto"
-                }
-              ]
-            },
-            {
-              clips: [
+                },
                 {
                   asset: {
                     type: "video",
