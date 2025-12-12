@@ -23,7 +23,8 @@ import {
   Loader2,
   Archive,
   Eye,
-  Pause
+  Pause,
+  RefreshCw
 } from "lucide-react";
 
 interface VideoClip {
@@ -60,43 +61,55 @@ export default function VideoVariationGenerator() {
   
   const ffmpegRef = useRef<FFmpeg | null>(null);
   const pauseRef = useRef(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const totalVariations = hookVideos.length * bodyVideos.length * ctaVideos.length;
   const estimatedTimeSeconds = totalVariations * 30; // ~30 sec per video locally
 
+  // Load FFmpeg function
+  const loadFFmpeg = useCallback(async () => {
+    if (ffmpegRef.current) return;
+    
+    setFfmpegLoading(true);
+    setLoadError(null);
+    setLoadingProgress(0);
+    
+    try {
+      const ffmpeg = new FFmpeg();
+      
+      ffmpeg.on("progress", ({ progress }) => {
+        setLoadingProgress(Math.round(progress * 100));
+      });
+
+      ffmpeg.on("log", ({ message }) => {
+        console.log("[FFmpeg]", message);
+      });
+
+      const baseURL = "https://unpkg.com/@ffmpeg/core-mt@0.12.6/dist/esm";
+      
+      await ffmpeg.load({
+        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+        workerURL: await toBlobURL(`${baseURL}/ffmpeg-core.worker.js`, "text/javascript"),
+      });
+
+      ffmpegRef.current = ffmpeg;
+      setFfmpegLoaded(true);
+      toast.success("FFmpeg carregado com sucesso!");
+    } catch (error) {
+      console.error("Error loading FFmpeg:", error);
+      const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
+      setLoadError(errorMessage);
+      toast.error("Erro ao carregar FFmpeg. Clique em 'Tentar Novamente'.");
+    } finally {
+      setFfmpegLoading(false);
+    }
+  }, []);
+
   // Load FFmpeg on mount
   useEffect(() => {
-    const loadFFmpeg = async () => {
-      if (ffmpegRef.current || ffmpegLoading) return;
-      
-      setFfmpegLoading(true);
-      try {
-        const ffmpeg = new FFmpeg();
-        
-        ffmpeg.on("progress", ({ progress }) => {
-          setLoadingProgress(Math.round(progress * 100));
-        });
-
-        const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm";
-        
-        await ffmpeg.load({
-          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
-        });
-
-        ffmpegRef.current = ffmpeg;
-        setFfmpegLoaded(true);
-        toast.success("FFmpeg carregado com sucesso!");
-      } catch (error) {
-        console.error("Error loading FFmpeg:", error);
-        toast.error("Erro ao carregar FFmpeg. Tente recarregar a página.");
-      } finally {
-        setFfmpegLoading(false);
-      }
-    };
-
     loadFFmpeg();
-  }, []);
+  }, [loadFFmpeg]);
 
   // Sync pause state with ref
   useEffect(() => {
@@ -415,16 +428,47 @@ export default function VideoVariationGenerator() {
             <Card className="bg-background/95 border-2 border-accent">
               <CardContent className="pt-6">
                 <div className="flex items-center gap-4">
-                  <Loader2 className="h-6 w-6 animate-spin text-accent" />
+                  {ffmpegLoading ? (
+                    <Loader2 className="h-6 w-6 animate-spin text-accent" />
+                  ) : loadError ? (
+                    <XCircle className="h-6 w-6 text-destructive" />
+                  ) : (
+                    <Loader2 className="h-6 w-6 animate-spin text-accent" />
+                  )}
                   <div className="flex-1">
-                    <p className="text-sm font-medium">Carregando FFmpeg...</p>
-                    <p className="text-xs text-muted-foreground">
-                      Isso pode levar alguns segundos na primeira vez (~31MB)
-                    </p>
+                    {loadError ? (
+                      <>
+                        <p className="text-sm font-medium text-destructive">Erro ao carregar FFmpeg</p>
+                        <p className="text-xs text-muted-foreground">
+                          {loadError}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-medium">Carregando FFmpeg...</p>
+                        <p className="text-xs text-muted-foreground">
+                          Isso pode levar alguns segundos na primeira vez (~31MB)
+                        </p>
+                      </>
+                    )}
                     {ffmpegLoading && (
                       <Progress value={loadingProgress} className="h-2 mt-2" />
                     )}
                   </div>
+                  {loadError && (
+                    <Button
+                      onClick={() => {
+                        ffmpegRef.current = null;
+                        loadFFmpeg();
+                      }}
+                      variant="outline"
+                      size="sm"
+                      className="border-accent"
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Tentar Novamente
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
