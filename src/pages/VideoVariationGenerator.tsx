@@ -89,13 +89,24 @@ export default function VideoVariationGenerator() {
   const [analysisResult, setAnalysisResult] = useState<VideoAnalysis | null>(null);
   const [analysisVideoName, setAnalysisVideoName] = useState<string>('');
   
+  // Custom variation count
+  const [customVariationCount, setCustomVariationCount] = useState<number | null>(null);
+  
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const generatedVideosRef = useRef<GeneratedVideo[]>([]);
 
   const canShowAudioSection = hookVideos.length > 0 && bodyVideos.length > 0 && ctaVideos.length > 0;
   const videoVariations = hookVideos.length * bodyVideos.length * ctaVideos.length;
-  const totalVariations = audioClips.length > 0 ? videoVariations * audioClips.length : videoVariations;
+  const maxVariations = audioClips.length > 0 ? videoVariations * audioClips.length : videoVariations;
+  const totalVariations = customVariationCount !== null ? Math.min(customVariationCount, maxVariations) : maxVariations;
   const estimatedTimeSeconds = totalVariations * 60;
+  
+  // Reset custom count when max changes
+  useEffect(() => {
+    if (customVariationCount !== null && customVariationCount > maxVariations) {
+      setCustomVariationCount(maxVariations);
+    }
+  }, [maxVariations, customVariationCount]);
 
   // Keep ref in sync with state for polling
   useEffect(() => {
@@ -463,8 +474,13 @@ export default function VideoVariationGenerator() {
       }
     }
 
+    // Limit variations to the custom count if set
+    const limitedVariations = customVariationCount !== null 
+      ? variations.slice(0, customVariationCount) 
+      : variations;
+
     // Initialize all videos as queued
-    const initialVideos: GeneratedVideo[] = variations.map((v, i) => ({
+    const initialVideos: GeneratedVideo[] = limitedVariations.map((v, i) => ({
       id: `video-${i}-${Date.now()}`,
       name: v.name,
       status: 'queued',
@@ -473,8 +489,8 @@ export default function VideoVariationGenerator() {
     setGeneratedVideos(initialVideos);
 
     // Submit all jobs
-    for (let i = 0; i < variations.length; i++) {
-      const variation = variations[i];
+    for (let i = 0; i < limitedVariations.length; i++) {
+      const variation = limitedVariations[i];
       setCurrentProcessing(variation.name);
 
       // Update status to processing
@@ -815,44 +831,89 @@ export default function VideoVariationGenerator() {
           {/* Stats and Generate Button */}
           <Card className="bg-background/95 border-2 border-accent">
             <CardContent className="pt-6">
-              <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-                <div className="flex flex-wrap gap-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <FileVideo className="h-4 w-4 text-accent" />
-                    <span>Vídeos: <strong>{videoVariations}</strong></span>
-                  </div>
-                  {audioClips.length > 0 && (
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                  <div className="flex flex-wrap gap-4 text-sm">
                     <div className="flex items-center gap-2">
-                      <Music className="h-4 w-4 text-purple-500" />
-                      <span>Áudios: <strong>{audioClips.length}</strong></span>
+                      <FileVideo className="h-4 w-4 text-accent" />
+                      <span>Vídeos: <strong>{videoVariations}</strong></span>
                     </div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <FileVideo className="h-4 w-4 text-green-500" />
-                    <span>Total de variações: <strong>{totalVariations}</strong></span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span>Tempo estimado: <strong>~{Math.ceil(estimatedTimeSeconds / 60)} min</strong></span>
+                    {audioClips.length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <Music className="h-4 w-4 text-purple-500" />
+                        <span>Áudios: <strong>{audioClips.length}</strong></span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <FileVideo className="h-4 w-4 text-green-500" />
+                      <span>Máximo de variações: <strong>{maxVariations}</strong></span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span>Tempo estimado: <strong>~{Math.ceil(estimatedTimeSeconds / 60)} min</strong></span>
+                    </div>
                   </div>
                 </div>
-                <Button
-                  onClick={generateVariations}
-                  disabled={isGenerating || videoVariations === 0 || isUploading}
-                  className="bg-accent hover:bg-accent/90 text-accent-foreground"
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Processando... {currentProcessing && `(${currentProcessing})`}
-                    </>
-                  ) : (
-                    <>
-                      <Play className="mr-2 h-4 w-4" />
-                      Gerar {totalVariations} Variações
-                    </>
-                  )}
-                </Button>
+                
+                {/* Custom variation count */}
+                {maxVariations > 0 && (
+                  <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-muted/30 rounded-lg border border-muted">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-muted-foreground">Quantas variações deseja gerar?</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={1}
+                        max={maxVariations}
+                        value={customVariationCount ?? maxVariations}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value);
+                          if (isNaN(value) || value < 1) {
+                            setCustomVariationCount(1);
+                          } else if (value > maxVariations) {
+                            setCustomVariationCount(maxVariations);
+                          } else {
+                            setCustomVariationCount(value);
+                          }
+                        }}
+                        className="w-24 text-center border-accent"
+                        disabled={isGenerating}
+                      />
+                      <span className="text-sm text-muted-foreground">de {maxVariations}</span>
+                      {customVariationCount !== null && customVariationCount !== maxVariations && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setCustomVariationCount(null)}
+                          className="text-xs text-muted-foreground hover:text-foreground"
+                        >
+                          Gerar todas
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                <div className="flex justify-end">
+                  <Button
+                    onClick={generateVariations}
+                    disabled={isGenerating || videoVariations === 0 || isUploading}
+                    className="bg-accent hover:bg-accent/90 text-accent-foreground"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Processando... {currentProcessing && `(${currentProcessing})`}
+                      </>
+                    ) : (
+                      <>
+                        <Play className="mr-2 h-4 w-4" />
+                        Gerar {totalVariations} Variações
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
