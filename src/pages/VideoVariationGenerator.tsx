@@ -504,79 +504,112 @@ export default function VideoVariationGenerator() {
     }));
     setGeneratedVideos(initialVideos);
 
-    // Submit all jobs
-    for (let i = 0; i < limitedVariations.length; i++) {
-      const variation = limitedVariations[i];
-      setCurrentProcessing(variation.name);
+    // Submit jobs in parallel batches for much faster processing
+    const BATCH_SIZE = 5; // Process 5 jobs at a time
+    const batches: typeof limitedVariations[] = [];
+    
+    for (let i = 0; i < limitedVariations.length; i += BATCH_SIZE) {
+      batches.push(limitedVariations.slice(i, i + BATCH_SIZE));
+    }
 
-      // Update status to processing
-      setGeneratedVideos(prev => prev.map((v, idx) => 
-        idx === i ? { ...v, status: 'processing' } : v
-      ));
+    let processedCount = 0;
 
-      try {
-        if (variation.audio && variation.audio.storageUrl) {
-          // With audio: use merge-videos-with-audio endpoint
-          const { data, error } = await supabase.functions.invoke('merge-videos', {
-            body: {
-              videoUrls: [
-                variation.hook.storageUrl,
-                variation.body.storageUrl,
-                variation.cta.storageUrl
-              ],
-              audioUrl: variation.audio.storageUrl,
-              variationName: variation.name
-            }
-          });
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex];
+      setCurrentProcessing(`Lote ${batchIndex + 1}/${batches.length} (${batch.length} vídeos)`);
 
-          if (error || !data?.success) {
-            console.error('Error submitting job with audio:', error || data?.error);
-            setGeneratedVideos(prev => prev.map((v, idx) => 
-              idx === i ? { ...v, status: 'failed' } : v
-            ));
-            continue;
-          }
-
-          // Store request ID and response URL for polling
-          setGeneratedVideos(prev => prev.map((v, idx) => 
-            idx === i ? { ...v, requestId: data.requestId, responseUrl: data.responseUrl } : v
-          ));
-        } else {
-          // Without audio: use regular merge-videos endpoint
-          const { data, error } = await supabase.functions.invoke('merge-videos', {
-            body: {
-              videoUrls: [
-                variation.hook.storageUrl,
-                variation.body.storageUrl,
-                variation.cta.storageUrl
-              ],
-              variationName: variation.name
-            }
-          });
-
-          if (error || !data?.success) {
-            console.error('Error submitting job:', error || data?.error);
-            setGeneratedVideos(prev => prev.map((v, idx) => 
-              idx === i ? { ...v, status: 'failed' } : v
-            ));
-            continue;
-          }
-
-          // Store request ID and response URL for polling
-          setGeneratedVideos(prev => prev.map((v, idx) => 
-            idx === i ? { ...v, requestId: data.requestId, responseUrl: data.responseUrl } : v
-          ));
-        }
-
-      } catch (error) {
-        console.error(`Error processing ${variation.name}:`, error);
+      // Process batch in parallel
+      const batchPromises = batch.map(async (variation, batchItemIndex) => {
+        const globalIndex = batchIndex * BATCH_SIZE + batchItemIndex;
+        
+        // Update status to processing
         setGeneratedVideos(prev => prev.map((v, idx) => 
-          idx === i ? { ...v, status: 'failed' } : v
+          idx === globalIndex ? { ...v, status: 'processing' } : v
         ));
-      }
+
+        try {
+          if (variation.audio && variation.audio.storageUrl) {
+            // With audio: use merge-videos-with-audio endpoint
+            const { data, error } = await supabase.functions.invoke('merge-videos', {
+              body: {
+                videoUrls: [
+                  variation.hook.storageUrl,
+                  variation.body.storageUrl,
+                  variation.cta.storageUrl
+                ],
+                audioUrl: variation.audio.storageUrl,
+                variationName: variation.name
+              }
+            });
+
+            if (error || !data?.success) {
+              console.error('Error submitting job with audio:', error || data?.error);
+              return { index: globalIndex, success: false };
+            }
+
+            return { 
+              index: globalIndex, 
+              success: true, 
+              requestId: data.requestId, 
+              responseUrl: data.responseUrl 
+            };
+          } else {
+            // Without audio: use regular merge-videos endpoint
+            const { data, error } = await supabase.functions.invoke('merge-videos', {
+              body: {
+                videoUrls: [
+                  variation.hook.storageUrl,
+                  variation.body.storageUrl,
+                  variation.cta.storageUrl
+                ],
+                variationName: variation.name
+              }
+            });
+
+            if (error || !data?.success) {
+              console.error('Error submitting job:', error || data?.error);
+              return { index: globalIndex, success: false };
+            }
+
+            return { 
+              index: globalIndex, 
+              success: true, 
+              requestId: data.requestId, 
+              responseUrl: data.responseUrl 
+            };
+          }
+        } catch (error) {
+          console.error(`Error processing ${variation.name}:`, error);
+          return { index: globalIndex, success: false };
+        }
+      });
+
+      // Wait for batch to complete
+      const batchResults = await Promise.all(batchPromises);
+
+      // Update all results from this batch
+      setGeneratedVideos(prev => {
+        const updated = [...prev];
+        for (const result of batchResults) {
+          if (result.success && result.requestId) {
+            updated[result.index] = { 
+              ...updated[result.index], 
+              requestId: result.requestId, 
+              responseUrl: result.responseUrl 
+            };
+          } else {
+            updated[result.index] = { ...updated[result.index], status: 'failed' };
+          }
+        }
+        return updated;
+      });
+
+      processedCount += batch.length;
+      console.log(`Batch ${batchIndex + 1} complete. Total processed: ${processedCount}/${limitedVariations.length}`);
     }
 
     setCurrentProcessing(null);
+    toast.success(`${limitedVariations.length} vídeos enviados para processamento!`);
 
     // Start polling for results
     startPolling();
