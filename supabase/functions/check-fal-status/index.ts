@@ -31,19 +31,20 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    const { requestId } = await req.json();
+    const { requestId, responseUrl } = await req.json();
     console.log(`Checking status for request: ${requestId}`);
 
     if (!FAL_KEY) {
       throw new Error('FAL_KEY not configured');
     }
 
-    // The correct endpoint pattern for fal.ai queue - must include the full model path
-    const responseUrl = `https://queue.fal.run/fal-ai/ffmpeg-api/concat-videos/requests/${requestId}`;
+    // Use the response_url directly from the submit result if provided
+    // Otherwise construct it (fallback)
+    const fetchUrl = responseUrl || `https://queue.fal.run/fal-ai/ffmpeg-api/concat-videos/requests/${requestId}`;
     
-    console.log(`Fetching result from: ${responseUrl}`);
+    console.log(`Fetching result from: ${fetchUrl}`);
     
-    const resultResponse = await fetch(responseUrl, {
+    const resultResponse = await fetch(fetchUrl, {
       method: 'GET',
       headers: {
         'Authorization': `Key ${FAL_KEY}`,

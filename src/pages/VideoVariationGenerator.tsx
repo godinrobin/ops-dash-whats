@@ -40,6 +40,7 @@ interface GeneratedVideo {
   status: 'queued' | 'processing' | 'done' | 'failed';
   url?: string;
   requestId?: string;
+  responseUrl?: string;
 }
 
 export default function VideoVariationGenerator() {
@@ -159,9 +160,9 @@ export default function VideoVariationGenerator() {
     });
   };
 
-  const checkVideoStatus = async (requestId: string): Promise<{ status: string; videoUrl?: string }> => {
+  const checkVideoStatus = async (requestId: string, responseUrl?: string): Promise<{ status: string; videoUrl?: string }> => {
     const { data, error } = await supabase.functions.invoke('check-fal-status', {
-      body: { requestId }
+      body: { requestId, responseUrl }
     });
 
     if (error) {
@@ -252,9 +253,9 @@ export default function VideoVariationGenerator() {
           continue;
         }
 
-        // Store request ID for polling
+        // Store request ID and response URL for polling
         setGeneratedVideos(prev => prev.map((v, idx) => 
-          idx === i ? { ...v, requestId: data.requestId } : v
+          idx === i ? { ...v, requestId: data.requestId, responseUrl: data.responseUrl } : v
         ));
 
       } catch (error) {
@@ -295,7 +296,7 @@ export default function VideoVariationGenerator() {
       for (const video of pendingVideos) {
         if (!video.requestId) continue;
 
-        const result = await checkVideoStatus(video.requestId);
+        const result = await checkVideoStatus(video.requestId, video.responseUrl);
         
         if (result.status === 'done' && result.videoUrl) {
           setGeneratedVideos(prev => prev.map(v => 
@@ -574,6 +575,21 @@ export default function VideoVariationGenerator() {
                             Pausar
                           </>
                         )}
+                      </Button>
+                    )}
+                    {!isGenerating && failedCount > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setGeneratedVideos([]);
+                          setIsGenerating(false);
+                          toast.info("Estado limpo. Clique em 'Gerar Variações' para testar novamente.");
+                        }}
+                        className="border-destructive text-destructive"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Limpar e Testar Novamente
                       </Button>
                     )}
                     {completedCount > 0 && (

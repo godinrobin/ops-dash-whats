@@ -86,6 +86,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({ 
       success: true, 
       requestId,
+      responseUrl: submitResult.response_url,
       status: 'queued',
       variationName
     }), {
