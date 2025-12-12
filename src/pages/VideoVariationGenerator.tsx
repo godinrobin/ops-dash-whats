@@ -111,6 +111,55 @@ export default function VideoVariationGenerator() {
     };
   }, []);
 
+  // Recovery: check for pending jobs on page load and resume polling
+  useEffect(() => {
+    const recoverPendingJobs = async () => {
+      if (!user) return;
+
+      try {
+        // Fetch jobs from last 2 hours that are still queued or processing
+        const { data: pendingJobs, error } = await supabase
+          .from('video_generation_jobs')
+          .select('*')
+          .eq('user_id', user.id)
+          .in('status', ['queued', 'processing'])
+          .gte('created_at', new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString())
+          .order('created_at', { ascending: true });
+
+        if (error) {
+          console.error('Error fetching pending jobs:', error);
+          return;
+        }
+
+        if (pendingJobs && pendingJobs.length > 0) {
+          console.log(`Recovering ${pendingJobs.length} pending jobs`);
+          
+          // Convert database jobs to GeneratedVideo format
+          const recoveredVideos: GeneratedVideo[] = pendingJobs.map((job, index) => ({
+            id: job.id,
+            name: job.variation_name,
+            status: job.status as 'queued' | 'processing',
+            requestId: job.render_id,
+            responseUrl: `https://queue.fal.run/fal-ai/ffmpeg-api/requests/${job.render_id}`,
+            url: job.video_url || undefined
+          }));
+
+          setGeneratedVideos(recoveredVideos);
+          setIsGenerating(true);
+          
+          // Start polling to check status of recovered jobs
+          setTimeout(() => startPolling(), 1000);
+          
+          toast.info(`Recuperando ${pendingJobs.length} vídeos em processamento...`);
+        }
+      } catch (err) {
+        console.error('Error recovering pending jobs:', err);
+      }
+    };
+
+    recoverPendingJobs();
+  }, [user]);
+
   const uploadVideoToStorage = async (file: File): Promise<string | null> => {
     if (!user) return null;
     
