@@ -577,13 +577,14 @@ export default function VideoVariationGenerator() {
                         )}
                       </Button>
                     )}
-                    {!isGenerating && failedCount > 0 && (
+                    {failedCount > 0 && (
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => {
                           setGeneratedVideos([]);
                           setIsGenerating(false);
+                          setIsPaused(false);
                           toast.info("Estado limpo. Clique em 'Gerar Variações' para testar novamente.");
                         }}
                         className="border-destructive text-destructive"
