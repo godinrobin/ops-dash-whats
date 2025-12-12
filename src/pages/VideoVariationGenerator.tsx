@@ -25,7 +25,9 @@ import {
   Eye,
   RotateCcw,
   Sparkles,
-  Music
+  Music,
+  Pause,
+  RefreshCw
 } from "lucide-react";
 
 interface VideoClip {
@@ -49,7 +51,7 @@ interface AudioClip {
 interface GeneratedVideo {
   id: string;
   name: string;
-  status: 'queued' | 'processing' | 'done' | 'failed';
+  status: 'queued' | 'processing' | 'done' | 'failed' | 'paused';
   url?: string;
   requestId?: string;
   responseUrl?: string;
@@ -92,8 +94,11 @@ export default function VideoVariationGenerator() {
   // Custom variation count
   const [customVariationCount, setCustomVariationCount] = useState<number | null>(null);
   
+  // Pause state
+  const [isPaused, setIsPaused] = useState(false);
+  
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
-  const generatedVideosRef = useRef<GeneratedVideo[]>([]);
+  const generatedVideosRef = useRef<GeneratedVideo[]>();
 
   const canShowAudioSection = hookVideos.length > 0 && bodyVideos.length > 0 && ctaVideos.length > 0;
   const videoVariations = hookVideos.length * bodyVideos.length * ctaVideos.length;
@@ -359,6 +364,73 @@ export default function VideoVariationGenerator() {
     }
   };
 
+  // Pause generation
+  const pauseGeneration = () => {
+    setIsPaused(true);
+    setIsGenerating(false);
+    
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+    
+    // Mark queued/processing videos as paused
+    setGeneratedVideos(prev => prev.map(v => 
+      (v.status === 'queued' || v.status === 'processing') 
+        ? { ...v, status: 'paused' as const }
+        : v
+    ));
+    
+    toast.info('Geração pausada');
+  };
+
+  // Retry failed videos
+  const retryFailedVideos = async () => {
+    const failedVideos = generatedVideos.filter(v => v.status === 'failed');
+    if (failedVideos.length === 0) return;
+
+    setIsGenerating(true);
+    setIsPaused(false);
+
+    // Mark failed videos as processing
+    setGeneratedVideos(prev => prev.map(v => 
+      v.status === 'failed' ? { ...v, status: 'processing' as const } : v
+    ));
+
+    // Re-submit failed jobs by fetching their info from the database
+    for (const video of failedVideos) {
+      try {
+        // Get job info from database
+        const { data: jobData } = await supabase
+          .from('video_generation_jobs')
+          .select('*')
+          .eq('id', video.id)
+          .single();
+
+        if (jobData) {
+          // Update status in database
+          await supabase
+            .from('video_generation_jobs')
+            .update({ status: 'queued' })
+            .eq('id', video.id);
+            
+          // Update local state
+          setGeneratedVideos(prev => prev.map(v => 
+            v.id === video.id 
+              ? { ...v, status: 'queued' as const } 
+              : v
+          ));
+        }
+      } catch (error) {
+        console.error(`Error retrying ${video.name}:`, error);
+      }
+    }
+
+    // Start polling again
+    startPolling();
+    toast.success(`Tentando novamente ${failedVideos.length} vídeo(s) com erro`);
+  };
+
   const clearAll = async () => {
     // Clear all uploaded videos and audios
     hookVideos.forEach(v => URL.revokeObjectURL(v.url));
@@ -385,6 +457,7 @@ export default function VideoVariationGenerator() {
     setAudioClips([]);
     setGeneratedVideos([]);
     setIsGenerating(false);
+    setIsPaused(false);
     
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
@@ -840,7 +913,8 @@ export default function VideoVariationGenerator() {
   const completedCount = generatedVideos.filter(v => v.status === 'done').length;
   const failedCount = generatedVideos.filter(v => v.status === 'failed').length;
   const pendingCount = generatedVideos.filter(v => v.status === 'queued' || v.status === 'processing').length;
-  const allCompleted = generatedVideos.length > 0 && pendingCount === 0;
+  const pausedCount = generatedVideos.filter(v => v.status === 'paused').length;
+  const allCompleted = generatedVideos.length > 0 && pendingCount === 0 && pausedCount === 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -974,7 +1048,29 @@ export default function VideoVariationGenerator() {
                   </div>
                 )}
                 
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-2">
+                  {isGenerating && (
+                    <Button
+                      onClick={pauseGeneration}
+                      variant="outline"
+                      className="border-yellow-500 text-yellow-500 hover:bg-yellow-500/10"
+                    >
+                      <Pause className="mr-2 h-4 w-4" />
+                      Pausar
+                    </Button>
+                  )}
+                  {isPaused && (
+                    <>
+                      <Button
+                        onClick={clearAll}
+                        variant="outline"
+                        className="border-destructive text-destructive hover:bg-destructive/10"
+                      >
+                        <RotateCcw className="mr-2 h-4 w-4" />
+                        Limpar
+                      </Button>
+                    </>
+                  )}
                   <Button
                     onClick={generateVariations}
                     disabled={isGenerating || videoVariations === 0 || isUploading}
@@ -1018,6 +1114,16 @@ export default function VideoVariationGenerator() {
                       <div className="flex items-center gap-2 text-sm">
                         <XCircle className="h-4 w-4 text-destructive" />
                         <span>{failedCount}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={retryFailedVideos}
+                          disabled={isGenerating}
+                          className="h-6 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <RefreshCw className="mr-1 h-3 w-3" />
+                          Tentar novamente
+                        </Button>
                       </div>
                     )}
                     {allCompleted && (
@@ -1069,17 +1175,23 @@ export default function VideoVariationGenerator() {
                         {(video.status === 'queued' || video.status === 'processing') && (
                           <Loader2 className="h-4 w-4 animate-spin text-accent" />
                         )}
+                        {video.status === 'paused' && (
+                          <Pause className="h-4 w-4 text-yellow-500" />
+                        )}
                       </div>
                       <Badge 
                         variant={
                           video.status === 'done' ? 'default' :
-                          video.status === 'failed' ? 'destructive' : 'secondary'
+                          video.status === 'failed' ? 'destructive' : 
+                          video.status === 'paused' ? 'outline' : 'secondary'
                         }
+                        className={video.status === 'paused' ? 'border-yellow-500 text-yellow-500' : ''}
                       >
                         {video.status === 'queued' && 'Processando'}
                         {video.status === 'processing' && 'Processando'}
                         {video.status === 'done' && 'Finalizado'}
                         {video.status === 'failed' && 'Falhou'}
+                        {video.status === 'paused' && 'Pausado'}
                       </Badge>
                       {video.status === 'done' && video.url && (
                         <div className="space-y-2">
