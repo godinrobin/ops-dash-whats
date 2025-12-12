@@ -8,6 +8,7 @@ const corsHeaders = {
 };
 
 const FAL_KEY = Deno.env.get('FAL_KEY');
+const FAL_MERGE_AUDIO_URL = 'https://queue.fal.run/fal-ai/ffmpeg-api/merge-audio-video';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -38,10 +39,10 @@ serve(async (req) => {
       throw new Error('FAL_KEY not configured');
     }
 
-    // First, check if the job exists and get its creation time
+    // First, check if the job exists and get its info
     const { data: jobData } = await supabaseClient
       .from('video_generation_jobs')
-      .select('created_at, status')
+      .select('created_at, status, video_url')
       .eq('render_id', requestId)
       .eq('user_id', user.id)
       .single();
@@ -69,10 +70,70 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
+
+      // Check if this is an audio merge job (video_url starts with audio_merge:)
+      if (jobData.video_url?.startsWith('AUDIO_MERGE:')) {
+        const audioMergeRequestId = jobData.video_url.replace('AUDIO_MERGE:', '');
+        console.log(`Checking audio merge status: ${audioMergeRequestId}`);
+        
+        const audioFetchUrl = `https://queue.fal.run/fal-ai/ffmpeg-api/requests/${audioMergeRequestId}`;
+        const audioResponse = await fetch(audioFetchUrl, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Key ${FAL_KEY}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        console.log(`Audio merge response status: ${audioResponse.status}`);
+
+        if (audioResponse.status === 202 || 
+            (audioResponse.status === 400 && (await audioResponse.clone().text()).toLowerCase().includes('still in progress'))) {
+          return new Response(JSON.stringify({ 
+            success: true, 
+            status: 'processing',
+            videoUrl: null,
+            requestId
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        if (audioResponse.ok) {
+          const audioResult = await audioResponse.json();
+          const finalVideoUrl = audioResult.video?.url || audioResult.video_url;
+          
+          if (finalVideoUrl) {
+            console.log(`Audio merge complete: ${finalVideoUrl}`);
+            await supabaseClient
+              .from('video_generation_jobs')
+              .update({ status: 'done', video_url: finalVideoUrl, updated_at: new Date().toISOString() })
+              .eq('render_id', requestId)
+              .eq('user_id', user.id);
+
+            return new Response(JSON.stringify({ 
+              success: true, 
+              status: 'done',
+              videoUrl: finalVideoUrl,
+              requestId
+            }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+          }
+        }
+
+        return new Response(JSON.stringify({ 
+          success: true, 
+          status: 'processing',
+          videoUrl: null,
+          requestId
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
     }
 
-    // Use the response_url provided by Fal.ai - it's the correct endpoint
-    // Note: Fal.ai returns response_url as fal-ai/ffmpeg-api/requests/{id} (without merge-videos in path)
+    // Use the response_url provided by Fal.ai
     const fetchUrl = responseUrl || `https://queue.fal.run/fal-ai/ffmpeg-api/requests/${requestId}`;
     
     console.log(`Fetching result from: ${fetchUrl}`);
@@ -88,7 +149,6 @@ serve(async (req) => {
     console.log(`Fal.ai response status: ${resultResponse.status}`);
 
     if (resultResponse.status === 202) {
-      // Still processing
       console.log('Job still processing (202)');
       return new Response(JSON.stringify({ 
         success: true, 
@@ -104,7 +164,6 @@ serve(async (req) => {
       const errorText = await resultResponse.text();
       console.error('Fal.ai error:', errorText);
       
-      // Check if it's a "still in progress" error (400 with specific message)
       if (resultResponse.status === 400 && errorText.toLowerCase().includes('still in progress')) {
         console.log('Job still in progress (400 response)');
         return new Response(JSON.stringify({ 
@@ -117,7 +176,6 @@ serve(async (req) => {
         });
       }
       
-      // Mark as failed in database
       await supabaseClient
         .from('video_generation_jobs')
         .update({ status: 'failed', updated_at: new Date().toISOString() })
@@ -137,13 +195,59 @@ serve(async (req) => {
     const resultData = await resultResponse.json();
     console.log('Fal.ai result:', JSON.stringify(resultData));
 
-    // Check if we have a video URL in the result
-    // merge-videos API returns video.url according to docs
-    const videoUrl = resultData.video?.url || resultData.video_url || resultData.output?.url || resultData.data?.video?.url;
+    const videoUrl = resultData.video?.url || resultData.video_url || resultData.output?.url;
     
     if (videoUrl) {
-      // Job completed successfully
       console.log(`Video URL found: ${videoUrl}`);
+      
+      // Check if this job needs audio merge
+      if (jobData?.video_url?.startsWith('PENDING_AUDIO:')) {
+        const audioUrl = jobData.video_url.replace('PENDING_AUDIO:', '');
+        console.log(`Starting audio merge with: ${audioUrl}`);
+        
+        // Submit audio merge job
+        const audioResponse = await fetch(FAL_MERGE_AUDIO_URL, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Key ${FAL_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            video_url: videoUrl,
+            audio_url: audioUrl,
+            start_offset: 0
+          })
+        });
+
+        if (audioResponse.ok) {
+          const audioResult = await audioResponse.json();
+          console.log(`Audio merge queued: ${audioResult.request_id}`);
+          
+          // Update job to track audio merge
+          await supabaseClient
+            .from('video_generation_jobs')
+            .update({ 
+              video_url: `AUDIO_MERGE:${audioResult.request_id}`,
+              status: 'processing',
+              updated_at: new Date().toISOString() 
+            })
+            .eq('render_id', requestId)
+            .eq('user_id', user.id);
+
+          return new Response(JSON.stringify({ 
+            success: true, 
+            status: 'processing',
+            videoUrl: null,
+            requestId
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        } else {
+          console.error('Failed to start audio merge');
+        }
+      }
+      
+      // No audio needed or audio merge failed, use video as-is
       await supabaseClient
         .from('video_generation_jobs')
         .update({ status: 'done', video_url: videoUrl, updated_at: new Date().toISOString() })
@@ -160,7 +264,6 @@ serve(async (req) => {
       });
     }
 
-    // If no video URL but response is OK, check if still in queue
     if (resultData.status === 'IN_QUEUE' || resultData.status === 'IN_PROGRESS') {
       console.log(`Job status: ${resultData.status}`);
       return new Response(JSON.stringify({ 
@@ -173,7 +276,6 @@ serve(async (req) => {
       });
     }
 
-    // Default: still processing
     console.log('No video URL yet, still processing');
     return new Response(JSON.stringify({ 
       success: true, 

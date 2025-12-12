@@ -9,7 +9,6 @@ const corsHeaders = {
 
 const FAL_KEY = Deno.env.get('FAL_KEY');
 const FAL_MERGE_VIDEOS_URL = 'https://queue.fal.run/fal-ai/ffmpeg-api/merge-videos';
-const FAL_MERGE_AUDIO_URL = 'https://queue.fal.run/fal-ai/ffmpeg-api/merge-audio-video';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -35,8 +34,8 @@ serve(async (req) => {
 
     const { videoUrls, audioUrl, variationName } = await req.json();
     console.log(`Processing variation: ${variationName}`);
-    console.log(`Video URLs: ${JSON.stringify(videoUrls)}`);
-    console.log(`Audio URL: ${audioUrl || 'none'}`);
+    console.log(`Video URLs count: ${videoUrls?.length}`);
+    console.log(`Has audio: ${!!audioUrl}`);
 
     if (!FAL_KEY) {
       throw new Error('FAL_KEY not configured');
@@ -46,98 +45,36 @@ serve(async (req) => {
       throw new Error('At least 2 video URLs are required');
     }
 
-    let requestId: string;
-    let responseUrl: string;
+    // ALWAYS use async queue for faster submission
+    // Step 1: Queue video merge (async - returns immediately)
+    console.log('Queuing video merge (async)...');
+    
+    const submitResponse = await fetch(FAL_MERGE_VIDEOS_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ video_urls: videoUrls })
+    });
 
-    if (audioUrl) {
-      // With audio: First merge videos, wait for result, then add audio
-      console.log('Processing with audio - Step 1: Merge videos');
-      
-      // Step 1: Merge videos (synchronous call to get immediate result)
-      const mergeResponse = await fetch('https://fal.run/fal-ai/ffmpeg-api/merge-videos', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Key ${FAL_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ video_urls: videoUrls })
-      });
-
-      if (!mergeResponse.ok) {
-        const errorText = await mergeResponse.text();
-        console.error('Fal.ai merge error:', errorText);
-        throw new Error(`Video merge failed: ${mergeResponse.status}`);
-      }
-
-      const mergeResult = await mergeResponse.json();
-      console.log('Video merge result:', JSON.stringify(mergeResult));
-
-      const mergedVideoUrl = mergeResult.video?.url;
-      if (!mergedVideoUrl) {
-        throw new Error('No video URL returned from merge');
-      }
-
-      console.log('Step 2: Adding audio to merged video');
-      
-      // Step 2: Add audio to merged video (async/queued)
-      const audioResponse = await fetch(FAL_MERGE_AUDIO_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Key ${FAL_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          video_url: mergedVideoUrl,
-          audio_url: audioUrl,
-          start_offset: 0
-        })
-      });
-
-      if (!audioResponse.ok) {
-        const errorText = await audioResponse.text();
-        console.error('Fal.ai audio merge error:', errorText);
-        throw new Error(`Audio merge failed: ${audioResponse.status}`);
-      }
-
-      const audioResult = await audioResponse.json();
-      console.log('Audio merge queued:', JSON.stringify(audioResult));
-
-      requestId = audioResult.request_id;
-      responseUrl = audioResult.response_url;
-
-    } else {
-      // Without audio: Just queue video merge
-      console.log('Processing without audio - Queue video merge');
-      
-      const submitResponse = await fetch(FAL_MERGE_VIDEOS_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Key ${FAL_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ video_urls: videoUrls })
-      });
-
-      const responseText = await submitResponse.text();
-      console.log('Fal.ai raw response:', responseText);
-
-      if (!submitResponse.ok) {
-        console.error('Fal.ai submit error:', responseText);
-        throw new Error(`Fal.ai error: ${submitResponse.status} - ${responseText}`);
-      }
-
-      const submitResult = JSON.parse(responseText);
-      console.log('Fal.ai submit result:', submitResult);
-
-      requestId = submitResult.request_id;
-      responseUrl = submitResult.response_url;
+    if (!submitResponse.ok) {
+      const errorText = await submitResponse.text();
+      console.error('Fal.ai submit error:', errorText);
+      throw new Error(`Fal.ai error: ${submitResponse.status} - ${errorText}`);
     }
+
+    const submitResult = await submitResponse.json();
+    console.log('Fal.ai queued:', submitResult.request_id);
+
+    const requestId = submitResult.request_id;
+    const responseUrl = submitResult.response_url;
 
     if (!requestId) {
       throw new Error('No request_id returned from Fal.ai');
     }
 
-    // Save job to database
+    // Save job to database with audio info for later processing
     const { error: insertError } = await supabaseClient
       .from('video_generation_jobs')
       .insert({
@@ -149,6 +86,23 @@ serve(async (req) => {
 
     if (insertError) {
       console.error('Error inserting job:', insertError);
+    }
+
+    // Store audio URL in a way we can retrieve it later (using the job's render_id)
+    // We'll handle audio merge in the status check function when video is ready
+    if (audioUrl) {
+      console.log('Audio URL will be merged when video is ready');
+      // Store audio URL for later - we'll add it when checking status
+      const { error: updateError } = await supabaseClient
+        .from('video_generation_jobs')
+        .update({ 
+          video_url: `PENDING_AUDIO:${audioUrl}` // Temporary marker
+        })
+        .eq('render_id', requestId);
+      
+      if (updateError) {
+        console.error('Error storing audio URL:', updateError);
+      }
     }
 
     return new Response(JSON.stringify({ 
