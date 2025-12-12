@@ -66,7 +66,7 @@ export default function VideoVariationGenerator() {
   const totalVariations = hookVideos.length * bodyVideos.length * ctaVideos.length;
   const estimatedTimeSeconds = totalVariations * 30; // ~30 sec per video locally
 
-  // Load FFmpeg function
+  // Load FFmpeg function - using single-threaded version (UMD) for better browser compatibility
   const loadFFmpeg = useCallback(async () => {
     if (ffmpegRef.current) return;
     
@@ -85,12 +85,12 @@ export default function VideoVariationGenerator() {
         console.log("[FFmpeg]", message);
       });
 
-      const baseURL = "https://unpkg.com/@ffmpeg/core-mt@0.12.6/dist/esm";
+      // Use single-threaded UMD version - works without SharedArrayBuffer/COOP/COEP headers
+      const baseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd";
       
       await ffmpeg.load({
         coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
         wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
-        workerURL: await toBlobURL(`${baseURL}/ffmpeg-core.worker.js`, "text/javascript"),
       });
 
       ffmpegRef.current = ffmpeg;
