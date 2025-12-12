@@ -39,8 +39,8 @@ serve(async (req) => {
     }
 
     // Use the response_url directly from the submit result if provided
-    // Otherwise construct it (fallback)
-    const fetchUrl = responseUrl || `https://queue.fal.run/fal-ai/ffmpeg-api/concat-videos/requests/${requestId}`;
+    // Otherwise construct it (without concat-videos in path - that was wrong)
+    const fetchUrl = responseUrl || `https://queue.fal.run/fal-ai/ffmpeg-api/requests/${requestId}`;
     
     console.log(`Fetching result from: ${fetchUrl}`);
     
