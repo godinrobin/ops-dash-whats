@@ -38,3 +38,6 @@ verify_jwt = true
 
 [functions.check-fal-status]
 verify_jwt = true
+
+[functions.analyze-creative-video]
+verify_jwt = true
