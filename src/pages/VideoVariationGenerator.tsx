@@ -501,6 +501,7 @@ export default function VideoVariationGenerator() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
+      <div className="h-14 md:h-16" />
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto space-y-8">
           <div className="text-center">
