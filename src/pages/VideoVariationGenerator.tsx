@@ -50,6 +50,8 @@ interface VideoAnalysis {
   bodyAnalysis: string;
   ctaScore: number;
   ctaAnalysis: string;
+  coherenceScore: number;
+  coherenceAnalysis: string;
   overallScore: number;
   overallAnalysis: string;
   transcription: string;
@@ -229,8 +231,9 @@ export default function VideoVariationGenerator() {
     setAnalysisVideoName(videoName);
     
     try {
+      // First check for existing analysis
       const { data, error } = await supabase.functions.invoke('analyze-creative-video', {
-        body: { videoUrl, videoName }
+        body: { videoUrl, videoName, checkExisting: true }
       });
 
       if (error) {
@@ -242,6 +245,10 @@ export default function VideoVariationGenerator() {
       if (data.error) {
         toast.error(data.error);
         return;
+      }
+
+      if (data.cached) {
+        toast.info('Exibindo análise salva anteriormente');
       }
 
       setAnalysisResult(data.analysis);
@@ -824,7 +831,7 @@ export default function VideoVariationGenerator() {
               </div>
 
               {/* Individual Scores */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className={`p-4 rounded-lg border ${getScoreBg(analysisResult.hookScore)} text-center`}>
                   <div className="w-3 h-3 rounded-full bg-green-500 mx-auto mb-2" />
                   <p className="text-xs text-muted-foreground">Hook</p>
@@ -844,6 +851,13 @@ export default function VideoVariationGenerator() {
                   <p className="text-xs text-muted-foreground">CTA</p>
                   <p className={`text-2xl font-bold ${getScoreColor(analysisResult.ctaScore)}`}>
                     {analysisResult.ctaScore}
+                  </p>
+                </div>
+                <div className={`p-4 rounded-lg border ${getScoreBg(analysisResult.coherenceScore || 0)} text-center`}>
+                  <div className="w-3 h-3 rounded-full bg-accent mx-auto mb-2" />
+                  <p className="text-xs text-muted-foreground">Coerência</p>
+                  <p className={`text-2xl font-bold ${getScoreColor(analysisResult.coherenceScore || 0)}`}>
+                    {analysisResult.coherenceScore || 0}
                   </p>
                 </div>
               </div>
@@ -872,6 +886,14 @@ export default function VideoVariationGenerator() {
                     <h4 className="font-semibold">CTA (Final)</h4>
                   </div>
                   <p className="text-sm text-muted-foreground">{analysisResult.ctaAnalysis}</p>
+                </div>
+
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-3 h-3 rounded-full bg-accent" />
+                    <h4 className="font-semibold">🔗 Coerência</h4>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{analysisResult.coherenceAnalysis || 'Análise de coerência não disponível.'}</p>
                 </div>
 
                 <div className="p-4 bg-accent/10 border border-accent/30 rounded-lg">
