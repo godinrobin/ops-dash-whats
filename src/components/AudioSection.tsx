@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, DragEvent } from "react";
+import { useState, useRef, useCallback, DragEvent, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,7 +20,10 @@ import {
   Pause,
   Check,
   X,
-  RefreshCw
+  RefreshCw,
+  Clock,
+  AlertTriangle,
+  Volume2
 } from "lucide-react";
 
 interface AudioClip {
@@ -31,6 +34,7 @@ interface AudioClip {
   storageUrl?: string;
   isGenerated?: boolean;
   copy?: string;
+  duration?: number;
 }
 
 interface Voice {
@@ -51,18 +55,37 @@ const voices: Voice[] = [
   { id: 'bIHbv24MWmeRgasZH58o', name: 'Carioca', category: 'bonus' },
 ];
 
+const PREVIEW_TEXT = "Esta é a voz selecionada, gostou?";
+
+// Estimate audio duration from text (approx 150 words per minute, avg 5 chars per word)
+const estimateAudioDuration = (text: string): number => {
+  const wordsPerMinute = 150;
+  const avgCharsPerWord = 5;
+  const words = text.length / avgCharsPerWord;
+  const minutes = words / wordsPerMinute;
+  return Math.ceil(minutes * 60); // Return seconds
+};
+
+const formatDuration = (seconds: number): string => {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
 interface AudioSectionProps {
   audioClips: AudioClip[];
   setAudioClips: React.Dispatch<React.SetStateAction<AudioClip[]>>;
   isGenerating: boolean;
   onUploadToStorage: (file: File) => Promise<string | null>;
+  totalVideoDuration?: number;
 }
 
 export function AudioSection({ 
   audioClips, 
   setAudioClips, 
   isGenerating,
-  onUploadToStorage 
+  onUploadToStorage,
+  totalVideoDuration = 0
 }: AudioSectionProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -86,8 +109,36 @@ export function AudioSection({
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   
+  // Voice preview state
+  const [voicePreviews, setVoicePreviews] = useState<Record<string, string>>({});
+  const [loadingVoicePreview, setLoadingVoicePreview] = useState<string | null>(null);
+  const [playingVoicePreview, setPlayingVoicePreview] = useState<string | null>(null);
+  const voicePreviewAudioRef = useRef<HTMLAudioElement | null>(null);
+  
   // Step tracking
   const [aiStep, setAiStep] = useState<'copy' | 'variations' | 'voice' | 'preview' | 'done'>('copy');
+
+  // Load voice previews from database on mount
+  useEffect(() => {
+    const loadVoicePreviews = async () => {
+      const { data, error } = await supabase
+        .from('voice_previews')
+        .select('voice_id, audio_base64');
+      
+      if (data && !error) {
+        const previews: Record<string, string> = {};
+        data.forEach((item: any) => {
+          previews[item.voice_id] = item.audio_base64;
+        });
+        setVoicePreviews(previews);
+      }
+    };
+    
+    loadVoicePreviews();
+  }, []);
+
+  // Calculate total audio duration from clips
+  const totalAudioDuration = audioClips.reduce((total, clip) => total + (clip.duration || 0), 0);
 
   const handleFileUpload = async (files: FileList | null) => {
     if (!files) return;
@@ -109,12 +160,23 @@ export function AudioSection({
         }
 
         const localUrl = URL.createObjectURL(file);
+        
+        // Get audio duration
+        const audio = new Audio(localUrl);
+        const duration = await new Promise<number>((resolve) => {
+          audio.addEventListener('loadedmetadata', () => {
+            resolve(Math.ceil(audio.duration));
+          });
+          audio.addEventListener('error', () => resolve(0));
+        });
+        
         setAudioClips(prev => [...prev, {
           id: Date.now().toString() + Math.random(),
           file,
           url: localUrl,
           name: file.name,
-          storageUrl
+          storageUrl,
+          duration
         }]);
       }
       
@@ -240,6 +302,80 @@ export function AudioSection({
     setAiStep('voice');
   };
 
+  const playVoicePreview = async (voiceId: string) => {
+    // Stop any currently playing preview
+    if (voicePreviewAudioRef.current) {
+      voicePreviewAudioRef.current.pause();
+      voicePreviewAudioRef.current = null;
+    }
+    
+    if (playingVoicePreview === voiceId) {
+      setPlayingVoicePreview(null);
+      return;
+    }
+
+    // Check if we have cached preview
+    if (voicePreviews[voiceId]) {
+      const audioUrl = `data:audio/mpeg;base64,${voicePreviews[voiceId]}`;
+      const audio = new Audio(audioUrl);
+      voicePreviewAudioRef.current = audio;
+      setPlayingVoicePreview(voiceId);
+      
+      audio.onended = () => {
+        setPlayingVoicePreview(null);
+      };
+      
+      audio.play();
+      return;
+    }
+
+    // Generate preview
+    setLoadingVoicePreview(voiceId);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-audio', {
+        body: { 
+          text: PREVIEW_TEXT,
+          voiceId 
+        }
+      });
+
+      if (error) throw error;
+
+      const base64Audio = data.audioContent;
+      
+      // Save to database for all users
+      const voice = voices.find(v => v.id === voiceId);
+      await supabase
+        .from('voice_previews')
+        .upsert({
+          voice_id: voiceId,
+          voice_name: voice?.name || voiceId,
+          audio_base64: base64Audio
+        }, { onConflict: 'voice_id' });
+
+      // Update local cache
+      setVoicePreviews(prev => ({ ...prev, [voiceId]: base64Audio }));
+
+      // Play the preview
+      const audioUrl = `data:audio/mpeg;base64,${base64Audio}`;
+      const audio = new Audio(audioUrl);
+      voicePreviewAudioRef.current = audio;
+      setPlayingVoicePreview(voiceId);
+      
+      audio.onended = () => {
+        setPlayingVoicePreview(null);
+      };
+      
+      audio.play();
+    } catch (error) {
+      console.error('Error generating voice preview:', error);
+      toast.error('Erro ao gerar prévia da voz');
+    } finally {
+      setLoadingVoicePreview(null);
+    }
+  };
+
   const generateAudios = async () => {
     if (!selectedVoice) {
       toast.error('Selecione uma voz');
@@ -349,13 +485,24 @@ export function AudioSection({
 
         if (storageUrl) {
           const localUrl = URL.createObjectURL(blob);
+          
+          // Get audio duration
+          const audio = new Audio(localUrl);
+          const duration = await new Promise<number>((resolve) => {
+            audio.addEventListener('loadedmetadata', () => {
+              resolve(Math.ceil(audio.duration));
+            });
+            audio.addEventListener('error', () => resolve(estimateAudioDuration(copy)));
+          });
+          
           newAudioClips.push({
             id: `ia-${Date.now()}-${i}`,
             url: localUrl,
             name: i === 0 ? 'Áudio IA (Original)' : `Áudio IA (Variação ${i})`,
             storageUrl,
             isGenerated: true,
-            copy
+            copy,
+            duration
           });
         }
       }
@@ -396,6 +543,8 @@ export function AudioSection({
     setAiStep('copy');
     delete (window as any).__pendingCopies;
   };
+
+  const estimatedCopyDuration = generatedCopy ? estimateAudioDuration(generatedCopy) : 0;
 
   return (
     <Card className="bg-background/95 border-2 border-accent">
@@ -472,6 +621,11 @@ export function AudioSection({
                   {audio.isGenerated && (
                     <Badge variant="outline" className="ml-2 text-xs">IA</Badge>
                   )}
+                  {audio.duration && (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      ({formatDuration(audio.duration)})
+                    </span>
+                  )}
                 </span>
                 {audio.storageUrl ? (
                   <Check className="h-4 w-4 text-green-500" />
@@ -491,6 +645,20 @@ export function AudioSection({
           </div>
         )}
 
+        {/* Audio Duration Warning */}
+        {audioClips.length > 0 && totalAudioDuration > 0 && (
+          <div className="p-3 bg-muted/30 rounded-lg border border-muted-foreground/20">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Clock className="h-4 w-4" />
+              <span>Duração total dos áudios: <strong>{formatDuration(totalAudioDuration)}</strong></span>
+            </div>
+            <p className="text-xs text-muted-foreground/70 mt-1 flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3" />
+              O tempo total do vídeo deve ser igual ou maior que o tempo do áudio.
+            </p>
+          </div>
+        )}
+
         {/* AI Dialog */}
         <Dialog open={showAIDialog} onOpenChange={(open) => {
           if (!open) resetAIState();
@@ -506,20 +674,24 @@ export function AudioSection({
 
             {aiStep === 'copy' && (
               <div className="space-y-4">
-                <RadioGroup
-                  value={copyMode}
-                  onValueChange={(v) => setCopyMode(v as 'insert' | 'create')}
-                  className="flex gap-4"
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="create" id="create" />
-                    <Label htmlFor="create">Criar Copy com IA</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="insert" id="insert" />
-                    <Label htmlFor="insert">Inserir minha Copy</Label>
-                  </div>
-                </RadioGroup>
+                <div className="flex gap-2">
+                  <Button
+                    variant={copyMode === 'create' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setCopyMode('create')}
+                    className={copyMode === 'create' ? 'bg-purple-500 hover:bg-purple-600' : ''}
+                  >
+                    Criar Copy com IA
+                  </Button>
+                  <Button
+                    variant={copyMode === 'insert' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setCopyMode('insert')}
+                    className={copyMode === 'insert' ? 'bg-purple-500 hover:bg-purple-600' : ''}
+                  >
+                    Inserir minha Copy
+                  </Button>
+                </div>
 
                 {copyMode === 'create' ? (
                   <div className="space-y-2">
@@ -545,6 +717,18 @@ export function AudioSection({
                       rows={6}
                       className="border-accent/50"
                     />
+                    {insertedCopy && (
+                      <div className="p-2 bg-muted/30 rounded-lg border border-muted-foreground/20">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Clock className="h-4 w-4" />
+                          <span>Duração estimada do áudio: <strong>~{formatDuration(estimateAudioDuration(insertedCopy))}</strong></span>
+                        </div>
+                        <p className="text-xs text-muted-foreground/70 mt-1 flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          O tempo total do vídeo deve ser igual ou maior que o tempo do áudio.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -570,6 +754,18 @@ export function AudioSection({
                   <div className="space-y-4 mt-4 p-4 bg-muted/50 rounded-lg">
                     <Label>Copy Gerada:</Label>
                     <p className="text-sm whitespace-pre-wrap">{generatedCopy}</p>
+                    
+                    {/* Duration estimate */}
+                    <div className="p-2 bg-muted/30 rounded-lg border border-muted-foreground/20">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Clock className="h-4 w-4" />
+                        <span>Duração estimada do áudio: <strong>~{formatDuration(estimatedCopyDuration)}</strong></span>
+                      </div>
+                      <p className="text-xs text-muted-foreground/70 mt-1 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        O tempo total do vídeo deve ser igual ou maior que o tempo do áudio.
+                      </p>
+                    </div>
                     
                     {!copyApproved && (
                       <div className="space-y-2">
@@ -666,31 +862,52 @@ export function AudioSection({
                   </span>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <Label>Escolha a voz</Label>
-                  <Select value={selectedVoice} onValueChange={setSelectedVoice}>
-                    <SelectTrigger className="border-accent/50">
-                      <SelectValue placeholder="Selecione uma voz..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Mulher</div>
-                      {voices.filter(v => v.category === 'mulher').map(voice => (
-                        <SelectItem key={voice.id} value={voice.id}>{voice.name}</SelectItem>
-                      ))}
-                      <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Homem</div>
-                      {voices.filter(v => v.category === 'homem').map(voice => (
-                        <SelectItem key={voice.id} value={voice.id}>{voice.name}</SelectItem>
-                      ))}
-                      <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Famosos</div>
-                      {voices.filter(v => v.category === 'famosos').map(voice => (
-                        <SelectItem key={voice.id} value={voice.id}>{voice.name}</SelectItem>
-                      ))}
-                      <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Bônus</div>
-                      {voices.filter(v => v.category === 'bonus').map(voice => (
-                        <SelectItem key={voice.id} value={voice.id}>{voice.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  
+                  {/* Voice list with preview buttons */}
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                    {['mulher', 'homem', 'famosos', 'bonus'].map((category) => (
+                      <div key={category} className="space-y-1">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase px-2">
+                          {category === 'mulher' ? 'Mulher' : 
+                           category === 'homem' ? 'Homem' : 
+                           category === 'famosos' ? 'Famosos' : 'Bônus'}
+                        </p>
+                        {voices.filter(v => v.category === category).map(voice => (
+                          <div 
+                            key={voice.id}
+                            className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${
+                              selectedVoice === voice.id 
+                                ? 'bg-purple-500/20 border border-purple-500/50' 
+                                : 'bg-muted/30 hover:bg-muted/50'
+                            }`}
+                            onClick={() => setSelectedVoice(voice.id)}
+                          >
+                            <span className="text-sm">{voice.name}</span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                playVoicePreview(voice.id);
+                              }}
+                              disabled={loadingVoicePreview === voice.id}
+                              className="h-8 w-8 p-0"
+                            >
+                              {loadingVoicePreview === voice.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : playingVoicePreview === voice.id ? (
+                                <Pause className="h-4 w-4 text-purple-400" />
+                              ) : (
+                                <Volume2 className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 <Button
