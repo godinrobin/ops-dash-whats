@@ -39,8 +39,8 @@ serve(async (req) => {
     }
 
     // Use the response_url directly from the submit result if provided
-    // Otherwise construct it with the correct merge-videos endpoint
-    const fetchUrl = responseUrl || `https://queue.fal.run/fal-ai/ffmpeg-api/merge-videos/requests/${requestId}`;
+    // Otherwise construct it with the compose endpoint
+    const fetchUrl = responseUrl || `https://queue.fal.run/fal-ai/ffmpeg-api/compose/requests/${requestId}`;
     
     console.log(`Fetching result from: ${fetchUrl}`);
     
@@ -91,8 +91,8 @@ serve(async (req) => {
     const resultData = await resultResponse.json();
     console.log('Fal.ai result:', JSON.stringify(resultData));
 
-    // Check if we have a video URL in the result
-    const videoUrl = resultData.video?.url || resultData.output?.url || resultData.data?.video?.url;
+    // Check if we have a video URL in the result - compose API returns video_url
+    const videoUrl = resultData.video_url || resultData.video?.url || resultData.output?.url || resultData.data?.video?.url;
     
     if (videoUrl) {
       // Job completed successfully
