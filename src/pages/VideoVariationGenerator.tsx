@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,8 +8,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { fetchFile, toBlobURL } from "@ffmpeg/util";
 import { 
   Upload, 
   Trash2, 
@@ -34,10 +35,10 @@ interface VideoClip {
 
 interface GeneratedVideo {
   id: string;
-  renderId: string;
   name: string;
-  status: 'queued' | 'rendering' | 'done' | 'failed';
+  status: 'queued' | 'processing' | 'done' | 'failed';
   url?: string;
+  blob?: Blob;
 }
 
 const MAX_VIDEO_DURATION_MINUTES = 4;
@@ -48,35 +49,59 @@ export default function VideoVariationGenerator() {
   const [bodyVideos, setBodyVideos] = useState<VideoClip[]>([]);
   const [ctaVideos, setCtaVideos] = useState<VideoClip[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>([]);
   const [previewVideo, setPreviewVideo] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
+  const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
+  const [ffmpegLoading, setFfmpegLoading] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [currentProcessing, setCurrentProcessing] = useState<string | null>(null);
+  
+  const ffmpegRef = useRef<FFmpeg | null>(null);
+  const pauseRef = useRef(false);
 
   const totalVariations = hookVideos.length * bodyVideos.length * ctaVideos.length;
-  const estimatedTimeMinutes = totalVariations * 2; // ~2 min per video
+  const estimatedTimeSeconds = totalVariations * 30; // ~30 sec per video locally
 
-  const uploadVideo = async (file: File, section: 'hook' | 'body' | 'cta') => {
-    if (!user) return null;
+  // Load FFmpeg on mount
+  useEffect(() => {
+    const loadFFmpeg = async () => {
+      if (ffmpegRef.current || ffmpegLoading) return;
+      
+      setFfmpegLoading(true);
+      try {
+        const ffmpeg = new FFmpeg();
+        
+        ffmpeg.on("progress", ({ progress }) => {
+          setLoadingProgress(Math.round(progress * 100));
+        });
 
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${user.id}/${section}/${Date.now()}.${fileExt}`;
+        const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm";
+        
+        await ffmpeg.load({
+          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+        });
 
-    const { data, error } = await supabase.storage
-      .from('video-clips')
-      .upload(fileName, file);
+        ffmpegRef.current = ffmpeg;
+        setFfmpegLoaded(true);
+        toast.success("FFmpeg carregado com sucesso!");
+      } catch (error) {
+        console.error("Error loading FFmpeg:", error);
+        toast.error("Erro ao carregar FFmpeg. Tente recarregar a página.");
+      } finally {
+        setFfmpegLoading(false);
+      }
+    };
 
-    if (error) {
-      console.error('Upload error:', error);
-      throw error;
-    }
+    loadFFmpeg();
+  }, []);
 
-    const { data: urlData } = supabase.storage
-      .from('video-clips')
-      .getPublicUrl(fileName);
-
-    return urlData.publicUrl;
-  };
+  // Sync pause state with ref
+  useEffect(() => {
+    pauseRef.current = isPaused;
+  }, [isPaused]);
 
   const handleFileUpload = async (
     files: FileList | null,
@@ -93,140 +118,177 @@ export default function VideoVariationGenerator() {
           continue;
         }
 
-        const url = await uploadVideo(file, section);
-        if (url) {
-          setVideos(prev => [...prev, {
-            id: Date.now().toString() + Math.random(),
-            file,
-            url,
-            name: file.name
-          }]);
-        }
+        const url = URL.createObjectURL(file);
+        setVideos(prev => [...prev, {
+          id: Date.now().toString() + Math.random(),
+          file,
+          url,
+          name: file.name
+        }]);
       }
       toast.success('Vídeos adicionados com sucesso!');
     } catch (error) {
       console.error('Upload error:', error);
-      toast.error('Erro ao fazer upload dos vídeos');
+      toast.error('Erro ao adicionar vídeos');
     } finally {
       setIsUploading(false);
     }
   };
 
   const removeVideo = (id: string, setVideos: React.Dispatch<React.SetStateAction<VideoClip[]>>) => {
-    setVideos(prev => prev.filter(v => v.id !== id));
+    setVideos(prev => {
+      const video = prev.find(v => v.id === id);
+      if (video) {
+        URL.revokeObjectURL(video.url);
+      }
+      return prev.filter(v => v.id !== id);
+    });
+  };
+
+  const concatenateVideos = async (
+    hookFile: File,
+    bodyFile: File,
+    ctaFile: File,
+    outputName: string
+  ): Promise<Blob | null> => {
+    const ffmpeg = ffmpegRef.current;
+    if (!ffmpeg) return null;
+
+    try {
+      // Write input files to FFmpeg virtual filesystem
+      await ffmpeg.writeFile("hook.mp4", await fetchFile(hookFile));
+      await ffmpeg.writeFile("body.mp4", await fetchFile(bodyFile));
+      await ffmpeg.writeFile("cta.mp4", await fetchFile(ctaFile));
+
+      // Create concat list file
+      const concatList = "file 'hook.mp4'\nfile 'body.mp4'\nfile 'cta.mp4'";
+      await ffmpeg.writeFile("list.txt", concatList);
+
+      // Execute concatenation with re-encoding for compatibility
+      await ffmpeg.exec([
+        "-f", "concat",
+        "-safe", "0",
+        "-i", "list.txt",
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "23",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-movflags", "+faststart",
+        "output.mp4"
+      ]);
+
+      // Read output file
+      const data = await ffmpeg.readFile("output.mp4");
+      const uint8Array = new Uint8Array(data as Uint8Array);
+      const blob = new Blob([uint8Array], { type: "video/mp4" });
+
+      // Cleanup
+      await ffmpeg.deleteFile("hook.mp4");
+      await ffmpeg.deleteFile("body.mp4");
+      await ffmpeg.deleteFile("cta.mp4");
+      await ffmpeg.deleteFile("list.txt");
+      await ffmpeg.deleteFile("output.mp4");
+
+      return blob;
+    } catch (error) {
+      console.error("Concatenation error:", error);
+      return null;
+    }
   };
 
   const generateVariations = async () => {
+    if (!ffmpegLoaded) {
+      toast.error("FFmpeg ainda está carregando. Aguarde.");
+      return;
+    }
+
     if (hookVideos.length === 0 || bodyVideos.length === 0 || ctaVideos.length === 0) {
       toast.error('Adicione pelo menos um vídeo em cada seção');
       return;
     }
 
     setIsGenerating(true);
-    setGeneratedVideos([]);
+    setIsPaused(false);
+    pauseRef.current = false;
 
-    try {
-      // Generate all variation combinations
-      const variations: { hookIndex: number; bodyIndex: number; ctaIndex: number; name: string }[] = [];
-      
-      for (let h = 0; h < hookVideos.length; h++) {
-        for (let b = 0; b < bodyVideos.length; b++) {
-          for (let c = 0; c < ctaVideos.length; c++) {
-            variations.push({
-              hookIndex: h,
-              bodyIndex: b,
-              ctaIndex: c,
-              name: `Hook${h + 1}_Corpo${b + 1}_CTA${c + 1}`
-            });
-          }
+    // Generate all variation combinations
+    const variations: { hook: VideoClip; body: VideoClip; cta: VideoClip; name: string }[] = [];
+    
+    for (let h = 0; h < hookVideos.length; h++) {
+      for (let b = 0; b < bodyVideos.length; b++) {
+        for (let c = 0; c < ctaVideos.length; c++) {
+          variations.push({
+            hook: hookVideos[h],
+            body: bodyVideos[b],
+            cta: ctaVideos[c],
+            name: `Hook${h + 1}_Corpo${b + 1}_CTA${c + 1}`
+          });
         }
       }
-
-      const { data, error } = await supabase.functions.invoke('generate-video-variations', {
-        body: {
-          action: 'render',
-          variations,
-          hookVideos: hookVideos.map(v => v.url),
-          bodyVideos: bodyVideos.map(v => v.url),
-          ctaVideos: ctaVideos.map(v => v.url)
-        }
-      });
-
-      if (error) throw error;
-
-      if (data.success && data.renders) {
-        const newVideos: GeneratedVideo[] = data.renders.map((r: any) => ({
-          id: r.renderId || Date.now().toString(),
-          renderId: r.renderId,
-          name: r.name,
-          status: r.status === 'failed' ? 'failed' : 'queued'
-        }));
-        setGeneratedVideos(newVideos);
-        toast.success(`${variations.length} variações enviadas para geração!`);
-      }
-    } catch (error) {
-      console.error('Generation error:', error);
-      toast.error('Erro ao gerar variações');
-    } finally {
-      setIsGenerating(false);
     }
-  };
 
-  const checkVideoStatus = useCallback(async (renderId: string) => {
-    try {
-      const { data, error } = await supabase.functions.invoke('generate-video-variations', {
-        body: { action: 'status', renderId }
-      });
+    // Initialize all videos as queued
+    const initialVideos: GeneratedVideo[] = variations.map((v, i) => ({
+      id: `video-${i}-${Date.now()}`,
+      name: v.name,
+      status: 'queued'
+    }));
+    setGeneratedVideos(initialVideos);
 
-      if (error) throw error;
+    // Process each variation sequentially
+    for (let i = 0; i < variations.length; i++) {
+      // Check if paused
+      while (pauseRef.current) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
 
-      if (data.success) {
-        setGeneratedVideos(prev => prev.map(v => 
-          v.renderId === renderId 
-            ? { ...v, status: data.status, url: data.url }
-            : v
+      const variation = variations[i];
+      setCurrentProcessing(variation.name);
+
+      // Update status to processing
+      setGeneratedVideos(prev => prev.map((v, idx) => 
+        idx === i ? { ...v, status: 'processing' } : v
+      ));
+
+      try {
+        const blob = await concatenateVideos(
+          variation.hook.file,
+          variation.body.file,
+          variation.cta.file,
+          variation.name
+        );
+
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          setGeneratedVideos(prev => prev.map((v, idx) => 
+            idx === i ? { ...v, status: 'done', url, blob } : v
+          ));
+        } else {
+          setGeneratedVideos(prev => prev.map((v, idx) => 
+            idx === i ? { ...v, status: 'failed' } : v
+          ));
+        }
+      } catch (error) {
+        console.error(`Error processing ${variation.name}:`, error);
+        setGeneratedVideos(prev => prev.map((v, idx) => 
+          idx === i ? { ...v, status: 'failed' } : v
         ));
       }
-    } catch (error) {
-      console.error('Status check error:', error);
     }
-  }, []);
 
-  // Poll for status updates
-  useEffect(() => {
-    if (isPaused) return;
+    setCurrentProcessing(null);
+    setIsGenerating(false);
+    toast.success("Todas as variações foram processadas!");
+  };
 
-    const pendingVideos = generatedVideos.filter(v => 
-      v.status === 'queued' || v.status === 'rendering'
-    );
-
-    if (pendingVideos.length === 0) return;
-
-    const interval = setInterval(() => {
-      if (!isPaused) {
-        pendingVideos.forEach(v => checkVideoStatus(v.renderId));
-      }
-    }, 10000); // Check every 10 seconds
-
-    return () => clearInterval(interval);
-  }, [generatedVideos, checkVideoStatus, isPaused]);
-
-  const downloadVideo = async (url: string, name: string) => {
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = `${name}.mp4`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(downloadUrl);
-    } catch (error) {
-      console.error('Download error:', error);
-      toast.error('Erro ao baixar vídeo');
-    }
+  const downloadVideo = (url: string, name: string) => {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${name}.mp4`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const downloadAllAsZip = async () => {
@@ -236,13 +298,12 @@ export default function VideoVariationGenerator() {
       return;
     }
 
-    toast.info('Preparando download... isso pode levar alguns segundos');
+    toast.info('Baixando vídeos...');
     
-    // For now, download each video individually
-    // In production, you'd use a library like JSZip
     for (const video of completedVideos) {
       if (video.url) {
-        await downloadVideo(video.url, video.name);
+        downloadVideo(video.url, video.name);
+        await new Promise(resolve => setTimeout(resolve, 500)); // Small delay between downloads
       }
     }
   };
@@ -279,7 +340,7 @@ export default function VideoVariationGenerator() {
             className="hidden"
             id={`upload-${section}`}
             onChange={(e) => handleFileUpload(e.target.files, section, setVideos)}
-            disabled={isUploading}
+            disabled={isUploading || isGenerating}
           />
           <Label 
             htmlFor={`upload-${section}`} 
@@ -316,6 +377,7 @@ export default function VideoVariationGenerator() {
                   variant="ghost"
                   size="icon"
                   onClick={() => removeVideo(video.id, setVideos)}
+                  disabled={isGenerating}
                 >
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>
@@ -329,7 +391,7 @@ export default function VideoVariationGenerator() {
 
   const completedCount = generatedVideos.filter(v => v.status === 'done').length;
   const failedCount = generatedVideos.filter(v => v.status === 'failed').length;
-  const pendingCount = generatedVideos.filter(v => v.status === 'queued' || v.status === 'rendering').length;
+  const pendingCount = generatedVideos.filter(v => v.status === 'queued' || v.status === 'processing').length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -344,9 +406,29 @@ export default function VideoVariationGenerator() {
               Crie múltiplas variações de anúncios combinando diferentes hooks, corpos e CTAs
             </p>
             <p className="text-sm text-accent mt-2">
-              ⚠️ Tempo máximo por vídeo: {MAX_VIDEO_DURATION_MINUTES} minutos
+              ⚠️ Processamento local no navegador - mantenha a aba aberta
             </p>
           </div>
+
+          {/* FFmpeg Loading Status */}
+          {!ffmpegLoaded && (
+            <Card className="bg-background/95 border-2 border-accent">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <Loader2 className="h-6 w-6 animate-spin text-accent" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Carregando FFmpeg...</p>
+                    <p className="text-xs text-muted-foreground">
+                      Isso pode levar alguns segundos na primeira vez (~31MB)
+                    </p>
+                    {ffmpegLoading && (
+                      <Progress value={loadingProgress} className="h-2 mt-2" />
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Upload Sections */}
           <div className="grid md:grid-cols-3 gap-4">
@@ -384,18 +466,18 @@ export default function VideoVariationGenerator() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span>Tempo estimado: <strong>~{estimatedTimeMinutes} min</strong></span>
+                    <span>Tempo estimado: <strong>~{Math.ceil(estimatedTimeSeconds / 60)} min</strong></span>
                   </div>
                 </div>
                 <Button
                   onClick={generateVariations}
-                  disabled={isGenerating || totalVariations === 0}
+                  disabled={isGenerating || totalVariations === 0 || !ffmpegLoaded}
                   className="bg-accent hover:bg-accent/90 text-accent-foreground"
                 >
                   {isGenerating ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Gerando...
+                      Processando... {currentProcessing && `(${currentProcessing})`}
                     </>
                   ) : (
                     <>
@@ -412,9 +494,9 @@ export default function VideoVariationGenerator() {
           {generatedVideos.length > 0 && (
             <Card className="bg-background/95 border-2 border-accent">
               <CardHeader>
-                <CardTitle className="flex items-center justify-between">
+                <CardTitle className="flex items-center justify-between flex-wrap gap-2">
                   <span>Vídeos Gerados</span>
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 flex-wrap">
                     <div className="flex items-center gap-2 text-sm">
                       <CheckCircle className="h-4 w-4 text-green-500" />
                       <span>{completedCount}</span>
@@ -429,7 +511,7 @@ export default function VideoVariationGenerator() {
                         <span>{failedCount}</span>
                       </div>
                     )}
-                    {pendingCount > 0 && (
+                    {isGenerating && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -484,7 +566,7 @@ export default function VideoVariationGenerator() {
                         {video.status === 'failed' && (
                           <XCircle className="h-4 w-4 text-destructive" />
                         )}
-                        {(video.status === 'queued' || video.status === 'rendering') && (
+                        {(video.status === 'queued' || video.status === 'processing') && (
                           <Loader2 className="h-4 w-4 animate-spin text-accent" />
                         )}
                       </div>
@@ -495,7 +577,7 @@ export default function VideoVariationGenerator() {
                         }
                       >
                         {video.status === 'queued' && 'Na fila'}
-                        {video.status === 'rendering' && 'Renderizando'}
+                        {video.status === 'processing' && 'Processando...'}
                         {video.status === 'done' && 'Concluído'}
                         {video.status === 'failed' && 'Falhou'}
                       </Badge>
