@@ -620,7 +620,10 @@ export default function VideoVariationGenerator() {
       clearInterval(pollingRef.current);
     }
 
-    // Use faster polling interval for better responsiveness
+    let currentBatchStart = 0;
+    const POLL_BATCH_SIZE = 10; // Only check 10 videos at a time to avoid overwhelming the API
+
+    // Poll every 5 seconds with batched status checks
     pollingRef.current = setInterval(async () => {
       // Use ref to get current state, avoiding stale closure
       const currentVideos = generatedVideosRef.current;
@@ -643,19 +646,30 @@ export default function VideoVariationGenerator() {
         return;
       }
 
-      console.log(`Checking status for ${pendingVideos.length} pending videos...`);
+      // Get next batch of videos to check (round-robin through all pending)
+      const batchToCheck = pendingVideos.slice(currentBatchStart, currentBatchStart + POLL_BATCH_SIZE);
+      
+      // Update batch start for next iteration
+      currentBatchStart = (currentBatchStart + POLL_BATCH_SIZE) % Math.max(pendingVideos.length, 1);
 
-      // Check all pending videos in parallel
-      const statusChecks = pendingVideos.map(async (video) => {
+      console.log(`Checking status for ${batchToCheck.length} of ${pendingVideos.length} pending videos...`);
+
+      // Check only this batch of videos
+      const statusChecks = batchToCheck.map(async (video) => {
         if (!video.requestId) return null;
 
-        const result = await checkVideoStatus(video.requestId, video.responseUrl);
-        return { video, result };
+        try {
+          const result = await checkVideoStatus(video.requestId, video.responseUrl);
+          return { video, result };
+        } catch (error) {
+          console.error(`Error checking status for ${video.name}:`, error);
+          return null;
+        }
       });
 
       const results = await Promise.all(statusChecks);
 
-      // Update all statuses at once
+      // Update statuses for checked videos
       setGeneratedVideos(prev => {
         const updated = [...prev];
         for (const item of results) {
@@ -672,7 +686,7 @@ export default function VideoVariationGenerator() {
         }
         return updated;
       });
-    }, 3000); // Poll every 3 seconds for faster feedback
+    }, 5000); // Poll every 5 seconds with smaller batches
   };
 
   const downloadVideo = async (url: string, name: string) => {
