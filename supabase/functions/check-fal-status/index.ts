@@ -38,9 +38,10 @@ serve(async (req) => {
       throw new Error('FAL_KEY not configured');
     }
 
-    // Fetch result directly from the response URL (not status URL)
-    // The response URL returns the result if completed, or status info if still processing
-    const responseUrl = `https://queue.fal.run/fal-ai/ffmpeg-api/requests/${requestId}`;
+    // The correct endpoint pattern for fal.ai queue - must include the full model path
+    const responseUrl = `https://queue.fal.run/fal-ai/ffmpeg-api/concat-videos/requests/${requestId}`;
+    
+    console.log(`Fetching result from: ${responseUrl}`);
     
     const resultResponse = await fetch(responseUrl, {
       method: 'GET',
@@ -54,7 +55,7 @@ serve(async (req) => {
 
     if (resultResponse.status === 202) {
       // Still processing
-      console.log('Job still processing');
+      console.log('Job still processing (202)');
       return new Response(JSON.stringify({ 
         success: true, 
         status: 'processing',
@@ -94,6 +95,7 @@ serve(async (req) => {
     
     if (videoUrl) {
       // Job completed successfully
+      console.log(`Video URL found: ${videoUrl}`);
       await supabaseClient
         .from('video_generation_jobs')
         .update({ status: 'done', video_url: videoUrl, updated_at: new Date().toISOString() })
@@ -110,7 +112,21 @@ serve(async (req) => {
       });
     }
 
-    // If no video URL but response is OK, it might still be processing
+    // If no video URL but response is OK, check if still in queue
+    if (resultData.status === 'IN_QUEUE' || resultData.status === 'IN_PROGRESS') {
+      console.log(`Job status: ${resultData.status}`);
+      return new Response(JSON.stringify({ 
+        success: true, 
+        status: 'processing',
+        videoUrl: null,
+        requestId
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Default: still processing
+    console.log('No video URL yet, still processing');
     return new Response(JSON.stringify({ 
       success: true, 
       status: 'processing',
