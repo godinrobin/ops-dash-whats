@@ -38,9 +38,9 @@ serve(async (req) => {
       throw new Error('FAL_KEY not configured');
     }
 
-    // Use the response_url directly from the submit result if provided
-    // Otherwise construct it with the merge-videos endpoint
-    const fetchUrl = responseUrl || `https://queue.fal.run/fal-ai/ffmpeg-api/merge-videos/requests/${requestId}`;
+    // Always construct the correct merge-videos endpoint URL
+    // Do NOT use the responseUrl from Fal.ai as it may return a generic path
+    const fetchUrl = `https://queue.fal.run/fal-ai/ffmpeg-api/merge-videos/requests/${requestId}`;
     
     console.log(`Fetching result from: ${fetchUrl}`);
     
@@ -70,6 +70,19 @@ serve(async (req) => {
     if (!resultResponse.ok) {
       const errorText = await resultResponse.text();
       console.error('Fal.ai error:', errorText);
+      
+      // Check if it's a "still in progress" error (400 with specific message)
+      if (resultResponse.status === 400 && errorText.toLowerCase().includes('still in progress')) {
+        console.log('Job still in progress (400 response)');
+        return new Response(JSON.stringify({ 
+          success: true, 
+          status: 'processing',
+          videoUrl: null,
+          requestId
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
       
       // Mark as failed in database
       await supabaseClient
