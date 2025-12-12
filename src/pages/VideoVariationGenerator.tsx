@@ -22,7 +22,8 @@ import {
   Loader2,
   Archive,
   Eye,
-  RotateCcw
+  RotateCcw,
+  Sparkles
 } from "lucide-react";
 
 interface VideoClip {
@@ -42,6 +43,18 @@ interface GeneratedVideo {
   responseUrl?: string;
 }
 
+interface VideoAnalysis {
+  hookScore: number;
+  hookAnalysis: string;
+  bodyScore: number;
+  bodyAnalysis: string;
+  ctaScore: number;
+  ctaAnalysis: string;
+  overallScore: number;
+  overallAnalysis: string;
+  transcription: string;
+}
+
 export default function VideoVariationGenerator() {
   const { user } = useAuth();
   const [hookVideos, setHookVideos] = useState<VideoClip[]>([]);
@@ -54,6 +67,11 @@ export default function VideoVariationGenerator() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [currentProcessing, setCurrentProcessing] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState<string | null>(null);
+  
+  // Analysis state
+  const [isAnalyzing, setIsAnalyzing] = useState<string | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<VideoAnalysis | null>(null);
+  const [analysisVideoName, setAnalysisVideoName] = useState<string>('');
   
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const generatedVideosRef = useRef<GeneratedVideo[]>([]);
@@ -204,6 +222,35 @@ export default function VideoVariationGenerator() {
       status: data.status,
       videoUrl: data.videoUrl
     };
+  };
+
+  const analyzeVideo = async (videoUrl: string, videoName: string) => {
+    setIsAnalyzing(videoName);
+    setAnalysisVideoName(videoName);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('analyze-creative-video', {
+        body: { videoUrl, videoName }
+      });
+
+      if (error) {
+        console.error('Analysis error:', error);
+        toast.error('Erro ao analisar o criativo');
+        return;
+      }
+
+      if (data.error) {
+        toast.error(data.error);
+        return;
+      }
+
+      setAnalysisResult(data.analysis);
+    } catch (error) {
+      console.error('Analysis error:', error);
+      toast.error('Erro ao analisar o criativo');
+    } finally {
+      setIsAnalyzing(null);
+    }
   };
 
   const clearAll = () => {
@@ -393,6 +440,20 @@ export default function VideoVariationGenerator() {
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
+  };
+
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return 'text-green-500';
+    if (score >= 60) return 'text-yellow-500';
+    if (score >= 40) return 'text-orange-500';
+    return 'text-red-500';
+  };
+
+  const getScoreBg = (score: number) => {
+    if (score >= 80) return 'bg-green-500/20 border-green-500/50';
+    if (score >= 60) return 'bg-yellow-500/20 border-yellow-500/50';
+    if (score >= 40) return 'bg-orange-500/20 border-orange-500/50';
+    return 'bg-red-500/20 border-red-500/50';
   };
 
   const VideoSection = ({ 
@@ -643,7 +704,7 @@ export default function VideoVariationGenerator() {
                 )}
               </CardHeader>
               <CardContent>
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[400px] overflow-y-auto">
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto">
                   {generatedVideos.map((video) => (
                     <div 
                       key={video.id}
@@ -673,24 +734,45 @@ export default function VideoVariationGenerator() {
                         {video.status === 'failed' && 'Falhou'}
                       </Badge>
                       {video.status === 'done' && video.url && (
-                        <div className="flex gap-2">
+                        <div className="space-y-2">
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setPreviewVideo(video.url!)}
+                              className="flex-1"
+                            >
+                              <Eye className="mr-1 h-3 w-3" />
+                              Preview
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => downloadVideo(video.url!, video.name)}
+                              className="flex-1 border-accent"
+                            >
+                              <Download className="mr-1 h-3 w-3" />
+                              Baixar
+                            </Button>
+                          </div>
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setPreviewVideo(video.url!)}
-                            className="flex-1"
+                            onClick={() => analyzeVideo(video.url!, video.name)}
+                            disabled={isAnalyzing === video.name}
+                            className="w-full bg-purple-500/10 border-purple-500/50 hover:bg-purple-500/20 text-purple-400"
                           >
-                            <Eye className="mr-1 h-3 w-3" />
-                            Preview
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => downloadVideo(video.url!, video.name)}
-                            className="flex-1 border-accent"
-                          >
-                            <Download className="mr-1 h-3 w-3" />
-                            Baixar
+                            {isAnalyzing === video.name ? (
+                              <>
+                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                Analisando...
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="mr-1 h-3 w-3" />
+                                Análise IA
+                              </>
+                            )}
                           </Button>
                         </div>
                       )}
@@ -716,6 +798,95 @@ export default function VideoVariationGenerator() {
               className="w-full rounded-lg"
               autoPlay
             />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Analysis Result Modal */}
+      <Dialog open={!!analysisResult} onOpenChange={() => setAnalysisResult(null)}>
+        <DialogContent className="max-w-2xl bg-background border-2 border-accent max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-purple-500" />
+              Análise de Criativo - {analysisVideoName}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {analysisResult && (
+            <div className="space-y-6 py-4">
+              {/* Overall Score */}
+              <div className={`p-6 rounded-lg border-2 ${getScoreBg(analysisResult.overallScore)} text-center`}>
+                <p className="text-sm text-muted-foreground mb-2">Pontuação Geral</p>
+                <p className={`text-5xl font-bold ${getScoreColor(analysisResult.overallScore)}`}>
+                  {analysisResult.overallScore}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">de 100 pontos</p>
+              </div>
+
+              {/* Individual Scores */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className={`p-4 rounded-lg border ${getScoreBg(analysisResult.hookScore)} text-center`}>
+                  <div className="w-3 h-3 rounded-full bg-green-500 mx-auto mb-2" />
+                  <p className="text-xs text-muted-foreground">Hook</p>
+                  <p className={`text-2xl font-bold ${getScoreColor(analysisResult.hookScore)}`}>
+                    {analysisResult.hookScore}
+                  </p>
+                </div>
+                <div className={`p-4 rounded-lg border ${getScoreBg(analysisResult.bodyScore)} text-center`}>
+                  <div className="w-3 h-3 rounded-full bg-blue-500 mx-auto mb-2" />
+                  <p className="text-xs text-muted-foreground">Corpo</p>
+                  <p className={`text-2xl font-bold ${getScoreColor(analysisResult.bodyScore)}`}>
+                    {analysisResult.bodyScore}
+                  </p>
+                </div>
+                <div className={`p-4 rounded-lg border ${getScoreBg(analysisResult.ctaScore)} text-center`}>
+                  <div className="w-3 h-3 rounded-full bg-purple-500 mx-auto mb-2" />
+                  <p className="text-xs text-muted-foreground">CTA</p>
+                  <p className={`text-2xl font-bold ${getScoreColor(analysisResult.ctaScore)}`}>
+                    {analysisResult.ctaScore}
+                  </p>
+                </div>
+              </div>
+
+              {/* Detailed Analysis */}
+              <div className="space-y-4">
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-3 h-3 rounded-full bg-green-500" />
+                    <h4 className="font-semibold">Hook (Início)</h4>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{analysisResult.hookAnalysis}</p>
+                </div>
+
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-3 h-3 rounded-full bg-blue-500" />
+                    <h4 className="font-semibold">Corpo (Meio)</h4>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{analysisResult.bodyAnalysis}</p>
+                </div>
+
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-3 h-3 rounded-full bg-purple-500" />
+                    <h4 className="font-semibold">CTA (Final)</h4>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{analysisResult.ctaAnalysis}</p>
+                </div>
+
+                <div className="p-4 bg-accent/10 border border-accent/30 rounded-lg">
+                  <h4 className="font-semibold mb-2">📊 Análise Geral</h4>
+                  <p className="text-sm text-muted-foreground">{analysisResult.overallAnalysis}</p>
+                </div>
+
+                {analysisResult.transcription && (
+                  <div className="p-4 bg-muted/30 rounded-lg">
+                    <h4 className="font-semibold mb-2 text-sm">📝 Transcrição</h4>
+                    <p className="text-xs text-muted-foreground italic">"{analysisResult.transcription}"</p>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>
