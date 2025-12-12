@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, DragEvent } from "react";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,8 +22,7 @@ import {
   Loader2,
   Archive,
   Eye,
-  Pause,
-  Cloud
+  RotateCcw
 } from "lucide-react";
 
 interface VideoClip {
@@ -49,23 +48,18 @@ export default function VideoVariationGenerator() {
   const [bodyVideos, setBodyVideos] = useState<VideoClip[]>([]);
   const [ctaVideos, setCtaVideos] = useState<VideoClip[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
   const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>([]);
   const [previewVideo, setPreviewVideo] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [currentProcessing, setCurrentProcessing] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState<string | null>(null);
   
-  const pauseRef = useRef(false);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const generatedVideosRef = useRef<GeneratedVideo[]>([]);
 
   const totalVariations = hookVideos.length * bodyVideos.length * ctaVideos.length;
-  const estimatedTimeSeconds = totalVariations * 60; // ~1 min per video on cloud
-
-  useEffect(() => {
-    pauseRef.current = isPaused;
-  }, [isPaused]);
+  const estimatedTimeSeconds = totalVariations * 60;
 
   // Keep ref in sync with state for polling
   useEffect(() => {
@@ -120,8 +114,9 @@ export default function VideoVariationGenerator() {
       let uploaded = 0;
       
       for (const file of fileArray) {
-        if (!file.type.startsWith('video/')) {
-          toast.error(`${file.name} não é um vídeo válido`);
+        // Only accept MP4 files
+        if (file.type !== 'video/mp4') {
+          toast.error(`${file.name} não é um arquivo MP4 válido`);
           continue;
         }
 
@@ -146,7 +141,9 @@ export default function VideoVariationGenerator() {
         setUploadProgress((uploaded / fileArray.length) * 100);
       }
       
-      toast.success('Vídeos enviados com sucesso!');
+      if (uploaded > 0) {
+        toast.success('Vídeos enviados com sucesso!');
+      }
     } catch (error) {
       console.error('Upload error:', error);
       toast.error('Erro ao adicionar vídeos');
@@ -155,6 +152,33 @@ export default function VideoVariationGenerator() {
       setUploadProgress(0);
     }
   };
+
+  const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>, section: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(section);
+  }, []);
+
+  const handleDragLeave = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(null);
+  }, []);
+
+  const handleDrop = useCallback((
+    e: DragEvent<HTMLDivElement>,
+    section: 'hook' | 'body' | 'cta',
+    setVideos: React.Dispatch<React.SetStateAction<VideoClip[]>>
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(null);
+    
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      handleFileUpload(files, section, setVideos);
+    }
+  }, [user]);
 
   const removeVideo = (id: string, setVideos: React.Dispatch<React.SetStateAction<VideoClip[]>>) => {
     setVideos(prev => {
@@ -182,6 +206,24 @@ export default function VideoVariationGenerator() {
     };
   };
 
+  const clearAll = () => {
+    // Clear all uploaded videos
+    hookVideos.forEach(v => URL.revokeObjectURL(v.url));
+    bodyVideos.forEach(v => URL.revokeObjectURL(v.url));
+    ctaVideos.forEach(v => URL.revokeObjectURL(v.url));
+    
+    setHookVideos([]);
+    setBodyVideos([]);
+    setCtaVideos([]);
+    setGeneratedVideos([]);
+    setIsGenerating(false);
+    
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  };
+
   const generateVariations = async () => {
     if (hookVideos.length === 0 || bodyVideos.length === 0 || ctaVideos.length === 0) {
       toast.error('Adicione pelo menos um vídeo em cada seção');
@@ -197,12 +239,11 @@ export default function VideoVariationGenerator() {
     }
 
     setIsGenerating(true);
-    setIsPaused(false);
-    pauseRef.current = false;
 
     // Generate all variation combinations
     const variations: { hook: VideoClip; body: VideoClip; cta: VideoClip; name: string }[] = [];
     
+    let count = 1;
     for (let h = 0; h < hookVideos.length; h++) {
       for (let b = 0; b < bodyVideos.length; b++) {
         for (let c = 0; c < ctaVideos.length; c++) {
@@ -210,8 +251,9 @@ export default function VideoVariationGenerator() {
             hook: hookVideos[h],
             body: bodyVideos[b],
             cta: ctaVideos[c],
-            name: `Hook${h + 1}_Corpo${b + 1}_CTA${c + 1}`
+            name: `Criativo ${count}`
           });
+          count++;
         }
       }
     }
@@ -224,13 +266,8 @@ export default function VideoVariationGenerator() {
     }));
     setGeneratedVideos(initialVideos);
 
-    // Submit all jobs to Fal.ai
+    // Submit all jobs
     for (let i = 0; i < variations.length; i++) {
-      // Check if paused
-      while (pauseRef.current) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-
       const variation = variations[i];
       setCurrentProcessing(variation.name);
 
@@ -273,7 +310,6 @@ export default function VideoVariationGenerator() {
     }
 
     setCurrentProcessing(null);
-    toast.info("Jobs enviados! Verificando status...");
 
     // Start polling for results
     startPolling();
@@ -291,12 +327,9 @@ export default function VideoVariationGenerator() {
         v => v.requestId && (v.status === 'processing' || v.status === 'queued')
       );
 
-      console.log(`Polling: ${pendingVideos.length} pending videos out of ${currentVideos.length} total`);
-
       if (pendingVideos.length === 0) {
         // Check if we have any videos at all
         if (currentVideos.length === 0) {
-          console.log('No videos yet, continuing to poll...');
           return;
         }
         
@@ -305,16 +338,13 @@ export default function VideoVariationGenerator() {
           pollingRef.current = null;
         }
         setIsGenerating(false);
-        toast.success("Todas as variações foram processadas!");
         return;
       }
 
       for (const video of pendingVideos) {
         if (!video.requestId) continue;
 
-        console.log(`Checking status for: ${video.name} (${video.requestId})`);
         const result = await checkVideoStatus(video.requestId, video.responseUrl);
-        console.log(`Status result for ${video.name}:`, result);
         
         if (result.status === 'done' && result.videoUrl) {
           setGeneratedVideos(prev => prev.map(v => 
@@ -326,7 +356,7 @@ export default function VideoVariationGenerator() {
           ));
         }
       }
-    }, 5000); // Poll every 5 seconds
+    }, 5000);
   };
 
   const downloadVideo = async (url: string, name: string) => {
@@ -389,10 +419,19 @@ export default function VideoVariationGenerator() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-6 text-center">
+        <div 
+          className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+            isDragging === section 
+              ? 'border-accent bg-accent/10' 
+              : 'border-muted-foreground/30'
+          }`}
+          onDragOver={(e) => handleDragOver(e, section)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, section, setVideos)}
+        >
           <Input
             type="file"
-            accept="video/*"
+            accept="video/mp4"
             multiple
             className="hidden"
             id={`upload-${section}`}
@@ -409,7 +448,10 @@ export default function VideoVariationGenerator() {
               <Upload className="h-8 w-8 text-muted-foreground" />
             )}
             <span className="text-sm text-muted-foreground">
-              Clique ou arraste vídeos aqui
+              Clique ou arraste vídeos MP4 aqui
+            </span>
+            <span className="text-xs text-muted-foreground/70">
+              Apenas arquivos .mp4 são aceitos
             </span>
           </Label>
         </div>
@@ -424,7 +466,7 @@ export default function VideoVariationGenerator() {
                 <FileVideo className="h-5 w-5 text-accent" />
                 <span className="text-sm truncate flex-1">{video.name}</span>
                 {video.storageUrl ? (
-                  <Cloud className="h-4 w-4 text-green-500" />
+                  <CheckCircle className="h-4 w-4 text-green-500" />
                 ) : (
                   <Loader2 className="h-4 w-4 animate-spin text-accent" />
                 )}
@@ -454,6 +496,7 @@ export default function VideoVariationGenerator() {
   const completedCount = generatedVideos.filter(v => v.status === 'done').length;
   const failedCount = generatedVideos.filter(v => v.status === 'failed').length;
   const pendingCount = generatedVideos.filter(v => v.status === 'queued' || v.status === 'processing').length;
+  const allCompleted = generatedVideos.length > 0 && pendingCount === 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -467,9 +510,6 @@ export default function VideoVariationGenerator() {
             <p className="text-muted-foreground">
               Crie múltiplas variações de anúncios combinando diferentes hooks, corpos e CTAs
             </p>
-            <p className="text-sm text-accent mt-2">
-              ☁️ Processamento na nuvem - vídeos mesclados via Fal.ai
-            </p>
           </div>
 
           {/* Upload Progress */}
@@ -479,7 +519,7 @@ export default function VideoVariationGenerator() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Loader2 className="h-5 w-5 animate-spin text-accent" />
-                    <span className="text-sm">Enviando vídeos para a nuvem...</span>
+                    <span className="text-sm">Enviando vídeos...</span>
                   </div>
                   <Progress value={uploadProgress} className="h-2" />
                 </div>
@@ -558,50 +598,27 @@ export default function VideoVariationGenerator() {
                       <CheckCircle className="h-4 w-4 text-green-500" />
                       <span>{completedCount}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <Loader2 className="h-4 w-4 animate-spin text-accent" />
-                      <span>{pendingCount}</span>
-                    </div>
+                    {pendingCount > 0 && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Loader2 className="h-4 w-4 animate-spin text-accent" />
+                        <span>{pendingCount}</span>
+                      </div>
+                    )}
                     {failedCount > 0 && (
                       <div className="flex items-center gap-2 text-sm">
                         <XCircle className="h-4 w-4 text-destructive" />
                         <span>{failedCount}</span>
                       </div>
                     )}
-                    {isGenerating && (
+                    {allCompleted && (
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setIsPaused(!isPaused)}
-                        className={isPaused ? "border-green-500 text-green-500" : "border-destructive text-destructive"}
+                        onClick={clearAll}
+                        className="border-accent"
                       >
-                        {isPaused ? (
-                          <>
-                            <Play className="mr-2 h-4 w-4" />
-                            Continuar
-                          </>
-                        ) : (
-                          <>
-                            <Pause className="mr-2 h-4 w-4" />
-                            Pausar
-                          </>
-                        )}
-                      </Button>
-                    )}
-                    {failedCount > 0 && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setGeneratedVideos([]);
-                          setIsGenerating(false);
-                          setIsPaused(false);
-                          toast.info("Estado limpo. Clique em 'Gerar Variações' para testar novamente.");
-                        }}
-                        className="border-destructive text-destructive"
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Limpar e Testar Novamente
+                        <RotateCcw className="mr-2 h-4 w-4" />
+                        Limpar e Recomeçar
                       </Button>
                     )}
                     {completedCount > 0 && (
@@ -649,9 +666,9 @@ export default function VideoVariationGenerator() {
                           video.status === 'failed' ? 'destructive' : 'secondary'
                         }
                       >
-                        {video.status === 'queued' && 'Na fila'}
-                        {video.status === 'processing' && 'Processando na nuvem...'}
-                        {video.status === 'done' && 'Concluído'}
+                        {video.status === 'queued' && 'Processando'}
+                        {video.status === 'processing' && 'Processando'}
+                        {video.status === 'done' && 'Finalizado'}
                         {video.status === 'failed' && 'Falhou'}
                       </Badge>
                       {video.status === 'done' && video.url && (

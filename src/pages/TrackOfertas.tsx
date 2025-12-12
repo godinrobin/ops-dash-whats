@@ -717,9 +717,9 @@ const TrackOfertas = () => {
         <DialogContent className="sm:max-w-[90vw] md:max-w-[800px] max-h-[90vh] overflow-y-auto bg-card border-2 border-accent">
           <DialogHeader>
             <DialogTitle className="text-2xl">{expandedOffer?.name}</DialogTitle>
-            <DialogDescription className="flex items-center gap-2 mt-2">
-              <ExternalLink className="h-4 w-4" />
-              <a href={expandedOffer?.ad_library_link} target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">
+            <DialogDescription className="flex flex-col gap-2 mt-2">
+              <a href={expandedOffer?.ad_library_link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:text-accent transition-colors">
+                <ExternalLink className="h-4 w-4" />
                 Ver biblioteca de anúncios
               </a>
             </DialogDescription>
@@ -849,6 +849,16 @@ const TrackOfertas = () => {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* WhatsApp da oferta */}
+              {expandedOffer?.funnel_number && (
+                <div className="space-y-2 border-t border-border pt-4">
+                  <h4 className="font-semibold">WhatsApp da Oferta</h4>
+                  <p className="text-muted-foreground bg-secondary/30 p-3 rounded-lg">
+                    {expandedOffer.funnel_number}
+                  </p>
+                </div>
+              )}
 
               {/* Campo de observações */}
               <div className="space-y-3 border-t border-border pt-4">
