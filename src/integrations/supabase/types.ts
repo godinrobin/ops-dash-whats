@@ -459,6 +459,39 @@ export type Database = {
         }
         Relationships: []
       }
+      video_generation_jobs: {
+        Row: {
+          created_at: string
+          id: string
+          render_id: string
+          status: string
+          updated_at: string
+          user_id: string
+          variation_name: string
+          video_url: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          render_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+          variation_name: string
+          video_url?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          render_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+          variation_name?: string
+          video_url?: string | null
+        }
+        Relationships: []
+      }
       zap_spy_offers: {
         Row: {
           active_ads_count: number | null
