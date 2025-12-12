@@ -32,11 +32,44 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    const { videoUrl, videoName } = await req.json();
+    const { videoUrl, videoName, checkExisting } = await req.json();
     console.log(`Analyzing creative: ${videoName}`);
 
     if (!videoUrl) {
       throw new Error('Video URL is required');
+    }
+
+    // Check for existing analysis if requested
+    if (checkExisting) {
+      const { data: existingAnalysis } = await supabaseClient
+        .from('video_creative_analyses')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('video_url', videoUrl)
+        .maybeSingle();
+
+      if (existingAnalysis) {
+        console.log('Found existing analysis');
+        return new Response(JSON.stringify({
+          success: true,
+          cached: true,
+          analysis: {
+            hookScore: existingAnalysis.hook_score,
+            bodyScore: existingAnalysis.body_score,
+            ctaScore: existingAnalysis.cta_score,
+            coherenceScore: existingAnalysis.coherence_score,
+            overallScore: existingAnalysis.overall_score,
+            hookAnalysis: existingAnalysis.hook_analysis,
+            bodyAnalysis: existingAnalysis.body_analysis,
+            ctaAnalysis: existingAnalysis.cta_analysis,
+            coherenceAnalysis: existingAnalysis.coherence_analysis,
+            overallAnalysis: existingAnalysis.overall_analysis,
+            transcription: existingAnalysis.transcription,
+          }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
     }
 
     if (!OPENAI_API_KEY) {
@@ -92,9 +125,11 @@ serve(async (req) => {
           hookScore: 0,
           bodyScore: 0,
           ctaScore: 0,
+          coherenceScore: 0,
           hookAnalysis: 'Não foi possível identificar áudio no vídeo.',
           bodyAnalysis: 'Não foi possível identificar áudio no vídeo.',
           ctaAnalysis: 'Não foi possível identificar áudio no vídeo.',
+          coherenceAnalysis: 'Não foi possível analisar coerência sem áudio.',
           overallAnalysis: 'O vídeo não possui áudio transcrevível. Certifique-se de que o vídeo contém narração ou diálogos.',
           transcription: '',
         }
@@ -106,36 +141,73 @@ serve(async (req) => {
     // Step 3: Analyze the creative with GPT
     console.log('Analyzing creative with GPT...');
     
-    const analysisPrompt = `Você é um especialista em análise de criativos de vídeo para anúncios de WhatsApp. 
-Analise a seguinte transcrição de um vídeo de anúncio e forneça uma análise detalhada.
+    const analysisPrompt = `Você é um especialista sênior em análise de criativos de vídeo para vendas via WhatsApp. 
+Analise a seguinte transcrição de um vídeo de anúncio e forneça uma análise justa e construtiva.
 
 TRANSCRIÇÃO DO VÍDEO:
 "${transcription}"
 
+## ESTRUTURA DO VÍDEO
 O vídeo é dividido em 3 partes:
 1. HOOK (Início): Os primeiros segundos que devem chamar a atenção do usuário
 2. CORPO (Meio): O conteúdo principal que deve reter o usuário e explicar a oferta
 3. CTA (Final): A chamada para ação que deve direcionar para WhatsApp
 
-Analise cada parte separadamente e o vídeo como um todo. Dê uma nota de 0 a 100 para cada parte e uma nota geral.
+## BASE DE CONHECIMENTO - O QUE FAZ UM BOM CRIATIVO
+
+### HOOKS EFICAZES (nota 70-100):
+- Perguntas retóricas que geram curiosidade ("Você sabia que...?", "Cansada de...?")
+- Afirmações impactantes ou polêmicas (sem ser ofensivo)
+- Identificação direta com a dor do público ("Se você sofre com...")
+- Promessas intrigantes ("Descobri algo que mudou...")
+- Uso de números específicos ("3 passos para...", "Em 7 dias...")
+- Quebra de padrão (algo inesperado que prende atenção)
+
+### CORPO EFICAZ (nota 70-100):
+- Conta uma história ou jornada de transformação
+- Apresenta provas sociais (depoimentos, resultados)
+- Explica benefícios claros (não apenas características)
+- Cria conexão emocional com o público
+- Mantém ritmo e não é monótono
+- Responde objeções de forma sutil
+
+### CTA EFICAZ (nota 70-100):
+- Chamada clara para o WhatsApp ("Clique no botão abaixo", "Me chama no WhatsApp")
+- Urgência ou escassez genuína (quando aplicável)
+- Benefício de tomar ação agora
+- Simplicidade e clareza do próximo passo
+- Reforço do que a pessoa vai receber
+
+### COERÊNCIA (nota 70-100):
+- Hook, corpo e CTA conversam entre si
+- Não há mudanças bruscas de assunto
+- A promessa do hook é entregue no corpo
+- O CTA faz sentido com o que foi apresentado
+- Tom de voz consistente ao longo do vídeo
+
+## CRITÉRIOS DE AVALIAÇÃO JUSTOS
+- Não penalize se o criativo for simples mas eficaz
+- Valorize clareza e objetividade
+- Considere que diferentes nichos têm abordagens diferentes
+- Um criativo pode ser excelente mesmo sem usar TODAS as técnicas
+- Seja construtivo: aponte o que está bom E o que pode melhorar
+- Notas entre 60-85 são normais para criativos decentes
+- Notas acima de 85 são para criativos excepcionais
+- Notas abaixo de 50 apenas se houver problemas graves
 
 Responda EXATAMENTE neste formato JSON (sem markdown, apenas o JSON puro):
 {
   "hookScore": <número de 0 a 100>,
-  "hookAnalysis": "<análise do hook em 2-3 frases>",
+  "hookAnalysis": "<análise do hook em 2-3 frases, destacando pontos positivos e sugestões>",
   "bodyScore": <número de 0 a 100>,
-  "bodyAnalysis": "<análise do corpo em 2-3 frases>",
+  "bodyAnalysis": "<análise do corpo em 2-3 frases, destacando pontos positivos e sugestões>",
   "ctaScore": <número de 0 a 100>,
-  "ctaAnalysis": "<análise do CTA em 2-3 frases>",
+  "ctaAnalysis": "<análise do CTA em 2-3 frases, destacando pontos positivos e sugestões>",
+  "coherenceScore": <número de 0 a 100>,
+  "coherenceAnalysis": "<análise da coerência entre hook, corpo e CTA em 2-3 frases>",
   "overallScore": <número de 0 a 100>,
-  "overallAnalysis": "<análise geral do criativo em 3-4 frases, incluindo pontos fortes e sugestões de melhoria>"
-}
-
-Critérios de avaliação:
-- Hook: Consegue capturar atenção nos primeiros segundos? Gera curiosidade?
-- Corpo: Mantém o interesse? Explica bem a oferta? É persuasivo?
-- CTA: É claro e direto? Motiva a ação de chamar no WhatsApp?
-- Geral: Fluidez, coerência, persuasão e adequação para vendas via WhatsApp`;
+  "overallAnalysis": "<análise geral do criativo em 3-4 frases, incluindo principais pontos fortes e 1-2 sugestões prioritárias de melhoria>"
+}`;
 
     const gptResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -146,11 +218,11 @@ Critérios de avaliação:
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'Você é um especialista em marketing digital e análise de criativos de vídeo. Sempre responda em JSON válido, sem markdown.' },
+          { role: 'system', content: 'Você é um especialista sênior em marketing digital e análise de criativos de vídeo para vendas via WhatsApp. Seja justo e construtivo nas análises, reconhecendo pontos positivos e dando sugestões práticas. Sempre responda em JSON válido, sem markdown.' },
           { role: 'user', content: analysisPrompt }
         ],
         temperature: 0.7,
-        max_tokens: 1000,
+        max_tokens: 1500,
       }),
     });
 
@@ -173,6 +245,33 @@ Critérios de avaliação:
     } catch (parseError) {
       console.error('Failed to parse GPT response:', parseError);
       throw new Error('Failed to parse analysis response');
+    }
+
+    // Save analysis to database
+    const { error: saveError } = await supabaseClient
+      .from('video_creative_analyses')
+      .insert({
+        user_id: user.id,
+        video_url: videoUrl,
+        video_name: videoName || 'Sem nome',
+        hook_score: analysis.hookScore,
+        body_score: analysis.bodyScore,
+        cta_score: analysis.ctaScore,
+        coherence_score: analysis.coherenceScore,
+        overall_score: analysis.overallScore,
+        hook_analysis: analysis.hookAnalysis,
+        body_analysis: analysis.bodyAnalysis,
+        cta_analysis: analysis.ctaAnalysis,
+        coherence_analysis: analysis.coherenceAnalysis,
+        overall_analysis: analysis.overallAnalysis,
+        transcription: transcription,
+      });
+
+    if (saveError) {
+      console.error('Failed to save analysis:', saveError);
+      // Continue anyway, analysis was successful
+    } else {
+      console.log('Analysis saved to database');
     }
 
     return new Response(JSON.stringify({

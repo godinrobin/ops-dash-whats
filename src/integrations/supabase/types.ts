@@ -459,6 +459,63 @@ export type Database = {
         }
         Relationships: []
       }
+      video_creative_analyses: {
+        Row: {
+          body_analysis: string
+          body_score: number
+          coherence_analysis: string
+          coherence_score: number
+          created_at: string
+          cta_analysis: string
+          cta_score: number
+          hook_analysis: string
+          hook_score: number
+          id: string
+          overall_analysis: string
+          overall_score: number
+          transcription: string | null
+          user_id: string
+          video_name: string
+          video_url: string
+        }
+        Insert: {
+          body_analysis: string
+          body_score: number
+          coherence_analysis: string
+          coherence_score: number
+          created_at?: string
+          cta_analysis: string
+          cta_score: number
+          hook_analysis: string
+          hook_score: number
+          id?: string
+          overall_analysis: string
+          overall_score: number
+          transcription?: string | null
+          user_id: string
+          video_name: string
+          video_url: string
+        }
+        Update: {
+          body_analysis?: string
+          body_score?: number
+          coherence_analysis?: string
+          coherence_score?: number
+          created_at?: string
+          cta_analysis?: string
+          cta_score?: number
+          hook_analysis?: string
+          hook_score?: number
+          id?: string
+          overall_analysis?: string
+          overall_score?: number
+          transcription?: string | null
+          user_id?: string
+          video_name?: string
+          video_url?: string
+        }
+        Relationships: []
+      }
       video_generation_jobs: {
         Row: {
           created_at: string
