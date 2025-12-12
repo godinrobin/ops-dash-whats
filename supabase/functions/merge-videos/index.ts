@@ -8,7 +8,8 @@ const corsHeaders = {
 };
 
 const FAL_KEY = Deno.env.get('FAL_KEY');
-const FAL_API_URL = 'https://queue.fal.run/fal-ai/ffmpeg-api/merge-videos';
+// Using the compose API which is more robust for different video formats
+const FAL_API_URL = 'https://queue.fal.run/fal-ai/ffmpeg-api/compose';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -43,7 +44,14 @@ serve(async (req) => {
       throw new Error('At least 2 video URLs are required');
     }
 
-    // Submit the job to Fal.ai queue
+    // Build keyframes array for the compose API
+    // Each video becomes a keyframe in a single video track
+    const keyframes = videoUrls.map((url: string, index: number) => ({
+      url: url,
+      start: index // Sequential order
+    }));
+
+    // Submit the job to Fal.ai compose API
     const submitResponse = await fetch(FAL_API_URL, {
       method: 'POST',
       headers: {
@@ -51,7 +59,11 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        video_urls: videoUrls
+        tracks: [{
+          id: "main_video",
+          type: "video",
+          keyframes: keyframes
+        }]
       })
     });
 
