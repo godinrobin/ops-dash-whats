@@ -10,6 +10,36 @@ const corsHeaders = {
 const FAL_KEY = Deno.env.get('FAL_KEY');
 const FAL_MERGE_AUDIO_URL = 'https://queue.fal.run/fal-ai/ffmpeg-api/merge-audio-video';
 
+// Retry fetch with exponential backoff for transient HTTP/2 errors
+async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      return response;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.log(`Fetch attempt ${attempt + 1} failed: ${lastError.message}`);
+      
+      // Only retry on connection/network errors
+      if (lastError.message.includes('http2') || 
+          lastError.message.includes('connection') || 
+          lastError.message.includes('network') ||
+          lastError.message.includes('SendRequest')) {
+        const delay = Math.pow(2, attempt) * 500; // 500ms, 1s, 2s
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      
+      throw error;
+    }
+  }
+  
+  throw lastError || new Error('Max retries exceeded');
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -77,7 +107,7 @@ serve(async (req) => {
         console.log(`Checking audio merge status: ${audioMergeRequestId}`);
         
         const audioFetchUrl = `https://queue.fal.run/fal-ai/ffmpeg-api/requests/${audioMergeRequestId}`;
-        const audioResponse = await fetch(audioFetchUrl, {
+        const audioResponse = await fetchWithRetry(audioFetchUrl, {
           method: 'GET',
           headers: {
             'Authorization': `Key ${FAL_KEY}`,
@@ -138,7 +168,7 @@ serve(async (req) => {
     
     console.log(`Fetching result from: ${fetchUrl}`);
     
-    const resultResponse = await fetch(fetchUrl, {
+    const resultResponse = await fetchWithRetry(fetchUrl, {
       method: 'GET',
       headers: {
         'Authorization': `Key ${FAL_KEY}`,
@@ -206,7 +236,7 @@ serve(async (req) => {
         console.log(`Starting audio merge with: ${audioUrl}`);
         
         // Submit audio merge job
-        const audioResponse = await fetch(FAL_MERGE_AUDIO_URL, {
+        const audioResponse = await fetchWithRetry(FAL_MERGE_AUDIO_URL, {
           method: 'POST',
           headers: {
             'Authorization': `Key ${FAL_KEY}`,
