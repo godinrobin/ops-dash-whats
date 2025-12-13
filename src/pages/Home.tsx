@@ -229,12 +229,10 @@ const Home = () => {
               </CardContent>
             </Card>
 
-            <Card
-              className="relative cursor-not-allowed opacity-70 border-2 border-accent"
+            <Card 
+              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
+              onClick={() => navigate("/tag-whats")}
             >
-              <Badge className="absolute top-2 right-2 bg-accent text-accent-foreground text-xs">
-                Em breve
-              </Badge>
               <CardHeader className="text-center p-3 md:p-6">
                 <div className="flex justify-center mb-2 md:mb-4">
                   <span className="text-3xl md:text-6xl">🏷️</span>
