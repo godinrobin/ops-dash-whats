@@ -30,6 +30,7 @@ const SYSTEMS = [
   { id: "gerador-audio", name: "Gerador de Áudio", emoji: "🎙️" },
   { id: "transcricao-audio", name: "Transcrição de Áudio", emoji: "📝" },
   { id: "zap-spy", name: "Zap Spy", emoji: "🔍" },
+  { id: "tag-whats", name: "Tag Whats", emoji: "📲" },
 ];
 
 interface AnnouncementData {

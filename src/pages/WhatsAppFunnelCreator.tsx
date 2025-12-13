@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Copy, Wand2, MessageSquare, Mic, Image, Video, FileText, ChevronDown, ChevronUp, Lightbulb, Edit, Plus, Save, Trash2, FolderOpen } from "lucide-react";
+import { Copy, Wand2, MessageSquare, Mic, Image, Video, FileText, ChevronDown, ChevronUp, Lightbulb, Edit, Plus, Save, Trash2, FolderOpen, Sparkles, Loader2, Send } from "lucide-react";
 import { TicketTagInput } from "@/components/TicketTagInput";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 
@@ -100,6 +100,11 @@ const WhatsAppFunnelCreator = () => {
   const [saveFunnelName, setSaveFunnelName] = useState("");
   const [editingFunnelId, setEditingFunnelId] = useState<string | null>(null);
   const [editingFunnelName, setEditingFunnelName] = useState("");
+  
+  // AI Edit State
+  const [showAIEditDialog, setShowAIEditDialog] = useState(false);
+  const [aiEditRequest, setAiEditRequest] = useState("");
+  const [isEditingWithAI, setIsEditingWithAI] = useState(false);
   
   const [formData, setFormData] = useState({
     niche: "",
@@ -382,6 +387,52 @@ const WhatsAppFunnelCreator = () => {
     });
   };
 
+  const handleAIEdit = async () => {
+    if (!aiEditRequest.trim() || !generatedFunnel) return;
+
+    setIsEditingWithAI(true);
+    try {
+      const productContext = formData.product === "Outro" 
+        ? formData.customProduct 
+        : formData.product;
+
+      const { data, error } = await supabase.functions.invoke("edit-funnel-with-ai", {
+        body: {
+          funnelContent: generatedFunnel,
+          editRequest: aiEditRequest.trim(),
+          productContext,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.funnel) {
+        setGeneratedFunnel(data.funnel);
+        setExpandedSections(data.funnel.sections.reduce((acc: Record<string, boolean>, section: FunnelSection) => {
+          acc[section.title] = true;
+          return acc;
+        }, {}));
+
+        toast({
+          title: "Funil editado com sucesso!",
+          description: "As alterações foram aplicadas.",
+        });
+        
+        setAiEditRequest("");
+        setShowAIEditDialog(false);
+      }
+    } catch (error: any) {
+      console.error("Error editing funnel:", error);
+      toast({
+        title: "Erro ao editar funil",
+        description: error.message || "Ocorreu um erro ao processar sua solicitação.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsEditingWithAI(false);
+    }
+  };
+
   const getMessageIcon = (type: string) => {
     switch (type) {
       case "text":
@@ -453,6 +504,60 @@ const WhatsAppFunnelCreator = () => {
                 className="flex-1 bg-accent hover:bg-accent/90"
               >
                 Adicionar site
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Edit Dialog */}
+      <Dialog open={showAIEditDialog} onOpenChange={setShowAIEditDialog}>
+        <DialogContent className="sm:max-w-[500px] bg-card border-purple-500">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <Sparkles className="h-5 w-5 text-purple-400" />
+              Editar Funil com IA
+            </DialogTitle>
+            <DialogDescription className="text-base pt-2">
+              Descreva qual alteração você deseja fazer no funil e a IA irá aplicar automaticamente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <Textarea
+              placeholder="Ex: Troque o nome da expert para Maria, adicione mais urgência nas mensagens de cobrança, mude o tom para mais formal..."
+              value={aiEditRequest}
+              onChange={(e) => setAiEditRequest(e.target.value)}
+              rows={4}
+              disabled={isEditingWithAI}
+            />
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowAIEditDialog(false);
+                  setAiEditRequest("");
+                }}
+                className="flex-1"
+                disabled={isEditingWithAI}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleAIEdit}
+                className="flex-1 bg-purple-600 hover:bg-purple-700"
+                disabled={!aiEditRequest.trim() || isEditingWithAI}
+              >
+                {isEditingWithAI ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Editando...
+                  </>
+                ) : (
+                  <>
+                    <Send className="mr-2 h-4 w-4" />
+                    Aplicar Edição
+                  </>
+                )}
               </Button>
             </div>
           </div>
@@ -897,11 +1002,19 @@ const WhatsAppFunnelCreator = () => {
               <CardContent className="flex flex-wrap gap-3 py-4">
                 <Button
                   variant="outline"
+                  onClick={() => setShowAIEditDialog(true)}
+                  className="border-purple-500/50 hover:bg-purple-500/10 text-purple-400"
+                >
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Editar com IA
+                </Button>
+                <Button
+                  variant="outline"
                   onClick={() => setShowConfig(true)}
                   className="border-accent/50 hover:bg-accent/10"
                 >
                   <Edit className="mr-2 h-4 w-4" />
-                  Editar Informações do Funil
+                  Editar Informações
                 </Button>
                 <Button
                   variant="outline"

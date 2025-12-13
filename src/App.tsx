@@ -19,6 +19,7 @@ import VideoVariationGenerator from "./pages/VideoVariationGenerator";
 import AudioGenerator from "./pages/AudioGenerator";
 import AudioTranscriber from "./pages/AudioTranscriber";
 import ZapSpy from "./pages/ZapSpy";
+import TagWhats from "./pages/TagWhats";
 import AdminPanelNew from "./pages/AdminPanelNew";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
@@ -45,6 +46,7 @@ const App = () => (
             <Route path="/gerador-audio" element={<ProtectedRoute><AudioGenerator /></ProtectedRoute>} />
             <Route path="/transcricao-audio" element={<ProtectedRoute><AudioTranscriber /></ProtectedRoute>} />
             <Route path="/zap-spy" element={<ProtectedRoute><ZapSpy /></ProtectedRoute>} />
+            <Route path="/tag-whats" element={<ProtectedRoute><TagWhats /></ProtectedRoute>} />
             <Route path="/produto/:productId" element={<ProtectedRoute><ProductMetrics /></ProtectedRoute>} />
             <Route path="/produto/:productId/analise" element={<ProtectedRoute><ProductAnalysis /></ProtectedRoute>} />
             <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />

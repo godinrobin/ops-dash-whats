@@ -51,6 +51,8 @@ const voices: Voice[] = [
   { id: 'EvpLGWrX1AwQb1i7PLlO', name: 'Voz de Influencer', category: 'mulher' },
   { id: 'rRfxJNvibLZ8tabPQWMQ', name: 'Voz de Tiktok', category: 'mulher' },
   { id: 'TU0AKFEDB4rOIzrirWl0', name: 'Voz de IA', category: 'mulher' },
+  { id: 'erMftXUmGTCGs1yArsUh', name: 'Voz Para Demonstração', category: 'mulher' },
+  { id: 'QTisrsrrHxSoMiznY2EJ', name: 'Voz Famosa de Criativo', category: 'mulher' },
   // Homem
   { id: '4vbXGL1xAN936MeSCtyJ', name: 'Voz de Pastor na Igreja', category: 'homem' },
   { id: 'ZA5HAcCWFlMQVFIL9S9a', name: 'Voz de Homem Séria', category: 'homem' },

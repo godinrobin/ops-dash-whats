@@ -8,7 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Download, ArrowLeft, Image as ImageIcon, Check } from "lucide-react";
+import { Loader2, Download, ArrowLeft, Image as ImageIcon, Check, Sparkles, Send } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useNavigate } from "react-router-dom";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import creativeModel1 from "@/assets/creative-model-1.png";
@@ -60,6 +61,9 @@ const CreativeGenerator = () => {
   const [observation, setObservation] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [showAIEditDialog, setShowAIEditDialog] = useState(false);
+  const [aiEditRequest, setAiEditRequest] = useState("");
+  const [isEditingWithAI, setIsEditingWithAI] = useState(false);
 
   const handleGenerate = async () => {
     if (!productName.trim()) {
@@ -112,6 +116,38 @@ const CreativeGenerator = () => {
     link.click();
     document.body.removeChild(link);
     toast.success("Download iniciado!");
+  };
+
+  const handleAIEdit = async () => {
+    if (!aiEditRequest.trim() || !generatedImage) return;
+
+    setIsEditingWithAI(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('edit-creative-with-ai', {
+        body: {
+          currentImageUrl: generatedImage,
+          editRequest: aiEditRequest.trim(),
+          productName: productName.trim(),
+          modelType: selectedModel,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.success && data.image) {
+        setGeneratedImage(data.image);
+        toast.success("Criativo editado com sucesso!");
+        setAiEditRequest("");
+        setShowAIEditDialog(false);
+      } else {
+        throw new Error(data.error || "Erro ao editar imagem");
+      }
+    } catch (error: any) {
+      console.error("Error editing creative:", error);
+      toast.error(error.message || "Erro ao editar criativo");
+    } finally {
+      setIsEditingWithAI(false);
+    }
   };
 
   return (
@@ -268,17 +304,82 @@ const CreativeGenerator = () => {
                       className="w-full h-auto"
                     />
                   </div>
-                  <Button
-                    onClick={handleDownload}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white"
-                    size="lg"
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    Baixar Criativo
-                  </Button>
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={() => setShowAIEditDialog(true)}
+                      variant="outline"
+                      className="flex-1 border-purple-500/50 text-purple-400 hover:bg-purple-500/10"
+                      size="lg"
+                    >
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Editar com IA
+                    </Button>
+                    <Button
+                      onClick={handleDownload}
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                      size="lg"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Baixar Criativo
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             )}
+
+            {/* AI Edit Dialog */}
+            <Dialog open={showAIEditDialog} onOpenChange={setShowAIEditDialog}>
+              <DialogContent className="sm:max-w-[500px] bg-card border-purple-500">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-xl">
+                    <Sparkles className="h-5 w-5 text-purple-400" />
+                    Editar Criativo com IA
+                  </DialogTitle>
+                  <DialogDescription className="text-base pt-2">
+                    Descreva qual alteração você deseja fazer no criativo e a IA irá gerar uma nova versão.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="py-4 space-y-4">
+                  <Textarea
+                    placeholder="Ex: Mude a cor do fundo para azul, adicione mais produtos na imagem, coloque um texto diferente..."
+                    value={aiEditRequest}
+                    onChange={(e) => setAiEditRequest(e.target.value)}
+                    rows={4}
+                    disabled={isEditingWithAI}
+                  />
+                  <div className="flex gap-3">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowAIEditDialog(false);
+                        setAiEditRequest("");
+                      }}
+                      className="flex-1"
+                      disabled={isEditingWithAI}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      onClick={handleAIEdit}
+                      className="flex-1 bg-purple-600 hover:bg-purple-700"
+                      disabled={!aiEditRequest.trim() || isEditingWithAI}
+                    >
+                      {isEditingWithAI ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Editando...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="mr-2 h-4 w-4" />
+                          Aplicar Edição
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
 
           <footer className="mt-16 text-center text-xs text-muted-foreground/50">
