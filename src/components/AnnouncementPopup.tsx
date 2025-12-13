@@ -25,10 +25,11 @@ const SYSTEMS = [
   { id: "track-ofertas", name: "Track Ofertas", emoji: "🎯", route: "/track-ofertas" },
   { id: "criador-funil", name: "Criador de Funil", emoji: "💬", route: "/criador-funil" },
   { id: "gerador-criativos-imagem", name: "Gerador de Criativos em Imagem", emoji: "🖼️", route: "/gerador-criativos" },
-  { id: "gerador-criativos-video", name: "Gerador de Criativos em Vídeo", emoji: "🎬", route: "/gerador-video" },
+  { id: "gerador-criativos-video", name: "Gerador de Criativos em Vídeo", emoji: "🎬", route: "/gerador-variacoes-video" },
   { id: "gerador-audio", name: "Gerador de Áudio", emoji: "🎙️", route: "/gerador-audio" },
   { id: "transcricao-audio", name: "Transcrição de Áudio", emoji: "📝", route: "/transcricao-audio" },
   { id: "zap-spy", name: "Zap Spy", emoji: "🔍", route: "/zap-spy" },
+  { id: "tag-whats", name: "Tag Whats", emoji: "📲", route: "/tag-whats" },
 ];
 
 export const AnnouncementPopup = () => {
