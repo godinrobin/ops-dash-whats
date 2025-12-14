@@ -8,7 +8,8 @@ const corsHeaders = {
 
 // Taxa de conversão USD para BRL (a API retorna preços em USD)
 const USD_TO_BRL = 6.10;
-const PROFIT_MARGIN = 1.30; // 30% de margem
+const PROFIT_MARGIN = 1.30; // 30% de margem base
+const PLATFORM_MARKUP = 1.10; // 10% de lucro da plataforma
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -42,10 +43,11 @@ serve(async (req) => {
       throw new Error('Usuário não autenticado');
     }
 
-    const { serviceCode, serviceName, country } = await req.json();
+    const { serviceCode, serviceName, country, quantity = 1 } = await req.json();
     const countryCode = country || '73';
+    const buyQuantity = Math.min(Math.max(1, quantity), 10); // Máximo 10 por vez
 
-    console.log(`User ${user.id} buying number for service ${serviceCode} in country ${countryCode}`);
+    console.log(`User ${user.id} buying ${buyQuantity} number(s) for service ${serviceCode} in country ${countryCode}`);
 
     // Primeiro, busca o preço atual do serviço
     const priceUrl = `https://api.sms-activate.org/stubs/handler_api.php?api_key=${apiKey}&action=getPrices&country=${countryCode}&service=${serviceCode}`;
@@ -53,13 +55,31 @@ serve(async (req) => {
     const priceData = await priceResponse.json();
     
     let priceUsd = 0;
+    let available = 0;
     if (priceData[countryCode] && priceData[countryCode][serviceCode]) {
       priceUsd = priceData[countryCode][serviceCode].cost;
+      available = priceData[countryCode][serviceCode].count;
     } else {
       throw new Error('Serviço não disponível neste país');
     }
 
-    const priceBrl = Math.ceil(priceUsd * USD_TO_BRL * PROFIT_MARGIN * 100) / 100;
+    // Verifica disponibilidade
+    if (available < buyQuantity) {
+      return new Response(JSON.stringify({ 
+        error: `Apenas ${available} números disponíveis`,
+        available 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Preço real (custo interno)
+    const priceBrlUnit = Math.ceil(priceUsd * USD_TO_BRL * PROFIT_MARGIN * 100) / 100;
+    // Preço com markup (cobrado do usuário)
+    const priceWithMarkupUnit = Math.ceil(priceBrlUnit * PLATFORM_MARKUP * 100) / 100;
+    // Total a cobrar do usuário
+    const totalCharge = Math.ceil(priceWithMarkupUnit * buyQuantity * 100) / 100;
 
     // Verifica saldo do usuário
     const { data: wallet, error: walletError } = await supabase
@@ -75,10 +95,10 @@ serve(async (req) => {
 
     const currentBalance = wallet?.balance || 0;
     
-    if (currentBalance < priceBrl) {
+    if (currentBalance < totalCharge) {
       return new Response(JSON.stringify({ 
         error: 'Saldo insuficiente',
-        required: priceBrl,
+        required: totalCharge,
         current: currentBalance 
       }), {
         status: 400,
@@ -86,32 +106,49 @@ serve(async (req) => {
       });
     }
 
-    // Compra o número na API SMS-Activate
-    const buyUrl = `https://api.sms-activate.org/stubs/handler_api.php?api_key=${apiKey}&action=getNumber&service=${serviceCode}&country=${countryCode}`;
-    console.log('Buying number from SMS-Activate...');
-    
-    const buyResponse = await fetch(buyUrl);
-    const buyResult = await buyResponse.text();
-    
-    console.log('Buy result:', buyResult);
+    // Compra os números na API SMS-Activate
+    const purchasedNumbers = [];
+    let successCount = 0;
+    let totalCost = 0;
 
-    // Resposta esperada: ACCESS_NUMBER:123456:79123456789
-    if (!buyResult.startsWith('ACCESS_NUMBER')) {
-      if (buyResult.includes('NO_NUMBERS')) {
-        throw new Error('Sem números disponíveis no momento. Tente outro país.');
+    for (let i = 0; i < buyQuantity; i++) {
+      const buyUrl = `https://api.sms-activate.org/stubs/handler_api.php?api_key=${apiKey}&action=getNumber&service=${serviceCode}&country=${countryCode}`;
+      console.log(`Buying number ${i + 1}/${buyQuantity} from SMS-Activate...`);
+      
+      const buyResponse = await fetch(buyUrl);
+      const buyResult = await buyResponse.text();
+      
+      console.log(`Buy result ${i + 1}:`, buyResult);
+
+      if (!buyResult.startsWith('ACCESS_NUMBER')) {
+        if (buyResult.includes('NO_NUMBERS')) {
+          console.log('No more numbers available, stopping purchase');
+          break;
+        }
+        if (buyResult.includes('NO_BALANCE')) {
+          console.error('API balance insufficient');
+          break;
+        }
+        console.error(`Error buying number ${i + 1}:`, buyResult);
+        continue;
       }
-      if (buyResult.includes('NO_BALANCE')) {
-        throw new Error('Erro interno: saldo da API insuficiente');
-      }
-      throw new Error(`Erro ao comprar número: ${buyResult}`);
+
+      const parts = buyResult.split(':');
+      const smsActivateId = parts[1];
+      const phoneNumber = parts[2];
+
+      purchasedNumbers.push({ smsActivateId, phoneNumber });
+      successCount++;
+      totalCost += priceWithMarkupUnit;
     }
 
-    const parts = buyResult.split(':');
-    const smsActivateId = parts[1];
-    const phoneNumber = parts[2];
+    if (successCount === 0) {
+      throw new Error('Não foi possível comprar nenhum número. Tente novamente.');
+    }
 
-    // Debita saldo do usuário
-    const newBalance = currentBalance - priceBrl;
+    // Debita saldo do usuário (apenas pelos números comprados com sucesso)
+    const totalDebit = Math.ceil(totalCost * 100) / 100;
+    const newBalance = currentBalance - totalDebit;
     
     if (wallet) {
       const { error: updateError } = await supabase
@@ -121,65 +158,73 @@ serve(async (req) => {
       
       if (updateError) {
         console.error('Error updating balance:', updateError);
-        // Tenta cancelar o número
-        await fetch(`https://api.sms-activate.org/stubs/handler_api.php?api_key=${apiKey}&action=setStatus&status=8&id=${smsActivateId}`);
+        // Tenta cancelar os números comprados
+        for (const num of purchasedNumbers) {
+          await fetch(`https://api.sms-activate.org/stubs/handler_api.php?api_key=${apiKey}&action=setStatus&status=8&id=${num.smsActivateId}`);
+        }
         throw new Error('Erro ao debitar saldo');
       }
     } else {
-      // Cria wallet com saldo negativo (não deveria acontecer, mas...)
       const { error: insertError } = await supabase
         .from('sms_user_wallets')
-        .insert({ user_id: user.id, balance: -priceBrl });
+        .insert({ user_id: user.id, balance: -totalDebit });
       
       if (insertError) {
         console.error('Error creating wallet:', insertError);
       }
     }
 
-    // Cria o pedido
+    // Cria os pedidos
     const expiresAt = new Date(Date.now() + 20 * 60 * 1000); // 20 minutos
-    
-    const { data: order, error: orderError } = await supabase
-      .from('sms_orders')
-      .insert({
-        user_id: user.id,
-        sms_activate_id: smsActivateId,
-        phone_number: phoneNumber,
-        service_code: serviceCode,
-        service_name: serviceName || serviceCode,
-        country_code: countryCode,
-        price: priceBrl,
-        status: 'waiting_sms',
-        expires_at: expiresAt.toISOString(),
-      })
-      .select()
-      .single();
+    const orders = [];
 
-    if (orderError) {
-      console.error('Error creating order:', orderError);
+    for (const num of purchasedNumbers) {
+      const { data: order, error: orderError } = await supabase
+        .from('sms_orders')
+        .insert({
+          user_id: user.id,
+          sms_activate_id: num.smsActivateId,
+          phone_number: num.phoneNumber,
+          service_code: serviceCode,
+          service_name: serviceName || serviceCode,
+          country_code: countryCode,
+          price: priceWithMarkupUnit,
+          status: 'waiting_sms',
+          expires_at: expiresAt.toISOString(),
+        })
+        .select()
+        .single();
+
+      if (orderError) {
+        console.error('Error creating order:', orderError);
+      } else {
+        orders.push(order);
+      }
+
+      // Registra transação
+      await supabase
+        .from('sms_transactions')
+        .insert({
+          user_id: user.id,
+          type: 'purchase',
+          amount: -priceWithMarkupUnit,
+          description: `Compra de número ${serviceName || serviceCode} (+${num.phoneNumber})`,
+          order_id: order?.id,
+        });
     }
-
-    // Registra transação
-    await supabase
-      .from('sms_transactions')
-      .insert({
-        user_id: user.id,
-        type: 'purchase',
-        amount: -priceBrl,
-        description: `Compra de número ${serviceName || serviceCode}`,
-        order_id: order?.id,
-      });
 
     return new Response(JSON.stringify({
       success: true,
-      order: {
-        id: order?.id,
-        smsActivateId,
-        phoneNumber,
+      purchasedCount: successCount,
+      requestedCount: buyQuantity,
+      orders: orders.map(o => ({
+        id: o?.id,
+        smsActivateId: o?.sms_activate_id,
+        phoneNumber: o?.phone_number,
         serviceName: serviceName || serviceCode,
-        price: priceBrl,
+        price: priceWithMarkupUnit,
         expiresAt: expiresAt.toISOString(),
-      },
+      })),
       newBalance,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

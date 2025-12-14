@@ -24,6 +24,7 @@ interface Service {
   name: string;
   priceUsd: number;
   priceBrl: number;
+  priceWithMarkup: number; // preço com 10% de lucro (exibido ao usuário)
   available: number;
 }
 
@@ -60,6 +61,7 @@ const SMSBot = () => {
   const [buyingService, setBuyingService] = useState<string | null>(null);
   const [pollingOrders, setPollingOrders] = useState<Set<string>>(new Set());
   const [showRechargeModal, setShowRechargeModal] = useState(false);
+  const [serviceQuantities, setServiceQuantities] = useState<Record<string, number>>({});
 
   // Carrega saldo do usuário
   const loadBalance = useCallback(async () => {
@@ -134,9 +136,31 @@ const SMSBot = () => {
     setLoadingOrders(false);
   }, [user]);
 
-  // Compra número
+  // Atualiza quantidade do serviço
+  const updateQuantity = (serviceCode: string, quantity: number) => {
+    setServiceQuantities(prev => ({
+      ...prev,
+      [serviceCode]: Math.max(1, quantity)
+    }));
+  };
+
+  const getQuantity = (serviceCode: string) => serviceQuantities[serviceCode] || 1;
+
+  // Compra número(s)
   const buyNumber = async (service: Service) => {
     if (!selectedCountry) return;
+    
+    const quantity = getQuantity(service.code);
+    
+    // Verifica se há disponibilidade suficiente
+    if (quantity > service.available) {
+      toast({ 
+        title: `Apenas ${service.available} números disponíveis`,
+        description: "Reduza a quantidade e tente novamente.",
+        variant: "destructive" 
+      });
+      return;
+    }
     
     setBuyingService(service.code);
     try {
@@ -144,7 +168,8 @@ const SMSBot = () => {
         body: {
           serviceCode: service.code,
           serviceName: service.name,
-          country: selectedCountry.code
+          country: selectedCountry.code,
+          quantity: quantity
         }
       });
       
@@ -159,8 +184,9 @@ const SMSBot = () => {
         return;
       }
       
-      toast({ title: "Número adquirido com sucesso!" });
+      toast({ title: quantity > 1 ? `${quantity} números adquiridos com sucesso!` : "Número adquirido com sucesso!" });
       setBalance(data.newBalance);
+      setServiceQuantities(prev => ({ ...prev, [service.code]: 1 }));
       loadOrders();
       
     } catch (error: any) {
@@ -275,7 +301,7 @@ const SMSBot = () => {
       <div className="min-h-screen bg-background p-4 md:p-6">
         <div className="container mx-auto max-w-6xl">
           <header className="text-center mb-8">
-            <h1 className="text-3xl md:text-4xl font-bold mb-2">📱 SMS Bot</h1>
+            <h1 className="text-3xl md:text-4xl font-bold mb-2">📱 Números Virtuais</h1>
             <p className="text-muted-foreground">
               Compre números virtuais para receber SMS
             </p>
@@ -380,36 +406,70 @@ const SMSBot = () => {
                     </p>
                   ) : (
                     <ScrollArea className="h-[400px]">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {filteredServices.map(service => (
-                          <div
-                            key={service.code}
-                            className="flex items-center justify-between p-3 rounded-lg border border-border hover:border-accent transition-colors"
-                          >
-                            <div>
-                              <p className="font-medium">{service.name}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {service.available} disponíveis
-                              </p>
+                      <div className="grid grid-cols-1 gap-2">
+                        {filteredServices.map(service => {
+                          const quantity = getQuantity(service.code);
+                          const totalPrice = service.priceWithMarkup * quantity;
+                          
+                          return (
+                            <div
+                              key={service.code}
+                              className="flex items-center justify-between p-3 rounded-lg border border-border hover:border-accent transition-colors"
+                            >
+                              <div className="flex-1">
+                                <p className="font-medium">{service.name}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {service.available} disponíveis
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="secondary" className="bg-accent/20 text-accent">
+                                  R$ {service.priceWithMarkup.toFixed(2)}
+                                </Badge>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 w-8 p-0"
+                                    onClick={() => updateQuantity(service.code, quantity - 1)}
+                                    disabled={quantity <= 1}
+                                  >
+                                    -
+                                  </Button>
+                                  <Input
+                                    type="number"
+                                    value={quantity}
+                                    onChange={(e) => updateQuantity(service.code, parseInt(e.target.value) || 1)}
+                                    className="w-12 h-8 text-center p-1"
+                                    min={1}
+                                    max={service.available}
+                                  />
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 w-8 p-0"
+                                    onClick={() => updateQuantity(service.code, quantity + 1)}
+                                    disabled={quantity >= service.available}
+                                  >
+                                    +
+                                  </Button>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  onClick={() => buyNumber(service)}
+                                  disabled={buyingService === service.code || balance < totalPrice}
+                                  className="bg-green-600 hover:bg-green-700 text-white min-w-[100px]"
+                                >
+                                  {buyingService === service.code ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    quantity > 1 ? `R$ ${totalPrice.toFixed(2)}` : "Comprar"
+                                  )}
+                                </Button>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="secondary" className="bg-accent/20 text-accent">
-                                R$ {service.priceBrl.toFixed(2)}
-                              </Badge>
-                              <Button
-                                size="sm"
-                                onClick={() => buyNumber(service)}
-                                disabled={buyingService === service.code || balance < service.priceBrl}
-                              >
-                                {buyingService === service.code ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  "Comprar"
-                                )}
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </ScrollArea>
                   )}
