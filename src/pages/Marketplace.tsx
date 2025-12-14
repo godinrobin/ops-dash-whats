@@ -1034,21 +1034,74 @@ const SMSBotEmbed = () => {
               ) : (
                 <div className="space-y-3">
                   {orders.map(order => (
-                    <div key={order.id} className="p-3 rounded-lg border border-border">
+                    <div key={order.id} className={`p-3 rounded-lg border-2 ${
+                      order.status === 'received' 
+                        ? 'border-green-500/50 bg-green-500/5' 
+                        : order.status === 'cancelled'
+                        ? 'border-red-500/50 bg-red-500/5'
+                        : 'border-accent/50 bg-accent/5'
+                    }`}>
                       <div className="flex justify-between items-start mb-2">
                         <div>
                           <p className="font-medium">{order.service_name}</p>
-                          <p className="text-lg font-mono">{order.phone_number || "Aguardando..."}</p>
+                          <div 
+                            className="flex items-center gap-2 text-lg font-mono cursor-pointer hover:text-accent"
+                            onClick={() => {
+                              if (order.phone_number) {
+                                navigator.clipboard.writeText(order.phone_number);
+                                toast.success("Número copiado!");
+                              }
+                            }}
+                          >
+                            {order.phone_number || "Aguardando..."}
+                            {order.phone_number && <span className="text-xs">📋</span>}
+                          </div>
                         </div>
-                        <Badge className={order.status === 'received' ? 'bg-green-500' : order.status === 'waiting_sms' ? 'bg-yellow-500' : 'bg-muted'}>
-                          {order.status}
+                        <Badge className={
+                          order.status === 'received' 
+                            ? 'bg-green-500 text-white' 
+                            : order.status === 'waiting_sms' 
+                            ? 'bg-yellow-500 text-black' 
+                            : order.status === 'cancelled'
+                            ? 'bg-red-500 text-white'
+                            : 'bg-muted'
+                        }>
+                          {order.status === 'received' 
+                            ? 'Recebido' 
+                            : order.status === 'waiting_sms' 
+                            ? 'Aguardando' 
+                            : order.status === 'cancelled'
+                            ? 'Cancelado'
+                            : order.status}
                         </Badge>
                       </div>
                       {order.sms_code && (
-                        <div className="bg-green-500/20 p-2 rounded mb-2">
+                        <div 
+                          className="bg-green-500/20 p-2 rounded mb-2 cursor-pointer hover:bg-green-500/30"
+                          onClick={() => {
+                            navigator.clipboard.writeText(order.sms_code!);
+                            toast.success("Código SMS copiado!");
+                          }}
+                        >
                           <p className="text-sm text-muted-foreground">Código SMS:</p>
-                          <p className="text-xl font-bold text-green-500">{order.sms_code}</p>
+                          <p className="text-xl font-bold text-green-500 flex items-center gap-2">
+                            {order.sms_code}
+                            <span className="text-sm">📋 Copiar</span>
+                          </p>
                         </div>
+                      )}
+                      {order.status === 'received' && order.phone_number && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mb-2 text-xs"
+                          onClick={() => {
+                            navigator.clipboard.writeText(order.phone_number!);
+                            toast.success("Número copiado!");
+                          }}
+                        >
+                          📋 Copiar Número
+                        </Button>
                       )}
                       <div className="flex gap-2">
                         {order.status === 'waiting_sms' && (
