@@ -6,8 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const RUB_TO_BRL = 0.055;
-const PROFIT_MARGIN = 1.5;
+// Taxa de conversão USD para BRL (a API retorna preços em USD)
+const USD_TO_BRL = 6.10;
+const PROFIT_MARGIN = 1.30; // 30% de margem
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -51,14 +52,14 @@ serve(async (req) => {
     const priceResponse = await fetch(priceUrl);
     const priceData = await priceResponse.json();
     
-    let priceRub = 0;
+    let priceUsd = 0;
     if (priceData[countryCode] && priceData[countryCode][serviceCode]) {
-      priceRub = priceData[countryCode][serviceCode].cost;
+      priceUsd = priceData[countryCode][serviceCode].cost;
     } else {
       throw new Error('Serviço não disponível neste país');
     }
 
-    const priceBrl = Math.ceil(priceRub * RUB_TO_BRL * PROFIT_MARGIN * 100) / 100;
+    const priceBrl = Math.ceil(priceUsd * USD_TO_BRL * PROFIT_MARGIN * 100) / 100;
 
     // Verifica saldo do usuário
     const { data: wallet, error: walletError } = await supabase

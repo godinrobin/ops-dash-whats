@@ -71,3 +71,12 @@ verify_jwt = true
 
 [functions.sms-admin-recharge]
 verify_jwt = true
+
+[functions.sms-create-pix-charge]
+verify_jwt = true
+
+[functions.sms-pix-webhook]
+verify_jwt = false
+
+[functions.sms-check-payment]
+verify_jwt = true

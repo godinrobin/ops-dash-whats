@@ -398,8 +398,12 @@ export type Database = {
           amount: number
           created_at: string
           description: string | null
+          external_id: string | null
           id: string
           order_id: string | null
+          pix_copy_paste: string | null
+          pix_qr_code: string | null
+          status: string | null
           type: string
           user_id: string
         }
@@ -407,8 +411,12 @@ export type Database = {
           amount: number
           created_at?: string
           description?: string | null
+          external_id?: string | null
           id?: string
           order_id?: string | null
+          pix_copy_paste?: string | null
+          pix_qr_code?: string | null
+          status?: string | null
           type: string
           user_id: string
         }
@@ -416,8 +424,12 @@ export type Database = {
           amount?: number
           created_at?: string
           description?: string | null
+          external_id?: string | null
           id?: string
           order_id?: string | null
+          pix_copy_paste?: string | null
+          pix_qr_code?: string | null
+          status?: string | null
           type?: string
           user_id?: string
         }
