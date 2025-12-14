@@ -309,6 +309,7 @@ const AdminPanelNew = () => {
   // User access management state
   const [userProfiles, setUserProfiles] = useState<{id: string; username: string; email: string; is_full_member: boolean}[]>([]);
   const [userAccessSearch, setUserAccessSearch] = useState("");
+  const [userAccessFilter, setUserAccessFilter] = useState<"all" | "full" | "partial">("all");
   const [updatingUserAccess, setUpdatingUserAccess] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1333,10 +1334,14 @@ const AdminPanelNew = () => {
         );
 
       case "user-access":
-        const filteredProfiles = userProfiles.filter(p => 
-          p.username.toLowerCase().includes(userAccessSearch.toLowerCase()) ||
-          p.email.toLowerCase().includes(userAccessSearch.toLowerCase())
-        );
+        const filteredProfiles = userProfiles.filter(p => {
+          const matchesSearch = p.username.toLowerCase().includes(userAccessSearch.toLowerCase()) ||
+            p.email.toLowerCase().includes(userAccessSearch.toLowerCase());
+          
+          if (userAccessFilter === "full") return matchesSearch && p.is_full_member;
+          if (userAccessFilter === "partial") return matchesSearch && !p.is_full_member;
+          return matchesSearch;
+        });
         
         return (
           <Card className="border-2 border-accent">
@@ -1350,14 +1355,26 @@ const AdminPanelNew = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Search className="h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por nome ou email..."
-                  value={userAccessSearch}
-                  onChange={(e) => setUserAccessSearch(e.target.value)}
-                  className="max-w-sm"
-                />
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                <div className="flex items-center gap-2 flex-1">
+                  <Search className="h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por nome ou email..."
+                    value={userAccessSearch}
+                    onChange={(e) => setUserAccessSearch(e.target.value)}
+                    className="max-w-sm"
+                  />
+                </div>
+                <Select value={userAccessFilter} onValueChange={(v: "all" | "full" | "partial") => setUserAccessFilter(v)}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="Filtrar por tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os Membros</SelectItem>
+                    <SelectItem value="full">Membros Completos</SelectItem>
+                    <SelectItem value="partial">Membros Parciais</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               
               <div className="overflow-x-auto">
