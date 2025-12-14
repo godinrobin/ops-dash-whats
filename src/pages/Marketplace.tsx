@@ -255,7 +255,7 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
           src={getProductImage(product.image_url)} 
           alt={product.name}
           className="w-full h-auto object-cover rounded-t-lg"
-          style={{ clipPath: 'inset(0 3% 0 0)', marginRight: '-3%' }}
+          style={{ transform: 'scaleX(1.05)', transformOrigin: 'left' }}
         />
         {product.is_sold_out && (
           <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
@@ -575,7 +575,7 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
                           src={getProductImage(p.image_url)} 
                           alt={p.name}
                           className="w-full h-auto object-cover"
-                          style={{ clipPath: 'inset(0 3% 0 0)', marginRight: '-3%' }}
+                          style={{ transform: 'scaleX(1.05)', transformOrigin: 'left' }}
                         />
                         <CardContent className="p-3">
                           <p className="font-medium text-sm line-clamp-1">{p.name}</p>
