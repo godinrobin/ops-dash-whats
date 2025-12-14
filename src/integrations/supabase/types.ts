@@ -146,6 +146,104 @@ export type Database = {
         }
         Relationships: []
       }
+      marketplace_orders: {
+        Row: {
+          created_at: string
+          customer_name: string | null
+          customer_whatsapp: string | null
+          id: string
+          product_id: string
+          product_name: string
+          quantity: number
+          status: string
+          total_price: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          customer_name?: string | null
+          customer_whatsapp?: string | null
+          id?: string
+          product_id: string
+          product_name: string
+          quantity?: number
+          status?: string
+          total_price: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          customer_name?: string | null
+          customer_whatsapp?: string | null
+          id?: string
+          product_id?: string
+          product_name?: string
+          quantity?: number
+          status?: string
+          total_price?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketplace_orders_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "marketplace_products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketplace_products: {
+        Row: {
+          category: string
+          compare_price: number | null
+          created_at: string
+          description: string
+          discount_percent: number | null
+          id: string
+          image_url: string | null
+          is_sold_out: boolean
+          name: string
+          price: number
+          sold_count: number | null
+          stock: number | null
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          compare_price?: number | null
+          created_at?: string
+          description: string
+          discount_percent?: number | null
+          id?: string
+          image_url?: string | null
+          is_sold_out?: boolean
+          name: string
+          price: number
+          sold_count?: number | null
+          stock?: number | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          compare_price?: number | null
+          created_at?: string
+          description?: string
+          discount_percent?: number | null
+          id?: string
+          image_url?: string | null
+          is_sold_out?: boolean
+          name?: string
+          price?: number
+          sold_count?: number | null
+          stock?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       metrics: {
         Row: {
           conversion: number

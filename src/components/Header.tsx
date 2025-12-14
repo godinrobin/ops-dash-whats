@@ -2,12 +2,17 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { LogOut, ArrowLeft, User, Shield, Settings } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { LogOut, ArrowLeft, User, Shield, Settings, LayoutGrid, ShoppingBag } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ProfileModal } from "./ProfileModal";
 
-export const Header = () => {
+interface HeaderProps {
+  mode?: "sistemas" | "marketplace";
+  onModeChange?: (mode: "sistemas" | "marketplace") => void;
+}
+
+export const Header = ({ mode, onModeChange }: HeaderProps) => {
   const { signOut } = useAuth();
   const { isAdmin } = useAdminStatus();
   const navigate = useNavigate();
@@ -15,6 +20,7 @@ export const Header = () => {
   const [profileOpen, setProfileOpen] = useState(false);
   
   const showBackButton = location.pathname !== "/" && location.pathname !== "/auth";
+  const showModeToggle = location.pathname === "/" && mode && onModeChange;
 
   return (
     <>
@@ -33,7 +39,40 @@ export const Header = () => {
             )}
             <h1 className="text-xl font-bold bg-gradient-to-r from-accent to-orange-400 bg-clip-text text-transparent">Zapdata</h1>
           </div>
+
           <div className="flex items-center gap-2">
+            {/* Mode Toggle */}
+            {showModeToggle && (
+              <div className="flex items-center bg-secondary/50 rounded-lg p-1 border border-border/50 mr-2">
+                <button
+                  onClick={() => onModeChange("sistemas")}
+                  className={`
+                    flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all
+                    ${mode === "sistemas" 
+                      ? "bg-blue-500/20 text-blue-400 border border-blue-500/50" 
+                      : "text-muted-foreground hover:text-foreground"
+                    }
+                  `}
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Sistemas</span>
+                </button>
+                <button
+                  onClick={() => onModeChange("marketplace")}
+                  className={`
+                    flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all
+                    ${mode === "marketplace" 
+                      ? "bg-accent/20 text-accent border border-accent/50" 
+                      : "text-muted-foreground hover:text-foreground"
+                    }
+                  `}
+                >
+                  <ShoppingBag className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Marketplace</span>
+                </button>
+              </div>
+            )}
+
             <Button
               variant="ghost"
               size="sm"
