@@ -238,11 +238,20 @@ const AdminPanelNew = () => {
   const [newAnnouncementScheduleTime, setNewAnnouncementScheduleTime] = useState("");
 
   useEffect(() => {
-    loadAllData();
-    loadAnnouncements();
-    loadWalletsAndTransactions();
-    loadMargins();
+    const initData = async () => {
+      await loadAllData();
+      loadAnnouncements();
+      loadMargins();
+    };
+    initData();
   }, [user]);
+
+  // Reload wallets when users are loaded
+  useEffect(() => {
+    if (users.length > 0) {
+      loadWalletsAndTransactions();
+    }
+  }, [users]);
 
   const loadAllData = async () => {
     if (!user) return;
