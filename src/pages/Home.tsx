@@ -282,7 +282,7 @@ const Home = () => {
                   <span className="text-3xl md:text-6xl">📈</span>
                 </div>
                 <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-pink-400 to-rose-500 bg-clip-text text-transparent">
-                  Painel SMM
+                  Painel Marketing
                 </CardTitle>
                 <CardDescription className="text-xs md:text-base hidden md:block">
                   Compre seguidores, curtidas e visualizações

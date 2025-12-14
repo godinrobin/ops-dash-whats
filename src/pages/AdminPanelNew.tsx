@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Header } from "@/components/Header";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -11,7 +10,12 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X, Key, Loader2, UserPlus, Activity, Megaphone, Eye, MousePointer, Trash2, Image, Clock } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { 
+  Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X, Key, Loader2, 
+  UserPlus, Activity, Megaphone, Eye, MousePointer, Trash2, Image, Clock, Settings, Users, 
+  BarChart3, Phone, FileText, Wallet, History, Percent, Menu
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -31,6 +35,38 @@ const SYSTEMS = [
   { id: "transcricao-audio", name: "Transcrição de Áudio", emoji: "📝" },
   { id: "zap-spy", name: "Zap Spy", emoji: "🔍" },
   { id: "tag-whats", name: "Tag Whats", emoji: "📲" },
+];
+
+// Sidebar menu structure
+const SIDEBAR_MENU = [
+  {
+    category: "Usuários",
+    icon: Users,
+    items: [
+      { id: "metrics", label: "Métricas", icon: BarChart3 },
+      { id: "numbers", label: "Números", icon: Phone },
+      { id: "offers", label: "Ofertas", icon: FileText },
+      { id: "activities", label: "Atividades", icon: Activity },
+    ]
+  },
+  {
+    category: "Financeiro",
+    icon: Wallet,
+    items: [
+      { id: "wallets", label: "Carteiras", icon: Wallet },
+      { id: "transactions", label: "Histórico", icon: History },
+    ]
+  },
+  {
+    category: "Configurações",
+    icon: Settings,
+    items: [
+      { id: "margins", label: "Margens de Lucro", icon: Percent },
+      { id: "passwords", label: "Senhas", icon: Key },
+      { id: "create-user", label: "Criar Usuário", icon: UserPlus },
+      { id: "announcements", label: "Avisos", icon: Megaphone },
+    ]
+  },
 ];
 
 interface AnnouncementData {
@@ -111,6 +147,24 @@ interface ActivityData {
   created_at: string;
 }
 
+interface WalletData {
+  user_id: string;
+  user_email: string;
+  username: string;
+  balance: number;
+}
+
+interface TransactionData {
+  id: string;
+  user_id: string;
+  user_email: string;
+  username: string;
+  type: string;
+  amount: number;
+  description: string | null;
+  created_at: string;
+}
+
 const AdminPanelNew = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -121,6 +175,12 @@ const AdminPanelNew = () => {
   const [offers, setOffers] = useState<OfferData[]>([]);
   const [activities, setActivities] = useState<ActivityData[]>([]);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [wallets, setWallets] = useState<WalletData[]>([]);
+  const [transactions, setTransactions] = useState<TransactionData[]>([]);
+
+  // Sidebar state
+  const [activeSection, setActiveSection] = useState("metrics");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // UI State for hierarchical navigation
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
@@ -128,6 +188,19 @@ const AdminPanelNew = () => {
   
   // Modal state for product metrics
   const [selectedProductForMetrics, setSelectedProductForMetrics] = useState<{id: string; name: string} | null>(null);
+
+  // Wallet management
+  const [selectedWalletUser, setSelectedWalletUser] = useState<WalletData | null>(null);
+  const [walletAmount, setWalletAmount] = useState("");
+  const [walletDescription, setWalletDescription] = useState("");
+  const [updatingWallet, setUpdatingWallet] = useState(false);
+
+  // Margin settings
+  const [smsMargin, setSmsMargin] = useState("1.30");
+  const [smmMargin, setSmmMargin] = useState("1.30");
+  const [smsPlatformMarkup, setSmsPlatformMarkup] = useState("1.10");
+  const [smmPlatformMarkup, setSmmPlatformMarkup] = useState("1.10");
+  const [savingMargins, setSavingMargins] = useState(false);
 
   // Offers sorting and filtering
   const [offerSortBy, setOfferSortBy] = useState<'recent' | 'status'>('recent');
@@ -167,6 +240,8 @@ const AdminPanelNew = () => {
   useEffect(() => {
     loadAllData();
     loadAnnouncements();
+    loadWalletsAndTransactions();
+    loadMargins();
   }, [user]);
 
   const loadAllData = async () => {
@@ -210,6 +285,92 @@ const AdminPanelNew = () => {
     }
   };
 
+  const loadWalletsAndTransactions = async () => {
+    try {
+      // Load all wallets
+      const { data: walletsData, error: walletsError } = await supabase
+        .from("sms_user_wallets")
+        .select("*")
+        .order("balance", { ascending: false });
+
+      if (walletsError) throw walletsError;
+
+      // Load all transactions
+      const { data: transactionsData, error: transactionsError } = await supabase
+        .from("sms_transactions")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(500);
+
+      if (transactionsError) throw transactionsError;
+
+      // Get user info for wallets and transactions
+      const userIds = new Set<string>();
+      walletsData?.forEach(w => userIds.add(w.user_id));
+      transactionsData?.forEach(t => userIds.add(t.user_id));
+
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, username")
+        .in("id", Array.from(userIds));
+
+      const profileMap = new Map(profiles?.map(p => [p.id, p.username]) || []);
+
+      // Find emails from users state
+      const userMap = new Map(users.map(u => [u.id, u.email]));
+
+      setWallets(walletsData?.map(w => ({
+        user_id: w.user_id,
+        user_email: userMap.get(w.user_id) || w.user_id,
+        username: profileMap.get(w.user_id) || userMap.get(w.user_id) || w.user_id,
+        balance: Number(w.balance),
+      })) || []);
+
+      setTransactions(transactionsData?.map(t => ({
+        id: t.id,
+        user_id: t.user_id,
+        user_email: userMap.get(t.user_id) || t.user_id,
+        username: profileMap.get(t.user_id) || userMap.get(t.user_id) || t.user_id,
+        type: t.type,
+        amount: Number(t.amount),
+        description: t.description,
+        created_at: t.created_at,
+      })) || []);
+    } catch (err) {
+      console.error("Error loading wallets:", err);
+    }
+  };
+
+  const loadMargins = async () => {
+    // For now, margins are stored in localStorage as a simple solution
+    // In production, you might want to store these in the database
+    const savedSmsMargin = localStorage.getItem("admin_sms_margin");
+    const savedSmmMargin = localStorage.getItem("admin_smm_margin");
+    const savedSmsPlatformMarkup = localStorage.getItem("admin_sms_platform_markup");
+    const savedSmmPlatformMarkup = localStorage.getItem("admin_smm_platform_markup");
+    
+    if (savedSmsMargin) setSmsMargin(savedSmsMargin);
+    if (savedSmmMargin) setSmmMargin(savedSmmMargin);
+    if (savedSmsPlatformMarkup) setSmsPlatformMarkup(savedSmsPlatformMarkup);
+    if (savedSmmPlatformMarkup) setSmmPlatformMarkup(savedSmmPlatformMarkup);
+  };
+
+  const saveMargins = async () => {
+    setSavingMargins(true);
+    try {
+      localStorage.setItem("admin_sms_margin", smsMargin);
+      localStorage.setItem("admin_smm_margin", smmMargin);
+      localStorage.setItem("admin_sms_platform_markup", smsPlatformMarkup);
+      localStorage.setItem("admin_smm_platform_markup", smmPlatformMarkup);
+      toast.success("Margens salvas com sucesso!");
+    } catch (err) {
+      console.error("Error saving margins:", err);
+      toast.error("Erro ao salvar margens");
+    } finally {
+      setSavingMargins(false);
+    }
+  };
+
   const loadAnnouncements = async () => {
     try {
       const { data, error } = await supabase
@@ -221,6 +382,49 @@ const AdminPanelNew = () => {
       setAnnouncements((data || []) as AnnouncementData[]);
     } catch (err) {
       console.error("Error loading announcements:", err);
+    }
+  };
+
+  const updateUserWallet = async (isAdd: boolean) => {
+    if (!selectedWalletUser || !walletAmount) return;
+    
+    const amount = parseFloat(walletAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error("Valor inválido");
+      return;
+    }
+
+    setUpdatingWallet(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      if (!token) {
+        toast.error("Sessão expirada");
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("sms-admin-recharge", {
+        body: { 
+          targetUserId: selectedWalletUser.user_id, 
+          amount: isAdd ? amount : -amount,
+          description: walletDescription || (isAdd ? "Adição manual pelo admin" : "Remoção manual pelo admin")
+        },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (error) throw error;
+      
+      toast.success(isAdd ? "Saldo adicionado!" : "Saldo removido!");
+      setSelectedWalletUser(null);
+      setWalletAmount("");
+      setWalletDescription("");
+      loadWalletsAndTransactions();
+    } catch (err: any) {
+      console.error("Error updating wallet:", err);
+      toast.error(err?.message || "Erro ao atualizar carteira");
+    } finally {
+      setUpdatingWallet(false);
     }
   };
 
@@ -289,7 +493,7 @@ const AdminPanelNew = () => {
         redirect_system: newAnnouncementRedirectType === 'system' ? newAnnouncementSystems.join(",") : null,
         redirect_button_text: newAnnouncementRedirectType === 'custom_link' ? newAnnouncementButtonText.trim() || null : null,
         scheduled_at: scheduledAt,
-        is_active: !newAnnouncementScheduled, // Se agendado, começa inativo
+        is_active: !newAnnouncementScheduled,
       };
 
       const { error } = await supabase
@@ -302,7 +506,6 @@ const AdminPanelNew = () => {
         ? "Aviso agendado com sucesso!" 
         : "Aviso publicado com sucesso!");
       
-      // Reset form
       setNewAnnouncementTitle("");
       setNewAnnouncementContent("");
       setNewAnnouncementImage(null);
@@ -439,7 +642,6 @@ const AdminPanelNew = () => {
       });
 
       if (error) {
-        // Try to parse error message from response
         const errorMessage = data?.error || error.message || "Erro ao redefinir senha";
         throw new Error(errorMessage);
       }
@@ -465,7 +667,6 @@ const AdminPanelNew = () => {
       return;
     }
 
-    // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(newUserEmail.trim())) {
       toast.error("Email inválido");
@@ -496,7 +697,6 @@ const AdminPanelNew = () => {
         throw new Error(data.error);
       }
 
-      // Check the results
       const results = data?.results || [];
       const created = results.filter((r: any) => r.status === 'created');
       const existing = results.filter((r: any) => r.status === 'exists');
@@ -504,7 +704,7 @@ const AdminPanelNew = () => {
       if (created.length > 0) {
         toast.success(`Usuário criado com sucesso! Senha: ${newUserPassword}`);
         setNewUserEmail("");
-        loadAllData(); // Reload to show new user
+        loadAllData();
       } else if (existing.length > 0) {
         toast.warning("Este email já está cadastrado");
       } else {
@@ -532,7 +732,6 @@ const AdminPanelNew = () => {
   };
 
   const getUserProducts = (userId: string) => {
-    // Get products from the products data, not from metrics
     return products.filter(p => p.user_id === userId).map(p => ({
       id: p.id,
       name: p.product_name
@@ -551,7 +750,6 @@ const AdminPanelNew = () => {
   const filteredUsers = useMemo(() => {
     let result = [...users];
     
-    // Filter by search
     if (userSearch.trim()) {
       const search = userSearch.toLowerCase();
       result = result.filter(u => 
@@ -560,7 +758,6 @@ const AdminPanelNew = () => {
       );
     }
     
-    // Sort
     if (userSortBy === 'invested') {
       result.sort((a, b) => b.totalInvested - a.totalInvested);
     } else if (userSortBy === 'favorites') {
@@ -576,11 +773,9 @@ const AdminPanelNew = () => {
     return result;
   }, [users, userSearch, userSortBy, favorites]);
 
-  // Get sorted and filtered offers
   const getSortedFilteredOffers = () => {
     let filtered = [...offers];
     
-    // Filter by link search
     if (offerLinkSearch.trim()) {
       const search = offerLinkSearch.toLowerCase();
       filtered = filtered.filter(o => 
@@ -589,7 +784,6 @@ const AdminPanelNew = () => {
       );
     }
     
-    // Filter by status
     if (offerStatusFilter !== 'all') {
       if (offerStatusFilter === 'none') {
         filtered = filtered.filter(o => !o.admin_status);
@@ -598,7 +792,6 @@ const AdminPanelNew = () => {
       }
     }
 
-    // Sort
     if (offerSortBy === 'recent') {
       filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     } else if (offerSortBy === 'status') {
@@ -621,885 +814,1104 @@ const AdminPanelNew = () => {
     );
   }
 
+  const renderContent = () => {
+    switch (activeSection) {
+      case "metrics":
+        return (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <Search className="h-5 w-5 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nome ou email..."
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+                className="max-w-md"
+              />
+              <Select value={userSortBy} onValueChange={(v) => setUserSortBy(v as typeof userSortBy)}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Ordenar por" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name">Nome</SelectItem>
+                  <SelectItem value="invested">Total Investido</SelectItem>
+                  <SelectItem value="favorites">Favoritos</SelectItem>
+                </SelectContent>
+              </Select>
+              <span className="text-sm text-muted-foreground ml-auto">
+                {filteredUsers.length} de {users.length} usuários
+              </span>
+            </div>
+            {filteredUsers.map((u) => (
+              <Card key={u.id} className="border-2 border-accent">
+                <CardHeader 
+                  className="cursor-pointer hover:bg-accent/5 transition-colors"
+                  onClick={() => setExpandedUser(expandedUser === u.id ? null : u.id)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {expandedUser === u.id ? (
+                        <ChevronDown className="h-5 w-5 text-accent" />
+                      ) : (
+                        <ChevronRight className="h-5 w-5 text-accent" />
+                      )}
+                      <div>
+                        <CardTitle className="text-lg">{u.username || u.email}</CardTitle>
+                        <p className="text-sm text-muted-foreground">
+                          Total investido: <span className="text-accent font-semibold">R$ {u.totalInvested.toFixed(2)}</span>
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFavorite(u.id);
+                      }}
+                    >
+                      <Star className={`h-5 w-5 ${favorites.has(u.id) ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}`} />
+                    </Button>
+                  </div>
+                </CardHeader>
+                
+                {expandedUser === u.id && (
+                  <CardContent>
+                    <div className="space-y-3 pl-8">
+                      {getUserProducts(u.id).map((product) => (
+                        <Card 
+                          key={product.id} 
+                          className="border border-border cursor-pointer hover:bg-accent/5 transition-colors"
+                          onClick={() => setSelectedProductForMetrics({ id: product.id, name: product.name })}
+                        >
+                          <CardHeader className="py-3">
+                            <div className="flex items-center gap-2">
+                              <ChevronRight className="h-4 w-4 text-accent" />
+                              <span className="font-medium">{product.name}</span>
+                              <Badge variant="outline" className="ml-auto text-xs">
+                                {getProductMetrics(product.id).length} métricas
+                              </Badge>
+                            </div>
+                          </CardHeader>
+                        </Card>
+                      ))}
+                      {getUserProducts(u.id).length === 0 && (
+                        <p className="text-muted-foreground text-sm">Nenhum produto cadastrado</p>
+                      )}
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
+            ))}
+          </div>
+        );
+
+      case "numbers":
+        return (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <Select value={userSortBy} onValueChange={(v) => setUserSortBy(v as typeof userSortBy)}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Ordenar por" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name">Nome</SelectItem>
+                  <SelectItem value="invested">Total Investido</SelectItem>
+                  <SelectItem value="favorites">Favoritos</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {filteredUsers.map((u) => {
+              const userNumbers = getUserNumbers(u.email);
+              if (userNumbers.length === 0) return null;
+              
+              return (
+                <Card key={u.id} className="border-2 border-accent">
+                  <CardHeader 
+                    className="cursor-pointer hover:bg-accent/5 transition-colors"
+                    onClick={() => setExpandedUserNumbers(expandedUserNumbers === u.id ? null : u.id)}
+                  >
+                    <div className="flex items-center gap-3">
+                      {expandedUserNumbers === u.id ? (
+                        <ChevronDown className="h-5 w-5 text-accent" />
+                      ) : (
+                        <ChevronRight className="h-5 w-5 text-accent" />
+                      )}
+                      <div>
+                        <CardTitle className="text-lg">{u.username || u.email}</CardTitle>
+                        <p className="text-sm text-muted-foreground">
+                          {userNumbers.length} número{userNumbers.length !== 1 ? 's' : ''} cadastrado{userNumbers.length !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  
+                  {expandedUserNumbers === u.id && (
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Número</TableHead>
+                              <TableHead>Celular</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead>Operação</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {userNumbers.map((n) => (
+                              <TableRow key={n.id}>
+                                <TableCell>{n.numero}</TableCell>
+                                <TableCell>{n.celular}</TableCell>
+                                <TableCell>
+                                  <Badge variant="outline">{n.status}</Badge>
+                                </TableCell>
+                                <TableCell>{n.operacao}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
+        );
+
+      case "offers":
+        return (
+          <Card className="border-2 border-accent">
+            <CardHeader>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <CardTitle>Ofertas</CardTitle>
+                <div className="flex flex-wrap gap-2">
+                  <div className="relative flex-1 md:flex-none">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar por link ou nome..."
+                      value={offerLinkSearch}
+                      onChange={(e) => setOfferLinkSearch(e.target.value)}
+                      className="pl-9 w-full md:w-64"
+                    />
+                    {offerLinkSearch && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6"
+                        onClick={() => setOfferLinkSearch("")}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                  <Select value={offerSortBy} onValueChange={(v) => setOfferSortBy(v as 'recent' | 'status')}>
+                    <SelectTrigger className="w-40">
+                      <ArrowUpDown className="h-4 w-4 mr-2" />
+                      <SelectValue placeholder="Ordenar" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="recent">Mais recentes</SelectItem>
+                      <SelectItem value="status">Por status</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={offerStatusFilter} onValueChange={setOfferStatusFilter}>
+                    <SelectTrigger className="w-40">
+                      <Filter className="h-4 w-4 mr-2" />
+                      <SelectValue placeholder="Filtrar status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="boa">Boa</SelectItem>
+                      <SelectItem value="minerada">Minerada</SelectItem>
+                      <SelectItem value="ruim">Ruim</SelectItem>
+                      <SelectItem value="none">Sem status</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nome da Oferta</TableHead>
+                      <TableHead>Link</TableHead>
+                      <TableHead>Status Admin</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {getSortedFilteredOffers().map((o) => (
+                      <TableRow key={o.id}>
+                        <TableCell className="font-medium">{o.name}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => copyToClipboard(o.ad_library_link)}
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => window.open(o.ad_library_link, "_blank")}
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={o.admin_status || "none"}
+                            onValueChange={(v) => updateOfferStatus(o.id, v === "none" ? null : v as AdminOfferStatus)}
+                          >
+                            <SelectTrigger className="w-32">
+                              {getStatusBadge(o.admin_status)}
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Sem status</SelectItem>
+                              <SelectItem value="boa">Boa</SelectItem>
+                              <SelectItem value="minerada">Minerada</SelectItem>
+                              <SelectItem value="ruim">Ruim</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        );
+
+      case "activities":
+        return (
+          <Card className="border-2 border-accent">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-accent" />
+                Atividades dos Usuários
+              </CardTitle>
+              <CardDescription>
+                Últimas atividades registradas na plataforma
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Usuário</TableHead>
+                      <TableHead>Sistema</TableHead>
+                      <TableHead>Data/Hora</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {activities.slice(0, 100).map((a) => (
+                      <TableRow key={a.id}>
+                        <TableCell className="font-medium">{a.username || a.user_email}</TableCell>
+                        <TableCell>{a.activity_name}</TableCell>
+                        <TableCell>{new Date(a.created_at).toLocaleString('pt-BR')}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        );
+
+      case "wallets":
+        return (
+          <Card className="border-2 border-accent">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wallet className="h-5 w-5 text-accent" />
+                Carteiras dos Usuários
+              </CardTitle>
+              <CardDescription>
+                Gerencie o saldo das carteiras
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Usuário</TableHead>
+                      <TableHead>Saldo</TableHead>
+                      <TableHead>Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {wallets.map((w) => (
+                      <TableRow key={w.user_id}>
+                        <TableCell className="font-medium">{w.username || w.user_email}</TableCell>
+                        <TableCell className="text-accent font-semibold">R$ {w.balance.toFixed(2)}</TableCell>
+                        <TableCell>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedWalletUser(w)}
+                          >
+                            <Wallet className="h-4 w-4 mr-2" />
+                            Gerenciar
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        );
+
+      case "transactions":
+        return (
+          <Card className="border-2 border-accent">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <History className="h-5 w-5 text-accent" />
+                Histórico de Transações
+              </CardTitle>
+              <CardDescription>
+                Todas as transações dos usuários
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Usuário</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Valor</TableHead>
+                      <TableHead>Descrição</TableHead>
+                      <TableHead>Data</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {transactions.map((t) => (
+                      <TableRow key={t.id}>
+                        <TableCell className="font-medium">{t.username || t.user_email}</TableCell>
+                        <TableCell>
+                          <Badge variant={t.type === 'recharge' ? 'default' : 'secondary'}>
+                            {t.type === 'recharge' ? 'Recarga' : t.type === 'purchase' ? 'Compra' : t.type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className={t.amount >= 0 ? 'text-green-500' : 'text-red-500'}>
+                          {t.amount >= 0 ? '+' : ''}R$ {t.amount.toFixed(2)}
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate">{t.description || '-'}</TableCell>
+                        <TableCell>{new Date(t.created_at).toLocaleString('pt-BR')}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        );
+
+      case "margins":
+        return (
+          <Card className="border-2 border-accent max-w-2xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Percent className="h-5 w-5 text-accent" />
+                Margens de Lucro
+              </CardTitle>
+              <CardDescription>
+                Configure as margens de lucro para cada sistema
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <h3 className="font-semibold text-lg">Números Virtuais (SMS)</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Margem de Lucro</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={smsMargin}
+                      onChange={(e) => setSmsMargin(e.target.value)}
+                      placeholder="1.30 = 30%"
+                    />
+                    <p className="text-xs text-muted-foreground">1.30 = 30% de margem</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Markup da Plataforma</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={smsPlatformMarkup}
+                      onChange={(e) => setSmsPlatformMarkup(e.target.value)}
+                      placeholder="1.10 = 10%"
+                    />
+                    <p className="text-xs text-muted-foreground">1.10 = 10% adicional</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="font-semibold text-lg">Painel Marketing (SMM)</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Margem de Lucro</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={smmMargin}
+                      onChange={(e) => setSmmMargin(e.target.value)}
+                      placeholder="1.30 = 30%"
+                    />
+                    <p className="text-xs text-muted-foreground">1.30 = 30% de margem</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Markup da Plataforma</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={smmPlatformMarkup}
+                      onChange={(e) => setSmmPlatformMarkup(e.target.value)}
+                      placeholder="1.10 = 10%"
+                    />
+                    <p className="text-xs text-muted-foreground">1.10 = 10% adicional</p>
+                  </div>
+                </div>
+              </div>
+
+              <Button onClick={saveMargins} disabled={savingMargins} className="w-full">
+                {savingMargins ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  <>
+                    <Settings className="mr-2 h-4 w-4" />
+                    Salvar Configurações
+                  </>
+                )}
+              </Button>
+
+              <div className="p-4 bg-muted/50 rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  <strong>Fórmula do preço final:</strong><br />
+                  Preço USD × Taxa de Câmbio (6.10) × Margem × Markup
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        );
+
+      case "passwords":
+        return (
+          <Card className="border-2 border-accent max-w-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Key className="h-5 w-5 text-accent" />
+                Redefinir Senha de Usuário
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Email do usuário</label>
+                <Input
+                  type="email"
+                  placeholder="usuario@email.com"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Nova senha</label>
+                <Input
+                  type="text"
+                  placeholder="Nova senha"
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                />
+              </div>
+              <Button 
+                onClick={resetUserPassword}
+                disabled={resettingPassword || !resetEmail.trim() || !resetPassword.trim()}
+                className="w-full"
+              >
+                {resettingPassword ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Redefinindo...
+                  </>
+                ) : (
+                  <>
+                    <Key className="mr-2 h-4 w-4" />
+                    Redefinir Senha
+                  </>
+                )}
+              </Button>
+              <p className="text-sm text-muted-foreground">
+                A nova senha será aplicada imediatamente.
+              </p>
+            </CardContent>
+          </Card>
+        );
+
+      case "create-user":
+        return (
+          <Card className="border-2 border-accent max-w-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <UserPlus className="h-5 w-5 text-accent" />
+                Criar Novo Usuário
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Email do usuário</label>
+                <Input
+                  type="email"
+                  placeholder="usuario@email.com"
+                  value={newUserEmail}
+                  onChange={(e) => setNewUserEmail(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Senha</label>
+                <Input
+                  type="text"
+                  placeholder="Senha do usuário"
+                  value={newUserPassword}
+                  onChange={(e) => setNewUserPassword(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">Padrão: 123456</p>
+              </div>
+              <Button 
+                onClick={handleCreateUser}
+                disabled={creatingUser || !newUserEmail.trim()}
+                className="w-full"
+              >
+                {creatingUser ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Criando...
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Criar Usuário
+                  </>
+                )}
+              </Button>
+              <p className="text-sm text-muted-foreground">
+                O usuário poderá fazer login imediatamente.
+              </p>
+            </CardContent>
+          </Card>
+        );
+
+      case "announcements":
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Create Announcement */}
+            <Card className="border-2 border-accent">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Megaphone className="h-5 w-5 text-accent" />
+                  Criar Novo Aviso
+                </CardTitle>
+                <CardDescription>
+                  O aviso será exibido uma única vez para cada usuário
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Título (opcional)</Label>
+                  <Input
+                    placeholder="Título do aviso"
+                    value={newAnnouncementTitle}
+                    onChange={(e) => setNewAnnouncementTitle(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Conteúdo *</Label>
+                  <Textarea
+                    placeholder="Escreva o conteúdo do aviso..."
+                    value={newAnnouncementContent}
+                    onChange={(e) => setNewAnnouncementContent(e.target.value)}
+                    onPaste={handleAnnouncementImagePaste}
+                    rows={4}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Imagem (opcional) - Cole com Ctrl+V</Label>
+                  <div 
+                    className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-accent/50 transition-colors"
+                    onPaste={handleAnnouncementImagePaste}
+                    tabIndex={0}
+                  >
+                    {uploadingAnnouncementImage ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        <span>Fazendo upload...</span>
+                      </div>
+                    ) : newAnnouncementImage ? (
+                      <div className="relative">
+                        <img 
+                          src={newAnnouncementImage} 
+                          alt="Preview" 
+                          className="max-h-40 mx-auto rounded"
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="absolute top-0 right-0 h-6 w-6 bg-destructive/80 hover:bg-destructive"
+                          onClick={() => setNewAnnouncementImage(null)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                        <Image className="h-8 w-8" />
+                        <span className="text-sm">Clique aqui e cole uma imagem (Ctrl+V)</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Tipo de Redirecionamento</Label>
+                  <Select 
+                    value={newAnnouncementRedirectType} 
+                    onValueChange={(v) => setNewAnnouncementRedirectType(v as AnnouncementRedirectType)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhum (apenas informativo)</SelectItem>
+                      <SelectItem value="custom_link">Link personalizado</SelectItem>
+                      <SelectItem value="system">Sistemas da plataforma</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {newAnnouncementRedirectType === 'custom_link' && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>URL do Link</Label>
+                      <Input
+                        placeholder="https://exemplo.com"
+                        value={newAnnouncementRedirectUrl}
+                        onChange={(e) => setNewAnnouncementRedirectUrl(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Texto do Botão (opcional)</Label>
+                      <Input
+                        placeholder="Acessar"
+                        value={newAnnouncementButtonText}
+                        onChange={(e) => setNewAnnouncementButtonText(e.target.value)}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {newAnnouncementRedirectType === 'system' && (
+                  <div className="space-y-2">
+                    <Label>Selecione os Sistemas</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {SYSTEMS.map(system => (
+                        <div
+                          key={system.id}
+                          className={`flex items-center gap-2 p-2 rounded border cursor-pointer transition-colors ${
+                            newAnnouncementSystems.includes(system.id)
+                              ? 'border-accent bg-accent/10'
+                              : 'border-border hover:border-accent/50'
+                          }`}
+                          onClick={() => toggleSystemSelection(system.id)}
+                        >
+                          <Checkbox
+                            checked={newAnnouncementSystems.includes(system.id)}
+                            onCheckedChange={() => toggleSystemSelection(system.id)}
+                          />
+                          <span className="text-lg">{system.emoji}</span>
+                          <span className="text-sm truncate">{system.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Scheduling */}
+                <div className="space-y-3 p-3 rounded-lg border border-border">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="schedule-announcement"
+                      checked={newAnnouncementScheduled}
+                      onCheckedChange={(checked) => setNewAnnouncementScheduled(checked === true)}
+                    />
+                    <Label htmlFor="schedule-announcement" className="cursor-pointer">
+                      Agendar publicação
+                    </Label>
+                  </div>
+                  
+                  {newAnnouncementScheduled && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Data</Label>
+                        <Input
+                          type="date"
+                          value={newAnnouncementScheduleDate}
+                          onChange={(e) => setNewAnnouncementScheduleDate(e.target.value)}
+                          min={new Date().toISOString().split('T')[0]}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Hora</Label>
+                        <Input
+                          type="time"
+                          value={newAnnouncementScheduleTime}
+                          onChange={(e) => setNewAnnouncementScheduleTime(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowAnnouncementPreview(true)}
+                    disabled={!newAnnouncementContent.trim()}
+                    className="flex-1"
+                  >
+                    <Eye className="mr-2 h-4 w-4" />
+                    Visualizar
+                  </Button>
+                  <Button
+                    onClick={createAnnouncement}
+                    disabled={creatingAnnouncement || !newAnnouncementContent.trim()}
+                    className="flex-1"
+                  >
+                    {creatingAnnouncement ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        {newAnnouncementScheduled ? "Agendando..." : "Publicando..."}
+                      </>
+                    ) : (
+                      <>
+                        <Megaphone className="mr-2 h-4 w-4" />
+                        {newAnnouncementScheduled ? "Agendar" : "Publicar"}
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Announcement History */}
+            <Card className="border-2 border-accent">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-5 w-5 text-accent" />
+                  Histórico de Avisos
+                </CardTitle>
+                <CardDescription>
+                  {announcements.length} aviso{announcements.length !== 1 ? 's' : ''} cadastrado{announcements.length !== 1 ? 's' : ''}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="h-[500px]">
+                  <div className="space-y-3 pr-4">
+                    {announcements.map(announcement => (
+                      <Card key={announcement.id} className={`border ${announcement.is_active ? 'border-green-500/50' : 'border-muted'}`}>
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              {announcement.title && (
+                                <h4 className="font-semibold truncate">{announcement.title}</h4>
+                              )}
+                              <p className="text-sm text-muted-foreground line-clamp-2">
+                                {announcement.content}
+                              </p>
+                              <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                  <Eye className="h-3 w-3" />
+                                  {announcement.views_count}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <MousePointer className="h-3 w-3" />
+                                  {announcement.clicks_count}
+                                </span>
+                                {announcement.views_count > 0 && (
+                                  <span>
+                                    ({((announcement.clicks_count / announcement.views_count) * 100).toFixed(1)}% CTR)
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2 mt-2">
+                                <Badge variant={announcement.is_active ? "default" : "secondary"}>
+                                  {announcement.is_active ? "Ativo" : "Inativo"}
+                                </Badge>
+                                {announcement.scheduled_at && !announcement.is_active && (
+                                  <Badge variant="outline" className="border-accent text-accent">
+                                    <Clock className="h-3 w-3 mr-1" />
+                                    {new Date(announcement.scheduled_at).toLocaleString('pt-BR', {
+                                      day: '2-digit',
+                                      month: '2-digit',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </Badge>
+                                )}
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(announcement.created_at).toLocaleDateString('pt-BR')}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => toggleAnnouncementActive(announcement.id, announcement.is_active)}
+                              >
+                                {announcement.is_active ? "Desativar" : "Ativar"}
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => deleteAnnouncement(announcement.id)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
   return (
     <>
       <Header />
       <div className="h-14 md:h-16" />
-      <div className="min-h-screen bg-background p-4 md:p-8">
-        <div className="container mx-auto">
-          <header className="text-center mb-8">
+      <div className="min-h-screen bg-background flex">
+        {/* Sidebar */}
+        <aside className={`${sidebarOpen ? 'w-64' : 'w-0 md:w-16'} transition-all duration-300 bg-card border-r border-border overflow-hidden`}>
+          <div className="p-4">
+            <div className="flex items-center justify-between mb-6">
+              {sidebarOpen && (
+                <h2 className="text-lg font-bold bg-gradient-to-r from-accent to-orange-400 bg-clip-text text-transparent">
+                  Admin
+                </h2>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="ml-auto"
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <nav className="space-y-6">
+              {SIDEBAR_MENU.map((category) => (
+                <div key={category.category}>
+                  {sidebarOpen && (
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
+                      <category.icon className="h-4 w-4" />
+                      {category.category}
+                    </h3>
+                  )}
+                  <div className="space-y-1">
+                    {category.items.map((item) => (
+                      <Button
+                        key={item.id}
+                        variant={activeSection === item.id ? "secondary" : "ghost"}
+                        className={`w-full ${sidebarOpen ? 'justify-start' : 'justify-center'} ${
+                          activeSection === item.id ? 'bg-accent/20 text-accent' : ''
+                        }`}
+                        onClick={() => setActiveSection(item.id)}
+                      >
+                        <item.icon className={`h-4 w-4 ${sidebarOpen ? 'mr-2' : ''}`} />
+                        {sidebarOpen && <span>{item.label}</span>}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </nav>
+          </div>
+        </aside>
+
+        {/* Main Content */}
+        <main className="flex-1 p-4 md:p-8 overflow-auto">
+          <header className="mb-8">
             <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-accent to-orange-400 bg-clip-text text-transparent">
               Painel Administrativo
             </h1>
             <p className="text-muted-foreground mt-2">
-              Gerencie usuários, métricas, números e ofertas
+              {SIDEBAR_MENU.flatMap(c => c.items).find(i => i.id === activeSection)?.label || 'Dashboard'}
             </p>
           </header>
 
-          <Tabs defaultValue="metrics" className="w-full">
-            <TabsList className="grid w-full grid-cols-7 mb-6">
-              <TabsTrigger value="metrics">Métricas</TabsTrigger>
-              <TabsTrigger value="numbers">Números</TabsTrigger>
-              <TabsTrigger value="offers">Ofertas</TabsTrigger>
-              <TabsTrigger value="activities">Atividades</TabsTrigger>
-              <TabsTrigger value="announcements">Avisos</TabsTrigger>
-              <TabsTrigger value="passwords">Senhas</TabsTrigger>
-              <TabsTrigger value="create-user">Criar</TabsTrigger>
-            </TabsList>
-
-            {/* MÉTRICAS USUÁRIOS */}
-            <TabsContent value="metrics">
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center gap-2 mb-4">
-                  <Search className="h-5 w-5 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar por nome ou email..."
-                    value={userSearch}
-                    onChange={(e) => setUserSearch(e.target.value)}
-                    className="max-w-md"
-                  />
-                  <Select value={userSortBy} onValueChange={(v) => setUserSortBy(v as typeof userSortBy)}>
-                    <SelectTrigger className="w-48">
-                      <SelectValue placeholder="Ordenar por" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="name">Nome</SelectItem>
-                      <SelectItem value="invested">Total Investido</SelectItem>
-                      <SelectItem value="favorites">Favoritos</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <span className="text-sm text-muted-foreground ml-auto">
-                    {filteredUsers.length} de {users.length} usuários
-                  </span>
-                </div>
-                {filteredUsers.map((u) => (
-                  <Card key={u.id} className="border-2 border-accent">
-                    <CardHeader 
-                      className="cursor-pointer hover:bg-accent/5 transition-colors"
-                      onClick={() => setExpandedUser(expandedUser === u.id ? null : u.id)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          {expandedUser === u.id ? (
-                            <ChevronDown className="h-5 w-5 text-accent" />
-                          ) : (
-                            <ChevronRight className="h-5 w-5 text-accent" />
-                          )}
-                          <div>
-                            <CardTitle className="text-lg">{u.username || u.email}</CardTitle>
-                            <p className="text-sm text-muted-foreground">
-                              Total investido: <span className="text-accent font-semibold">R$ {u.totalInvested.toFixed(2)}</span>
-                            </p>
-                          </div>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleFavorite(u.id);
-                          }}
-                        >
-                          <Star className={`h-5 w-5 ${favorites.has(u.id) ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}`} />
-                        </Button>
-                      </div>
-                    </CardHeader>
-                    
-                    {expandedUser === u.id && (
-                      <CardContent>
-                        <div className="space-y-3 pl-8">
-                          {getUserProducts(u.id).map((product) => (
-                            <Card 
-                              key={product.id} 
-                              className="border border-border cursor-pointer hover:bg-accent/5 transition-colors"
-                              onClick={() => setSelectedProductForMetrics({ id: product.id, name: product.name })}
-                            >
-                              <CardHeader className="py-3">
-                                <div className="flex items-center gap-2">
-                                  <ChevronRight className="h-4 w-4 text-accent" />
-                                  <span className="font-medium">{product.name}</span>
-                                  <Badge variant="outline" className="ml-auto text-xs">
-                                    {getProductMetrics(product.id).length} métricas
-                                  </Badge>
-                                </div>
-                              </CardHeader>
-                            </Card>
-                          ))}
-                          {getUserProducts(u.id).length === 0 && (
-                            <p className="text-muted-foreground text-sm">Nenhum produto cadastrado</p>
-                          )}
-                        </div>
-                      </CardContent>
-                    )}
-                  </Card>
-                ))}
-              </div>
-            </TabsContent>
-
-            {/* NÚMEROS USUÁRIOS */}
-            <TabsContent value="numbers">
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center gap-2 mb-4">
-                  <Select value={userSortBy} onValueChange={(v) => setUserSortBy(v as typeof userSortBy)}>
-                    <SelectTrigger className="w-48">
-                      <SelectValue placeholder="Ordenar por" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="name">Nome</SelectItem>
-                      <SelectItem value="invested">Total Investido</SelectItem>
-                      <SelectItem value="favorites">Favoritos</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                {filteredUsers.map((u) => {
-                  const userNumbers = getUserNumbers(u.email);
-                  if (userNumbers.length === 0) return null;
-                  
-                  return (
-                    <Card key={u.id} className="border-2 border-accent">
-                      <CardHeader 
-                        className="cursor-pointer hover:bg-accent/5 transition-colors"
-                        onClick={() => setExpandedUserNumbers(expandedUserNumbers === u.id ? null : u.id)}
-                      >
-                        <div className="flex items-center gap-3">
-                          {expandedUserNumbers === u.id ? (
-                            <ChevronDown className="h-5 w-5 text-accent" />
-                          ) : (
-                            <ChevronRight className="h-5 w-5 text-accent" />
-                          )}
-                          <div>
-                            <CardTitle className="text-lg">{u.username || u.email}</CardTitle>
-                            <p className="text-sm text-muted-foreground">
-                              {userNumbers.length} número{userNumbers.length !== 1 ? 's' : ''} cadastrado{userNumbers.length !== 1 ? 's' : ''}
-                            </p>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      
-                      {expandedUserNumbers === u.id && (
-                        <CardContent>
-                          <div className="overflow-x-auto">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Número</TableHead>
-                                  <TableHead>Celular</TableHead>
-                                  <TableHead>Status</TableHead>
-                                  <TableHead>Operação</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {userNumbers.map((n) => (
-                                  <TableRow key={n.id}>
-                                    <TableCell>{n.numero}</TableCell>
-                                    <TableCell>{n.celular}</TableCell>
-                                    <TableCell>
-                                      <Badge variant="outline">{n.status}</Badge>
-                                    </TableCell>
-                                    <TableCell>{n.operacao}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </div>
-                        </CardContent>
-                      )}
-                    </Card>
-                  );
-                })}
-              </div>
-            </TabsContent>
-
-            {/* OFERTAS USUÁRIOS */}
-            <TabsContent value="offers">
-              <Card className="border-2 border-accent">
-                <CardHeader>
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <CardTitle>Ofertas</CardTitle>
-                    <div className="flex flex-wrap gap-2">
-                      <div className="relative flex-1 md:flex-none">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          placeholder="Buscar por link ou nome..."
-                          value={offerLinkSearch}
-                          onChange={(e) => setOfferLinkSearch(e.target.value)}
-                          className="pl-9 w-full md:w-64"
-                        />
-                        {offerLinkSearch && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6"
-                            onClick={() => setOfferLinkSearch("")}
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                      <Select value={offerSortBy} onValueChange={(v) => setOfferSortBy(v as 'recent' | 'status')}>
-                        <SelectTrigger className="w-40">
-                          <ArrowUpDown className="h-4 w-4 mr-2" />
-                          <SelectValue placeholder="Ordenar" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="recent">Mais recentes</SelectItem>
-                          <SelectItem value="status">Por status</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Select value={offerStatusFilter} onValueChange={setOfferStatusFilter}>
-                        <SelectTrigger className="w-40">
-                          <Filter className="h-4 w-4 mr-2" />
-                          <SelectValue placeholder="Filtrar status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todos</SelectItem>
-                          <SelectItem value="boa">Boa</SelectItem>
-                          <SelectItem value="minerada">Minerada</SelectItem>
-                          <SelectItem value="ruim">Ruim</SelectItem>
-                          <SelectItem value="none">Sem status</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Nome da Oferta</TableHead>
-                          <TableHead>Link</TableHead>
-                          <TableHead>Status Admin</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {getSortedFilteredOffers().map((o) => (
-                          <TableRow key={o.id}>
-                            <TableCell className="font-medium">{o.name}</TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => copyToClipboard(o.ad_library_link)}
-                                >
-                                  <Copy className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => window.open(o.ad_library_link, "_blank")}
-                                >
-                                  <ExternalLink className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Select
-                                value={o.admin_status || "none"}
-                                onValueChange={(v) => updateOfferStatus(o.id, v === "none" ? null : v as AdminOfferStatus)}
-                              >
-                                <SelectTrigger className="w-32">
-                                  <SelectValue>
-                                    {getStatusBadge(o.admin_status)}
-                                  </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="none">Sem status</SelectItem>
-                                  <SelectItem value="minerada">Minerada</SelectItem>
-                                  <SelectItem value="ruim">Ruim</SelectItem>
-                                  <SelectItem value="boa">Boa</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* ATIVIDADES */}
-            <TabsContent value="activities">
-              <Card className="border-2 border-accent">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Activity className="h-5 w-5 text-accent" />
-                    Histórico de Atividades
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Usuário</TableHead>
-                          <TableHead>Sistema</TableHead>
-                          <TableHead>Data/Hora</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {activities.map((activity) => (
-                          <TableRow key={activity.id}>
-                            <TableCell className="font-medium">
-                              {activity.username !== 'N/A' ? activity.username : activity.user_email}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className="border-accent/50">
-                                {activity.activity_name}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {new Date(activity.created_at).toLocaleString('pt-BR', {
-                                day: '2-digit',
-                                month: '2-digit',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                        {activities.length === 0 && (
-                          <TableRow>
-                            <TableCell colSpan={3} className="text-center text-muted-foreground">
-                              Nenhuma atividade registrada
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* RESETAR SENHAS */}
-            <TabsContent value="passwords">
-              <Card className="border-2 border-accent">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Key className="h-5 w-5 text-accent" />
-                    Redefinir Senha de Usuário
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="max-w-md space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Email do usuário</label>
-                      <Input
-                        type="email"
-                        placeholder="usuario@email.com"
-                        value={resetEmail}
-                        onChange={(e) => setResetEmail(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Nova senha</label>
-                      <Input
-                        type="text"
-                        placeholder="Nova senha"
-                        value={resetPassword}
-                        onChange={(e) => setResetPassword(e.target.value)}
-                      />
-                    </div>
-                    <Button 
-                      onClick={resetUserPassword}
-                      disabled={resettingPassword || !resetEmail.trim() || !resetPassword.trim()}
-                      className="w-full"
-                    >
-                      {resettingPassword ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Redefinindo...
-                        </>
-                      ) : (
-                        <>
-                          <Key className="mr-2 h-4 w-4" />
-                          Redefinir Senha
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-4">
-                    A nova senha será aplicada imediatamente. O usuário poderá fazer login com a nova senha.
-                  </p>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* CRIAR USUÁRIO */}
-            <TabsContent value="create-user">
-              <Card className="border-2 border-accent">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <UserPlus className="h-5 w-5 text-accent" />
-                    Criar Novo Usuário
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="max-w-md space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Email do usuário</label>
-                      <Input
-                        type="email"
-                        placeholder="usuario@email.com"
-                        value={newUserEmail}
-                        onChange={(e) => setNewUserEmail(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Senha</label>
-                      <Input
-                        type="text"
-                        placeholder="Senha do usuário"
-                        value={newUserPassword}
-                        onChange={(e) => setNewUserPassword(e.target.value)}
-                      />
-                      <p className="text-xs text-muted-foreground">Padrão: 123456</p>
-                    </div>
-                    <Button 
-                      onClick={handleCreateUser}
-                      disabled={creatingUser || !newUserEmail.trim()}
-                      className="w-full"
-                    >
-                      {creatingUser ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Criando...
-                        </>
-                      ) : (
-                        <>
-                          <UserPlus className="mr-2 h-4 w-4" />
-                          Criar Usuário
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-4">
-                    O usuário poderá fazer login imediatamente com o email e senha informados.
-                  </p>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* AVISOS */}
-            <TabsContent value="announcements">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Criar Novo Aviso */}
-                <Card className="border-2 border-accent">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Megaphone className="h-5 w-5 text-accent" />
-                      Criar Novo Aviso
-                    </CardTitle>
-                    <CardDescription>
-                      O aviso será exibido uma única vez para cada usuário
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Título (opcional)</Label>
-                      <Input
-                        placeholder="Título do aviso"
-                        value={newAnnouncementTitle}
-                        onChange={(e) => setNewAnnouncementTitle(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Conteúdo *</Label>
-                      <Textarea
-                        placeholder="Escreva o conteúdo do aviso..."
-                        value={newAnnouncementContent}
-                        onChange={(e) => setNewAnnouncementContent(e.target.value)}
-                        onPaste={handleAnnouncementImagePaste}
-                        rows={4}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Imagem (opcional) - Cole com Ctrl+V</Label>
-                      <div 
-                        className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-accent/50 transition-colors"
-                        onPaste={handleAnnouncementImagePaste}
-                        tabIndex={0}
-                      >
-                        {uploadingAnnouncementImage ? (
-                          <div className="flex items-center justify-center gap-2">
-                            <Loader2 className="h-5 w-5 animate-spin" />
-                            <span>Fazendo upload...</span>
-                          </div>
-                        ) : newAnnouncementImage ? (
-                          <div className="relative">
-                            <img 
-                              src={newAnnouncementImage} 
-                              alt="Preview" 
-                              className="max-h-40 mx-auto rounded"
-                            />
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="absolute top-0 right-0 h-6 w-6 bg-destructive/80 hover:bg-destructive"
-                              onClick={() => setNewAnnouncementImage(null)}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                            <Image className="h-8 w-8" />
-                            <span className="text-sm">Clique aqui e cole uma imagem (Ctrl+V)</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Tipo de Redirecionamento</Label>
-                      <Select 
-                        value={newAnnouncementRedirectType} 
-                        onValueChange={(v) => setNewAnnouncementRedirectType(v as AnnouncementRedirectType)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Nenhum (apenas informativo)</SelectItem>
-                          <SelectItem value="custom_link">Link personalizado</SelectItem>
-                          <SelectItem value="system">Sistemas da plataforma</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {newAnnouncementRedirectType === 'custom_link' && (
-                      <>
-                        <div className="space-y-2">
-                          <Label>URL do Link</Label>
-                          <Input
-                            placeholder="https://exemplo.com"
-                            value={newAnnouncementRedirectUrl}
-                            onChange={(e) => setNewAnnouncementRedirectUrl(e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Texto do Botão (opcional)</Label>
-                          <Input
-                            placeholder="Acessar"
-                            value={newAnnouncementButtonText}
-                            onChange={(e) => setNewAnnouncementButtonText(e.target.value)}
-                          />
-                        </div>
-                      </>
-                    )}
-
-                    {newAnnouncementRedirectType === 'system' && (
-                      <div className="space-y-2">
-                        <Label>Selecione os Sistemas</Label>
-                        <div className="grid grid-cols-2 gap-2">
-                          {SYSTEMS.map(system => (
-                            <div
-                              key={system.id}
-                              className={`flex items-center gap-2 p-2 rounded border cursor-pointer transition-colors ${
-                                newAnnouncementSystems.includes(system.id)
-                                  ? 'border-accent bg-accent/10'
-                                  : 'border-border hover:border-accent/50'
-                              }`}
-                              onClick={() => toggleSystemSelection(system.id)}
-                            >
-                              <Checkbox
-                                checked={newAnnouncementSystems.includes(system.id)}
-                                onCheckedChange={() => toggleSystemSelection(system.id)}
-                              />
-                              <span className="text-lg">{system.emoji}</span>
-                              <span className="text-sm truncate">{system.name}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Agendamento */}
-                    <div className="space-y-3 p-3 rounded-lg border border-border">
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          id="schedule-announcement"
-                          checked={newAnnouncementScheduled}
-                          onCheckedChange={(checked) => setNewAnnouncementScheduled(checked === true)}
-                        />
-                        <Label htmlFor="schedule-announcement" className="cursor-pointer">
-                          Agendar publicação
-                        </Label>
-                      </div>
-                      
-                      {newAnnouncementScheduled && (
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-1">
-                            <Label className="text-xs">Data</Label>
-                            <Input
-                              type="date"
-                              value={newAnnouncementScheduleDate}
-                              onChange={(e) => setNewAnnouncementScheduleDate(e.target.value)}
-                              min={new Date().toISOString().split('T')[0]}
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">Hora</Label>
-                            <Input
-                              type="time"
-                              value={newAnnouncementScheduleTime}
-                              onChange={(e) => setNewAnnouncementScheduleTime(e.target.value)}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => setShowAnnouncementPreview(true)}
-                        disabled={!newAnnouncementContent.trim()}
-                        className="flex-1"
-                      >
-                        <Eye className="mr-2 h-4 w-4" />
-                        Visualizar
-                      </Button>
-                      <Button
-                        onClick={createAnnouncement}
-                        disabled={creatingAnnouncement || !newAnnouncementContent.trim()}
-                        className="flex-1"
-                      >
-                        {creatingAnnouncement ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            {newAnnouncementScheduled ? "Agendando..." : "Publicando..."}
-                          </>
-                        ) : (
-                          <>
-                            <Megaphone className="mr-2 h-4 w-4" />
-                            {newAnnouncementScheduled ? "Agendar" : "Publicar"}
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Histórico de Avisos */}
-                <Card className="border-2 border-accent">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Activity className="h-5 w-5 text-accent" />
-                      Histórico de Avisos
-                    </CardTitle>
-                    <CardDescription>
-                      {announcements.length} aviso{announcements.length !== 1 ? 's' : ''} cadastrado{announcements.length !== 1 ? 's' : ''}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3 max-h-[500px] overflow-y-auto">
-                      {announcements.map(announcement => (
-                        <Card key={announcement.id} className={`border ${announcement.is_active ? 'border-green-500/50' : 'border-muted'}`}>
-                          <CardContent className="p-4">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex-1 min-w-0">
-                                {announcement.title && (
-                                  <h4 className="font-semibold truncate">{announcement.title}</h4>
-                                )}
-                                <p className="text-sm text-muted-foreground line-clamp-2">
-                                  {announcement.content}
-                                </p>
-                                <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                                  <span className="flex items-center gap-1">
-                                    <Eye className="h-3 w-3" />
-                                    {announcement.views_count}
-                                  </span>
-                                  <span className="flex items-center gap-1">
-                                    <MousePointer className="h-3 w-3" />
-                                    {announcement.clicks_count}
-                                  </span>
-                                  {announcement.views_count > 0 && (
-                                    <span>
-                                      ({((announcement.clicks_count / announcement.views_count) * 100).toFixed(1)}% CTR)
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex flex-wrap items-center gap-2 mt-2">
-                                  <Badge variant={announcement.is_active ? "default" : "secondary"}>
-                                    {announcement.is_active ? "Ativo" : "Inativo"}
-                                  </Badge>
-                                  {announcement.scheduled_at && !announcement.is_active && (
-                                    <Badge variant="outline" className="border-accent text-accent">
-                                      <Clock className="h-3 w-3 mr-1" />
-                                      {new Date(announcement.scheduled_at).toLocaleString('pt-BR', {
-                                        day: '2-digit',
-                                        month: '2-digit',
-                                        hour: '2-digit',
-                                        minute: '2-digit'
-                                      })}
-                                    </Badge>
-                                  )}
-                                  <span className="text-xs text-muted-foreground">
-                                    {new Date(announcement.created_at).toLocaleDateString('pt-BR')}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="flex flex-col gap-1">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => toggleAnnouncementActive(announcement.id, announcement.is_active)}
-                                >
-                                  {announcement.is_active ? "Desativar" : "Ativar"}
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-destructive hover:text-destructive"
-                                  onClick={() => deleteAnnouncement(announcement.id)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                      {announcements.length === 0 && (
-                        <p className="text-center text-muted-foreground py-8">
-                          Nenhum aviso criado ainda
-                        </p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
-          </Tabs>
-        </div>
+          {renderContent()}
+        </main>
       </div>
 
-      {/* Modal de Métricas do Produto */}
-      <Dialog 
-        open={!!selectedProductForMetrics} 
-        onOpenChange={(open) => !open && setSelectedProductForMetrics(null)}
-      >
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto border-accent">
+      {/* Product Metrics Modal */}
+      <Dialog open={!!selectedProductForMetrics} onOpenChange={() => setSelectedProductForMetrics(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center justify-between">
-              <span>Métricas: {selectedProductForMetrics?.name}</span>
-            </DialogTitle>
+            <DialogTitle>Métricas: {selectedProductForMetrics?.name}</DialogTitle>
           </DialogHeader>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Data</TableHead>
-                  <TableHead>Estrutura</TableHead>
                   <TableHead>Investido</TableHead>
                   <TableHead>Leads</TableHead>
+                  <TableHead>PIX</TableHead>
+                  <TableHead>Total PIX</TableHead>
                   <TableHead>CPL</TableHead>
-                  <TableHead>Vendas</TableHead>
-                  <TableHead>Faturamento</TableHead>
-                  <TableHead>Resultado</TableHead>
+                  <TableHead>Conv.</TableHead>
                   <TableHead>ROAS</TableHead>
+                  <TableHead>Resultado</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {selectedProductForMetrics && getProductMetrics(selectedProductForMetrics.id).map((m) => (
                   <TableRow key={m.id}>
                     <TableCell>{m.date}</TableCell>
-                    <TableCell className="max-w-[150px] truncate">{m.structure}</TableCell>
                     <TableCell>R$ {m.invested.toFixed(2)}</TableCell>
                     <TableCell>{m.leads}</TableCell>
-                    <TableCell>R$ {m.cpl.toFixed(2)}</TableCell>
                     <TableCell>{m.pix_count}</TableCell>
                     <TableCell>R$ {m.pix_total.toFixed(2)}</TableCell>
+                    <TableCell>R$ {m.cpl.toFixed(2)}</TableCell>
+                    <TableCell>{m.conversion.toFixed(1)}%</TableCell>
+                    <TableCell>{m.roas.toFixed(2)}x</TableCell>
                     <TableCell className={m.result >= 0 ? 'text-green-500' : 'text-red-500'}>
                       R$ {m.result.toFixed(2)}
                     </TableCell>
-                    <TableCell>{m.roas.toFixed(2)}x</TableCell>
                   </TableRow>
                 ))}
-                {selectedProductForMetrics && getProductMetrics(selectedProductForMetrics.id).length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground">
-                      Nenhuma métrica cadastrada para este produto
-                    </TableCell>
-                  </TableRow>
-                )}
               </TableBody>
             </Table>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Preview do Aviso */}
-      <Dialog open={showAnnouncementPreview} onOpenChange={setShowAnnouncementPreview}>
-        <DialogContent className="max-w-lg border-accent">
+      {/* Wallet Management Modal */}
+      <Dialog open={!!selectedWalletUser} onOpenChange={() => setSelectedWalletUser(null)}>
+        <DialogContent>
           <DialogHeader>
-            {newAnnouncementTitle && (
-              <DialogTitle className="text-xl text-center">
-                {newAnnouncementTitle}
-              </DialogTitle>
-            )}
+            <DialogTitle>Gerenciar Carteira</DialogTitle>
           </DialogHeader>
-
           <div className="space-y-4">
-            {/* Imagem */}
-            {newAnnouncementImage && (
-              <div className="w-full rounded-lg overflow-hidden">
-                <img 
-                  src={newAnnouncementImage} 
-                  alt="Preview" 
-                  className="w-full h-auto object-contain max-h-64"
-                />
-              </div>
-            )}
+            <div className="p-4 bg-muted/50 rounded-lg">
+              <p className="text-sm text-muted-foreground">Usuário</p>
+              <p className="font-semibold">{selectedWalletUser?.username || selectedWalletUser?.user_email}</p>
+              <p className="text-sm text-muted-foreground mt-2">Saldo atual</p>
+              <p className="text-2xl font-bold text-accent">R$ {selectedWalletUser?.balance.toFixed(2)}</p>
+            </div>
 
-            {/* Conteúdo */}
-            <p className="text-center text-muted-foreground whitespace-pre-wrap">
-              {newAnnouncementContent || "Conteúdo do aviso..."}
-            </p>
+            <div className="space-y-2">
+              <Label>Valor</Label>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={walletAmount}
+                onChange={(e) => setWalletAmount(e.target.value)}
+              />
+            </div>
 
-            {/* Sistemas */}
-            {newAnnouncementRedirectType === 'system' && newAnnouncementSystems.length > 0 && (
-              <div className="flex flex-wrap justify-center gap-3 pt-2">
-                {newAnnouncementSystems.map(systemId => {
-                  const system = SYSTEMS.find(s => s.id === systemId);
-                  if (!system) return null;
-                  return (
-                    <Button
-                      key={systemId}
-                      variant="outline"
-                      className="flex flex-col items-center gap-1 h-auto py-3 px-4 border-accent hover:bg-accent/10"
-                      onClick={() => {}}
-                    >
-                      <span className="text-2xl">{system.emoji}</span>
-                      <span className="text-xs">{system.name}</span>
-                    </Button>
-                  );
-                })}
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label>Descrição (opcional)</Label>
+              <Input
+                placeholder="Motivo da alteração"
+                value={walletDescription}
+                onChange={(e) => setWalletDescription(e.target.value)}
+              />
+            </div>
 
-            {/* Botão de redirecionamento */}
-            {newAnnouncementRedirectType === 'custom_link' && newAnnouncementRedirectUrl && (
-              <div className="flex justify-center pt-2">
-                <Button className="bg-accent hover:bg-accent/90 text-accent-foreground">
-                  <ExternalLink className="mr-2 h-4 w-4" />
+            <div className="flex gap-2">
+              <Button
+                onClick={() => updateUserWallet(true)}
+                disabled={updatingWallet || !walletAmount}
+                className="flex-1 bg-green-600 hover:bg-green-700"
+              >
+                {updatingWallet ? <Loader2 className="h-4 w-4 animate-spin" /> : "Adicionar Saldo"}
+              </Button>
+              <Button
+                onClick={() => updateUserWallet(false)}
+                disabled={updatingWallet || !walletAmount}
+                variant="destructive"
+                className="flex-1"
+              >
+                {updatingWallet ? <Loader2 className="h-4 w-4 animate-spin" /> : "Remover Saldo"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Announcement Preview Modal */}
+      <Dialog open={showAnnouncementPreview} onOpenChange={setShowAnnouncementPreview}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Prévia do Aviso</DialogTitle>
+          </DialogHeader>
+          <Card className="border-accent">
+            <CardContent className="p-4 space-y-3">
+              {newAnnouncementTitle && (
+                <h3 className="font-semibold text-lg">{newAnnouncementTitle}</h3>
+              )}
+              {newAnnouncementImage && (
+                <img src={newAnnouncementImage} alt="Preview" className="w-full rounded-lg" />
+              )}
+              <p className="whitespace-pre-wrap">{newAnnouncementContent}</p>
+              {newAnnouncementRedirectType === 'custom_link' && newAnnouncementRedirectUrl && (
+                <Button className="w-full">
                   {newAnnouncementButtonText || "Acessar"}
                 </Button>
-              </div>
-            )}
-          </div>
-
-          <div className="text-center text-xs text-muted-foreground border-t pt-3 mt-3">
-            Este é um preview. O aviso ainda não foi publicado.
-          </div>
+              )}
+              {newAnnouncementRedirectType === 'system' && newAnnouncementSystems.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {newAnnouncementSystems.map(sysId => {
+                    const sys = SYSTEMS.find(s => s.id === sysId);
+                    return sys ? (
+                      <Badge key={sysId} variant="outline">
+                        {sys.emoji} {sys.name}
+                      </Badge>
+                    ) : null;
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </DialogContent>
       </Dialog>
     </>
