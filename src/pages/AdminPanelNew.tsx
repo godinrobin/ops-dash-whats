@@ -481,7 +481,21 @@ const AdminPanelNew = () => {
         .order("created_at", { ascending: false });
 
       if (ordersError) throw ordersError;
-      setMarketplaceOrders(ordersData || []);
+
+      // Enrich orders with profile username
+      const userIds = [...new Set((ordersData || []).map(o => o.user_id))];
+      const { data: profilesData } = await supabase
+        .from("profiles")
+        .select("id, username")
+        .in("id", userIds);
+
+      const profileMap = new Map((profilesData || []).map(p => [p.id, p.username]));
+      const enrichedOrders = (ordersData || []).map(order => ({
+        ...order,
+        username: profileMap.get(order.user_id) || '-'
+      }));
+
+      setMarketplaceOrders(enrichedOrders);
     } catch (err) {
       console.error("Error loading marketplace data:", err);
     }
@@ -1914,23 +1928,38 @@ const AdminPanelNew = () => {
 
               if (orderError) throw orderError;
 
-              // Atualizar saldo do usuário
+              // Atualizar saldo do usuário - buscar wallet existente primeiro
               const { data: walletData } = await supabase
                 .from("sms_user_wallets")
-                .select("balance")
+                .select("id, balance")
                 .eq("user_id", orderData.user_id)
                 .single();
 
               const currentBalance = walletData?.balance || 0;
-              const newBalance = currentBalance + orderData.total_price;
+              const newBalance = currentBalance + Number(orderData.total_price);
 
-              await supabase
-                .from("sms_user_wallets")
-                .upsert({ 
-                  user_id: orderData.user_id, 
-                  balance: newBalance,
-                  updated_at: new Date().toISOString()
-                });
+              if (walletData) {
+                // Atualizar wallet existente
+                const { error: updateError } = await supabase
+                  .from("sms_user_wallets")
+                  .update({ 
+                    balance: newBalance,
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq("user_id", orderData.user_id);
+                
+                if (updateError) throw updateError;
+              } else {
+                // Criar nova wallet
+                const { error: insertError } = await supabase
+                  .from("sms_user_wallets")
+                  .insert({ 
+                    user_id: orderData.user_id, 
+                    balance: newBalance
+                  });
+                
+                if (insertError) throw insertError;
+              }
 
               // Registrar transação de reembolso
               await supabase
@@ -1938,7 +1967,7 @@ const AdminPanelNew = () => {
                 .insert({
                   user_id: orderData.user_id,
                   type: 'refund',
-                  amount: orderData.total_price,
+                  amount: Number(orderData.total_price),
                   description: `Reembolso - Pedido de ativo cancelado`,
                   status: 'completed'
                 });
@@ -1978,6 +2007,7 @@ const AdminPanelNew = () => {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Produto</TableHead>
+                        <TableHead>Usuário</TableHead>
                         <TableHead>Cliente</TableHead>
                         <TableHead>WhatsApp</TableHead>
                         <TableHead>Qtd</TableHead>
@@ -1988,9 +2018,10 @@ const AdminPanelNew = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {marketplaceOrders.map((order) => (
+                      {marketplaceOrders.map((order: any) => (
                         <TableRow key={order.id}>
                           <TableCell className="font-medium">{order.product_name}</TableCell>
+                          <TableCell className="text-muted-foreground">{order.username || '-'}</TableCell>
                           <TableCell>{order.customer_name || '-'}</TableCell>
                           <TableCell>
                             {order.customer_whatsapp ? (
