@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -6,8 +7,30 @@ const corsHeaders = {
 };
 
 const USD_TO_BRL = 6.10;
-const PROFIT_MARGIN = 1.30;
-const PLATFORM_MARKUP = 1.21; // 10% original + 10% adicional = 21%
+
+async function getMarginFromDatabase(): Promise<number> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    
+    const { data, error } = await supabase
+      .from('platform_margins')
+      .select('margin_percent')
+      .eq('system_name', 'smm')
+      .single();
+    
+    if (error || !data) {
+      console.log('Using default margin (30%)');
+      return 30;
+    }
+    
+    return data.margin_percent;
+  } catch (err) {
+    console.error('Error fetching margin:', err);
+    return 30;
+  }
+}
 
 // Traduções de categorias
 const categoryTranslations: Record<string, string> = {
@@ -238,6 +261,11 @@ serve(async (req) => {
       throw new Error('SMMRAJA_API_KEY not configured');
     }
 
+    // Get margin from database
+    const marginPercent = await getMarginFromDatabase();
+    const marginMultiplier = 1 + (marginPercent / 100);
+    
+    console.log(`Using margin: ${marginPercent}% (multiplier: ${marginMultiplier})`);
     console.log('Fetching SMM services...');
     
     const response = await fetch('https://www.smmraja.com/api/v2', {
@@ -258,7 +286,6 @@ serve(async (req) => {
     const services = await response.json();
     console.log(`Fetched ${services.length} services`);
     
-    // Log sample service to verify rate format
     if (services.length > 0) {
       console.log('Sample service:', JSON.stringify(services[0]));
     }
@@ -266,8 +293,8 @@ serve(async (req) => {
     // Transform and translate services
     const transformedServices = services.map((service: any) => {
       const rateUsd = parseFloat(service.rate);
-      const pricePer1000Brl = rateUsd * USD_TO_BRL * PROFIT_MARGIN;
-      const priceWithMarkup = pricePer1000Brl * PLATFORM_MARKUP;
+      const pricePer1000BrlBase = rateUsd * USD_TO_BRL;
+      const priceWithMarkup = pricePer1000BrlBase * marginMultiplier;
 
       return {
         id: service.service,
@@ -277,7 +304,7 @@ serve(async (req) => {
         categoryPt: translateCategory(service.category),
         type: service.type,
         rateUsd: rateUsd,
-        pricePer1000Brl: pricePer1000Brl,
+        pricePer1000Brl: pricePer1000BrlBase,
         priceWithMarkup: priceWithMarkup,
         min: parseInt(service.min),
         max: parseInt(service.max),
