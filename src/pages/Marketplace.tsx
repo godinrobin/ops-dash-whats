@@ -197,7 +197,7 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
 
       if (walletError) throw walletError;
 
-      // Create order
+      // Create order with status em_andamento
       const { data: orderData, error: orderError } = await supabase
         .from("marketplace_orders")
         .insert({
@@ -206,10 +206,25 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
           product_name: selectedProduct.name,
           quantity,
           total_price: totalPrice,
-          status: "pending"
+          status: "em_andamento"
         })
         .select()
         .single();
+
+      if (orderError) throw orderError;
+
+      // Add to local orders immediately for instant UI update
+      setUserOrders(prev => [{
+        id: orderData.id,
+        product_id: selectedProduct.id,
+        product_name: selectedProduct.name,
+        quantity,
+        total_price: totalPrice,
+        status: "em_andamento",
+        created_at: orderData.created_at,
+        customer_name: null,
+        customer_whatsapp: null
+      }, ...prev]);
 
       if (orderError) throw orderError;
 
@@ -258,10 +273,18 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
         .from("marketplace_orders")
         .update({
           customer_name: customerName,
-          customer_whatsapp: customerWhatsApp,
-          status: "confirmed"
+          customer_whatsapp: customerWhatsApp
         })
         .eq("id", currentOrderId);
+
+      if (error) throw error;
+      
+      // Update local order immediately
+      setUserOrders(prev => prev.map(order => 
+        order.id === currentOrderId 
+          ? { ...order, customer_name: customerName, customer_whatsapp: customerWhatsApp }
+          : order
+      ));
 
       if (error) throw error;
       setOrderSaved(true);
