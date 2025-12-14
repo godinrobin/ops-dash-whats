@@ -127,8 +127,8 @@ serve(async (req) => {
   } catch (error: unknown) {
     console.error('Error in sms-cancel-order:', error);
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
+    // Retorna 200 com success: false para que o frontend possa ler a mensagem de erro
+    return new Response(JSON.stringify({ success: false, error: message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

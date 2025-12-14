@@ -245,8 +245,8 @@ const SMSBot = () => {
       
       if (error) throw error;
       
-      if (data.error) {
-        toast({ title: data.error, variant: "destructive" });
+      if (!data.success) {
+        toast({ title: data.error || "Erro ao cancelar", variant: "destructive" });
         return;
       }
       
