@@ -80,3 +80,18 @@ verify_jwt = false
 
 [functions.sms-check-payment]
 verify_jwt = true
+
+[functions.smm-get-services]
+verify_jwt = true
+
+[functions.smm-create-order]
+verify_jwt = true
+
+[functions.smm-check-status]
+verify_jwt = true
+
+[functions.smm-cancel-order]
+verify_jwt = true
+
+[functions.smm-refill-order]
+verify_jwt = true

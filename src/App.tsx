@@ -21,6 +21,7 @@ import AudioTranscriber from "./pages/AudioTranscriber";
 import ZapSpy from "./pages/ZapSpy";
 import TagWhats from "./pages/TagWhats";
 import SMSBot from "./pages/SMSBot";
+import SMMPanel from "./pages/SMMPanel";
 import AdminPanelNew from "./pages/AdminPanelNew";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
@@ -49,6 +50,7 @@ const App = () => (
             <Route path="/zap-spy" element={<ProtectedRoute><ZapSpy /></ProtectedRoute>} />
             <Route path="/tag-whats" element={<ProtectedRoute><TagWhats /></ProtectedRoute>} />
             <Route path="/sms-bot" element={<ProtectedRoute><SMSBot /></ProtectedRoute>} />
+            <Route path="/smm-panel" element={<ProtectedRoute><SMMPanel /></ProtectedRoute>} />
             <Route path="/produto/:productId" element={<ProtectedRoute><ProductMetrics /></ProtectedRoute>} />
             <Route path="/produto/:productId/analise" element={<ProtectedRoute><ProductAnalysis /></ProtectedRoute>} />
             <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />

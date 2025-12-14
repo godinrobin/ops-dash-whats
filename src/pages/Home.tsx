@@ -260,7 +260,7 @@ const Home = () => {
                   <span className="text-3xl md:text-6xl">📲</span>
                 </div>
                 <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent">
-                  SMS Bot
+                  Números Virtuais
                 </CardTitle>
                 <CardDescription className="text-xs md:text-base hidden md:block">
                   Compre números virtuais para receber SMS
@@ -269,6 +269,28 @@ const Home = () => {
               <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
                 <p className="text-sm text-muted-foreground">
                   Números temporários para verificação
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card 
+              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
+              onClick={() => navigate("/smm-panel")}
+            >
+              <CardHeader className="text-center p-3 md:p-6">
+                <div className="flex justify-center mb-2 md:mb-4">
+                  <span className="text-3xl md:text-6xl">📈</span>
+                </div>
+                <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-pink-400 to-rose-500 bg-clip-text text-transparent">
+                  Painel SMM
+                </CardTitle>
+                <CardDescription className="text-xs md:text-base hidden md:block">
+                  Compre seguidores, curtidas e visualizações
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
+                <p className="text-sm text-muted-foreground">
+                  Serviços SMM para redes sociais
                 </p>
               </CardContent>
             </Card>

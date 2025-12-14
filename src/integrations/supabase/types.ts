@@ -345,6 +345,60 @@ export type Database = {
         }
         Relationships: []
       }
+      smm_orders: {
+        Row: {
+          category: string | null
+          created_at: string
+          id: string
+          link: string
+          price_brl: number
+          price_usd: number
+          quantity: number
+          remains: number | null
+          service_id: number
+          service_name: string
+          smm_raja_order_id: string | null
+          start_count: number | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          link: string
+          price_brl: number
+          price_usd: number
+          quantity: number
+          remains?: number | null
+          service_id: number
+          service_name: string
+          smm_raja_order_id?: string | null
+          start_count?: number | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          link?: string
+          price_brl?: number
+          price_usd?: number
+          quantity?: number
+          remains?: number | null
+          service_id?: number
+          service_name?: string
+          smm_raja_order_id?: string | null
+          start_count?: number | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       sms_orders: {
         Row: {
           country_code: string | null
