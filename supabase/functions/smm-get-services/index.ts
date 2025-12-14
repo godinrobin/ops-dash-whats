@@ -7,7 +7,7 @@ const corsHeaders = {
 
 const USD_TO_BRL = 6.10;
 const PROFIT_MARGIN = 1.30;
-const PLATFORM_MARKUP = 1.10;
+const PLATFORM_MARKUP = 1.21; // 10% original + 10% adicional = 21%
 
 // Traduções de categorias
 const categoryTranslations: Record<string, string> = {

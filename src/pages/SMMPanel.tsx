@@ -3,6 +3,8 @@ import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -17,6 +19,7 @@ import { useActivityTracker } from "@/hooks/useActivityTracker";
 interface Service {
   id: string;
   name: string;
+  nameOriginal: string;
   category: string;
   categoryPt: string;
   type: string;
@@ -65,6 +68,7 @@ const SMMPanel = () => {
   const [purchasing, setPurchasing] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState<string | null>(null);
   const [showRechargeModal, setShowRechargeModal] = useState(false);
+  const [customComments, setCustomComments] = useState("");
 
   useEffect(() => {
     fetchServices();
@@ -136,6 +140,19 @@ const SMMPanel = () => {
     }
   };
 
+  // Check if service requires custom comments
+  const requiresCustomComments = (service: Service | null) => {
+    if (!service) return false;
+    const name = service.nameOriginal?.toLowerCase() || service.name.toLowerCase();
+    return name.includes('custom comment') || name.includes('personalizado') || name.includes('comments -');
+  };
+
+  // Validate custom comments count matches quantity
+  const getCommentsCount = () => {
+    if (!customComments.trim()) return 0;
+    return customComments.split('\n').filter(line => line.trim()).length;
+  };
+
   const handlePurchase = async () => {
     if (!selectedService || !orderLink || !orderQuantity) {
       toast({
@@ -155,6 +172,19 @@ const SMMPanel = () => {
       return;
     }
 
+    // Validate custom comments
+    if (requiresCustomComments(selectedService)) {
+      const commentsCount = getCommentsCount();
+      if (commentsCount !== orderQuantity) {
+        toast({
+          title: "Comentários inválidos",
+          description: `Você precisa inserir exatamente ${orderQuantity} comentários (um por linha). Você inseriu ${commentsCount}.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     setPurchasing(true);
 
     try {
@@ -164,17 +194,25 @@ const SMMPanel = () => {
       const priceUsd = (selectedService.rateUsd / 1000) * orderQuantity;
       const priceBrl = (selectedService.priceWithMarkup / 1000) * orderQuantity;
 
+      // Build request body
+      const requestBody: any = {
+        serviceId: selectedService.id,
+        serviceName: selectedService.name,
+        category: selectedService.category,
+        link: orderLink,
+        quantity: orderQuantity,
+        priceUsd: priceUsd,
+        priceBrl: priceBrl,
+      };
+
+      // Add custom comments if required
+      if (requiresCustomComments(selectedService) && customComments.trim()) {
+        requestBody.comments = customComments;
+      }
+
       const response = await supabase.functions.invoke('smm-create-order', {
         headers: { Authorization: `Bearer ${session.access_token}` },
-        body: {
-          serviceId: selectedService.id,
-          serviceName: selectedService.name,
-          category: selectedService.category,
-          link: orderLink,
-          quantity: orderQuantity,
-          priceUsd: priceUsd,
-          priceBrl: priceBrl,
-        },
+        body: requestBody,
       });
 
       if (response.data?.success) {
@@ -186,6 +224,7 @@ const SMMPanel = () => {
         setSelectedService(null);
         setOrderLink("");
         setOrderQuantity(100);
+        setCustomComments("");
         fetchOrders();
       } else {
         throw new Error(response.data?.error || 'Erro ao criar pedido');
@@ -364,6 +403,34 @@ const SMMPanel = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
+                  {/* Quick Filter Buttons */}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant={selectedCategory === 'Instagram Seguidores' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setSelectedCategory(selectedCategory === 'Instagram Seguidores' ? 'all' : 'Instagram Seguidores')}
+                      className={selectedCategory === 'Instagram Seguidores' ? 'bg-pink-600 hover:bg-pink-700' : ''}
+                    >
+                      📸 Instagram Seguidores
+                    </Button>
+                    <Button
+                      variant={selectedCategory === 'Instagram Curtidas' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setSelectedCategory(selectedCategory === 'Instagram Curtidas' ? 'all' : 'Instagram Curtidas')}
+                      className={selectedCategory === 'Instagram Curtidas' ? 'bg-pink-600 hover:bg-pink-700' : ''}
+                    >
+                      ❤️ Instagram Curtidas
+                    </Button>
+                    <Button
+                      variant={selectedCategory === 'Facebook Comentários' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setSelectedCategory(selectedCategory === 'Facebook Comentários' ? 'all' : 'Facebook Comentários')}
+                      className={selectedCategory === 'Facebook Comentários' ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                    >
+                      💬 Facebook Comentários
+                    </Button>
+                  </div>
+
                   {/* Filters */}
                   <div className="flex flex-col md:flex-row gap-3">
                     <div className="relative flex-1">
@@ -425,6 +492,36 @@ const SMMPanel = () => {
                             onChange={(e) => setOrderQuantity(parseInt(e.target.value) || 0)}
                           />
                         </div>
+                        
+                        {/* Custom Comments Field */}
+                        {requiresCustomComments(selectedService) && (
+                          <div>
+                            <label className="text-sm text-muted-foreground">
+                              Comentários Personalizados ({getCommentsCount()}/{orderQuantity})
+                            </label>
+                            <p className="text-xs text-muted-foreground mb-2">
+                              Insira exatamente {orderQuantity} comentários, um por linha
+                            </p>
+                            <Textarea
+                              placeholder={`Comentário 1\nComentário 2\nComentário 3\n...`}
+                              value={customComments}
+                              onChange={(e) => setCustomComments(e.target.value)}
+                              rows={6}
+                              className={getCommentsCount() !== orderQuantity && customComments.trim() 
+                                ? 'border-red-500' 
+                                : getCommentsCount() === orderQuantity 
+                                  ? 'border-green-500' 
+                                  : ''
+                              }
+                            />
+                            {customComments.trim() && getCommentsCount() !== orderQuantity && (
+                              <p className="text-xs text-red-500 mt-1">
+                                Você precisa de {orderQuantity} comentários. Inseridos: {getCommentsCount()}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
                         <div className="flex items-center justify-between pt-2 border-t">
                           <div>
                             <p className="text-sm text-muted-foreground">Preço por 1000:</p>
@@ -547,14 +644,33 @@ const SMMPanel = () => {
                                 {new Date(order.created_at).toLocaleDateString('pt-BR')}
                               </span>
                             </div>
+                            {/* Progress Display */}
                             {(order.start_count !== null || order.remains !== null) && (
-                              <div className="mt-2 pt-2 border-t text-xs text-muted-foreground flex gap-4">
-                                {order.start_count !== null && (
-                                  <span>Início: {order.start_count}</span>
-                                )}
-                                {order.remains !== null && (
-                                  <span>Restante: {order.remains}</span>
-                                )}
+                              <div className="mt-3 pt-3 border-t space-y-2">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-muted-foreground">Progresso</span>
+                                  <span className="font-medium">
+                                    {order.remains !== null 
+                                      ? `${order.quantity - order.remains} / ${order.quantity}`
+                                      : `0 / ${order.quantity}`
+                                    }
+                                  </span>
+                                </div>
+                                <Progress 
+                                  value={order.remains !== null 
+                                    ? ((order.quantity - order.remains) / order.quantity) * 100 
+                                    : 0
+                                  } 
+                                  className="h-2"
+                                />
+                                <div className="flex gap-4 text-xs text-muted-foreground">
+                                  {order.start_count !== null && (
+                                    <span>Início: {order.start_count}</span>
+                                  )}
+                                  {order.remains !== null && (
+                                    <span>Restante: {order.remains}</span>
+                                  )}
+                                </div>
                               </div>
                             )}
                             <div className="flex items-center gap-2 mt-3">
