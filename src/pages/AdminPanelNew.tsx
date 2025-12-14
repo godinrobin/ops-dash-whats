@@ -1820,13 +1820,22 @@ const AdminPanelNew = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {marketplaceProducts.map((product) => (
                   <Card key={product.id} className="border-accent/30 overflow-hidden">
-                    {product.image_url && (
-                      <img 
-                        src={product.image_url} 
-                        alt={product.name} 
-                        className="w-full h-40 object-cover"
-                      />
-                    )}
+                    <div className="w-full h-40 bg-secondary overflow-hidden">
+                      {product.image_url ? (
+                        <img 
+                          src={product.image_url} 
+                          alt={product.name} 
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Package className="h-12 w-12 text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
                     <CardContent className="p-4">
                       <div className="flex justify-between items-start mb-2">
                         <h3 className="font-bold">{product.name}</h3>
