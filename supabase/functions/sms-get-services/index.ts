@@ -8,7 +8,8 @@ const corsHeaders = {
 // Taxa de conversão USD para BRL (aproximada) + margem de lucro
 // A API SMS-Activate retorna preços em USD, não em RUB
 const USD_TO_BRL = 6.10; // 1 USD = ~6.10 BRL
-const PROFIT_MARGIN = 1.30; // 30% de margem
+const PROFIT_MARGIN = 1.30; // 30% de margem base
+const PLATFORM_MARKUP = 1.10; // 10% de lucro da plataforma (exibido ao usuário)
 
 // Serviços mais populares com nomes em português
 const popularServices: Record<string, string> = {
@@ -108,6 +109,7 @@ serve(async (req) => {
         name: string;
         priceUsd: number;
         priceBrl: number;
+        priceWithMarkup: number;
         available: number;
       }> = [];
 
@@ -120,13 +122,17 @@ serve(async (req) => {
           
           // Só adiciona se tiver números disponíveis
           if (available > 0) {
+            // Preço real de custo (usado internamente na compra)
             const priceBrl = Math.ceil(priceUsd * USD_TO_BRL * PROFIT_MARGIN * 100) / 100;
+            // Preço com markup de 10% (exibido ao usuário)
+            const priceWithMarkup = Math.ceil(priceBrl * PLATFORM_MARKUP * 100) / 100;
             
             services.push({
               code: serviceCode,
               name: popularServices[serviceCode] || serviceCode.toUpperCase(),
               priceUsd,
               priceBrl,
+              priceWithMarkup,
               available,
             });
           }

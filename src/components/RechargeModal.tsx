@@ -81,7 +81,7 @@ export function RechargeModal({ open, onOpenChange, onSuccess }: RechargeModalPr
 
   const handleSelectAmount = (amount: number) => {
     setSelectedAmount(amount);
-    setCustomAmount("");
+    setCustomAmount(amount.toString());
   };
 
   const handleCustomAmountChange = (value: string) => {
