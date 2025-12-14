@@ -46,6 +46,12 @@ serve(async (req) => {
       throw new Error('Valor máximo: R$ 1.000,00');
     }
 
+    // Validate email - Mercado Pago requires valid email format
+    const userEmail = user.email;
+    if (!userEmail || !userEmail.includes('@')) {
+      throw new Error('Email do usuário inválido. Atualize seu perfil.');
+    }
+    
     console.log(`User ${user.id} creating PIX charge for R$ ${amount}`);
 
     // Cria pagamento PIX no Mercado Pago
@@ -59,9 +65,9 @@ serve(async (req) => {
       body: JSON.stringify({
         transaction_amount: amount,
         payment_method_id: 'pix',
-        description: `Recarga SMS Bot - R$ ${amount.toFixed(2)}`,
+        description: `Recarga Números Virtuais - R$ ${amount.toFixed(2)}`,
         payer: {
-          email: user.email || 'cliente@smsbot.com',
+          email: userEmail,
         },
       }),
     });
