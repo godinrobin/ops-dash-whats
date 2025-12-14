@@ -79,21 +79,42 @@ serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    console.log(`Creating user for email: ${email}, name: ${name}`);
+    // Normalize email
+    email = email.toLowerCase().trim();
+    console.log(`Processing webhook for email: ${email}, name: ${name}`);
 
     // Check if user already exists
     const { data: existingUsers } = await supabase.auth.admin.listUsers();
-    const userExists = existingUsers?.users?.some(u => u.email === email);
+    const existingUser = existingUsers?.users?.find(u => u.email?.toLowerCase() === email);
 
-    if (userExists) {
-      console.log(`User ${email} already exists`);
+    if (existingUser) {
+      console.log(`User ${email} already exists, upgrading to full member`);
+      
+      // Update the existing user's profile to be a full member
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ is_full_member: true })
+        .eq("id", existingUser.id);
+
+      if (updateError) {
+        console.error("Error updating profile:", updateError);
+        // Even if profile update fails, return success since user exists
+      } else {
+        console.log(`Successfully upgraded user ${email} to full member`);
+      }
+
       return new Response(
-        JSON.stringify({ success: true, message: "Usuário já existe" }),
+        JSON.stringify({ 
+          success: true, 
+          message: "Usuário existente atualizado para membro completo",
+          user_id: existingUser.id,
+          upgraded: true
+        }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Use default password for new users
+    // Create new user with full membership
     const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
       email: email,
       password: DEFAULT_PASSWORD,
@@ -113,11 +134,25 @@ serve(async (req: Request): Promise<Response> => {
 
     console.log(`User created successfully: ${newUser.user.id}`);
 
+    // Set the new user as a full member
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update({ is_full_member: true })
+      .eq("id", newUser.user.id);
+
+    if (profileError) {
+      console.error("Error setting full member status:", profileError);
+      // Continue anyway, the trigger might handle profile creation
+    } else {
+      console.log(`User ${email} set as full member`);
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: "Usuário criado com sucesso",
-        user_id: newUser.user.id 
+        message: "Usuário criado com sucesso como membro completo",
+        user_id: newUser.user.id,
+        is_full_member: true
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

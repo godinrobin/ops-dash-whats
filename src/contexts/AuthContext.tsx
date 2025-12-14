@@ -40,20 +40,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signUp = async (username: string, password: string) => {
     try {
-      // First check if username already exists
+      // Check if username is already an email format (required for new signups)
+      const isEmail = username.includes('@') && username.includes('.');
+      if (!isEmail) {
+        return { error: { message: "Por favor, use um email válido para se cadastrar" } };
+      }
+
+      const email = username.toLowerCase().trim();
+      
+      // Check if email already exists in profiles
       const { data: existingProfile } = await supabase
         .from("profiles")
         .select("username")
-        .eq("username", username)
+        .eq("username", email)
         .single();
 
       if (existingProfile) {
-        return { error: { message: "Nome de usuário já existe" } };
+        return { error: { message: "Este email já está cadastrado" } };
       }
 
-      // Check if username is already an email format
-      const isEmail = username.includes('@') && username.includes('.');
-      const email = isEmail ? username.toLowerCase().trim() : `${username.toLowerCase().trim()}@metricas.local`;
       const redirectUrl = `${window.location.origin}/`;
 
       const { data, error } = await supabase.auth.signUp({
@@ -61,7 +66,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         password,
         options: {
           data: {
-            username: username.toLowerCase().trim(),
+            username: email,
           },
           emailRedirectTo: redirectUrl,
         },
@@ -75,8 +80,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             }
           };
         }
+        if (error.message?.includes('already registered')) {
+          return { error: { message: "Este email já está cadastrado" } };
+        }
         return { error };
       }
+
+      // Note: is_full_member will be false by default for self-registered users
+      // The handle_new_user trigger creates the profile, but we need to ensure is_full_member = false
 
       return { error: null };
     } catch (error: any) {

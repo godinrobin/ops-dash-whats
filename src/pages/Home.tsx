@@ -7,10 +7,17 @@ import Autoplay from "embla-carousel-autoplay";
 import Marketplace from "./Marketplace";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAccessLevel } from "@/hooks/useAccessLevel";
+import { RestrictedFeatureModal } from "@/components/RestrictedFeatureModal";
+import { Lock } from "lucide-react";
 
 const Home = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isFullMember, canAccessSystem, loading: accessLoading } = useAccessLevel();
+  const [restrictedModalOpen, setRestrictedModalOpen] = useState(false);
+  const [selectedFeatureName, setSelectedFeatureName] = useState<string>("");
+  
   const autoplayPlugin = useRef(
     Autoplay({ delay: 3000, stopOnInteraction: true })
   );
@@ -48,6 +55,112 @@ const Home = () => {
     { id: "FXpRT-Dsqes", name: "ORGANIZADOR DE NÚMEROS DE WHATSAPP" },
   ];
 
+  // System definitions with access control
+  const systems = [
+    { 
+      path: "/metricas", 
+      emoji: "📊", 
+      title: "Sistema de Métricas",
+      description: "Gerencie suas métricas de produtos e acompanhe resultados",
+      subtext: "Acompanhe investimentos, leads, conversões e ROAS",
+      gradient: null,
+      restricted: false
+    },
+    { 
+      path: "/organizador-numeros", 
+      emoji: "📱", 
+      title: "Organizador de Números",
+      description: "Organize e gerencie seus números de trabalho",
+      subtext: "Mantenha controle de números, status e operações",
+      gradient: null,
+      restricted: false
+    },
+    { 
+      path: "/track-ofertas", 
+      emoji: "🎯", 
+      title: "Track Ofertas",
+      description: "Acompanhe a performance dos anúncios de seus concorrentes",
+      subtext: "Monitore anúncios ativos e tendências diariamente",
+      gradient: "from-accent to-orange-400",
+      restricted: false
+    },
+    { 
+      path: "/criador-funil", 
+      emoji: "💬", 
+      title: "Criador de Funil",
+      description: "Crie funis de vendas personalizados para WhatsApp",
+      subtext: "Gere scripts de vendas completos com IA",
+      gradient: "from-green-400 to-green-600",
+      restricted: true
+    },
+    { 
+      path: "/gerador-criativos", 
+      emoji: "🖼️", 
+      title: "Gerador de Criativos em Imagem",
+      description: "Crie imagens profissionais para anúncios com IA",
+      subtext: "Gere criativos de alta qualidade automaticamente",
+      gradient: "from-purple-400 to-pink-500",
+      restricted: true
+    },
+    { 
+      path: "/gerador-variacoes-video", 
+      emoji: "🎬", 
+      title: "Gerador de Criativos em Vídeo",
+      description: "Crie variações de anúncios combinando vídeos",
+      subtext: "Combine hooks, corpos e CTAs automaticamente",
+      gradient: "from-violet-400 to-fuchsia-500",
+      restricted: true
+    },
+    { 
+      path: "/gerador-audio", 
+      emoji: "🎙️", 
+      title: "Gerador de Áudio",
+      description: "Transforme texto em áudio com vozes realistas",
+      subtext: "Gere áudios profissionais com IA",
+      gradient: "from-red-400 to-orange-500",
+      restricted: true
+    },
+    { 
+      path: "/transcricao-audio", 
+      emoji: "📝", 
+      title: "Transcrição de Áudio",
+      description: "Converta áudios em texto automaticamente",
+      subtext: "Transcreva áudios MP3, OGG e OPUS",
+      gradient: "from-blue-400 to-cyan-500",
+      restricted: true
+    },
+    { 
+      path: "/zap-spy", 
+      emoji: "🔍", 
+      title: "Zap Spy",
+      description: "Acesse as ofertas mais escaladas de X1",
+      subtext: "Encontre ofertas validadas por nicho",
+      gradient: "from-accent to-yellow-400",
+      restricted: false
+    },
+    { 
+      path: "/tag-whats", 
+      emoji: "🏷️", 
+      title: "Tag Whats",
+      description: "Marque vendas do WhatsApp automaticamente",
+      subtext: "Sistema automático de marcação de vendas",
+      gradient: "from-teal-400 to-emerald-500",
+      restricted: true
+    }
+  ];
+
+  const handleSystemClick = (system: typeof systems[0]) => {
+    // If full member or system is not restricted, navigate normally
+    if (isFullMember || !system.restricted) {
+      navigate(system.path);
+      return;
+    }
+
+    // Show restricted modal for non-members trying to access restricted features
+    setSelectedFeatureName(system.title);
+    setRestrictedModalOpen(true);
+  };
+
   // If marketplace mode, render marketplace component
   if (mode === "marketplace") {
     return <Marketplace onModeChange={setMode} currentMode={mode} />;
@@ -67,221 +180,47 @@ const Home = () => {
           </header>
 
           <div className="grid grid-cols-3 gap-3 md:gap-6">
-            <Card 
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
-              onClick={() => navigate("/metricas")}
-            >
-              <CardHeader className="text-center p-3 md:p-6">
-                <div className="flex justify-center mb-2 md:mb-4">
-                  <span className="text-3xl md:text-6xl">📊</span>
-                </div>
-                <CardTitle className="text-sm md:text-2xl">Sistema de Métricas</CardTitle>
-                <CardDescription className="text-xs md:text-base hidden md:block">
-                  Gerencie suas métricas de produtos e acompanhe resultados
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
-                <p className="text-sm text-muted-foreground">
-                  Acompanhe investimentos, leads, conversões e ROAS
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card 
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
-              onClick={() => navigate("/organizador-numeros")}
-            >
-              <CardHeader className="text-center p-3 md:p-6">
-                <div className="flex justify-center mb-2 md:mb-4">
-                  <span className="text-3xl md:text-6xl">📱</span>
-                </div>
-                <CardTitle className="text-sm md:text-2xl">Organizador de Números</CardTitle>
-                <CardDescription className="text-xs md:text-base hidden md:block">
-                  Organize e gerencie seus números de trabalho
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
-                <p className="text-sm text-muted-foreground">
-                  Mantenha controle de números, status e operações
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card 
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
-              onClick={() => navigate("/track-ofertas")}
-            >
-              <CardHeader className="text-center p-3 md:p-6">
-                <div className="flex justify-center mb-2 md:mb-4">
-                  <span className="text-3xl md:text-6xl">🎯</span>
-                </div>
-                <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-accent to-orange-400 bg-clip-text text-transparent">
-                  Track Ofertas
-                </CardTitle>
-                <CardDescription className="text-xs md:text-base hidden md:block">
-                  Acompanhe a performance dos anúncios de seus concorrentes
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
-                <p className="text-sm text-muted-foreground">
-                  Monitore anúncios ativos e tendências diariamente
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card 
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
-              onClick={() => navigate("/criador-funil")}
-            >
-              <CardHeader className="text-center p-3 md:p-6">
-                <div className="flex justify-center mb-2 md:mb-4">
-                  <span className="text-3xl md:text-6xl">💬</span>
-                </div>
-                <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent">
-                  Criador de Funil
-                </CardTitle>
-                <CardDescription className="text-xs md:text-base hidden md:block">
-                  Crie funis de vendas personalizados para WhatsApp
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
-                <p className="text-sm text-muted-foreground">
-                  Gere scripts de vendas completos com IA
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card 
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
-              onClick={() => navigate("/gerador-criativos")}
-            >
-              <CardHeader className="text-center p-3 md:p-6">
-                <div className="flex justify-center mb-2 md:mb-4">
-                  <span className="text-3xl md:text-6xl">🖼️</span>
-                </div>
-                <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
-                  Gerador de Criativos em Imagem
-                </CardTitle>
-                <CardDescription className="text-xs md:text-base hidden md:block">
-                  Crie imagens profissionais para anúncios com IA
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
-                <p className="text-sm text-muted-foreground">
-                  Gere criativos de alta qualidade automaticamente
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card 
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
-              onClick={() => navigate("/gerador-variacoes-video")}
-            >
-              <CardHeader className="text-center p-3 md:p-6">
-                <div className="flex justify-center mb-2 md:mb-4">
-                  <span className="text-3xl md:text-6xl">🎬</span>
-                </div>
-                <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-violet-400 to-fuchsia-500 bg-clip-text text-transparent">
-                  Gerador de Criativos em Vídeo
-                </CardTitle>
-                <CardDescription className="text-xs md:text-base hidden md:block">
-                  Crie variações de anúncios combinando vídeos
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
-                <p className="text-sm text-muted-foreground">
-                  Combine hooks, corpos e CTAs automaticamente
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card 
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
-              onClick={() => navigate("/gerador-audio")}
-            >
-              <CardHeader className="text-center p-3 md:p-6">
-                <div className="flex justify-center mb-2 md:mb-4">
-                  <span className="text-3xl md:text-6xl">🎙️</span>
-                </div>
-                <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-red-400 to-orange-500 bg-clip-text text-transparent">
-                  Gerador de Áudio
-                </CardTitle>
-                <CardDescription className="text-xs md:text-base hidden md:block">
-                  Transforme texto em áudio com vozes realistas
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
-                <p className="text-sm text-muted-foreground">
-                  Gere áudios profissionais com IA
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card 
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
-              onClick={() => navigate("/transcricao-audio")}
-            >
-              <CardHeader className="text-center p-3 md:p-6">
-                <div className="flex justify-center mb-2 md:mb-4">
-                  <span className="text-3xl md:text-6xl">📝</span>
-                </div>
-                <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-blue-400 to-cyan-500 bg-clip-text text-transparent">
-                  Transcrição de Áudio
-                </CardTitle>
-                <CardDescription className="text-xs md:text-base hidden md:block">
-                  Converta áudios em texto automaticamente
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
-                <p className="text-sm text-muted-foreground">
-                  Transcreva áudios MP3, OGG e OPUS
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card 
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
-              onClick={() => navigate("/zap-spy")}
-            >
-              <CardHeader className="text-center p-3 md:p-6">
-                <div className="flex justify-center mb-2 md:mb-4">
-                  <span className="text-3xl md:text-6xl">🔍</span>
-                </div>
-                <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-accent to-yellow-400 bg-clip-text text-transparent">
-                  Zap Spy
-                </CardTitle>
-                <CardDescription className="text-xs md:text-base hidden md:block">
-                  Acesse as ofertas mais escaladas de X1
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
-                <p className="text-sm text-muted-foreground">
-                  Encontre ofertas validadas por nicho
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card 
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
-              onClick={() => navigate("/tag-whats")}
-            >
-              <CardHeader className="text-center p-3 md:p-6">
-                <div className="flex justify-center mb-2 md:mb-4">
-                  <span className="text-3xl md:text-6xl">🏷️</span>
-                </div>
-                <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-teal-400 to-emerald-500 bg-clip-text text-transparent">
-                  Tag Whats
-                </CardTitle>
-                <CardDescription className="text-xs md:text-base hidden md:block">
-                  Marque vendas do WhatsApp automaticamente
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
-                <p className="text-sm text-muted-foreground">
-                  Sistema automático de marcação de vendas
-                </p>
-              </CardContent>
-            </Card>
+            {systems.map((system) => {
+              const isLocked = !isFullMember && system.restricted;
+              
+              return (
+                <Card 
+                  key={system.path}
+                  className={`cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent relative ${
+                    isLocked ? 'opacity-80' : ''
+                  }`}
+                  onClick={() => handleSystemClick(system)}
+                >
+                  {isLocked && (
+                    <div className="absolute top-2 right-2 z-10">
+                      <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-accent/20 flex items-center justify-center">
+                        <Lock className="w-3 h-3 md:w-4 md:h-4 text-accent" />
+                      </div>
+                    </div>
+                  )}
+                  <CardHeader className="text-center p-3 md:p-6">
+                    <div className="flex justify-center mb-2 md:mb-4">
+                      <span className="text-3xl md:text-6xl">{system.emoji}</span>
+                    </div>
+                    <CardTitle className={`text-sm md:text-2xl ${
+                      system.gradient 
+                        ? `bg-gradient-to-r ${system.gradient} bg-clip-text text-transparent` 
+                        : ''
+                    }`}>
+                      {system.title}
+                    </CardTitle>
+                    <CardDescription className="text-xs md:text-base hidden md:block">
+                      {system.description}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
+                    <p className="text-sm text-muted-foreground">
+                      {system.subtext}
+                    </p>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
 
           <section className="mt-16">
@@ -330,6 +269,12 @@ const Home = () => {
           </footer>
         </div>
       </div>
+
+      <RestrictedFeatureModal
+        open={restrictedModalOpen}
+        onOpenChange={setRestrictedModalOpen}
+        featureName={selectedFeatureName}
+      />
     </>
   );
 };
