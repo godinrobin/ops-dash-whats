@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { 
   Wallet, Phone, BarChart3, ShoppingBag, ArrowLeft, Shield, Truck, CreditCard, 
-  Check, Minus, Plus, Clock, X, Loader2
+  Check, Minus, Plus, Clock, X, Loader2, ClipboardList
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -62,6 +62,15 @@ interface MarketplaceProps {
   currentMode?: "sistemas" | "marketplace";
 }
 
+interface UserOrder {
+  id: string;
+  product_name: string;
+  quantity: number;
+  total_price: number;
+  status: string;
+  created_at: string;
+}
+
 const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
   const { user } = useAuth();
   useActivityTracker("marketplace", "Marketplace");
@@ -88,6 +97,11 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
   const [customerName, setCustomerName] = useState("");
   const [customerWhatsApp, setCustomerWhatsApp] = useState("");
   const [savingOrder, setSavingOrder] = useState(false);
+
+  // User orders
+  const [userOrders, setUserOrders] = useState<UserOrder[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [showOrders, setShowOrders] = useState(false);
   const [orderSaved, setOrderSaved] = useState(false);
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
 
@@ -95,8 +109,28 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
     if (user) {
       loadProducts();
       loadBalance();
+      loadUserOrders();
     }
   }, [user]);
+
+  const loadUserOrders = async () => {
+    if (!user) return;
+    setLoadingOrders(true);
+    try {
+      const { data, error } = await supabase
+        .from("marketplace_orders")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setUserOrders(data || []);
+    } catch (err) {
+      console.error("Error loading orders:", err);
+    } finally {
+      setLoadingOrders(false);
+    }
+  };
 
   const loadProducts = async () => {
     try {
@@ -356,36 +390,117 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
             </TabsContent>
 
             <TabsContent value="ativos">
-              {/* Category Filter */}
-              <div className="flex flex-wrap gap-2 mb-6">
-                <Button
-                  variant={selectedCategory === null ? "default" : "outline"}
-                  onClick={() => setSelectedCategory(null)}
-                  className={selectedCategory === null ? "bg-accent" : ""}
-                >
-                  Todos
-                </Button>
-                {categories.map(cat => (
+              {/* Orders Button + Category Filter */}
+              <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+                <div className="flex flex-wrap gap-2">
                   <Button
-                    key={cat}
-                    variant={selectedCategory === cat ? "default" : "outline"}
-                    onClick={() => setSelectedCategory(cat)}
-                    className={selectedCategory === cat ? "bg-accent" : ""}
+                    variant={selectedCategory === null && !showOrders ? "default" : "outline"}
+                    onClick={() => { setSelectedCategory(null); setShowOrders(false); }}
+                    className={selectedCategory === null && !showOrders ? "bg-accent" : ""}
                   >
-                    {cat}
+                    Todos
                   </Button>
-                ))}
+                  {categories.map(cat => (
+                    <Button
+                      key={cat}
+                      variant={selectedCategory === cat && !showOrders ? "default" : "outline"}
+                      onClick={() => { setSelectedCategory(cat); setShowOrders(false); }}
+                      className={selectedCategory === cat && !showOrders ? "bg-accent" : ""}
+                    >
+                      {cat}
+                    </Button>
+                  ))}
+                </div>
+                <Button
+                  variant={showOrders ? "default" : "outline"}
+                  onClick={() => { setShowOrders(true); setSelectedCategory(null); }}
+                  className={showOrders ? "bg-accent" : "border-accent text-accent hover:bg-accent/10"}
+                >
+                  <ClipboardList className="h-4 w-4 mr-2" />
+                  Pedidos
+                </Button>
               </div>
 
-              {/* Products Grid */}
-              {loading ? (
-                <div className="flex justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-accent" />
-                </div>
+              {/* User Orders View */}
+              {showOrders ? (
+                <Card className="border-accent">
+                  <CardContent className="p-4">
+                    <h3 className="text-lg font-bold mb-4">Meus Pedidos</h3>
+                    {loadingOrders ? (
+                      <div className="flex justify-center py-8">
+                        <Loader2 className="h-8 w-8 animate-spin text-accent" />
+                      </div>
+                    ) : userOrders.length === 0 ? (
+                      <p className="text-center text-muted-foreground py-8">Nenhum pedido ainda</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {userOrders.map(order => {
+                          const getStatusColor = (status: string) => {
+                            switch (status) {
+                              case 'em_andamento':
+                              case 'pending':
+                              case 'confirmed':
+                                return 'bg-yellow-500/20 text-yellow-500 border-yellow-500/50';
+                              case 'entregue':
+                              case 'completed':
+                                return 'bg-green-500/20 text-green-500 border-green-500/50';
+                              case 'cancelado':
+                                return 'bg-red-500/20 text-red-500 border-red-500/50';
+                              default:
+                                return 'bg-muted text-muted-foreground';
+                            }
+                          };
+                          const getStatusLabel = (status: string) => {
+                            switch (status) {
+                              case 'em_andamento':
+                              case 'pending':
+                              case 'confirmed':
+                                return 'Em andamento';
+                              case 'entregue':
+                              case 'completed':
+                                return 'Entregue';
+                              case 'cancelado':
+                                return 'Cancelado';
+                              default:
+                                return status;
+                            }
+                          };
+                          return (
+                            <div key={order.id} className="flex items-center justify-between p-4 bg-secondary rounded-lg border border-border">
+                              <div>
+                                <p className="font-semibold">{order.quantity}x {order.product_name}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {new Date(order.created_at).toLocaleDateString('pt-BR')}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <span className="text-green-500 font-bold">
+                                  R$ {order.total_price.toFixed(2).replace('.', ',')}
+                                </span>
+                                <Badge className={`${getStatusColor(order.status)}`}>
+                                  {getStatusLabel(order.status)}
+                                </Badge>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {filteredProducts.map(renderProductCard)}
-                </div>
+                <>
+                  {/* Products Grid */}
+                  {loading ? (
+                    <div className="flex justify-center py-12">
+                      <Loader2 className="h-8 w-8 animate-spin text-accent" />
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {filteredProducts.map(renderProductCard)}
+                    </div>
+                  )}
+                </>
               )}
             </TabsContent>
           </Tabs>
