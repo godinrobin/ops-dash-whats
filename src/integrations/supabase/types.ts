@@ -355,7 +355,7 @@ export type Database = {
           price_usd: number
           quantity: number
           remains: number | null
-          service_id: number
+          service_id: string
           service_name: string
           smm_raja_order_id: string | null
           start_count: number | null
@@ -372,7 +372,7 @@ export type Database = {
           price_usd: number
           quantity: number
           remains?: number | null
-          service_id: number
+          service_id: string
           service_name: string
           smm_raja_order_id?: string | null
           start_count?: number | null
@@ -389,7 +389,7 @@ export type Database = {
           price_usd?: number
           quantity?: number
           remains?: number | null
-          service_id?: number
+          service_id?: string
           service_name?: string
           smm_raja_order_id?: string | null
           start_count?: number | null
