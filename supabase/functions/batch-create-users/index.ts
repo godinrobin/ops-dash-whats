@@ -113,6 +113,17 @@ serve(async (req: Request): Promise<Response> => {
           results.push({ email, status: "error", error: createError.message });
         } else {
           console.log(`User created: ${email} (${newUser.user.id})`);
+          
+          // Set user as full member
+          const { error: profileError } = await supabase
+            .from("profiles")
+            .update({ is_full_member: true })
+            .eq("id", newUser.user.id);
+          
+          if (profileError) {
+            console.log(`Note: Could not set full member for ${email}:`, profileError);
+          }
+          
           results.push({ email, status: "created" });
         }
       } catch (err) {

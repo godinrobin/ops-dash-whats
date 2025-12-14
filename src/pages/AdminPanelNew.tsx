@@ -66,6 +66,8 @@ const SYSTEMS = [
   { id: "numeros-virtuais", name: "Números Virtuais", emoji: "📞" },
 ];
 
+import { Shield } from "lucide-react";
+
 // Sidebar menu structure
 const SIDEBAR_MENU = [
   {
@@ -76,6 +78,7 @@ const SIDEBAR_MENU = [
       { id: "numbers", label: "Números", icon: Phone },
       { id: "offers", label: "Ofertas", icon: FileText },
       { id: "activities", label: "Atividades", icon: Activity },
+      { id: "user-access", label: "Acesso", icon: Shield },
     ]
   },
   {
@@ -303,20 +306,27 @@ const AdminPanelNew = () => {
   const [newAnnouncementScheduleDate, setNewAnnouncementScheduleDate] = useState("");
   const [newAnnouncementScheduleTime, setNewAnnouncementScheduleTime] = useState("");
 
+  // User access management state
+  const [userProfiles, setUserProfiles] = useState<{id: string; username: string; email: string; is_full_member: boolean}[]>([]);
+  const [userAccessSearch, setUserAccessSearch] = useState("");
+  const [updatingUserAccess, setUpdatingUserAccess] = useState<string | null>(null);
+
   useEffect(() => {
     const initData = async () => {
       await loadAllData();
       loadAnnouncements();
       loadMargins();
       loadMarketplaceData();
+      loadUserProfiles();
     };
     initData();
   }, [user]);
 
-  // Reload wallets when users are loaded
+  // Reload wallets and profiles when users are loaded
   useEffect(() => {
     if (users.length > 0) {
       loadWalletsAndTransactions();
+      loadUserProfiles();
     }
   }, [users]);
 
@@ -528,6 +538,57 @@ const AdminPanelNew = () => {
       setAnnouncements((data || []) as AnnouncementData[]);
     } catch (err) {
       console.error("Error loading announcements:", err);
+    }
+  };
+
+  const loadUserProfiles = async () => {
+    try {
+      // Load all profiles with membership status
+      const { data: profilesData, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, username, is_full_member")
+        .order("username", { ascending: true });
+
+      if (profilesError) throw profilesError;
+
+      // Combine with user emails from users state
+      const enrichedProfiles = (profilesData || []).map(profile => {
+        const userMatch = users.find(u => u.id === profile.id);
+        return {
+          id: profile.id,
+          username: profile.username,
+          email: userMatch?.email || profile.username,
+          is_full_member: profile.is_full_member,
+        };
+      });
+
+      setUserProfiles(enrichedProfiles);
+    } catch (err) {
+      console.error("Error loading user profiles:", err);
+    }
+  };
+
+  const updateUserAccess = async (userId: string, isFullMember: boolean) => {
+    setUpdatingUserAccess(userId);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ is_full_member: isFullMember })
+        .eq("id", userId);
+
+      if (error) throw error;
+
+      toast.success(isFullMember ? "Acesso completo concedido!" : "Acesso alterado para parcial");
+      
+      // Update local state
+      setUserProfiles(prev => prev.map(p => 
+        p.id === userId ? { ...p, is_full_member: isFullMember } : p
+      ));
+    } catch (err) {
+      console.error("Error updating user access:", err);
+      toast.error("Erro ao atualizar acesso");
+    } finally {
+      setUpdatingUserAccess(null);
     }
   };
 
@@ -1267,6 +1328,90 @@ const AdminPanelNew = () => {
                   </TableBody>
                 </Table>
               </div>
+            </CardContent>
+          </Card>
+        );
+
+      case "user-access":
+        const filteredProfiles = userProfiles.filter(p => 
+          p.username.toLowerCase().includes(userAccessSearch.toLowerCase()) ||
+          p.email.toLowerCase().includes(userAccessSearch.toLowerCase())
+        );
+        
+        return (
+          <Card className="border-2 border-accent">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-accent" />
+                Gerenciar Acesso dos Usuários
+              </CardTitle>
+              <CardDescription>
+                Altere o nível de acesso de cada usuário (Membro Completo ou Parcial)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Search className="h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nome ou email..."
+                  value={userAccessSearch}
+                  onChange={(e) => setUserAccessSearch(e.target.value)}
+                  className="max-w-sm"
+                />
+              </div>
+              
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Nível de Acesso</TableHead>
+                      <TableHead>Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredProfiles.map((profile) => (
+                      <TableRow key={profile.id}>
+                        <TableCell className="font-medium">{profile.username}</TableCell>
+                        <TableCell className="text-muted-foreground">{profile.email}</TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant={profile.is_full_member ? "default" : "secondary"}
+                            className={profile.is_full_member ? "bg-green-500/20 text-green-500" : "bg-yellow-500/20 text-yellow-500"}
+                          >
+                            {profile.is_full_member ? "Membro Completo" : "Membro Parcial"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={profile.is_full_member ? "full" : "partial"}
+                            onValueChange={(value) => updateUserAccess(profile.id, value === "full")}
+                            disabled={updatingUserAccess === profile.id}
+                          >
+                            <SelectTrigger className="w-40">
+                              {updatingUserAccess === profile.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <SelectValue />
+                              )}
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="full">Membro Completo</SelectItem>
+                              <SelectItem value="partial">Membro Parcial</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              
+              <p className="text-sm text-muted-foreground">
+                <strong>Membro Completo:</strong> Acesso a todos os sistemas da plataforma.<br />
+                <strong>Membro Parcial:</strong> Acesso apenas a Marketplace, Métricas, Organizador de Números, Track Ofertas e Zap Spy.
+              </p>
             </CardContent>
           </Card>
         );
