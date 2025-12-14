@@ -413,6 +413,7 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
                     src={getProductImage(selectedProduct.image_url)} 
                     alt={selectedProduct.name}
                     className="w-full h-auto block"
+                    style={{ transform: 'scaleX(1.05)', transformOrigin: 'left' }}
                   />
                 </div>
 
@@ -507,7 +508,7 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
               </div>
 
               {/* Description - closer to image */}
-              <div className="grid md:grid-cols-2 gap-6 mt-2">
+              <div className="grid md:grid-cols-2 gap-6 -mt-4">
                 <div>
                   <h3 className="text-lg font-bold mb-3">Descrição do produto</h3>
                   <div className="whitespace-pre-wrap text-muted-foreground">
