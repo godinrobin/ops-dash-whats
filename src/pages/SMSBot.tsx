@@ -525,7 +525,7 @@ const SMSBot = () => {
                                   {order.status === 'waiting_sms' && (
                                     <Badge variant="secondary" className="bg-accent/20">
                                       <Clock className="h-3 w-3 mr-1" />
-                                      Aguardando SMS
+                                      Aguardando
                                     </Badge>
                                   )}
                                   {order.status === 'received' && (
@@ -545,10 +545,23 @@ const SMSBot = () => {
                                 <div 
                                   className="flex items-center gap-2 text-lg font-mono cursor-pointer hover:text-accent"
                                   onClick={() => copyToClipboard(order.phone_number)}
+                                  title="Clique para copiar"
                                 >
                                   +{order.phone_number}
                                   <Copy className="h-4 w-4" />
                                 </div>
+
+                                {order.status === 'received' && order.phone_number && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="mt-1 text-xs"
+                                    onClick={() => copyToClipboard(order.phone_number)}
+                                  >
+                                    <Copy className="h-3 w-3 mr-1" />
+                                    Copiar Número
+                                  </Button>
+                                )}
 
                                 {order.sms_code && (
                                   <div 

@@ -1901,15 +1901,56 @@ const AdminPanelNew = () => {
         );
 
       case "marketplace-sales":
-        const updateOrderStatus = async (orderId: string, newStatus: string) => {
+        const updateOrderStatus = async (orderId: string, newStatus: string, previousStatus: string) => {
           try {
+            // Se mudando para cancelado, precisamos reembolsar o usuário
+            if (newStatus === 'cancelado' && previousStatus !== 'cancelado') {
+              // Buscar dados do pedido
+              const { data: orderData, error: orderError } = await supabase
+                .from("marketplace_orders")
+                .select("user_id, total_price")
+                .eq("id", orderId)
+                .single();
+
+              if (orderError) throw orderError;
+
+              // Atualizar saldo do usuário
+              const { data: walletData } = await supabase
+                .from("sms_user_wallets")
+                .select("balance")
+                .eq("user_id", orderData.user_id)
+                .single();
+
+              const currentBalance = walletData?.balance || 0;
+              const newBalance = currentBalance + orderData.total_price;
+
+              await supabase
+                .from("sms_user_wallets")
+                .upsert({ 
+                  user_id: orderData.user_id, 
+                  balance: newBalance,
+                  updated_at: new Date().toISOString()
+                });
+
+              // Registrar transação de reembolso
+              await supabase
+                .from("sms_transactions")
+                .insert({
+                  user_id: orderData.user_id,
+                  type: 'refund',
+                  amount: orderData.total_price,
+                  description: `Reembolso - Pedido de ativo cancelado`,
+                  status: 'completed'
+                });
+            }
+
             const { error } = await supabase
               .from("marketplace_orders")
               .update({ status: newStatus })
               .eq("id", orderId);
 
             if (error) throw error;
-            toast.success("Status atualizado!");
+            toast.success(newStatus === 'cancelado' ? "Pedido cancelado e saldo reembolsado!" : "Status atualizado!");
             loadMarketplaceData();
           } catch (err) {
             console.error("Error updating order status:", err);
@@ -1992,7 +2033,7 @@ const AdminPanelNew = () => {
                           <TableCell>
                             <Select
                               value={order.status}
-                              onValueChange={(value) => updateOrderStatus(order.id, value)}
+                              onValueChange={(value) => updateOrderStatus(order.id, value, order.status)}
                             >
                               <SelectTrigger className="w-36">
                                 <SelectValue />
