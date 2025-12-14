@@ -68,7 +68,14 @@ serve(async (req) => {
     console.log('SMM Raja refill result:', refillResult);
 
     if (refillResult.error) {
-      throw new Error(refillResult.error);
+      // Translate common API errors to Portuguese
+      let errorMessage = refillResult.error;
+      if (refillResult.error.includes('Not authorized to refill')) {
+        errorMessage = 'Este serviço não suporta refill ou o pedido não está elegível';
+      } else if (refillResult.error.includes('Incorrect order')) {
+        errorMessage = 'Pedido não encontrado no sistema';
+      }
+      throw new Error(errorMessage);
     }
 
     return new Response(JSON.stringify({
