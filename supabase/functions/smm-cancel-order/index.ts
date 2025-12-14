@@ -67,18 +67,27 @@ serve(async (req) => {
     const cancelResult = await cancelResponse.json();
     console.log('SMM Raja cancel result:', cancelResult);
 
+    // Verifica se houve erro na API
     if (cancelResult.error) {
       throw new Error(cancelResult.error);
     }
 
-    // Update order status
+    // Verifica se o cancelamento foi aceito
+    // cancel: 1 = aceito, cancel: false/0 = não pode ser cancelado
+    const wasCancelled = cancelResult.cancel === 1 || cancelResult.cancel === true || cancelResult.cancel === '1';
+    
+    if (!wasCancelled) {
+      throw new Error('Este pedido não pode ser cancelado. Verifique se já está em processamento.');
+    }
+
+    // Update order status only after successful cancellation
     await supabase
       .from('smm_orders')
       .update({ status: 'cancelado' })
       .eq('id', orderId);
 
-    // Refund user if applicable
-    if (cancelResult.cancel) {
+    // Refund user
+    if (wasCancelled) {
       const refundAmount = order.price_brl;
       
       // Get current wallet balance

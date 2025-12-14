@@ -68,7 +68,20 @@ serve(async (req) => {
     
     console.log('Cancel result:', cancelResult);
 
-    // Reembolsa o usuário
+    // Verifica se o cancelamento foi negado pela API
+    if (cancelResult.includes('EARLY_CANCEL_DENIED')) {
+      throw new Error('Cancelamento negado: aguarde alguns minutos antes de cancelar');
+    }
+    
+    if (cancelResult.includes('NO_ACTIVATION')) {
+      // Ativação já expirou ou não existe, só atualiza o status local
+      console.log('Activation already expired or not found, updating local status only');
+    } else if (!cancelResult.includes('ACCESS_CANCEL') && !cancelResult.includes('ACCESS_READY')) {
+      // Erro desconhecido - não prossegue com reembolso
+      throw new Error(`Erro ao cancelar na API: ${cancelResult}`);
+    }
+
+    // Reembolsa o usuário apenas se cancelamento foi aceito
     const { data: wallet } = await supabase
       .from('sms_user_wallets')
       .select('balance')
