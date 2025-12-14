@@ -8,7 +8,7 @@ const corsHeaders = {
 
 const USD_TO_BRL = 6.10;
 const PROFIT_MARGIN = 1.30;
-const PLATFORM_MARKUP = 1.10;
+const PLATFORM_MARKUP = 1.21; // 10% original + 10% adicional = 21%
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -39,7 +39,7 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    const { serviceId, serviceName, category, link, quantity, priceUsd, priceBrl } = await req.json();
+    const { serviceId, serviceName, category, link, quantity, priceUsd, priceBrl, comments } = await req.json();
 
     console.log(`Creating SMM order for user ${user.id}: service ${serviceId}, qty ${quantity}`);
 
@@ -65,18 +65,25 @@ serve(async (req) => {
     }
 
     // Create order in SMM Raja API
+    const orderPayload: any = {
+      key: smmApiKey,
+      action: 'add',
+      service: serviceId,
+      link: link,
+      quantity: quantity,
+    };
+
+    // Add comments for custom comment services
+    if (comments) {
+      orderPayload.comments = comments;
+    }
+
     const orderResponse = await fetch('https://www.smmraja.com/api/v2', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        key: smmApiKey,
-        action: 'add',
-        service: serviceId,
-        link: link,
-        quantity: quantity,
-      }),
+      body: JSON.stringify(orderPayload),
     });
 
     const orderResult = await orderResponse.json();
