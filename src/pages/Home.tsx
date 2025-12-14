@@ -181,7 +181,8 @@ const Home = () => {
 
           <div className="grid grid-cols-3 gap-3 md:gap-6">
             {systems.map((system) => {
-              const isLocked = !isFullMember && system.restricted;
+              // Only show lock after loading is complete and user is confirmed as non-member
+              const isLocked = !accessLoading && isFullMember === false && system.restricted;
               
               return (
                 <Card 
