@@ -404,28 +404,37 @@ const SMMPanel = () => {
               ) : (
                 <div className="space-y-4">
                   {/* Quick Filter Buttons */}
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap justify-center gap-3">
                     <Button
-                      variant={selectedCategory === 'Instagram Seguidores' ? 'default' : 'outline'}
+                      variant="outline"
                       size="sm"
                       onClick={() => setSelectedCategory(selectedCategory === 'Instagram Seguidores' ? 'all' : 'Instagram Seguidores')}
-                      className={selectedCategory === 'Instagram Seguidores' ? 'bg-pink-600 hover:bg-pink-700' : ''}
+                      className={selectedCategory === 'Instagram Seguidores' 
+                        ? 'border-pink-500 bg-pink-500/10 text-pink-400 hover:bg-pink-500/20' 
+                        : 'border-muted-foreground/30 hover:border-pink-500/50'
+                      }
                     >
                       📸 Instagram Seguidores
                     </Button>
                     <Button
-                      variant={selectedCategory === 'Instagram Curtidas' ? 'default' : 'outline'}
+                      variant="outline"
                       size="sm"
                       onClick={() => setSelectedCategory(selectedCategory === 'Instagram Curtidas' ? 'all' : 'Instagram Curtidas')}
-                      className={selectedCategory === 'Instagram Curtidas' ? 'bg-pink-600 hover:bg-pink-700' : ''}
+                      className={selectedCategory === 'Instagram Curtidas' 
+                        ? 'border-pink-500 bg-pink-500/10 text-pink-400 hover:bg-pink-500/20' 
+                        : 'border-muted-foreground/30 hover:border-pink-500/50'
+                      }
                     >
                       ❤️ Instagram Curtidas
                     </Button>
                     <Button
-                      variant={selectedCategory === 'Facebook Comentários' ? 'default' : 'outline'}
+                      variant="outline"
                       size="sm"
                       onClick={() => setSelectedCategory(selectedCategory === 'Facebook Comentários' ? 'all' : 'Facebook Comentários')}
-                      className={selectedCategory === 'Facebook Comentários' ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                      className={selectedCategory === 'Facebook Comentários' 
+                        ? 'border-blue-500 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20' 
+                        : 'border-muted-foreground/30 hover:border-blue-500/50'
+                      }
                     >
                       💬 Facebook Comentários
                     </Button>
@@ -564,28 +573,30 @@ const SMMPanel = () => {
                             setOrderQuantity(service.min);
                           }}
                         >
-                          <CardContent className="p-4 flex items-center justify-between">
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium truncate">{service.name}</p>
-                              <div className="flex items-center gap-2 mt-1">
-                                <Badge variant="outline" className="text-xs">
-                                  {service.categoryPt}
-                                </Badge>
-                                <span className="text-xs text-muted-foreground">
-                                  {service.min} - {service.max}
-                                </span>
-                                {service.refill && (
-                                  <Badge variant="secondary" className="text-xs bg-blue-500/20 text-blue-400">
-                                    Refill
+                          <CardContent className="p-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                              <div className="flex-1">
+                                <p className="font-medium">{service.name}</p>
+                                <div className="flex flex-wrap items-center gap-2 mt-1">
+                                  <Badge variant="outline" className="text-xs">
+                                    {service.categoryPt}
                                   </Badge>
-                                )}
+                                  <span className="text-xs text-muted-foreground">
+                                    {service.min} - {service.max}
+                                  </span>
+                                  {service.refill && (
+                                    <Badge variant="secondary" className="text-xs bg-blue-500/20 text-blue-400">
+                                      Refill
+                                    </Badge>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                            <div className="text-right ml-4">
-                              <p className="text-lg font-bold text-accent">
-                                R$ {service.priceWithMarkup.toFixed(2)}
-                              </p>
-                              <p className="text-xs text-muted-foreground">por 1000</p>
+                              <div className="text-left sm:text-right shrink-0">
+                                <p className="text-lg font-bold text-accent">
+                                  R$ {service.priceWithMarkup.toFixed(2)}
+                                </p>
+                                <p className="text-xs text-muted-foreground">por 1000</p>
+                              </div>
                             </div>
                           </CardContent>
                         </Card>
