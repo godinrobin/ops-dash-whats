@@ -34,28 +34,30 @@ const popularServices: Record<string, string> = {
   'py': 'PayPal',
 };
 
-// Países principais com bandeiras
+// Países principais com bandeiras - CÓDIGOS SÃO IDs DA API SMS-ACTIVATE, NÃO DDIs
+// Referência: https://sms-activate.io/api2 - getCountries
 const countries: Record<string, { name: string; flag: string }> = {
-  '73': { name: 'Rússia', flag: '🇷🇺' },
+  '0': { name: 'Rússia', flag: '🇷🇺' },
+  '1': { name: 'Ucrânia', flag: '🇺🇦' },
+  '2': { name: 'Cazaquistão', flag: '🇰🇿' },
+  '3': { name: 'China', flag: '🇨🇳' },
+  '4': { name: 'Filipinas', flag: '🇵🇭' },
+  '6': { name: 'Indonésia', flag: '🇮🇩' },
   '12': { name: 'Estados Unidos', flag: '🇺🇸' },
   '16': { name: 'Reino Unido', flag: '🇬🇧' },
-  '39': { name: 'Brasil', flag: '🇧🇷' },
-  '62': { name: 'Indonésia', flag: '🇮🇩' },
-  '86': { name: 'China', flag: '🇨🇳' },
-  '91': { name: 'Índia', flag: '🇮🇳' },
-  '52': { name: 'México', flag: '🇲🇽' },
-  '63': { name: 'Filipinas', flag: '🇵🇭' },
-  '84': { name: 'Vietnã', flag: '🇻🇳' },
-  '351': { name: 'Portugal', flag: '🇵🇹' },
-  '34': { name: 'Espanha', flag: '🇪🇸' },
+  '19': { name: 'Espanha', flag: '🇪🇸' },
   '33': { name: 'França', flag: '🇫🇷' },
-  '49': { name: 'Alemanha', flag: '🇩🇪' },
-  '7': { name: 'Cazaquistão', flag: '🇰🇿' },
-  '380': { name: 'Ucrânia', flag: '🇺🇦' },
-  '48': { name: 'Polônia', flag: '🇵🇱' },
-  '90': { name: 'Turquia', flag: '🇹🇷' },
-  '234': { name: 'Nigéria', flag: '🇳🇬' },
-  '27': { name: 'África do Sul', flag: '🇿🇦' },
+  '34': { name: 'México', flag: '🇲🇽' },
+  '39': { name: 'Argentina', flag: '🇦🇷' },
+  '43': { name: 'Alemanha', flag: '🇩🇪' },
+  '54': { name: 'Turquia', flag: '🇹🇷' },
+  '73': { name: 'Brasil', flag: '🇧🇷' },
+  '77': { name: 'Índia', flag: '🇮🇳' },
+  '84': { name: 'Vietnã', flag: '🇻🇳' },
+  '117': { name: 'Portugal', flag: '🇵🇹' },
+  '15': { name: 'Polônia', flag: '🇵🇱' },
+  '53': { name: 'Nigéria', flag: '🇳🇬' },
+  '31': { name: 'África do Sul', flag: '🇿🇦' },
 };
 
 serve(async (req) => {
