@@ -30,6 +30,8 @@ const SYSTEMS = [
   { id: "transcricao-audio", name: "Transcrição de Áudio", emoji: "📝", route: "/transcricao-audio" },
   { id: "zap-spy", name: "Zap Spy", emoji: "🔍", route: "/zap-spy" },
   { id: "tag-whats", name: "Tag Whats", emoji: "📲", route: "/tag-whats" },
+  { id: "painel-marketing", name: "Painel Marketing", emoji: "📈", route: "/smm-panel" },
+  { id: "numeros-virtuais", name: "Números Virtuais", emoji: "📞", route: "/sms-bot" },
 ];
 
 export const AnnouncementPopup = () => {
