@@ -21,6 +21,32 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { MarketplaceProductModal } from "@/components/MarketplaceProductModal";
 
+// Product image imports for admin
+import bmVerificadaImg from "@/assets/bm-verificada.png";
+import bmSimplesImg from "@/assets/bm-simples.png";
+import perfilAntigoRealImg from "@/assets/perfil-antigo-real.png";
+import perfilComumImg from "@/assets/perfil-comum.png";
+import perfilReestabelecidoImg from "@/assets/perfil-reestabelecido.png";
+import perfilVerificadoImg from "@/assets/perfil-verificado.png";
+import comboMasterImg from "@/assets/combo-master.png";
+import comboDiamondImg from "@/assets/combo-diamond.png";
+
+const ADMIN_IMAGE_MAP: Record<string, string> = {
+  "/assets/bm-verificada.png": bmVerificadaImg,
+  "/assets/bm-simples.png": bmSimplesImg,
+  "/assets/perfil-antigo-real.png": perfilAntigoRealImg,
+  "/assets/perfil-comum.png": perfilComumImg,
+  "/assets/perfil-reestabelecido.png": perfilReestabelecidoImg,
+  "/assets/perfil-verificado.png": perfilVerificadoImg,
+  "/assets/combo-master.png": comboMasterImg,
+  "/assets/combo-diamond.png": comboDiamondImg,
+};
+
+const getAdminProductImage = (imageUrl: string | null) => {
+  if (!imageUrl) return "";
+  return ADMIN_IMAGE_MAP[imageUrl] || imageUrl;
+};
+
 type AdminOfferStatus = 'minerada' | 'ruim' | 'boa' | null;
 type AnnouncementRedirectType = 'none' | 'custom_link' | 'system';
 
@@ -1823,7 +1849,7 @@ const AdminPanelNew = () => {
                     <div className="w-full h-40 bg-secondary overflow-hidden">
                       {product.image_url ? (
                         <img 
-                          src={product.image_url} 
+                          src={getAdminProductImage(product.image_url)} 
                           alt={product.name} 
                           className="w-full h-full object-cover"
                           onError={(e) => {
