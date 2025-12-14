@@ -46,21 +46,25 @@ serve(async (req) => {
       throw new Error('Valor máximo: R$ 1.000,00');
     }
 
-    // Validate and sanitize email - Mercado Pago requires strict email format
-    let userEmail = user.email?.trim().toLowerCase();
+    // Mercado Pago requires valid internet email - .local domains are not accepted
+    // Always use a deterministic fallback email based on user ID for payment processing
+    const userEmailRaw = user.email?.trim().toLowerCase() || '';
     
-    console.log(`User ${user.id} email: "${userEmail}"`);
+    console.log(`User ${user.id} original email: "${userEmailRaw}"`);
     
-    // Email regex validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!userEmail || !emailRegex.test(userEmail)) {
-      console.error(`Invalid email format: "${userEmail}"`);
-      // Use a valid fallback email for payment processing
-      userEmail = `user_${user.id.substring(0, 8)}@pagamento.zapdata.com.br`;
-      console.log(`Using fallback email: ${userEmail}`);
+    // Check for valid internet email (excludes .local, .test, .invalid, etc.)
+    const validInternetEmailRegex = /^[^\s@]+@[^\s@]+\.(com|com\.br|net|org|io|app|dev|co|me|info|biz|edu|gov)(\.[a-z]{2})?$/i;
+    
+    let payerEmail: string;
+    if (validInternetEmailRegex.test(userEmailRaw)) {
+      payerEmail = userEmailRaw;
+    } else {
+      // Use fallback email for payment processing (user's real email is stored in auth)
+      payerEmail = `pagamento.${user.id.substring(0, 8)}@zapdata.app`;
+      console.log(`Using fallback email for payment: ${payerEmail}`);
     }
     
-    console.log(`User ${user.id} creating PIX charge for R$ ${amount} with email: ${userEmail}`);
+    console.log(`User ${user.id} creating PIX charge for R$ ${amount} with payer email: ${payerEmail}`);
 
     // Cria pagamento PIX no Mercado Pago
     const paymentResponse = await fetch('https://api.mercadopago.com/v1/payments', {
@@ -75,7 +79,7 @@ serve(async (req) => {
         payment_method_id: 'pix',
         description: `Recarga Números Virtuais - R$ ${amount.toFixed(2)}`,
         payer: {
-          email: userEmail,
+          email: payerEmail,
         },
       }),
     });
