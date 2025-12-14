@@ -93,7 +93,19 @@ serve(async (req) => {
       throw new Error('SMS_ACTIVATE_API_KEY não configurada');
     }
 
-    const { action, country } = await req.json();
+    let action = '';
+    let country = '73';
+    
+    try {
+      const body = await req.json();
+      action = body.action || '';
+      country = body.country || '73';
+    } catch {
+      // If no body or invalid JSON, return empty response for prefetch
+      return new Response(JSON.stringify({ prefetch: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     if (action === 'getCountries') {
       const countryList = Object.entries(countries).map(([code, data]) => ({
