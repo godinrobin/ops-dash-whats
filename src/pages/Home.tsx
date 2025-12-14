@@ -5,9 +5,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import Autoplay from "embla-carousel-autoplay";
 import Marketplace from "./Marketplace";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Home = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const autoplayPlugin = useRef(
     Autoplay({ delay: 3000, stopOnInteraction: true })
   );
@@ -22,6 +25,20 @@ const Home = () => {
   useEffect(() => {
     localStorage.setItem("homeMode", mode);
   }, [mode]);
+
+  // Pre-load marketplace data in background when user is on sistemas mode
+  useEffect(() => {
+    if (user && mode === "sistemas") {
+      // Pre-load marketplace products
+      supabase.from("marketplace_products").select("*").then(() => {});
+      // Pre-load wallet balance
+      supabase.from("sms_user_wallets").select("balance").eq("user_id", user.id).maybeSingle().then(() => {});
+      // Pre-load SMSBot services
+      supabase.functions.invoke("sms-get-services").then(() => {});
+      // Pre-load SMM services
+      supabase.functions.invoke("smm-get-services").then(() => {});
+    }
+  }, [user, mode]);
 
   const videos = [
     { id: "81hMbGdBQd0", name: "COMO CRIAR ENTREGÁVEL COM IA" },
