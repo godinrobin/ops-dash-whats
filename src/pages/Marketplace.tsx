@@ -407,17 +407,45 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
               </Button>
 
               <div className="grid md:grid-cols-2 gap-6">
-                {/* Product Image */}
-                <div className="rounded-xl overflow-hidden border-2 border-accent/30 self-start">
-                  <img 
-                    src={getProductImage(selectedProduct.image_url)} 
-                    alt={selectedProduct.name}
-                    className="w-full h-auto block"
-                    style={{ transform: 'scaleX(1.05)', transformOrigin: 'left' }}
-                  />
+                {/* Product Image + Description */}
+                <div className="space-y-4">
+                  <div className="rounded-xl overflow-hidden border-2 border-accent/30">
+                    <img 
+                      src={getProductImage(selectedProduct.image_url)} 
+                      alt={selectedProduct.name}
+                      className="w-full h-auto block"
+                      style={{ transform: 'scaleX(1.05)', transformOrigin: 'left' }}
+                    />
+                  </div>
+                  
+                  {/* Description - right below image */}
+                  <div>
+                    <h3 className="text-lg font-bold mb-3">Descrição do produto</h3>
+                    <div className="whitespace-pre-wrap text-muted-foreground">
+                      {selectedProduct.description}
+                    </div>
+
+                    <div className="mt-4 space-y-4">
+                      <div className="p-4 bg-secondary rounded-lg">
+                        <h4 className="font-bold mb-2">📦 Como eu recebo meu ativo?</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Após a compra do ativo, aparecerá um pop up para você inserir seus dados, 
+                          e entraremos em contato com você imediatamente para entrega do seu ativo.
+                        </p>
+                      </div>
+
+                      <div className="p-4 bg-secondary rounded-lg">
+                        <h4 className="font-bold mb-2">🛡️ Política de Garantia</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Caso ao logar em algum ativo, e ele já esteja bloqueado, 
+                          iremos te disponibilizar um novo ativo imediatamente.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Product Info */}
+                {/* Product Info + Specs */}
                 <div className="space-y-4">
                   <h2 className="text-2xl font-bold">{selectedProduct.name}</h2>
                   
@@ -504,54 +532,27 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
                       <span>Pagamento via PIX</span>
                     </div>
                   </div>
-                </div>
-              </div>
 
-              {/* Description - closer to image */}
-              <div className="grid md:grid-cols-2 gap-6 -mt-4">
-                <div>
-                  <h3 className="text-lg font-bold mb-3">Descrição do produto</h3>
-                  <div className="whitespace-pre-wrap text-muted-foreground">
-                    {selectedProduct.description}
-                  </div>
-
-                  <div className="mt-4 space-y-4">
-                    <div className="p-4 bg-secondary rounded-lg">
-                      <h4 className="font-bold mb-2">📦 Como eu recebo meu ativo?</h4>
-                      <p className="text-sm text-muted-foreground">
-                        Após a compra do ativo, aparecerá um pop up para você inserir seus dados, 
-                        e entraremos em contato com você imediatamente para entrega do seu ativo.
-                      </p>
-                    </div>
-
-                    <div className="p-4 bg-secondary rounded-lg">
-                      <h4 className="font-bold mb-2">🛡️ Política de Garantia</h4>
-                      <p className="text-sm text-muted-foreground">
-                        Caso ao logar em algum ativo, e ele já esteja bloqueado, 
-                        iremos te disponibilizar um novo ativo imediatamente.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-lg font-bold mb-3">Especificações do Ativo</h3>
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-green-500" />
-                      <span>Ativo digital premium</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-green-500" />
-                      <span>Entrega em até 12h</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-green-500" />
-                      <span>Suporte incluso</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-green-500" />
-                      <span>Pronto para uso</span>
+                  {/* Specifications */}
+                  <div className="pt-4">
+                    <h3 className="text-lg font-bold mb-3">Especificações do Ativo</h3>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Check className="h-4 w-4 text-green-500" />
+                        <span>Ativo digital premium</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Check className="h-4 w-4 text-green-500" />
+                        <span>Entrega em até 12h</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Check className="h-4 w-4 text-green-500" />
+                        <span>Suporte incluso</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Check className="h-4 w-4 text-green-500" />
+                        <span>Pronto para uso</span>
+                      </div>
                     </div>
                   </div>
                 </div>
