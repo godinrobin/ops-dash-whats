@@ -385,8 +385,8 @@ const SMMPanel = () => {
                       size="sm"
                       onClick={() => setSelectedCategory(selectedCategory === 'Instagram Seguidores' ? 'all' : 'Instagram Seguidores')}
                       className={selectedCategory === 'Instagram Seguidores' 
-                        ? 'border-pink-500 bg-pink-500/10 text-pink-400 hover:bg-pink-500/20' 
-                        : 'border-muted-foreground/30 hover:border-pink-500/50'
+                        ? 'border-accent bg-accent/10 text-accent hover:bg-accent/20' 
+                        : 'border-accent/30 hover:border-accent/50'
                       }
                     >
                       📸 Instagram Seguidores
@@ -396,8 +396,8 @@ const SMMPanel = () => {
                       size="sm"
                       onClick={() => setSelectedCategory(selectedCategory === 'Instagram Curtidas' ? 'all' : 'Instagram Curtidas')}
                       className={selectedCategory === 'Instagram Curtidas' 
-                        ? 'border-pink-500 bg-pink-500/10 text-pink-400 hover:bg-pink-500/20' 
-                        : 'border-muted-foreground/30 hover:border-pink-500/50'
+                        ? 'border-accent bg-accent/10 text-accent hover:bg-accent/20' 
+                        : 'border-accent/30 hover:border-accent/50'
                       }
                     >
                       ❤️ Instagram Curtidas
@@ -407,11 +407,22 @@ const SMMPanel = () => {
                       size="sm"
                       onClick={() => setSelectedCategory(selectedCategory === 'Facebook Comentários' ? 'all' : 'Facebook Comentários')}
                       className={selectedCategory === 'Facebook Comentários' 
-                        ? 'border-blue-500 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20' 
-                        : 'border-muted-foreground/30 hover:border-blue-500/50'
+                        ? 'border-accent bg-accent/10 text-accent hover:bg-accent/20' 
+                        : 'border-accent/30 hover:border-accent/50'
                       }
                     >
                       💬 Facebook Comentários
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedCategory(selectedCategory === 'Facebook Curtidas de Post' ? 'all' : 'Facebook Curtidas de Post')}
+                      className={selectedCategory === 'Facebook Curtidas de Post' 
+                        ? 'border-accent bg-accent/10 text-accent hover:bg-accent/20' 
+                        : 'border-accent/30 hover:border-accent/50'
+                      }
+                    >
+                      👍 Facebook Curtidas de Post
                     </Button>
                   </div>
 
