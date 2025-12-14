@@ -408,11 +408,11 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
 
               <div className="grid md:grid-cols-2 gap-6">
                 {/* Product Image */}
-                <div className="rounded-xl overflow-hidden border-2 border-accent/30">
+                <div className="rounded-xl overflow-hidden border-2 border-accent/30 self-start">
                   <img 
                     src={getProductImage(selectedProduct.image_url)} 
                     alt={selectedProduct.name}
-                    className="w-full h-auto object-contain"
+                    className="w-full h-auto block"
                   />
                 </div>
 
