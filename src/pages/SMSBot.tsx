@@ -6,11 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Copy, RefreshCw, Search, X, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { Loader2, Copy, RefreshCw, Search, X, CheckCircle2, Clock, XCircle, Wallet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
+import { RechargeModal } from "@/components/RechargeModal";
 
 interface Country {
   code: string;
@@ -21,7 +22,7 @@ interface Country {
 interface Service {
   code: string;
   name: string;
-  priceRub: number;
+  priceUsd: number;
   priceBrl: number;
   available: number;
 }
@@ -58,6 +59,7 @@ const SMSBot = () => {
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [buyingService, setBuyingService] = useState<string | null>(null);
   const [pollingOrders, setPollingOrders] = useState<Set<string>>(new Set());
+  const [showRechargeModal, setShowRechargeModal] = useState(false);
 
   // Carrega saldo do usuário
   const loadBalance = useCallback(async () => {
@@ -286,11 +288,30 @@ const SMSBot = () => {
                 <p className="text-sm text-muted-foreground">Seu saldo</p>
                 <p className="text-2xl font-bold text-accent">R$ {balance.toFixed(2)}</p>
               </div>
-              <Button variant="outline" size="sm" onClick={loadBalance}>
-                <RefreshCw className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button 
+                  onClick={() => setShowRechargeModal(true)}
+                  className="bg-accent text-accent-foreground hover:bg-accent/90"
+                >
+                  <Wallet className="h-4 w-4 mr-2" />
+                  Recarregar
+                </Button>
+                <Button variant="outline" size="icon" onClick={loadBalance}>
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
             </CardContent>
           </Card>
+
+          {/* Modal de Recarga */}
+          <RechargeModal
+            open={showRechargeModal}
+            onOpenChange={setShowRechargeModal}
+            onSuccess={(newBalance) => {
+              setBalance(newBalance);
+              setShowRechargeModal(false);
+            }}
+          />
 
           <Tabs defaultValue="buy" className="space-y-4">
             <TabsList className="grid w-full grid-cols-2">

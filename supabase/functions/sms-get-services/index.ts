@@ -5,9 +5,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Taxa de conversão RUB para BRL (aproximada) + margem de lucro
-const RUB_TO_BRL = 0.055; // 1 RUB = ~0.055 BRL
-const PROFIT_MARGIN = 1.5; // 50% de margem
+// Taxa de conversão USD para BRL (aproximada) + margem de lucro
+// A API SMS-Activate retorna preços em USD, não em RUB
+const USD_TO_BRL = 6.10; // 1 USD = ~6.10 BRL
+const PROFIT_MARGIN = 1.30; // 30% de margem
 
 // Serviços mais populares com nomes em português
 const popularServices: Record<string, string> = {
@@ -103,7 +104,7 @@ serve(async (req) => {
       const services: Array<{
         code: string;
         name: string;
-        priceRub: number;
+        priceUsd: number;
         priceBrl: number;
         available: number;
       }> = [];
@@ -112,17 +113,17 @@ serve(async (req) => {
       if (countryData) {
         for (const [serviceCode, serviceData] of Object.entries(countryData)) {
           const sData = serviceData as { cost: number; count: number };
-          const priceRub = sData.cost;
+          const priceUsd = sData.cost;
           const available = sData.count;
           
           // Só adiciona se tiver números disponíveis
           if (available > 0) {
-            const priceBrl = Math.ceil(priceRub * RUB_TO_BRL * PROFIT_MARGIN * 100) / 100;
+            const priceBrl = Math.ceil(priceUsd * USD_TO_BRL * PROFIT_MARGIN * 100) / 100;
             
             services.push({
               code: serviceCode,
               name: popularServices[serviceCode] || serviceCode.toUpperCase(),
-              priceRub,
+              priceUsd,
               priceBrl,
               available,
             });
