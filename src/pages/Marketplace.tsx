@@ -9,13 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { 
   Wallet, Phone, BarChart3, ShoppingBag, ArrowLeft, Shield, Truck, CreditCard, 
-  Check, Minus, Plus, Clock, HeadphonesIcon, Star, X, Copy, Loader2
+  Check, Minus, Plus, Clock, X, Loader2
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
 import { RechargeModal } from "@/components/RechargeModal";
+import { InsufficientBalanceModal } from "@/components/InsufficientBalanceModal";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 
 // Import product images
@@ -27,6 +27,10 @@ import perfilReestabelecidoImg from "@/assets/perfil-reestabelecido.png";
 import perfilVerificadoImg from "@/assets/perfil-verificado.png";
 import comboMasterImg from "@/assets/combo-master.png";
 import comboDiamondImg from "@/assets/combo-diamond.png";
+
+// Import the actual pages for embedding
+import SMSBot from "@/pages/SMSBot";
+import SMMPanel from "@/pages/SMMPanel";
 
 interface MarketplaceProduct {
   id: string;
@@ -60,7 +64,6 @@ interface MarketplaceProps {
 
 const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
   const { user } = useAuth();
-  const navigate = useNavigate();
   useActivityTracker("marketplace", "Marketplace");
 
   const [activeTab, setActiveTab] = useState("numeros-virtuais");
@@ -74,6 +77,10 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
   const [selectedProduct, setSelectedProduct] = useState<MarketplaceProduct | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [purchasing, setPurchasing] = useState(false);
+
+  // Insufficient balance modal
+  const [insufficientBalanceOpen, setInsufficientBalanceOpen] = useState(false);
+  const [requiredAmount, setRequiredAmount] = useState(0);
 
   // Purchase success modal
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
@@ -141,7 +148,8 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
     const totalPrice = selectedProduct.price * quantity;
     
     if (balance < totalPrice) {
-      toast.error("Saldo insuficiente. Recarregue sua carteira.");
+      setRequiredAmount(totalPrice);
+      setInsufficientBalanceOpen(true);
       return;
     }
 
@@ -246,8 +254,7 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
         <img 
           src={getProductImage(product.image_url)} 
           alt={product.name}
-          className="w-full h-full object-cover object-top rounded-t-lg"
-          style={{ marginLeft: '-5%', marginRight: '-5%', width: '110%' }}
+          className="w-full h-full object-contain rounded-t-lg"
         />
         {product.is_sold_out && (
           <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
@@ -339,34 +346,12 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="numeros-virtuais">
-              <Card className="border-accent/30">
-                <CardContent className="p-6 text-center">
-                  <Phone className="h-16 w-16 mx-auto text-accent mb-4" />
-                  <h3 className="text-xl font-bold mb-2">Números Virtuais</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Compre números virtuais para receber SMS de verificação
-                  </p>
-                  <Button onClick={() => navigate("/sms-bot")} className="bg-accent hover:bg-accent/90">
-                    Acessar Números Virtuais
-                  </Button>
-                </CardContent>
-              </Card>
+            <TabsContent value="numeros-virtuais" className="-mx-4 md:-mx-6 -mb-4 md:-mb-6">
+              <SMSBotEmbed />
             </TabsContent>
 
-            <TabsContent value="painel-marketing">
-              <Card className="border-accent/30">
-                <CardContent className="p-6 text-center">
-                  <BarChart3 className="h-16 w-16 mx-auto text-accent mb-4" />
-                  <h3 className="text-xl font-bold mb-2">Painel Marketing</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Compre seguidores, curtidas e visualizações para suas redes sociais
-                  </p>
-                  <Button onClick={() => navigate("/smm-panel")} className="bg-accent hover:bg-accent/90">
-                    Acessar Painel Marketing
-                  </Button>
-                </CardContent>
-              </Card>
+            <TabsContent value="painel-marketing" className="-mx-4 md:-mx-6 -mb-4 md:-mb-6">
+              <SMMPanelEmbed />
             </TabsContent>
 
             <TabsContent value="ativos">
@@ -410,7 +395,7 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
       <Dialog open={!!selectedProduct} onOpenChange={(open) => !open && setSelectedProduct(null)}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-background border-accent">
           {selectedProduct && (
-            <div className="space-y-6">
+            <div className="space-y-4">
               <Button
                 variant="ghost"
                 onClick={() => setSelectedProduct(null)}
@@ -426,8 +411,7 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
                   <img 
                     src={getProductImage(selectedProduct.image_url)} 
                     alt={selectedProduct.name}
-                    className="w-full h-auto object-cover rounded-lg"
-                    style={{ marginLeft: '-3%', width: '106%' }}
+                    className="w-full h-auto object-contain rounded-lg"
                   />
                 </div>
 
@@ -458,9 +442,6 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
                     <Badge variant="outline" className="text-green-500 border-green-500">
                       <Check className="h-3 w-3 mr-1" />
                       {selectedProduct.stock} disponíveis
-                    </Badge>
-                    <Badge variant="outline" className="text-accent border-accent">
-                      📈 {selectedProduct.sold_count} vendidos
                     </Badge>
                   </div>
 
@@ -524,15 +505,15 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
                 </div>
               </div>
 
-              {/* Description */}
-              <div className="grid md:grid-cols-2 gap-6">
+              {/* Description - closer to image */}
+              <div className="grid md:grid-cols-2 gap-6 mt-2">
                 <div>
                   <h3 className="text-lg font-bold mb-3">Descrição do produto</h3>
                   <div className="whitespace-pre-wrap text-muted-foreground">
                     {selectedProduct.description}
                   </div>
 
-                  <div className="mt-6 space-y-4">
+                  <div className="mt-4 space-y-4">
                     <div className="p-4 bg-secondary rounded-lg">
                       <h4 className="font-bold mb-2">📦 Como eu recebo meu ativo?</h4>
                       <p className="text-sm text-muted-foreground">
@@ -592,7 +573,7 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
                           <img 
                             src={getProductImage(p.image_url)} 
                             alt={p.name}
-                            className="w-full h-full object-cover object-top"
+                            className="w-full h-full object-contain"
                           />
                         </div>
                         <CardContent className="p-3">
@@ -689,12 +670,536 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
         </DialogContent>
       </Dialog>
 
+      {/* Insufficient Balance Modal */}
+      <InsufficientBalanceModal
+        open={insufficientBalanceOpen}
+        onOpenChange={setInsufficientBalanceOpen}
+        onRecharge={() => setRechargeOpen(true)}
+        requiredAmount={requiredAmount}
+        currentBalance={balance}
+      />
+
       <RechargeModal 
         open={rechargeOpen} 
         onOpenChange={setRechargeOpen}
         onSuccess={(newBalance) => setBalance(newBalance)}
       />
     </>
+  );
+};
+
+// Embedded SMS Bot component (without header and wallet)
+const SMSBotEmbed = () => {
+  const { user } = useAuth();
+  const [countries, setCountries] = useState<any[]>([]);
+  const [selectedCountry, setSelectedCountry] = useState<any>(null);
+  const [services, setServices] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [loadingCountries, setLoadingCountries] = useState(true);
+  const [loadingServices, setLoadingServices] = useState(false);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+  const [buyingService, setBuyingService] = useState<string | null>(null);
+  const [pollingOrders, setPollingOrders] = useState<Set<string>>(new Set());
+  const [serviceQuantities, setServiceQuantities] = useState<Record<string, number>>({});
+  const [activeSubTab, setActiveSubTab] = useState("buy");
+
+  useEffect(() => {
+    loadCountries();
+    loadOrders();
+  }, [user]);
+
+  useEffect(() => {
+    if (selectedCountry) {
+      loadServices(selectedCountry.code);
+    }
+  }, [selectedCountry]);
+
+  const loadCountries = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('sms-get-services', {
+        body: { action: 'getCountries' }
+      });
+      if (error) throw error;
+      setCountries(data.countries || []);
+      const brazil = data.countries?.find((c: any) => c.code === '73');
+      if (brazil) setSelectedCountry(brazil);
+    } catch (err) {
+      console.error('Error loading countries:', err);
+    } finally {
+      setLoadingCountries(false);
+    }
+  };
+
+  const loadServices = async (countryCode: string) => {
+    setLoadingServices(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('sms-get-services', {
+        body: { action: 'getServices', country: countryCode }
+      });
+      if (error) throw error;
+      setServices(data.services || []);
+    } catch (err) {
+      console.error('Error loading services:', err);
+    } finally {
+      setLoadingServices(false);
+    }
+  };
+
+  const loadOrders = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('sms_orders')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    setOrders(data || []);
+    setLoadingOrders(false);
+  };
+
+  const updateQuantity = (serviceCode: string, quantity: number) => {
+    setServiceQuantities(prev => ({ ...prev, [serviceCode]: Math.max(1, quantity) }));
+  };
+  const getQuantity = (serviceCode: string) => serviceQuantities[serviceCode] || 1;
+
+  const buyNumber = async (service: any) => {
+    if (!selectedCountry) return;
+    const quantity = getQuantity(service.code);
+    if (quantity > service.available) {
+      toast.error(`Apenas ${service.available} números disponíveis`);
+      return;
+    }
+    setBuyingService(service.code);
+    try {
+      const { data, error } = await supabase.functions.invoke('sms-buy-number', {
+        body: { serviceCode: service.code, serviceName: service.name, country: selectedCountry.code, quantity }
+      });
+      if (error) throw error;
+      if (data.error) {
+        toast.error(data.error);
+        return;
+      }
+      toast.success(quantity > 1 ? `${quantity} números adquiridos!` : "Número adquirido!");
+      setServiceQuantities(prev => ({ ...prev, [service.code]: 1 }));
+      loadOrders();
+      setActiveSubTab("orders");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao comprar número");
+    } finally {
+      setBuyingService(null);
+    }
+  };
+
+  const checkStatus = async (order: any) => {
+    setPollingOrders(prev => new Set(prev).add(order.id));
+    try {
+      const { data } = await supabase.functions.invoke('sms-check-status', {
+        body: { orderId: order.id, smsActivateId: order.sms_activate_id }
+      });
+      if (data?.status === 'received') {
+        toast.success("SMS recebido!");
+        loadOrders();
+      }
+    } finally {
+      setPollingOrders(prev => { const n = new Set(prev); n.delete(order.id); return n; });
+    }
+  };
+
+  const cancelOrder = async (order: any) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('sms-cancel-order', {
+        body: { orderId: order.id, smsActivateId: order.sms_activate_id }
+      });
+      if (error) throw error;
+      if (!data.success) {
+        toast.error(data.error || "Erro ao cancelar");
+        return;
+      }
+      toast.success(`Cancelado. Reembolso: R$ ${data.refundAmount.toFixed(2)}`);
+      loadOrders();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao cancelar");
+    }
+  };
+
+  const filteredServices = services.filter(s => 
+    s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    s.code.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  return (
+    <div className="p-4 md:p-6">
+      <Tabs value={activeSubTab} onValueChange={setActiveSubTab}>
+        <TabsList className="grid w-full grid-cols-2 mb-4">
+          <TabsTrigger value="buy">Comprar Número</TabsTrigger>
+          <TabsTrigger value="orders">
+            Meus Pedidos
+            {orders.filter(o => o.status === 'waiting_sms').length > 0 && (
+              <Badge className="ml-2 bg-accent">{orders.filter(o => o.status === 'waiting_sms').length}</Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="buy" className="space-y-4">
+          <Card className="border-border">
+            <CardContent className="p-4">
+              <h3 className="font-bold mb-3">1. Escolha o país</h3>
+              {loadingCountries ? (
+                <div className="flex justify-center p-4"><Loader2 className="h-6 w-6 animate-spin" /></div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {countries.map(country => (
+                    <Button
+                      key={country.code}
+                      variant={selectedCountry?.code === country.code ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setSelectedCountry(country)}
+                      className={selectedCountry?.code === country.code ? "bg-accent" : ""}
+                    >
+                      {country.flag} {country.name}
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardContent className="p-4">
+              <h3 className="font-bold mb-3">2. Escolha o serviço</h3>
+              <Input
+                placeholder="Buscar serviço..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="mb-3"
+              />
+              {loadingServices ? (
+                <div className="flex justify-center p-4"><Loader2 className="h-6 w-6 animate-spin" /></div>
+              ) : (
+                <div className="max-h-[400px] overflow-y-auto space-y-2">
+                  {filteredServices.map(service => {
+                    const quantity = getQuantity(service.code);
+                    const displayPrice = service.priceWithMarkup ?? service.priceBrl ?? 0;
+                    return (
+                      <div key={service.code} className="flex items-center justify-between p-3 rounded-lg border border-border hover:border-accent">
+                        <div>
+                          <p className="font-medium">{service.name}</p>
+                          <p className="text-sm text-muted-foreground">{service.available} disponíveis</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="bg-accent/20 text-accent">R$ {displayPrice.toFixed(2)}</Badge>
+                          <div className="flex items-center gap-1">
+                            <Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={() => updateQuantity(service.code, quantity - 1)} disabled={quantity <= 1}>-</Button>
+                            <span className="w-8 text-center">{quantity}</span>
+                            <Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={() => updateQuantity(service.code, quantity + 1)} disabled={quantity >= service.available}>+</Button>
+                          </div>
+                          <Button size="sm" onClick={() => buyNumber(service)} disabled={buyingService === service.code} className="bg-green-600 hover:bg-green-700">
+                            {buyingService === service.code ? <Loader2 className="h-4 w-4 animate-spin" /> : "Comprar"}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="orders">
+          <Card className="border-border">
+            <CardContent className="p-4">
+              {loadingOrders ? (
+                <div className="flex justify-center p-4"><Loader2 className="h-6 w-6 animate-spin" /></div>
+              ) : orders.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">Nenhum pedido encontrado</p>
+              ) : (
+                <div className="space-y-3">
+                  {orders.map(order => (
+                    <div key={order.id} className="p-3 rounded-lg border border-border">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <p className="font-medium">{order.service_name}</p>
+                          <p className="text-lg font-mono">{order.phone_number || "Aguardando..."}</p>
+                        </div>
+                        <Badge className={order.status === 'received' ? 'bg-green-500' : order.status === 'waiting_sms' ? 'bg-yellow-500' : 'bg-muted'}>
+                          {order.status}
+                        </Badge>
+                      </div>
+                      {order.sms_code && (
+                        <div className="bg-green-500/20 p-2 rounded mb-2">
+                          <p className="text-sm text-muted-foreground">Código SMS:</p>
+                          <p className="text-xl font-bold text-green-500">{order.sms_code}</p>
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        {order.status === 'waiting_sms' && (
+                          <>
+                            <Button size="sm" variant="outline" onClick={() => checkStatus(order)} disabled={pollingOrders.has(order.id)}>
+                              {pollingOrders.has(order.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verificar"}
+                            </Button>
+                            <Button size="sm" variant="destructive" onClick={() => cancelOrder(order)}>Cancelar</Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+};
+
+// Embedded SMM Panel component (without header and wallet)
+const SMMPanelEmbed = () => {
+  const { user } = useAuth();
+  const [services, setServices] = useState<any[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [orderLink, setOrderLink] = useState("");
+  const [orderQuantity, setOrderQuantity] = useState<number>(100);
+  const [selectedService, setSelectedService] = useState<any>(null);
+  const [purchasing, setPurchasing] = useState(false);
+  const [customComments, setCustomComments] = useState("");
+  const [activeSubTab, setActiveSubTab] = useState("services");
+
+  useEffect(() => {
+    fetchServices();
+    fetchOrders();
+  }, [user]);
+
+  const fetchServices = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const response = await supabase.functions.invoke('smm-get-services', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (response.data?.success) {
+        setServices(response.data.services);
+        setCategories(response.data.categoriesPt);
+      }
+    } catch (err) {
+      console.error('Error fetching services:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchOrders = async () => {
+    if (!user) return;
+    setLoadingOrders(true);
+    const { data } = await supabase
+      .from('smm_orders')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+    setOrders(data || []);
+    setLoadingOrders(false);
+  };
+
+  const requiresCustomComments = (service: any) => {
+    if (!service) return false;
+    const name = service.nameOriginal?.toLowerCase() || service.name.toLowerCase();
+    return name.includes('custom comment') || name.includes('personalizado');
+  };
+
+  const getCommentsCount = () => customComments.split('\n').filter(line => line.trim()).length;
+
+  const handlePurchase = async () => {
+    if (!selectedService || !orderLink || !orderQuantity) {
+      toast.error("Preencha todos os campos");
+      return;
+    }
+    if (orderQuantity < selectedService.min || orderQuantity > selectedService.max) {
+      toast.error(`Quantidade entre ${selectedService.min} e ${selectedService.max}`);
+      return;
+    }
+    if (requiresCustomComments(selectedService) && getCommentsCount() !== orderQuantity) {
+      toast.error(`Insira exatamente ${orderQuantity} comentários`);
+      return;
+    }
+
+    setPurchasing(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Não autenticado');
+      const priceUsd = (selectedService.rateUsd / 1000) * orderQuantity;
+      const priceBrl = (selectedService.priceWithMarkup / 1000) * orderQuantity;
+      const body: any = {
+        serviceId: selectedService.id,
+        serviceName: selectedService.name,
+        category: selectedService.category,
+        link: orderLink,
+        quantity: orderQuantity,
+        priceUsd,
+        priceBrl,
+      };
+      if (requiresCustomComments(selectedService) && customComments.trim()) {
+        body.comments = customComments;
+      }
+      const response = await supabase.functions.invoke('smm-create-order', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body,
+      });
+      if (response.data?.success) {
+        toast.success("Pedido criado!");
+        setSelectedService(null);
+        setOrderLink("");
+        setOrderQuantity(100);
+        setCustomComments("");
+        fetchOrders();
+        setActiveSubTab("orders");
+      } else {
+        throw new Error(response.data?.error);
+      }
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setPurchasing(false);
+    }
+  };
+
+  const filteredServices = services.filter(s => {
+    const matchesCategory = selectedCategory === "all" || s.categoryPt === selectedCategory;
+    const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
+  return (
+    <div className="p-4 md:p-6">
+      <Tabs value={activeSubTab} onValueChange={setActiveSubTab}>
+        <TabsList className="grid w-full grid-cols-2 mb-4">
+          <TabsTrigger value="services">Serviços</TabsTrigger>
+          <TabsTrigger value="orders">Meus Pedidos</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="services">
+          {loading ? (
+            <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-accent" /></div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex flex-col md:flex-row gap-3">
+                <Input
+                  placeholder="Buscar serviço..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="flex-1"
+                />
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="bg-background border border-border rounded-md px-3 py-2"
+                >
+                  <option value="all">Todas as categorias</option>
+                  {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                </select>
+              </div>
+
+              {selectedService && (
+                <Card className="border-green-500/50 bg-green-500/5">
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex justify-between">
+                      <div>
+                        <p className="font-bold">{selectedService.name}</p>
+                        <Badge variant="secondary">{selectedService.categoryPt}</Badge>
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedService(null)}><X className="h-4 w-4" /></Button>
+                    </div>
+                    <Input placeholder="Cole o link aqui" value={orderLink} onChange={(e) => setOrderLink(e.target.value)} />
+                    <Input type="number" placeholder="Quantidade" value={orderQuantity} onChange={(e) => setOrderQuantity(parseInt(e.target.value))} min={selectedService.min} max={selectedService.max} />
+                    {requiresCustomComments(selectedService) && (
+                      <textarea
+                        placeholder={`Insira ${orderQuantity} comentários, um por linha`}
+                        value={customComments}
+                        onChange={(e) => setCustomComments(e.target.value)}
+                        className="w-full bg-background border border-border rounded-md p-2 min-h-[100px]"
+                      />
+                    )}
+                    <div className="flex justify-between items-center">
+                      <p className="font-bold text-accent">Total: R$ {((selectedService.priceWithMarkup / 1000) * orderQuantity).toFixed(2)}</p>
+                      <Button onClick={handlePurchase} disabled={purchasing} className="bg-green-600 hover:bg-green-700">
+                        {purchasing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                        Comprar
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              <div className="max-h-[500px] overflow-y-auto space-y-2">
+                {filteredServices.map(service => (
+                  <div
+                    key={service.id}
+                    className="p-3 rounded-lg border border-border hover:border-accent cursor-pointer"
+                    onClick={() => {
+                      setSelectedService(service);
+                      setOrderQuantity(service.min);
+                    }}
+                  >
+                    <div className="flex justify-between">
+                      <div>
+                        <p className="font-medium">{service.name}</p>
+                        <p className="text-xs text-muted-foreground">{service.categoryPt}</p>
+                      </div>
+                      <Badge className="bg-accent/20 text-accent">R$ {(service.priceWithMarkup / 1000).toFixed(4)}/un</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="orders">
+          {loadingOrders ? (
+            <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin" /></div>
+          ) : orders.length === 0 ? (
+            <p className="text-center text-muted-foreground py-12">Nenhum pedido encontrado</p>
+          ) : (
+            <div className="space-y-3">
+              {orders.map(order => (
+                <Card key={order.id} className="border-border">
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-medium">{order.service_name}</p>
+                        <p className="text-sm text-muted-foreground">{order.quantity} unidades</p>
+                      </div>
+                      <Badge className={order.status === 'concluído' ? 'bg-green-500' : order.status === 'processando' ? 'bg-blue-500' : 'bg-yellow-500'}>
+                        {order.status}
+                      </Badge>
+                    </div>
+                    {order.start_count !== null && order.remains !== null && (
+                      <div className="mt-2">
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-accent"
+                            style={{ width: `${((order.quantity - (order.remains || 0)) / order.quantity) * 100}%` }}
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {order.quantity - (order.remains || 0)} / {order.quantity}
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 };
 

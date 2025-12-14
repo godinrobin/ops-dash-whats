@@ -17,7 +17,7 @@ interface RechargeModalProps {
   onSuccess: (newBalance: number) => void;
 }
 
-const PRESET_VALUES = [10, 20, 50, 100];
+const PRESET_VALUES = [10, 20, 50, 100, 200];
 
 export function RechargeModal({ open, onOpenChange, onSuccess }: RechargeModalProps) {
   const { toast } = useToast();
@@ -252,13 +252,13 @@ export function RechargeModal({ open, onOpenChange, onSuccess }: RechargeModalPr
           {/* Valores pré-definidos */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Ou escolha um valor</label>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-5 gap-2">
               {PRESET_VALUES.map((value) => (
                 <Button
                   key={value}
                   variant={selectedAmount === value ? "default" : "outline"}
                   onClick={() => handleSelectAmount(value)}
-                  className={selectedAmount === value ? "bg-accent text-accent-foreground" : ""}
+                  className={`${selectedAmount === value ? "bg-accent text-accent-foreground" : ""} text-sm px-2`}
                 >
                   R$ {value}
                 </Button>
