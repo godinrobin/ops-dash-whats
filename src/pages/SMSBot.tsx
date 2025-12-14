@@ -84,8 +84,8 @@ const SMSBot = () => {
       if (error) throw error;
       setCountries(data.countries || []);
       
-      // Seleciona Brasil por padrão
-      const brazil = data.countries?.find((c: Country) => c.code === '39');
+      // Seleciona Brasil por padrão (código 73 na API SMS-Activate)
+      const brazil = data.countries?.find((c: Country) => c.code === '73');
       if (brazil) {
         setSelectedCountry(brazil);
       }
