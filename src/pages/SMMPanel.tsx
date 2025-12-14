@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Search, Wallet, RefreshCw, ShoppingCart, ExternalLink, XCircle, RotateCcw } from "lucide-react";
+import { Loader2, Search, Wallet, RefreshCw, ShoppingCart, ExternalLink, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -311,35 +311,6 @@ const SMMPanel = () => {
     }
   };
 
-  const handleRefillOrder = async (order: Order) => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Não autenticado');
-
-      const response = await supabase.functions.invoke('smm-refill-order', {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-        body: {
-          orderId: order.id,
-          smmOrderId: order.smm_raja_order_id,
-        },
-      });
-
-      if (response.data?.success) {
-        toast({
-          title: "Refill solicitado",
-          description: "Solicitação de refill enviada com sucesso",
-        });
-      } else {
-        throw new Error(response.data?.error || 'Erro ao solicitar refill');
-      }
-    } catch (error: any) {
-      toast({
-        title: "Erro",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
 
   const filteredServices = services.filter(service => {
     const matchesCategory = selectedCategory === "all" || service.categoryPt === selectedCategory;
@@ -588,11 +559,6 @@ const SMMPanel = () => {
                                   <span className="text-xs text-muted-foreground">
                                     {service.min} - {service.max}
                                   </span>
-                                  {service.refill && (
-                                    <Badge variant="secondary" className="text-xs bg-blue-500/20 text-blue-400">
-                                      Refill
-                                    </Badge>
-                                  )}
                                 </div>
                               </div>
                               <div className="text-left sm:text-right shrink-0">
@@ -711,16 +677,6 @@ const SMMPanel = () => {
                                 >
                                   <XCircle className="w-3 h-3 mr-1" />
                                   Cancelar
-                                </Button>
-                              )}
-                              {order.status === 'concluído' && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleRefillOrder(order)}
-                                >
-                                  <RotateCcw className="w-3 h-3 mr-1" />
-                                  Refill
                                 </Button>
                               )}
                               <Button
