@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { MemberRoute } from "@/components/MemberRoute";
 import { AdminRoute } from "@/components/AdminRoute";
 import { AnnouncementPopup } from "@/components/AnnouncementPopup";
 import Home from "./pages/Home";
@@ -39,21 +40,28 @@ const App = () => (
           <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+            
+            {/* FREE SYSTEMS - Available to all users */}
             <Route path="/metricas" element={<ProtectedRoute><Index /></ProtectedRoute>} />
             <Route path="/organizador-numeros" element={<ProtectedRoute><NumberOrganizer /></ProtectedRoute>} />
             <Route path="/track-ofertas" element={<ProtectedRoute><TrackOfertas /></ProtectedRoute>} />
-            <Route path="/criador-funil" element={<ProtectedRoute><WhatsAppFunnelCreator /></ProtectedRoute>} />
-            <Route path="/gerador-criativos" element={<ProtectedRoute><CreativeGenerator /></ProtectedRoute>} />
-            <Route path="/gerador-variacoes-video" element={<ProtectedRoute><VideoVariationGenerator /></ProtectedRoute>} />
-            <Route path="/gerador-audio" element={<ProtectedRoute><AudioGenerator /></ProtectedRoute>} />
-            <Route path="/transcricao-audio" element={<ProtectedRoute><AudioTranscriber /></ProtectedRoute>} />
             <Route path="/zap-spy" element={<ProtectedRoute><ZapSpy /></ProtectedRoute>} />
-            <Route path="/tag-whats" element={<ProtectedRoute><TagWhats /></ProtectedRoute>} />
             <Route path="/sms-bot" element={<ProtectedRoute><SMSBot /></ProtectedRoute>} />
             <Route path="/smm-panel" element={<ProtectedRoute><SMMPanel /></ProtectedRoute>} />
             <Route path="/produto/:productId" element={<ProtectedRoute><ProductMetrics /></ProtectedRoute>} />
             <Route path="/produto/:productId/analise" element={<ProtectedRoute><ProductAnalysis /></ProtectedRoute>} />
+            
+            {/* MEMBER-ONLY SYSTEMS - Requires full membership */}
+            <Route path="/criador-funil" element={<MemberRoute featureName="Criador de Funil"><WhatsAppFunnelCreator /></MemberRoute>} />
+            <Route path="/gerador-criativos" element={<MemberRoute featureName="Gerador de Criativos em Imagem"><CreativeGenerator /></MemberRoute>} />
+            <Route path="/gerador-variacoes-video" element={<MemberRoute featureName="Gerador de Criativos em Vídeo"><VideoVariationGenerator /></MemberRoute>} />
+            <Route path="/gerador-audio" element={<MemberRoute featureName="Gerador de Áudio"><AudioGenerator /></MemberRoute>} />
+            <Route path="/transcricao-audio" element={<MemberRoute featureName="Transcrição de Áudio"><AudioTranscriber /></MemberRoute>} />
+            <Route path="/tag-whats" element={<MemberRoute featureName="Tag Whats"><TagWhats /></MemberRoute>} />
+            
+            {/* ADMIN ROUTES */}
             <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />
+            
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
