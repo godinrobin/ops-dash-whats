@@ -1901,6 +1901,22 @@ const AdminPanelNew = () => {
         );
 
       case "marketplace-sales":
+        const updateOrderStatus = async (orderId: string, newStatus: string) => {
+          try {
+            const { error } = await supabase
+              .from("marketplace_orders")
+              .update({ status: newStatus })
+              .eq("id", orderId);
+
+            if (error) throw error;
+            toast.success("Status atualizado!");
+            loadMarketplaceData();
+          } catch (err) {
+            console.error("Error updating order status:", err);
+            toast.error("Erro ao atualizar status");
+          }
+        };
+
         return (
           <Card className="border-2 border-accent">
             <CardHeader>
@@ -1926,6 +1942,7 @@ const AdminPanelNew = () => {
                         <TableHead>Qtd</TableHead>
                         <TableHead>Total</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead>Alterar Status</TableHead>
                         <TableHead>Data</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1953,9 +1970,39 @@ const AdminPanelNew = () => {
                           <TableCell>{order.quantity}</TableCell>
                           <TableCell className="text-green-500 font-bold">R$ {order.total_price.toFixed(2)}</TableCell>
                           <TableCell>
-                            <Badge variant={order.status === 'completed' ? 'default' : 'secondary'}>
-                              {order.status === 'pending' ? 'Pendente' : order.status === 'completed' ? 'Concluído' : order.status}
+                            <Badge 
+                              variant="secondary"
+                              className={
+                                order.status === 'entregue' || order.status === 'completed' 
+                                  ? 'bg-green-500/20 text-green-500' 
+                                  : order.status === 'cancelado'
+                                  ? 'bg-red-500/20 text-red-500'
+                                  : 'bg-yellow-500/20 text-yellow-500'
+                              }
+                            >
+                              {order.status === 'pending' || order.status === 'confirmed' || order.status === 'em_andamento' 
+                                ? 'Em andamento' 
+                                : order.status === 'entregue' || order.status === 'completed'
+                                ? 'Entregue'
+                                : order.status === 'cancelado'
+                                ? 'Cancelado'
+                                : order.status}
                             </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Select
+                              value={order.status}
+                              onValueChange={(value) => updateOrderStatus(order.id, value)}
+                            >
+                              <SelectTrigger className="w-36">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="em_andamento">Em andamento</SelectItem>
+                                <SelectItem value="entregue">Entregue</SelectItem>
+                                <SelectItem value="cancelado">Cancelado</SelectItem>
+                              </SelectContent>
+                            </Select>
                           </TableCell>
                           <TableCell>{new Date(order.created_at).toLocaleString('pt-BR')}</TableCell>
                         </TableRow>
