@@ -408,12 +408,11 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
 
               <div className="grid md:grid-cols-2 gap-6">
                 {/* Product Image */}
-                <div className="rounded-lg overflow-hidden">
+                <div className="rounded-xl overflow-hidden border-2 border-accent/30">
                   <img 
                     src={getProductImage(selectedProduct.image_url)} 
                     alt={selectedProduct.name}
-                    className="w-full h-auto object-contain rounded-lg"
-                    style={{ clipPath: 'inset(0 5% 0 0)' }}
+                    className="w-full h-auto object-contain"
                   />
                 </div>
 
@@ -508,7 +507,7 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
               </div>
 
               {/* Description - closer to image */}
-              <div className="grid md:grid-cols-2 gap-6 -mt-8">
+              <div className="grid md:grid-cols-2 gap-6 mt-2">
                 <div>
                   <h3 className="text-lg font-bold mb-3">Descrição do produto</h3>
                   <div className="whitespace-pre-wrap text-muted-foreground">
