@@ -345,6 +345,119 @@ export type Database = {
         }
         Relationships: []
       }
+      sms_orders: {
+        Row: {
+          country_code: string | null
+          created_at: string
+          expires_at: string | null
+          id: string
+          phone_number: string | null
+          price: number
+          service_code: string
+          service_name: string | null
+          sms_activate_id: string
+          sms_code: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          country_code?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          phone_number?: string | null
+          price: number
+          service_code: string
+          service_name?: string | null
+          sms_activate_id: string
+          sms_code?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          country_code?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          phone_number?: string | null
+          price?: number
+          service_code?: string
+          service_name?: string | null
+          sms_activate_id?: string
+          sms_code?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      sms_transactions: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string | null
+          id: string
+          order_id: string | null
+          type: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          order_id?: string | null
+          type: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          order_id?: string | null
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_transactions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "sms_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sms_user_wallets: {
+        Row: {
+          balance: number
+          country_code: string | null
+          created_at: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          balance?: number
+          country_code?: string | null
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          balance?: number
+          country_code?: string | null
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       tracked_offers: {
         Row: {
           ad_library_link: string

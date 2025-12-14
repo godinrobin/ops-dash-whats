@@ -56,3 +56,18 @@ verify_jwt = true
 
 [functions.generate-creative-image]
 verify_jwt = true
+
+[functions.sms-get-services]
+verify_jwt = true
+
+[functions.sms-buy-number]
+verify_jwt = true
+
+[functions.sms-check-status]
+verify_jwt = true
+
+[functions.sms-cancel-order]
+verify_jwt = true
+
+[functions.sms-admin-recharge]
+verify_jwt = true
