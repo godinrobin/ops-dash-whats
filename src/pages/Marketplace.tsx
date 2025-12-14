@@ -250,12 +250,12 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
       className={`bg-secondary border-accent/30 overflow-hidden cursor-pointer hover:border-accent transition-colors ${product.is_sold_out ? 'opacity-60' : ''}`}
       onClick={() => !product.is_sold_out && setSelectedProduct(product)}
     >
-      <div className="relative overflow-hidden rounded-t-lg">
+      <div className="relative overflow-hidden">
         <img 
           src={getProductImage(product.image_url)} 
           alt={product.name}
-          className="w-full h-auto object-cover"
-          style={{ clipPath: 'inset(0 5% 0 0)' }}
+          className="w-full h-auto object-cover rounded-t-lg"
+          style={{ clipPath: 'inset(0 3% 0 0)', marginRight: '-3%' }}
         />
         {product.is_sold_out && (
           <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
@@ -508,7 +508,7 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
               </div>
 
               {/* Description - closer to image */}
-              <div className="grid md:grid-cols-2 gap-6 -mt-2">
+              <div className="grid md:grid-cols-2 gap-6 -mt-8">
                 <div>
                   <h3 className="text-lg font-bold mb-3">Descrição do produto</h3>
                   <div className="whitespace-pre-wrap text-muted-foreground">
@@ -574,8 +574,8 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
                         <img 
                           src={getProductImage(p.image_url)} 
                           alt={p.name}
-                          className="w-full h-auto object-cover rounded-t-lg"
-                          style={{ clipPath: 'inset(0 5% 0 0)' }}
+                          className="w-full h-auto object-cover"
+                          style={{ clipPath: 'inset(0 3% 0 0)', marginRight: '-3%' }}
                         />
                         <CardContent className="p-3">
                           <p className="font-medium text-sm line-clamp-1">{p.name}</p>
