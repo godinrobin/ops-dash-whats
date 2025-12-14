@@ -37,7 +37,7 @@ interface Service {
 interface Order {
   id: string;
   smm_raja_order_id: string | null;
-  service_id: number;
+  service_id: string;
   service_name: string;
   category: string;
   link: string;
