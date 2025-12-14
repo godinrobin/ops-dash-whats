@@ -46,13 +46,21 @@ serve(async (req) => {
       throw new Error('Valor máximo: R$ 1.000,00');
     }
 
-    // Validate email - Mercado Pago requires valid email format
-    const userEmail = user.email;
-    if (!userEmail || !userEmail.includes('@')) {
-      throw new Error('Email do usuário inválido. Atualize seu perfil.');
+    // Validate and sanitize email - Mercado Pago requires strict email format
+    let userEmail = user.email?.trim().toLowerCase();
+    
+    console.log(`User ${user.id} email: "${userEmail}"`);
+    
+    // Email regex validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!userEmail || !emailRegex.test(userEmail)) {
+      console.error(`Invalid email format: "${userEmail}"`);
+      // Use a valid fallback email for payment processing
+      userEmail = `user_${user.id.substring(0, 8)}@pagamento.zapdata.com.br`;
+      console.log(`Using fallback email: ${userEmail}`);
     }
     
-    console.log(`User ${user.id} creating PIX charge for R$ ${amount}`);
+    console.log(`User ${user.id} creating PIX charge for R$ ${amount} with email: ${userEmail}`);
 
     // Cria pagamento PIX no Mercado Pago
     const paymentResponse = await fetch('https://api.mercadopago.com/v1/payments', {
