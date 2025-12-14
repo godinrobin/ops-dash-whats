@@ -273,6 +273,30 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_margins: {
+        Row: {
+          id: string
+          margin_percent: number
+          system_name: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          id?: string
+          margin_percent?: number
+          system_name: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          id?: string
+          margin_percent?: number
+          system_name?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       products: {
         Row: {
           created_at: string

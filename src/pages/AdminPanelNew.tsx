@@ -195,11 +195,9 @@ const AdminPanelNew = () => {
   const [walletDescription, setWalletDescription] = useState("");
   const [updatingWallet, setUpdatingWallet] = useState(false);
 
-  // Margin settings
-  const [smsMargin, setSmsMargin] = useState("1.30");
-  const [smmMargin, setSmmMargin] = useState("1.30");
-  const [smsPlatformMarkup, setSmsPlatformMarkup] = useState("1.10");
-  const [smmPlatformMarkup, setSmmPlatformMarkup] = useState("1.10");
+  // Margins state (in percentage, e.g., 30 = 30%)
+  const [smsMargin, setSmsMargin] = useState("30");
+  const [smmMargin, setSmmMargin] = useState("30");
   const [savingMargins, setSavingMargins] = useState(false);
 
   // Offers sorting and filtering
@@ -351,26 +349,42 @@ const AdminPanelNew = () => {
   };
 
   const loadMargins = async () => {
-    // For now, margins are stored in localStorage as a simple solution
-    // In production, you might want to store these in the database
-    const savedSmsMargin = localStorage.getItem("admin_sms_margin");
-    const savedSmmMargin = localStorage.getItem("admin_smm_margin");
-    const savedSmsPlatformMarkup = localStorage.getItem("admin_sms_platform_markup");
-    const savedSmmPlatformMarkup = localStorage.getItem("admin_smm_platform_markup");
-    
-    if (savedSmsMargin) setSmsMargin(savedSmsMargin);
-    if (savedSmmMargin) setSmmMargin(savedSmmMargin);
-    if (savedSmsPlatformMarkup) setSmsPlatformMarkup(savedSmsPlatformMarkup);
-    if (savedSmmPlatformMarkup) setSmmPlatformMarkup(savedSmmPlatformMarkup);
+    try {
+      const { data, error } = await supabase
+        .from('platform_margins')
+        .select('system_name, margin_percent');
+      
+      if (error) throw error;
+      
+      data?.forEach((margin) => {
+        if (margin.system_name === 'sms') setSmsMargin(String(margin.margin_percent));
+        if (margin.system_name === 'smm') setSmmMargin(String(margin.margin_percent));
+      });
+    } catch (err) {
+      console.error("Error loading margins:", err);
+    }
   };
 
   const saveMargins = async () => {
+    if (!user) return;
     setSavingMargins(true);
     try {
-      localStorage.setItem("admin_sms_margin", smsMargin);
-      localStorage.setItem("admin_smm_margin", smmMargin);
-      localStorage.setItem("admin_sms_platform_markup", smsPlatformMarkup);
-      localStorage.setItem("admin_smm_platform_markup", smmPlatformMarkup);
+      // Update SMS margin
+      const { error: smsError } = await supabase
+        .from('platform_margins')
+        .update({ margin_percent: parseFloat(smsMargin), updated_by: user.id })
+        .eq('system_name', 'sms');
+      
+      if (smsError) throw smsError;
+      
+      // Update SMM margin
+      const { error: smmError } = await supabase
+        .from('platform_margins')
+        .update({ margin_percent: parseFloat(smmMargin), updated_by: user.id })
+        .eq('system_name', 'smm');
+      
+      if (smmError) throw smmError;
+      
       toast.success("Margens salvas com sucesso!");
     } catch (err) {
       console.error("Error saving margins:", err);
@@ -1229,70 +1243,54 @@ const AdminPanelNew = () => {
 
       case "margins":
         return (
-          <Card className="border-2 border-accent max-w-2xl">
+          <Card className="border-2 border-accent max-w-md">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Percent className="h-5 w-5 text-accent" />
                 Margens de Lucro
               </CardTitle>
               <CardDescription>
-                Configure as margens de lucro para cada sistema
+                Configure a porcentagem de lucro para cada sistema
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-4">
-                <h3 className="font-semibold text-lg">Números Virtuais (SMS)</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Margem de Lucro</Label>
+                <div className="space-y-2">
+                  <Label className="text-base font-semibold">Números Virtuais (SMS)</Label>
+                  <div className="flex items-center gap-2">
                     <Input
                       type="number"
-                      step="0.01"
+                      step="1"
+                      min="0"
+                      max="200"
                       value={smsMargin}
                       onChange={(e) => setSmsMargin(e.target.value)}
-                      placeholder="1.30 = 30%"
+                      placeholder="30"
+                      className="flex-1"
                     />
-                    <p className="text-xs text-muted-foreground">1.30 = 30% de margem</p>
+                    <span className="text-lg font-bold text-accent">%</span>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Markup da Plataforma</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={smsPlatformMarkup}
-                      onChange={(e) => setSmsPlatformMarkup(e.target.value)}
-                      placeholder="1.10 = 10%"
-                    />
-                    <p className="text-xs text-muted-foreground">1.10 = 10% adicional</p>
-                  </div>
+                  <p className="text-xs text-muted-foreground">Ex: 30 = preço aumenta 30%</p>
                 </div>
               </div>
 
               <div className="space-y-4">
-                <h3 className="font-semibold text-lg">Painel Marketing (SMM)</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Margem de Lucro</Label>
+                <div className="space-y-2">
+                  <Label className="text-base font-semibold">Painel Marketing (SMM)</Label>
+                  <div className="flex items-center gap-2">
                     <Input
                       type="number"
-                      step="0.01"
+                      step="1"
+                      min="0"
+                      max="200"
                       value={smmMargin}
                       onChange={(e) => setSmmMargin(e.target.value)}
-                      placeholder="1.30 = 30%"
+                      placeholder="30"
+                      className="flex-1"
                     />
-                    <p className="text-xs text-muted-foreground">1.30 = 30% de margem</p>
+                    <span className="text-lg font-bold text-accent">%</span>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Markup da Plataforma</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={smmPlatformMarkup}
-                      onChange={(e) => setSmmPlatformMarkup(e.target.value)}
-                      placeholder="1.10 = 10%"
-                    />
-                    <p className="text-xs text-muted-foreground">1.10 = 10% adicional</p>
-                  </div>
+                  <p className="text-xs text-muted-foreground">Ex: 30 = preço aumenta 30%</p>
                 </div>
               </div>
 
@@ -1305,15 +1303,14 @@ const AdminPanelNew = () => {
                 ) : (
                   <>
                     <Settings className="mr-2 h-4 w-4" />
-                    Salvar Configurações
+                    Salvar Margens
                   </>
                 )}
               </Button>
 
               <div className="p-4 bg-muted/50 rounded-lg">
                 <p className="text-sm text-muted-foreground">
-                  <strong>Fórmula do preço final:</strong><br />
-                  Preço USD × Taxa de Câmbio (6.10) × Margem × Markup
+                  <strong>Fórmula:</strong> Preço USD × R$6.10 × (1 + margem%)
                 </p>
               </div>
             </CardContent>
