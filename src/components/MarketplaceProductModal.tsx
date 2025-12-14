@@ -15,6 +15,32 @@ import { Loader2, Image, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+// Import product images for preview mapping
+import bmVerificadaImg from "@/assets/bm-verificada.png";
+import bmSimplesImg from "@/assets/bm-simples.png";
+import perfilAntigoRealImg from "@/assets/perfil-antigo-real.png";
+import perfilComumImg from "@/assets/perfil-comum.png";
+import perfilReestabelecidoImg from "@/assets/perfil-reestabelecido.png";
+import perfilVerificadoImg from "@/assets/perfil-verificado.png";
+import comboMasterImg from "@/assets/combo-master.png";
+import comboDiamondImg from "@/assets/combo-diamond.png";
+
+const MODAL_IMAGE_MAP: Record<string, string> = {
+  "/assets/bm-verificada.png": bmVerificadaImg,
+  "/assets/bm-simples.png": bmSimplesImg,
+  "/assets/perfil-antigo-real.png": perfilAntigoRealImg,
+  "/assets/perfil-comum.png": perfilComumImg,
+  "/assets/perfil-reestabelecido.png": perfilReestabelecidoImg,
+  "/assets/perfil-verificado.png": perfilVerificadoImg,
+  "/assets/combo-master.png": comboMasterImg,
+  "/assets/combo-diamond.png": comboDiamondImg,
+};
+
+const getModalProductImage = (imageUrl: string | null) => {
+  if (!imageUrl) return "";
+  return MODAL_IMAGE_MAP[imageUrl] || imageUrl;
+};
+
 interface MarketplaceProduct {
   id: string;
   name: string;
@@ -195,7 +221,7 @@ export function MarketplaceProductModal({
               ) : imageUrl ? (
                 <div className="relative">
                   <img 
-                    src={imageUrl} 
+                    src={getModalProductImage(imageUrl)} 
                     alt="Preview" 
                     className="max-h-40 mx-auto rounded-lg object-contain"
                   />
@@ -294,6 +320,7 @@ export function MarketplaceProductModal({
             <Switch
               checked={isSoldOut}
               onCheckedChange={setIsSoldOut}
+              className={isSoldOut ? "data-[state=checked]:bg-red-500" : "data-[state=unchecked]:bg-green-500"}
             />
           </div>
 

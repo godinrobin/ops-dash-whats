@@ -528,7 +528,7 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
                       <span>Entrega em 12h</span>
                     </div>
                     <div className="flex flex-col items-center gap-1">
-                      <CreditCard className="h-5 w-5 text-green-500" />
+                      <span className="text-xl font-bold text-green-500">$</span>
                       <span>Pagamento via PIX</span>
                     </div>
                   </div>
@@ -560,13 +560,13 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
 
               {/* Similar Products */}
               {similarProducts.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-bold mb-4">Produtos similares</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {similarProducts.slice(0, 4).map(p => (
+                <div className="mt-6">
+                  <h3 className="text-lg font-bold mb-4 text-center">Produtos similares</h3>
+                  <div className="flex justify-center gap-4 flex-wrap">
+                    {similarProducts.slice(0, 3).map(p => (
                       <Card 
                         key={p.id} 
-                        className="bg-secondary border-accent/30 cursor-pointer hover:border-accent overflow-hidden"
+                        className="bg-secondary border-accent/30 cursor-pointer hover:border-accent overflow-hidden w-48"
                         onClick={() => {
                           setSelectedProduct(p);
                           setQuantity(1);
