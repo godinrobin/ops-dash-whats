@@ -1278,34 +1278,34 @@ const SMMPanelEmbed = () => {
               {/* Quick category buttons */}
               <div className="flex flex-wrap justify-center gap-2">
                 <Button
-                  variant={selectedCategory === "Instagram - Seguidores" ? "default" : "outline"}
+                  variant={selectedCategory === "Instagram Seguidores" ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setSelectedCategory(selectedCategory === "Instagram - Seguidores" ? "all" : "Instagram - Seguidores")}
-                  className={selectedCategory === "Instagram - Seguidores" ? "bg-accent" : ""}
+                  onClick={() => setSelectedCategory(selectedCategory === "Instagram Seguidores" ? "all" : "Instagram Seguidores")}
+                  className={selectedCategory === "Instagram Seguidores" ? "bg-accent" : "border-accent/30"}
                 >
                   Instagram Seguidores
                 </Button>
                 <Button
-                  variant={selectedCategory === "Facebook - Comentários" ? "default" : "outline"}
+                  variant={selectedCategory === "Facebook Comentários" ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setSelectedCategory(selectedCategory === "Facebook - Comentários" ? "all" : "Facebook - Comentários")}
-                  className={selectedCategory === "Facebook - Comentários" ? "bg-accent" : ""}
+                  onClick={() => setSelectedCategory(selectedCategory === "Facebook Comentários" ? "all" : "Facebook Comentários")}
+                  className={selectedCategory === "Facebook Comentários" ? "bg-accent" : "border-accent/30"}
                 >
                   Facebook Comentários
                 </Button>
                 <Button
-                  variant={selectedCategory === "Instagram - Curtidas" ? "default" : "outline"}
+                  variant={selectedCategory === "Instagram Curtidas" ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setSelectedCategory(selectedCategory === "Instagram - Curtidas" ? "all" : "Instagram - Curtidas")}
-                  className={selectedCategory === "Instagram - Curtidas" ? "bg-accent" : ""}
+                  onClick={() => setSelectedCategory(selectedCategory === "Instagram Curtidas" ? "all" : "Instagram Curtidas")}
+                  className={selectedCategory === "Instagram Curtidas" ? "bg-accent" : "border-accent/30"}
                 >
                   Instagram Curtidas
                 </Button>
                 <Button
-                  variant={selectedCategory === "Facebook - Curtidas de Post" ? "default" : "outline"}
+                  variant={selectedCategory === "Facebook Curtidas de Post" ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setSelectedCategory(selectedCategory === "Facebook - Curtidas de Post" ? "all" : "Facebook - Curtidas de Post")}
-                  className={selectedCategory === "Facebook - Curtidas de Post" ? "bg-accent" : ""}
+                  onClick={() => setSelectedCategory(selectedCategory === "Facebook Curtidas de Post" ? "all" : "Facebook Curtidas de Post")}
+                  className={selectedCategory === "Facebook Curtidas de Post" ? "bg-accent" : "border-accent/30"}
                 >
                   Facebook Curtidas de Post
                 </Button>
