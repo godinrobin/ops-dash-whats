@@ -522,22 +522,24 @@ const SMSBot = () => {
                               <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-1">
                                   <span className="font-medium">{order.service_name}</span>
-                                  {order.status === 'waiting_sms' && (
+                                  {order.status === 'waiting_sms' ? (
                                     <Badge variant="secondary" className="bg-accent/20">
                                       <Clock className="h-3 w-3 mr-1" />
                                       Aguardando
                                     </Badge>
-                                  )}
-                                  {order.status === 'received' && (
+                                  ) : order.status === 'received' ? (
                                     <Badge variant="secondary" className="bg-green-500/20 text-green-500">
                                       <CheckCircle2 className="h-3 w-3 mr-1" />
                                       Recebido
                                     </Badge>
-                                  )}
-                                  {order.status === 'cancelled' && (
+                                  ) : order.status === 'cancelled' ? (
                                     <Badge variant="secondary" className="bg-red-500/20 text-red-500">
                                       <XCircle className="h-3 w-3 mr-1" />
                                       Cancelado
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="secondary">
+                                      {order.status}
                                     </Badge>
                                   )}
                                 </div>
