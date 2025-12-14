@@ -250,6 +250,28 @@ const Home = () => {
                 </p>
               </CardContent>
             </Card>
+
+            <Card 
+              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
+              onClick={() => navigate("/sms-bot")}
+            >
+              <CardHeader className="text-center p-3 md:p-6">
+                <div className="flex justify-center mb-2 md:mb-4">
+                  <span className="text-3xl md:text-6xl">📲</span>
+                </div>
+                <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent">
+                  SMS Bot
+                </CardTitle>
+                <CardDescription className="text-xs md:text-base hidden md:block">
+                  Compre números virtuais para receber SMS
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
+                <p className="text-sm text-muted-foreground">
+                  Números temporários para verificação
+                </p>
+              </CardContent>
+            </Card>
           </div>
 
           <section className="mt-16">
