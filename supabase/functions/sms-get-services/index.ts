@@ -132,7 +132,24 @@ serve(async (req) => {
       console.log('Fetching prices for country:', countryCode);
       
       const response = await fetch(url);
-      const data = await response.json();
+      const responseText = await response.text();
+      
+      if (!responseText || responseText.trim() === '') {
+        console.error('Empty response from SMS-Activate API');
+        return new Response(JSON.stringify({ services: [], marginPercent, error: 'API retornou resposta vazia' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Failed to parse API response:', responseText.substring(0, 200));
+        return new Response(JSON.stringify({ services: [], marginPercent, error: 'Resposta inválida da API' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
       
       console.log('API response:', JSON.stringify(data).substring(0, 500));
       
