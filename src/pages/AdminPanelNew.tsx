@@ -35,6 +35,8 @@ const SYSTEMS = [
   { id: "transcricao-audio", name: "Transcrição de Áudio", emoji: "📝" },
   { id: "zap-spy", name: "Zap Spy", emoji: "🔍" },
   { id: "tag-whats", name: "Tag Whats", emoji: "📲" },
+  { id: "painel-marketing", name: "Painel Marketing", emoji: "📈" },
+  { id: "numeros-virtuais", name: "Números Virtuais", emoji: "📞" },
 ];
 
 // Sidebar menu structure
