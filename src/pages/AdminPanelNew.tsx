@@ -19,6 +19,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { MarketplaceProductModal } from "@/components/MarketplaceProductModal";
 
 type AdminOfferStatus = 'minerada' | 'ruim' | 'boa' | null;
 type AnnouncementRedirectType = 'none' | 'custom_link' | 'system';
@@ -177,6 +178,32 @@ interface TransactionData {
   created_at: string;
 }
 
+interface MarketplaceProductData {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  price: number;
+  compare_price: number | null;
+  discount_percent: number | null;
+  stock: number | null;
+  is_sold_out: boolean;
+  image_url: string | null;
+  sold_count: number | null;
+}
+
+interface MarketplaceOrderData {
+  id: string;
+  user_id: string;
+  product_name: string;
+  quantity: number;
+  total_price: number;
+  customer_name: string | null;
+  customer_whatsapp: string | null;
+  status: string;
+  created_at: string;
+}
+
 const AdminPanelNew = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -189,7 +216,10 @@ const AdminPanelNew = () => {
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [wallets, setWallets] = useState<WalletData[]>([]);
   const [transactions, setTransactions] = useState<TransactionData[]>([]);
-
+  const [marketplaceProducts, setMarketplaceProducts] = useState<MarketplaceProductData[]>([]);
+  const [marketplaceOrders, setMarketplaceOrders] = useState<MarketplaceOrderData[]>([]);
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<MarketplaceProductData | null>(null);
   // Sidebar state
   const [activeSection, setActiveSection] = useState("metrics");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -252,6 +282,7 @@ const AdminPanelNew = () => {
       await loadAllData();
       loadAnnouncements();
       loadMargins();
+      loadMarketplaceData();
     };
     initData();
   }, [user]);
@@ -403,6 +434,46 @@ const AdminPanelNew = () => {
       toast.error("Erro ao salvar margens");
     } finally {
       setSavingMargins(false);
+    }
+  };
+
+  const loadMarketplaceData = async () => {
+    try {
+      // Load marketplace products
+      const { data: productsData, error: productsError } = await supabase
+        .from("marketplace_products")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (productsError) throw productsError;
+      setMarketplaceProducts(productsData || []);
+
+      // Load marketplace orders
+      const { data: ordersData, error: ordersError } = await supabase
+        .from("marketplace_orders")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (ordersError) throw ordersError;
+      setMarketplaceOrders(ordersData || []);
+    } catch (err) {
+      console.error("Error loading marketplace data:", err);
+    }
+  };
+
+  const deleteMarketplaceProduct = async (productId: string) => {
+    try {
+      const { error } = await supabase
+        .from("marketplace_products")
+        .delete()
+        .eq("id", productId);
+
+      if (error) throw error;
+      toast.success("Produto excluído");
+      loadMarketplaceData();
+    } catch (err) {
+      console.error("Error deleting product:", err);
+      toast.error("Erro ao excluir produto");
     }
   };
 
@@ -1724,6 +1795,144 @@ const AdminPanelNew = () => {
           </div>
         );
 
+      case "marketplace-products":
+        return (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold">Produtos do Marketplace</h2>
+              <Button onClick={() => { setEditingProduct(null); setShowProductModal(true); }} className="bg-accent hover:bg-accent/90">
+                <Package className="h-4 w-4 mr-2" />
+                Novo Produto
+              </Button>
+            </div>
+            
+            {marketplaceProducts.length === 0 ? (
+              <Card className="border-border">
+                <CardContent className="p-8 text-center">
+                  <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">Nenhum produto cadastrado ainda</p>
+                  <Button onClick={() => { setEditingProduct(null); setShowProductModal(true); }} className="mt-4">
+                    Cadastrar primeiro produto
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {marketplaceProducts.map((product) => (
+                  <Card key={product.id} className="border-accent/30 overflow-hidden">
+                    {product.image_url && (
+                      <img 
+                        src={product.image_url} 
+                        alt={product.name} 
+                        className="w-full h-40 object-cover"
+                      />
+                    )}
+                    <CardContent className="p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <h3 className="font-bold">{product.name}</h3>
+                        {product.is_sold_out && (
+                          <Badge variant="destructive">Esgotado</Badge>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground line-clamp-2 mb-2">{product.description}</p>
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <p className="text-lg font-bold text-green-500">R$ {product.price.toFixed(2)}</p>
+                          <p className="text-xs text-muted-foreground">Estoque: {product.stock}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => { setEditingProduct(product); setShowProductModal(true); }}
+                          >
+                            Editar
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="destructive"
+                            onClick={() => deleteMarketplaceProduct(product.id)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+
+      case "marketplace-sales":
+        return (
+          <Card className="border-2 border-accent">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ShoppingBag className="h-5 w-5 text-accent" />
+                Vendas de Ativos
+              </CardTitle>
+              <CardDescription>
+                Todas as vendas de ativos para anúncios
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {marketplaceOrders.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">Nenhuma venda ainda</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Produto</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>WhatsApp</TableHead>
+                        <TableHead>Qtd</TableHead>
+                        <TableHead>Total</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Data</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {marketplaceOrders.map((order) => (
+                        <TableRow key={order.id}>
+                          <TableCell className="font-medium">{order.product_name}</TableCell>
+                          <TableCell>{order.customer_name || '-'}</TableCell>
+                          <TableCell>
+                            {order.customer_whatsapp ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-auto py-1 px-2"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(order.customer_whatsapp!);
+                                  toast.success("WhatsApp copiado!");
+                                }}
+                              >
+                                <Copy className="h-3 w-3 mr-1" />
+                                {order.customer_whatsapp}
+                              </Button>
+                            ) : '-'}
+                          </TableCell>
+                          <TableCell>{order.quantity}</TableCell>
+                          <TableCell className="text-green-500 font-bold">R$ {order.total_price.toFixed(2)}</TableCell>
+                          <TableCell>
+                            <Badge variant={order.status === 'completed' ? 'default' : 'secondary'}>
+                              {order.status === 'pending' ? 'Pendente' : order.status === 'completed' ? 'Concluído' : order.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{new Date(order.created_at).toLocaleString('pt-BR')}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+
       default:
         return null;
     }
@@ -1932,6 +2141,14 @@ const AdminPanelNew = () => {
           </Card>
         </DialogContent>
       </Dialog>
+
+      {/* Marketplace Product Modal */}
+      <MarketplaceProductModal
+        open={showProductModal}
+        onOpenChange={setShowProductModal}
+        onSuccess={loadMarketplaceData}
+        editProduct={editingProduct as any}
+      />
     </>
   );
 };

@@ -250,11 +250,12 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
       className={`bg-secondary border-accent/30 overflow-hidden cursor-pointer hover:border-accent transition-colors ${product.is_sold_out ? 'opacity-60' : ''}`}
       onClick={() => !product.is_sold_out && setSelectedProduct(product)}
     >
-      <div className="relative overflow-hidden">
+      <div className="relative overflow-hidden rounded-t-lg">
         <img 
           src={getProductImage(product.image_url)} 
           alt={product.name}
-          className="w-full h-auto object-cover rounded-t-lg"
+          className="w-full h-auto object-cover"
+          style={{ clipPath: 'inset(0 5% 0 0)' }}
         />
         {product.is_sold_out && (
           <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
@@ -412,6 +413,7 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
                     src={getProductImage(selectedProduct.image_url)} 
                     alt={selectedProduct.name}
                     className="w-full h-auto object-contain rounded-lg"
+                    style={{ clipPath: 'inset(0 5% 0 0)' }}
                   />
                 </div>
 
@@ -506,7 +508,7 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
               </div>
 
               {/* Description - closer to image */}
-              <div className="grid md:grid-cols-2 gap-6 mt-2">
+              <div className="grid md:grid-cols-2 gap-6 -mt-2">
                 <div>
                   <h3 className="text-lg font-bold mb-3">Descrição do produto</h3>
                   <div className="whitespace-pre-wrap text-muted-foreground">
@@ -563,19 +565,18 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
                     {similarProducts.slice(0, 4).map(p => (
                       <Card 
                         key={p.id} 
-                        className="bg-secondary border-accent/30 cursor-pointer hover:border-accent"
+                        className="bg-secondary border-accent/30 cursor-pointer hover:border-accent overflow-hidden"
                         onClick={() => {
                           setSelectedProduct(p);
                           setQuantity(1);
                         }}
                       >
-                        <div className="aspect-video overflow-hidden rounded-t-lg">
-                          <img 
-                            src={getProductImage(p.image_url)} 
-                            alt={p.name}
-                            className="w-full h-full object-contain"
-                          />
-                        </div>
+                        <img 
+                          src={getProductImage(p.image_url)} 
+                          alt={p.name}
+                          className="w-full h-auto object-cover rounded-t-lg"
+                          style={{ clipPath: 'inset(0 5% 0 0)' }}
+                        />
                         <CardContent className="p-3">
                           <p className="font-medium text-sm line-clamp-1">{p.name}</p>
                           <p className="text-green-500 font-bold">
@@ -882,19 +883,19 @@ const SMSBotEmbed = () => {
                     const quantity = getQuantity(service.code);
                     const displayPrice = service.priceWithMarkup ?? service.priceBrl ?? 0;
                     return (
-                      <div key={service.code} className="flex items-center justify-between p-3 rounded-lg border border-border hover:border-accent">
-                        <div>
-                          <p className="font-medium">{service.name}</p>
+                      <div key={service.code} className="flex flex-col md:flex-row md:items-center justify-between p-3 rounded-lg border border-border hover:border-accent gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium truncate">{service.name}</p>
                           <p className="text-sm text-muted-foreground">{service.available} disponíveis</p>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2 mt-2 md:mt-0">
                           <Badge variant="secondary" className="bg-accent/20 text-accent">R$ {displayPrice.toFixed(2)}</Badge>
                           <div className="flex items-center gap-1">
                             <Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={() => updateQuantity(service.code, quantity - 1)} disabled={quantity <= 1}>-</Button>
                             <span className="w-8 text-center">{quantity}</span>
                             <Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={() => updateQuantity(service.code, quantity + 1)} disabled={quantity >= service.available}>+</Button>
                           </div>
-                          <Button size="sm" onClick={() => buyNumber(service)} disabled={buyingService === service.code} className="bg-green-600 hover:bg-green-700">
+                          <Button size="sm" onClick={() => buyNumber(service)} disabled={buyingService === service.code} className="bg-green-600 hover:bg-green-700 w-full md:w-auto">
                             {buyingService === service.code ? <Loader2 className="h-4 w-4 animate-spin" /> : "Comprar"}
                           </Button>
                         </div>
@@ -1098,11 +1099,47 @@ const SMMPanelEmbed = () => {
                 <select
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="bg-background border border-border rounded-md px-3 py-2"
+                  className="bg-background border border-border rounded-md px-3 py-2 w-full md:w-auto"
                 >
                   <option value="all">Todas as categorias</option>
                   {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                 </select>
+              </div>
+
+              {/* Quick category buttons */}
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button
+                  variant={selectedCategory === "Instagram - Seguidores" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedCategory(selectedCategory === "Instagram - Seguidores" ? "all" : "Instagram - Seguidores")}
+                  className={selectedCategory === "Instagram - Seguidores" ? "bg-accent" : ""}
+                >
+                  Instagram Seguidores
+                </Button>
+                <Button
+                  variant={selectedCategory === "Facebook - Comentários" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedCategory(selectedCategory === "Facebook - Comentários" ? "all" : "Facebook - Comentários")}
+                  className={selectedCategory === "Facebook - Comentários" ? "bg-accent" : ""}
+                >
+                  Facebook Comentários
+                </Button>
+                <Button
+                  variant={selectedCategory === "Instagram - Curtidas" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedCategory(selectedCategory === "Instagram - Curtidas" ? "all" : "Instagram - Curtidas")}
+                  className={selectedCategory === "Instagram - Curtidas" ? "bg-accent" : ""}
+                >
+                  Instagram Curtidas
+                </Button>
+                <Button
+                  variant={selectedCategory === "Facebook - Curtidas de Post" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedCategory(selectedCategory === "Facebook - Curtidas de Post" ? "all" : "Facebook - Curtidas de Post")}
+                  className={selectedCategory === "Facebook - Curtidas de Post" ? "bg-accent" : ""}
+                >
+                  Facebook Curtidas de Post
+                </Button>
               </div>
 
               {selectedService && (
