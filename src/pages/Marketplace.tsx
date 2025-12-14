@@ -250,11 +250,11 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
       className={`bg-secondary border-accent/30 overflow-hidden cursor-pointer hover:border-accent transition-colors ${product.is_sold_out ? 'opacity-60' : ''}`}
       onClick={() => !product.is_sold_out && setSelectedProduct(product)}
     >
-      <div className="relative aspect-video overflow-hidden">
+      <div className="relative overflow-hidden">
         <img 
           src={getProductImage(product.image_url)} 
           alt={product.name}
-          className="w-full h-full object-contain rounded-t-lg"
+          className="w-full h-auto object-cover rounded-t-lg"
         />
         {product.is_sold_out && (
           <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
