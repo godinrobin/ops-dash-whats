@@ -9,6 +9,7 @@ const USD_TO_BRL = 6.10;
 const PROFIT_MARGIN = 1.30;
 const PLATFORM_MARKUP = 1.10;
 
+// Traduções de categorias
 const categoryTranslations: Record<string, string> = {
   'Instagram Followers': 'Instagram Seguidores',
   'Instagram Likes': 'Instagram Curtidas',
@@ -38,10 +39,10 @@ const categoryTranslations: Record<string, string> = {
   'Facebook Views': 'Facebook Visualizações',
   'Facebook Comments': 'Facebook Comentários',
   'Facebook Shares': 'Facebook Compartilhamentos',
-  'Twitter Followers': 'Twitter Seguidores',
-  'Twitter Likes': 'Twitter Curtidas',
-  'Twitter Retweets': 'Twitter Retweets',
-  'Twitter Views': 'Twitter Visualizações',
+  'Twitter Followers': 'Twitter/X Seguidores',
+  'Twitter Likes': 'Twitter/X Curtidas',
+  'Twitter Retweets': 'Twitter/X Retweets',
+  'Twitter Views': 'Twitter/X Visualizações',
   'Telegram Members': 'Telegram Membros',
   'Telegram Post Views': 'Telegram Visualizações',
   'Telegram Reactions': 'Telegram Reações',
@@ -68,21 +69,162 @@ const categoryTranslations: Record<string, string> = {
   'Kwai Views': 'Kwai Visualizações',
 };
 
+// Traduções de termos comuns em nomes de serviços
+const nameTranslations: Record<string, string> = {
+  'Followers': 'Seguidores',
+  'followers': 'seguidores',
+  'Likes': 'Curtidas',
+  'likes': 'curtidas',
+  'Views': 'Visualizações',
+  'views': 'visualizações',
+  'Comments': 'Comentários',
+  'comments': 'comentários',
+  'Shares': 'Compartilhamentos',
+  'shares': 'compartilhamentos',
+  'Subscribers': 'Inscritos',
+  'subscribers': 'inscritos',
+  'Members': 'Membros',
+  'members': 'membros',
+  'Saves': 'Salvamentos',
+  'saves': 'salvamentos',
+  'Watch Time': 'Tempo de Exibição',
+  'watch time': 'tempo de exibição',
+  'Reactions': 'Reações',
+  'reactions': 'reações',
+  'Plays': 'Reproduções',
+  'plays': 'reproduções',
+  'Real': 'Reais',
+  'real': 'reais',
+  'Instant': 'Instantâneo',
+  'instant': 'instantâneo',
+  'Fast': 'Rápido',
+  'fast': 'rápido',
+  'Slow': 'Lento',
+  'slow': 'lento',
+  'High Quality': 'Alta Qualidade',
+  'high quality': 'alta qualidade',
+  'HQ': 'Alta Qualidade',
+  'Premium': 'Premium',
+  'Cheap': 'Econômico',
+  'cheap': 'econômico',
+  'Bot': 'Bot',
+  'Refill': 'Reposição',
+  'refill': 'reposição',
+  'No Refill': 'Sem Reposição',
+  'no refill': 'sem reposição',
+  'Lifetime': 'Vitalício',
+  'lifetime': 'vitalício',
+  'Guaranteed': 'Garantido',
+  'guaranteed': 'garantido',
+  'Non Drop': 'Sem Queda',
+  'non drop': 'sem queda',
+  'No Drop': 'Sem Queda',
+  'no drop': 'sem queda',
+  'Drop': 'Queda',
+  'drop': 'queda',
+  'Active': 'Ativos',
+  'active': 'ativos',
+  'Targeted': 'Segmentado',
+  'targeted': 'segmentado',
+  'Worldwide': 'Mundial',
+  'worldwide': 'mundial',
+  'Global': 'Global',
+  'Brazil': 'Brasil',
+  'Brazilian': 'Brasileiro',
+  'USA': 'EUA',
+  'Minutes': 'Minutos',
+  'minutes': 'minutos',
+  'Hours': 'Horas',
+  'hours': 'horas',
+  'Days': 'Dias',
+  'days': 'dias',
+  'Post': 'Post',
+  'post': 'post',
+  'Story': 'Story',
+  'story': 'story',
+  'Reel': 'Reel',
+  'reel': 'reel',
+  'Video': 'Vídeo',
+  'video': 'vídeo',
+  'Photo': 'Foto',
+  'photo': 'foto',
+  'Profile': 'Perfil',
+  'profile': 'perfil',
+  'Page': 'Página',
+  'page': 'página',
+  'Channel': 'Canal',
+  'channel': 'canal',
+  'Group': 'Grupo',
+  'group': 'grupo',
+  'Live': 'Ao Vivo',
+  'live': 'ao vivo',
+  'Stream': 'Transmissão',
+  'stream': 'transmissão',
+  'per': 'por',
+  'Per': 'Por',
+  'day': 'dia',
+  'Day': 'Dia',
+  'hour': 'hora',
+  'Hour': 'Hora',
+  'Custom': 'Personalizado',
+  'custom': 'personalizado',
+  'Random': 'Aleatório',
+  'random': 'aleatório',
+  'Mixed': 'Misto',
+  'mixed': 'misto',
+  'Male': 'Masculino',
+  'male': 'masculino',
+  'Female': 'Feminino',
+  'female': 'feminino',
+  'Speed': 'Velocidade',
+  'speed': 'velocidade',
+  'Start': 'Início',
+  'start': 'início',
+  'Complete': 'Completo',
+  'complete': 'completo',
+  'Max': 'Máx',
+  'max': 'máx',
+  'Min': 'Mín',
+  'min': 'mín',
+  'Impressions': 'Impressões',
+  'impressions': 'impressões',
+  'Reach': 'Alcance',
+  'reach': 'alcance',
+  'Engagement': 'Engajamento',
+  'engagement': 'engajamento',
+  'Traffic': 'Tráfego',
+  'traffic': 'tráfego',
+  'Organic': 'Orgânico',
+  'organic': 'orgânico',
+};
+
 function translateCategory(category: string): string {
-  // First try exact match
   if (categoryTranslations[category]) {
     return categoryTranslations[category];
   }
   
-  // Try partial match
   for (const [key, value] of Object.entries(categoryTranslations)) {
     if (category.toLowerCase().includes(key.toLowerCase())) {
       return value;
     }
   }
   
-  // Return original if no match
   return category;
+}
+
+function translateServiceName(name: string): string {
+  let translated = name;
+  
+  // Ordenar por tamanho decrescente para traduzir frases maiores primeiro
+  const sortedEntries = Object.entries(nameTranslations).sort((a, b) => b[0].length - a[0].length);
+  
+  for (const [english, portuguese] of sortedEntries) {
+    // Usar regex para substituir palavras inteiras
+    const regex = new RegExp(`\\b${english}\\b`, 'g');
+    translated = translated.replace(regex, portuguese);
+  }
+  
+  return translated;
 }
 
 serve(async (req) => {
@@ -115,6 +257,11 @@ serve(async (req) => {
 
     const services = await response.json();
     console.log(`Fetched ${services.length} services`);
+    
+    // Log sample service to verify rate format
+    if (services.length > 0) {
+      console.log('Sample service:', JSON.stringify(services[0]));
+    }
 
     // Transform and translate services
     const transformedServices = services.map((service: any) => {
@@ -124,7 +271,8 @@ serve(async (req) => {
 
       return {
         id: service.service,
-        name: service.name,
+        name: translateServiceName(service.name),
+        nameOriginal: service.name,
         category: service.category,
         categoryPt: translateCategory(service.category),
         type: service.type,
