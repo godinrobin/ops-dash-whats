@@ -189,6 +189,13 @@ const SMSBot = () => {
       setServiceQuantities(prev => ({ ...prev, [service.code]: 1 }));
       loadOrders();
       
+      // Redireciona para a aba de pedidos
+      const tabsElement = document.querySelector('[data-state="active"][value="buy"]');
+      if (tabsElement) {
+        const ordersTab = document.querySelector('[value="orders"]') as HTMLButtonElement;
+        ordersTab?.click();
+      }
+      
     } catch (error: any) {
       console.error('Error buying number:', error);
       toast({ title: error.message || "Erro ao comprar número", variant: "destructive" });

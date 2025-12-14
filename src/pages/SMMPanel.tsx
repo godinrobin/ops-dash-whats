@@ -226,6 +226,10 @@ const SMMPanel = () => {
         setOrderQuantity(100);
         setCustomComments("");
         fetchOrders();
+        
+        // Redireciona para a aba de pedidos
+        const ordersTab = document.querySelector('[value="orders"]') as HTMLButtonElement;
+        ordersTab?.click();
       } else {
         throw new Error(response.data?.error || 'Erro ao criar pedido');
       }
