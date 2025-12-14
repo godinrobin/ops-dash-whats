@@ -14,7 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X, Key, Loader2, 
   UserPlus, Activity, Megaphone, Eye, MousePointer, Trash2, Image, Clock, Settings, Users, 
-  BarChart3, Phone, FileText, Wallet, History, Percent, Menu
+  BarChart3, Phone, FileText, Wallet, History, Percent, Menu, ShoppingBag, Package
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -60,10 +60,20 @@ const SIDEBAR_MENU = [
     ]
   },
   {
+    category: "Marketplace",
+    icon: ShoppingBag,
+    items: [
+      { id: "wallets", label: "Carteiras", icon: Wallet },
+      { id: "transactions", label: "Histórico", icon: History },
+      { id: "margins", label: "Margens de Lucro", icon: Percent },
+      { id: "marketplace-products", label: "Produtos", icon: Package },
+      { id: "marketplace-sales", label: "Vendas de Ativos", icon: ShoppingBag },
+    ]
+  },
+  {
     category: "Configurações",
     icon: Settings,
     items: [
-      { id: "margins", label: "Margens de Lucro", icon: Percent },
       { id: "passwords", label: "Senhas", icon: Key },
       { id: "create-user", label: "Criar Usuário", icon: UserPlus },
       { id: "announcements", label: "Avisos", icon: Megaphone },

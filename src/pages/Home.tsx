@@ -1,17 +1,27 @@
-import { useRef } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import Autoplay from "embla-carousel-autoplay";
-
+import Marketplace from "./Marketplace";
 
 const Home = () => {
   const navigate = useNavigate();
   const autoplayPlugin = useRef(
     Autoplay({ delay: 3000, stopOnInteraction: true })
   );
+
+  // Load mode from localStorage or default to "sistemas"
+  const [mode, setMode] = useState<"sistemas" | "marketplace">(() => {
+    const saved = localStorage.getItem("homeMode");
+    return (saved === "marketplace" ? "marketplace" : "sistemas");
+  });
+
+  // Save mode to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem("homeMode", mode);
+  }, [mode]);
 
   const videos = [
     { id: "81hMbGdBQd0", name: "COMO CRIAR ENTREGÁVEL COM IA" },
@@ -21,9 +31,14 @@ const Home = () => {
     { id: "FXpRT-Dsqes", name: "ORGANIZADOR DE NÚMEROS DE WHATSAPP" },
   ];
 
+  // If marketplace mode, render marketplace component
+  if (mode === "marketplace") {
+    return <Marketplace onModeChange={setMode} currentMode={mode} />;
+  }
+
   return (
     <>
-      <Header />
+      <Header mode={mode} onModeChange={setMode} />
       <div className="h-14 md:h-16" />
       <div className="min-h-screen bg-background p-6 md:p-10">
         <div className="container mx-auto max-w-6xl">
@@ -247,50 +262,6 @@ const Home = () => {
               <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
                 <p className="text-sm text-muted-foreground">
                   Sistema automático de marcação de vendas
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card 
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
-              onClick={() => navigate("/sms-bot")}
-            >
-              <CardHeader className="text-center p-3 md:p-6">
-                <div className="flex justify-center mb-2 md:mb-4">
-                  <span className="text-3xl md:text-6xl">📲</span>
-                </div>
-                <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent">
-                  Números Virtuais
-                </CardTitle>
-                <CardDescription className="text-xs md:text-base hidden md:block">
-                  Compre números virtuais para receber SMS
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
-                <p className="text-sm text-muted-foreground">
-                  Números temporários para verificação
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card 
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
-              onClick={() => navigate("/smm-panel")}
-            >
-              <CardHeader className="text-center p-3 md:p-6">
-                <div className="flex justify-center mb-2 md:mb-4">
-                  <span className="text-3xl md:text-6xl">📈</span>
-                </div>
-                <CardTitle className="text-sm md:text-2xl bg-gradient-to-r from-pink-400 to-rose-500 bg-clip-text text-transparent">
-                  Painel Marketing
-                </CardTitle>
-                <CardDescription className="text-xs md:text-base hidden md:block">
-                  Compre seguidores, curtidas e visualizações
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
-                <p className="text-sm text-muted-foreground">
-                  Serviços SMM para redes sociais
                 </p>
               </CardContent>
             </Card>
