@@ -409,7 +409,8 @@ const SMSBot = () => {
                       <div className="grid grid-cols-1 gap-2">
                         {filteredServices.map(service => {
                           const quantity = getQuantity(service.code);
-                          const totalPrice = service.priceWithMarkup * quantity;
+                          const displayPrice = service.priceWithMarkup ?? service.priceBrl ?? 0;
+                          const totalPrice = displayPrice * quantity;
                           
                           return (
                             <div
@@ -423,8 +424,8 @@ const SMSBot = () => {
                                 </p>
                               </div>
                               <div className="flex items-center gap-2">
-                                <Badge variant="secondary" className="bg-accent/20 text-accent">
-                                  R$ {service.priceWithMarkup.toFixed(2)}
+                              <Badge variant="secondary" className="bg-accent/20 text-accent">
+                                  R$ {displayPrice.toFixed(2)}
                                 </Badge>
                                 <div className="flex items-center gap-1">
                                   <Button
