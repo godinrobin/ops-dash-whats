@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FB Ads - Zapdata",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Baixe anúncios de imagem e vídeo da Biblioteca de Anúncios do Facebook. Filtre por WhatsApp. Salve ofertas diretamente no Zapdata.",
   "permissions": [
     "activeTab",

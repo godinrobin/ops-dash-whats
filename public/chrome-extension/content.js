@@ -1,17 +1,30 @@
-// FB Ads - Zapdata - Content Script
+// FB Ads - Zapdata - Content Script v3.0.0
 
 (function() {
   'use strict';
 
-  // Prevent multiple injections (SPA navigations / duplicated executions)
+  // Content script version marker (used to remove old injected buttons after updates)
+  const SCRIPT_VERSION = '3.0.0-final';
+
+  // Prevent multiple injections, BUT force cleanup if different version detected
   if (window.__FAD_ZAPDATA_LOADED__) {
-    console.log('ℹ️ FB Ads - Zapdata already loaded, skipping re-init');
-    return;
+    if (window.__FAD_ZAPDATA_VERSION__ === SCRIPT_VERSION) {
+      console.log('ℹ️ FB Ads - Zapdata v3 already loaded, skipping re-init');
+      return;
+    }
+    // Different version detected - force full cleanup before re-init
+    console.log('🔄 Different version detected, forcing cleanup and re-init');
+    document.querySelectorAll('.fad-actions-container, .fad-filter-bar, .fad-load-more-container, .fad-modal-overlay, .fad-toast').forEach(el => el.remove());
+    document.querySelectorAll('[data-fad-processed]').forEach(el => {
+      delete el.dataset.fadProcessed;
+      delete el.dataset.fadId;
+      delete el.dataset.fadWhatsapp;
+      delete el.dataset.fadLibraryId;
+      el.classList.remove('fad-whatsapp-highlight');
+    });
   }
   window.__FAD_ZAPDATA_LOADED__ = true;
-
-  // Content script version marker (used to remove old injected buttons after updates)
-  const SCRIPT_VERSION = '2.0.0-2025-12-15c';
+  window.__FAD_ZAPDATA_VERSION__ = SCRIPT_VERSION;
 
   // Library ID extraction (used to build ads/library/?id=... links and deduplicate cards)
   const LIBRARY_ID_REGEXES = [
@@ -162,45 +175,63 @@
     return count;
   }
 
-  // Cleanup duplicate buttons (best-effort, non-destructive)
-  // IMPORTANT: do NOT remove "orphan" buttons on scroll because Facebook reuses DOM nodes.
+  // AGGRESSIVE cleanup - removes ANY button not from current version
   function cleanupDuplicateButtons() {
     let removed = 0;
 
-    // 1) Remove stale containers from previous extension versions ("top buttons" not updated)
-    const all = Array.from(document.querySelectorAll('.fad-actions-container'));
-    for (const bar of all) {
+    // 1) Remove ALL containers from previous versions (the main fix)
+    document.querySelectorAll('.fad-actions-container').forEach(bar => {
       if (bar.dataset.fadVersion !== SCRIPT_VERSION) {
         bar.remove();
         removed++;
       }
-    }
+    });
 
-    // 2) Deduplicate by Library ID across the whole page
-    const currentBars = Array.from(document.querySelectorAll('.fad-actions-container'));
+    // 2) Validate remaining buttons - check if Library ID still matches card content
+    document.querySelectorAll('.fad-actions-container').forEach(bar => {
+      const parent = bar.parentElement;
+      if (!parent) {
+        bar.remove();
+        removed++;
+        return;
+      }
+      
+      // Get current Library ID from card text
+      const currentId = extractLibraryId(parent.textContent || '');
+      const barId = bar.dataset.fadLibraryId;
+      
+      // If bar has an ID but it doesn't match current card content, remove it (orphaned button)
+      if (barId && currentId && barId !== currentId) {
+        console.log(`🧹 Removing orphaned button: bar=${barId}, card=${currentId}`);
+        bar.remove();
+        removed++;
+      }
+    });
+
+    // 3) Deduplicate by Library ID - keep only ONE button per ad
     const byLibraryId = new Map();
-
-    for (const bar of currentBars) {
+    document.querySelectorAll('.fad-actions-container').forEach(bar => {
       const libId = bar.dataset.fadLibraryId;
-      if (!libId) continue;
+      if (!libId) return;
       if (!byLibraryId.has(libId)) byLibraryId.set(libId, []);
       byLibraryId.get(libId).push(bar);
-    }
+    });
 
     for (const [, list] of byLibraryId) {
       if (list.length <= 1) continue;
-      // Keep the last one in DOM order
+      // Keep only the last one
       for (let i = 0; i < list.length - 1; i++) {
         list[i].remove();
         removed++;
       }
     }
 
-    // 3) Final guard: deduplicate within the same parent container
-    const remaining = Array.from(document.querySelectorAll('.fad-actions-container'));
-    const parents = new Set(remaining.map((b) => b.parentElement).filter(Boolean));
-
-    parents.forEach((parent) => {
+    // 4) Final: max 1 button per parent container
+    const parents = new Set();
+    document.querySelectorAll('.fad-actions-container').forEach(b => {
+      if (b.parentElement) parents.add(b.parentElement);
+    });
+    parents.forEach(parent => {
       const siblings = parent.querySelectorAll('.fad-actions-container');
       if (siblings.length > 1) {
         for (let i = 0; i < siblings.length - 1; i++) {
@@ -211,24 +242,34 @@
     });
 
     if (removed > 0) {
-      console.log(`🧹 Cleaned up ${removed} duplicate/stale button containers`);
+      console.log(`🧹 Cleaned up ${removed} duplicate/stale/orphaned buttons`);
     }
   }
 
-  // Full cleanup on page refresh - called once at init
+  // AGGRESSIVE Full cleanup on page refresh - removes ALL old buttons regardless of version
   function fullCleanup() {
-    const allButtons = document.querySelectorAll('.fad-actions-container');
-    allButtons.forEach(btn => btn.remove());
+    // Remove ALL button containers (from any version)
+    document.querySelectorAll('.fad-actions-container').forEach(el => el.remove());
+    
+    // Remove all old class elements that might have been left behind
+    document.querySelectorAll('.fad-btn-download, .fad-btn-save, .fad-checkbox-container, .fad-whatsapp-badge').forEach(el => {
+      if (!el.closest('.fad-actions-container')) el.remove();
+    });
 
-    // Reset all processed flags
-    const processedCards = document.querySelectorAll('[data-fad-processed="true"]');
-    processedCards.forEach(card => {
-      card.dataset.fadProcessed = 'false';
+    // Reset ALL processed flags and data attributes
+    document.querySelectorAll('[data-fad-processed], [data-fad-id], [data-fad-whatsapp], [data-fad-library-id]').forEach(card => {
+      delete card.dataset.fadProcessed;
+      delete card.dataset.fadId;
+      delete card.dataset.fadWhatsapp;
+      delete card.dataset.fadLibraryId;
+      delete card.dataset.fadAdsCount;
       card.classList.remove('fad-whatsapp-highlight');
     });
 
     state.processedAds = new WeakSet();
-    console.log('🔄 Full cleanup completed');
+    state.selectedAds = new Set();
+    state.stats = { total: 0, whatsapp: 0, selected: 0 };
+    console.log('🧹 AGGRESSIVE full cleanup completed - all old buttons removed');
   }
 
   // Delegated event handlers (Facebook often re-creates nodes; direct listeners get lost)
