@@ -21,6 +21,7 @@ import AudioGenerator from "./pages/AudioGenerator";
 import AudioTranscriber from "./pages/AudioTranscriber";
 import ZapSpy from "./pages/ZapSpy";
 import TagWhats from "./pages/TagWhats";
+import ExtensaoAdsWhatsApp from "./pages/ExtensaoAdsWhatsApp";
 import SMSBot from "./pages/SMSBot";
 import SMMPanel from "./pages/SMMPanel";
 import AdminPanelNew from "./pages/AdminPanelNew";
@@ -58,6 +59,7 @@ const App = () => (
             <Route path="/gerador-audio" element={<MemberRoute featureName="Gerador de Áudio"><AudioGenerator /></MemberRoute>} />
             <Route path="/transcricao-audio" element={<MemberRoute featureName="Transcrição de Áudio"><AudioTranscriber /></MemberRoute>} />
             <Route path="/tag-whats" element={<MemberRoute featureName="Tag Whats"><TagWhats /></MemberRoute>} />
+            <Route path="/extensao-ads" element={<MemberRoute featureName="Extensão Ads WhatsApp"><ExtensaoAdsWhatsApp /></MemberRoute>} />
             
             {/* ADMIN ROUTES */}
             <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />

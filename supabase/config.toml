@@ -95,3 +95,6 @@ verify_jwt = true
 
 [functions.smm-refill-order]
 verify_jwt = true
+
+[functions.extension-auth]
+verify_jwt = false
