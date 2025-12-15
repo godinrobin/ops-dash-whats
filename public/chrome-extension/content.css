@@ -1,0 +1,587 @@
+/* FB Ads - Zapdata - Content Styles */
+
+:root {
+  --fad-primary: #FF6B00;
+  --fad-primary-hover: #E55F00;
+  --fad-bg-dark: #1A1A1A;
+  --fad-bg-card: #252525;
+  --fad-text: #FFFFFF;
+  --fad-text-muted: #A0A0A0;
+  --fad-success: #22C55E;
+  --fad-border: #3D3D3D;
+}
+
+/* Action Buttons Container */
+.fad-actions-container {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  background: linear-gradient(135deg, var(--fad-bg-dark) 0%, var(--fad-bg-card) 100%);
+  border-radius: 0 0 8px 8px;
+  margin-top: -4px;
+  border-top: 1px solid var(--fad-border);
+  flex-wrap: wrap;
+}
+
+/* Action Buttons */
+.fad-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.fad-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.fad-btn-download {
+  background: var(--fad-primary);
+  color: white;
+}
+
+.fad-btn-download:hover {
+  background: var(--fad-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 107, 0, 0.3);
+}
+
+.fad-btn-save {
+  background: var(--fad-bg-dark);
+  color: var(--fad-text);
+  border: 2px solid var(--fad-primary);
+}
+
+.fad-btn-save:hover {
+  background: rgba(255, 107, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.fad-btn-success {
+  background: var(--fad-success) !important;
+  color: white !important;
+  border-color: var(--fad-success) !important;
+}
+
+/* Checkbox for selection */
+.fad-checkbox-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding: 6px 12px;
+  background: var(--fad-bg-dark);
+  border: 2px solid var(--fad-primary);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.fad-checkbox-container:hover {
+  background: rgba(255, 107, 0, 0.1);
+}
+
+.fad-checkbox {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--fad-primary);
+  cursor: pointer;
+}
+
+.fad-checkbox:checked {
+  background: var(--fad-primary);
+}
+
+.fad-checkbox-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fad-text);
+  cursor: pointer;
+}
+
+/* WhatsApp Badge */
+.fad-whatsapp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #25D366;
+  color: white;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 8px;
+}
+
+.fad-whatsapp-badge svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Filter Bar - Bottom Fixed */
+.fad-filter-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 12px 24px;
+  background: linear-gradient(135deg, var(--fad-bg-dark) 0%, #252525 100%);
+  border-top: 2px solid var(--fad-primary);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.fad-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fad-filter-label {
+  color: var(--fad-text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Toggle Switch in Filter Bar */
+.fad-toggle {
+  position: relative;
+  width: 44px;
+  height: 24px;
+}
+
+.fad-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.fad-toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--fad-bg-card);
+  border-radius: 24px;
+  transition: 0.3s;
+  border: 1px solid var(--fad-border);
+}
+
+.fad-toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 2px;
+  bottom: 2px;
+  background-color: var(--fad-text-muted);
+  border-radius: 50%;
+  transition: 0.3s;
+}
+
+.fad-toggle input:checked + .fad-toggle-slider {
+  background-color: var(--fad-primary);
+  border-color: var(--fad-primary);
+}
+
+.fad-toggle input:checked + .fad-toggle-slider:before {
+  transform: translateX(20px);
+  background-color: white;
+}
+
+/* Number Input in Filter Bar */
+.fad-number-input {
+  width: 70px;
+  padding: 6px 10px;
+  background: var(--fad-bg-card);
+  border: 1px solid var(--fad-border);
+  border-radius: 6px;
+  color: var(--fad-text);
+  font-size: 13px;
+  text-align: center;
+}
+
+.fad-number-input:focus {
+  outline: none;
+  border-color: var(--fad-primary);
+}
+
+/* Download All Button */
+.fad-btn-download-all {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: var(--fad-primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.fad-btn-download-all:hover {
+  background: var(--fad-primary-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(255, 107, 0, 0.4);
+}
+
+.fad-btn-download-all:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.fad-btn-download-all svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Stats Display */
+.fad-stats {
+  display: flex;
+  gap: 16px;
+  padding: 0 16px;
+  border-left: 1px solid var(--fad-border);
+  border-right: 1px solid var(--fad-border);
+}
+
+.fad-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.fad-stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--fad-primary);
+}
+
+.fad-stat-label {
+  font-size: 10px;
+  color: var(--fad-text-muted);
+  text-transform: uppercase;
+}
+
+/* Separator */
+.fad-separator {
+  width: 1px;
+  height: 30px;
+  background: var(--fad-border);
+}
+
+/* Hidden ads (filtered out) */
+.fad-hidden,
+.fad-native-hidden {
+  display: none !important;
+}
+
+/* Highlight WhatsApp ads */
+.fad-whatsapp-highlight {
+  position: relative;
+}
+
+.fad-whatsapp-highlight::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border: 2px solid #25D366;
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Loading spinner */
+.fad-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: fad-spin 0.8s linear infinite;
+  display: inline-block;
+}
+
+@keyframes fad-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Toast Notifications */
+.fad-toast {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  padding: 12px 20px;
+  background: var(--fad-bg-dark);
+  color: var(--fad-text);
+  border-radius: 8px;
+  border-left: 4px solid var(--fad-primary);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  z-index: 10000;
+  animation: fad-slideIn 0.3s ease;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+}
+
+.fad-toast.success {
+  border-left-color: var(--fad-success);
+}
+
+.fad-toast.error {
+  border-left-color: #EF4444;
+}
+
+@keyframes fad-slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Load More Button Container */
+.fad-load-more-container {
+  position: fixed;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9998;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: linear-gradient(135deg, var(--fad-bg-dark) 0%, #252525 100%);
+  border: 1px solid var(--fad-border);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.fad-btn-load-more {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  background: var(--fad-primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.fad-btn-load-more:hover {
+  background: var(--fad-primary-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(255, 107, 0, 0.4);
+}
+
+.fad-load-more-info {
+  font-size: 11px;
+  color: var(--fad-text-muted);
+}
+
+/* Modal Overlay */
+.fad-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10001;
+  animation: fad-fadeIn 0.2s ease;
+}
+
+@keyframes fad-fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Modal */
+.fad-modal {
+  background: var(--fad-bg-dark);
+  border: 2px solid var(--fad-primary);
+  border-radius: 12px;
+  width: 400px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  animation: fad-slideUp 0.3s ease;
+}
+
+@keyframes fad-slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.fad-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--fad-border);
+}
+
+.fad-modal-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--fad-text);
+  margin: 0;
+}
+
+.fad-modal-close {
+  background: none;
+  border: none;
+  color: var(--fad-text-muted);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.fad-modal-close:hover {
+  color: var(--fad-text);
+}
+
+.fad-modal-body {
+  padding: 20px;
+}
+
+.fad-modal-input-group {
+  margin-bottom: 16px;
+}
+
+.fad-modal-input-group label {
+  display: block;
+  font-size: 12px;
+  color: var(--fad-text-muted);
+  margin-bottom: 6px;
+}
+
+.fad-modal-input-group input {
+  width: 100%;
+  padding: 12px;
+  background: var(--fad-bg-card);
+  border: 1px solid var(--fad-border);
+  border-radius: 8px;
+  color: var(--fad-text);
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.fad-modal-input-group input:focus {
+  outline: none;
+  border-color: var(--fad-primary);
+}
+
+.fad-modal-input-group input::placeholder {
+  color: var(--fad-text-muted);
+}
+
+.fad-modal-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(255, 107, 0, 0.1);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--fad-text-muted);
+}
+
+.fad-modal-info svg {
+  color: var(--fad-primary);
+  flex-shrink: 0;
+}
+
+.fad-modal-footer {
+  display: flex;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--fad-border);
+}
+
+.fad-modal-btn {
+  flex: 1;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.fad-modal-btn-cancel {
+  background: var(--fad-bg-card);
+  color: var(--fad-text);
+  border: 1px solid var(--fad-border);
+}
+
+.fad-modal-btn-cancel:hover {
+  background: var(--fad-bg-dark);
+  border-color: var(--fad-text-muted);
+}
+
+.fad-modal-btn-save {
+  background: var(--fad-primary);
+  color: white;
+}
+
+.fad-modal-btn-save:hover {
+  background: var(--fad-primary-hover);
+}
+
+.fad-modal-btn-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Adjust page padding for filter bar and load more */
+body {
+  padding-bottom: 140px !important;
+}

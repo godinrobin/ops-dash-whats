@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "FB Ads - Zapdata",
+  "version": "2.0.0",
+  "description": "Baixe anúncios de imagem e vídeo da Biblioteca de Anúncios do Facebook. Filtre por WhatsApp. Salve ofertas diretamente no Zapdata.",
+  "permissions": [
+    "activeTab",
+    "downloads",
+    "storage",
+    "clipboardWrite"
+  ],
+  "host_permissions": [
+    "https://www.facebook.com/*",
+    "https://facebook.com/*",
+    "https://dcjizoulbggsavizbukq.supabase.co/*"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.facebook.com/ads/library/*",
+        "https://facebook.com/ads/library/*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
