@@ -154,7 +154,7 @@ const Home = () => {
       description: "Extensão para analisar anúncios no Chrome",
       subtext: "Filtre e salve ofertas da Biblioteca de Anúncios",
       gradient: "from-orange-400 to-amber-500",
-      restricted: true
+      restricted: false
     }
   ];
 
