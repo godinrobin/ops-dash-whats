@@ -363,11 +363,11 @@
     return 1;
   }
 
-  // Get ad library link from card - extracts the specific ad ID
+  // Get ad library link from card - generates a link using the card's "Identificação da biblioteca" (Library ID)
   function getAdLibraryLink(card) {
     const LABEL_PATTERNS = [
-      /Identifica[çc][ãa]o\s*da\s*biblioteca[:\s]*(\d{10,25})/i,
-      /Library\s*ID[:\s]*(\d{10,25})/i,
+      /Identifica[çc][ãa]o\s*da\s*biblioteca\s*[:：]?\s*(\d{10,30})/i,
+      /Library\s*ID\s*[:：]?\s*(\d{10,30})/i,
     ];
 
     const buildUrl = (id) => `https://www.facebook.com/ads/library/?id=${id}`;
@@ -375,11 +375,12 @@
     const extractIdsFromText = (text) => {
       if (!text) return [];
       const ids = new Set();
+      const t = String(text);
 
       for (const pattern of LABEL_PATTERNS) {
         const re = new RegExp(pattern.source, 'ig');
-        for (const m of String(text).matchAll(re)) {
-          if (m && m[1]) ids.add(m[1]);
+        for (const m of t.matchAll(re)) {
+          if (m?.[1]) ids.add(m[1]);
         }
       }
 
@@ -391,36 +392,19 @@
       return ids.length === 1 ? ids[0] : null;
     };
 
-    const extractIdFromLinks = (root) => {
-      if (!root) return null;
-      const links = root.querySelectorAll('a[href]');
-      for (const link of links) {
-        const href = link.href || '';
-        if (!href) continue;
-
-        // Direct library URL already present
-        const libraryMatch = href.match(/facebook\.com\/ads\/library\/\?id=(\d{10,25})/i);
-        if (libraryMatch && libraryMatch[1]) return libraryMatch[1];
-
-        // ID in query params
-        const urlIdMatch = href.match(/[?&]id=(\d{10,25})/);
-        if (urlIdMatch && urlIdMatch[1]) return urlIdMatch[1];
-      }
-      return null;
-    };
-
-    const findClosestLabeledId = (root) => {
+    const findNearestLabeledId = (root) => {
       if (!root) return null;
 
       const cardRect = card.getBoundingClientRect();
       const candidates = [];
 
-      const nodes = root.querySelectorAll('span, div');
-      let scanned = 0;
-      for (const node of nodes) {
-        if (scanned++ > 400) break;
+      // Include root itself + a limited scan to keep performance stable.
+      const nodes = [root, ...root.querySelectorAll('span, div')];
+      const limit = Math.min(nodes.length, 1800);
 
-        const t = node.textContent || '';
+      for (let i = 0; i < limit; i++) {
+        const node = nodes[i];
+        const t = node?.textContent || '';
         const tl = t.toLowerCase();
         if (!tl.includes('biblioteca') && !tl.includes('library id')) continue;
 
@@ -428,13 +412,12 @@
         if (!id) continue;
 
         candidates.push({ id, node });
-        if (candidates.length >= 40) break;
+        if (candidates.length >= 60) break;
       }
 
       if (candidates.length === 0) return null;
       if (candidates.length === 1) return candidates[0].id;
 
-      // Multiple IDs found within this context; pick the one closest to the current card.
       let best = candidates[0];
       let bestDist = Infinity;
 
@@ -450,56 +433,50 @@
       return best?.id || null;
     };
 
-    // A) Card itself
-    const idFromCardLink = extractIdFromLinks(card);
-    if (idFromCardLink) {
-      console.log('📌 Found ad ID via link on card:', idFromCardLink);
-      return buildUrl(idFromCardLink);
-    }
-
-    // Only accept the card text when it's uniquely identified (avoid grabbing IDs from other cards)
+    // 1) Try the card first
     const idFromCardText = extractUniqueIdFromText(card.textContent || '');
     if (idFromCardText) {
-      console.log('📌 Found ad ID via text on card:', idFromCardText);
+      console.log('📌 Found Library ID via text on card:', idFromCardText);
       return buildUrl(idFromCardText);
     }
 
-    const idFromClosestCardLabel = findClosestLabeledId(card);
-    if (idFromClosestCardLabel) {
-      console.log('📌 Found ad ID via closest labeled node on card:', idFromClosestCardLabel);
-      return buildUrl(idFromClosestCardLabel);
+    const idFromNearestOnCard = findNearestLabeledId(card);
+    if (idFromNearestOnCard) {
+      console.log('📌 Found Library ID via nearest labeled node on card:', idFromNearestOnCard);
+      return buildUrl(idFromNearestOnCard);
     }
 
-    // B) Walk up parents to find the header ("Identificação da biblioteca") that might be outside the injected container
+    // 2) Walk up parents (the "Identificação da biblioteca" sometimes sits above the media container)
     let el = card;
     for (let depth = 0; depth < 12 && el; depth++) {
       const parent = el.parentElement;
       if (!parent) break;
 
-      const idFromParentLink = extractIdFromLinks(parent);
-      if (idFromParentLink) {
-        console.log('📌 Found ad ID via link in parent:', idFromParentLink);
-        return buildUrl(idFromParentLink);
+      const idFromParentText = extractUniqueIdFromText(parent.textContent || '');
+      if (idFromParentText) {
+        console.log('📌 Found Library ID via unique labeled text in parent:', idFromParentText);
+        return buildUrl(idFromParentText);
       }
 
-      // Only accept parent text if it contains a single labeled ID
-      const idFromParentTextUnique = extractUniqueIdFromText(parent.textContent || '');
-      if (idFromParentTextUnique) {
-        console.log('📌 Found ad ID via unique labeled text in parent:', idFromParentTextUnique);
-        return buildUrl(idFromParentTextUnique);
-      }
-
-      const idFromClosestParentLabel = findClosestLabeledId(parent);
-      if (idFromClosestParentLabel) {
-        console.log('📌 Found ad ID via closest labeled node in parent:', idFromClosestParentLabel);
-        return buildUrl(idFromClosestParentLabel);
+      const idFromNearestOnParent = findNearestLabeledId(parent);
+      if (idFromNearestOnParent) {
+        console.log('📌 Found Library ID via nearest labeled node in parent:', idFromNearestOnParent);
+        return buildUrl(idFromNearestOnParent);
       }
 
       el = parent;
     }
 
-    // If we can't reliably extract the ad ID, DO NOT fallback to the current page URL (it saves the wrong link).
-    console.warn('⚠️ Could not reliably extract the ad ID for this card.');
+    // 3) As a last attempt, scan the main content and pick the closest labeled ID to this card.
+    // This avoids falling back to the page URL and still targets the selected card.
+    const main = document.querySelector('[role="main"]') || document.body;
+    const idFromMain = findNearestLabeledId(main);
+    if (idFromMain) {
+      console.log('📌 Found Library ID via nearest labeled node in main:', idFromMain);
+      return buildUrl(idFromMain);
+    }
+
+    console.warn('⚠️ Could not extract a Library ID for this card.');
     return null;
   }
 
