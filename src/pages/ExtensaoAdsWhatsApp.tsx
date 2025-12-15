@@ -19,6 +19,7 @@ const ExtensaoAdsWhatsApp = () => {
       const zip = new JSZip();
       const cacheBust = Date.now();
       let zipVersion = "";
+      let filesAdded = 0;
 
       const extensionFiles = [
         "background.js",
@@ -39,26 +40,46 @@ const ExtensaoAdsWhatsApp = () => {
           const response = await fetch(`/chrome-extension/${file}?v=${cacheBust}`, {
             cache: "no-store",
           });
-          if (!response.ok) continue;
+          
+          if (!response.ok) {
+            console.warn(`File not found: ${file} (status ${response.status})`);
+            continue;
+          }
 
-          // For manifest.json, keep as text so we can read the version and bust browser caches reliably.
+          // For manifest.json, keep as text so we can read the version
           if (file === "manifest.json") {
             const text = await response.text();
-            zip.file(file, text);
-            try {
-              const parsed = JSON.parse(text);
-              if (typeof parsed?.version === "string") zipVersion = parsed.version;
-            } catch {
-              // ignore
+            if (text && text.length > 10) {
+              zip.file(file, text);
+              filesAdded++;
+              try {
+                const parsed = JSON.parse(text);
+                if (typeof parsed?.version === "string") zipVersion = parsed.version;
+              } catch {
+                // ignore parse errors
+              }
             }
             continue;
           }
 
           const content = await response.blob();
-          zip.file(file, content);
+          if (content && content.size > 0) {
+            zip.file(file, content);
+            filesAdded++;
+          }
         } catch (error) {
           console.warn(`Could not fetch ${file}:`, error);
         }
+      }
+
+      // Check if we got any files
+      if (filesAdded === 0) {
+        toast.error("Erro: Arquivos da extensão não encontrados. Clique em 'Update' para publicar as alterações.");
+        return;
+      }
+
+      if (filesAdded < 5) {
+        toast.warning(`Atenção: Apenas ${filesAdded} arquivos encontrados. A extensão pode estar incompleta.`);
       }
 
       const blob = await zip.generateAsync({ type: "blob" });
@@ -71,7 +92,7 @@ const ExtensaoAdsWhatsApp = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      toast.success("Download iniciado!");
+      toast.success(`Download iniciado! (v${zipVersion || "?"}, ${filesAdded} arquivos)`);
     } catch (error) {
       console.error("Error creating ZIP:", error);
       toast.error("Erro ao baixar extensão. Tente novamente.");
