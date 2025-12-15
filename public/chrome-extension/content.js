@@ -84,6 +84,9 @@
     // Full cleanup on init to remove any stale buttons from previous page state
     fullCleanup();
 
+    // Delegated handlers keep buttons working even when Facebook re-renders/clones DOM nodes
+    installDelegatedHandlers();
+
     createFilterBar();
     createLoadMoreButton();
     observeAds();
@@ -155,16 +158,63 @@
   function fullCleanup() {
     const allButtons = document.querySelectorAll('.fad-actions-container');
     allButtons.forEach(btn => btn.remove());
-    
+
     // Reset all processed flags
     const processedCards = document.querySelectorAll('[data-fad-processed="true"]');
     processedCards.forEach(card => {
       card.dataset.fadProcessed = 'false';
       card.classList.remove('fad-whatsapp-highlight');
     });
-    
+
     state.processedAds = new WeakSet();
     console.log('🔄 Full cleanup completed');
+  }
+
+  // Delegated event handlers (Facebook often re-creates nodes; direct listeners get lost)
+  let delegatedHandlersInstalled = false;
+  function installDelegatedHandlers() {
+    if (delegatedHandlersInstalled) return;
+    delegatedHandlersInstalled = true;
+
+    document.addEventListener(
+      'click',
+      (e) => {
+        const target = e.target;
+        if (!(target instanceof Element)) return;
+
+        const actionBtn = target.closest('.fad-btn-download, .fad-btn-save');
+        if (!actionBtn) return;
+
+        const card = findCardContainer(actionBtn) || actionBtn.closest('[data-fad-id]');
+        if (!card) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (actionBtn.classList.contains('fad-btn-download')) {
+          downloadAd(card, actionBtn);
+          return;
+        }
+
+        if (actionBtn.classList.contains('fad-btn-save')) {
+          showSaveOfferModal(card);
+        }
+      },
+      true
+    );
+
+    document.addEventListener(
+      'change',
+      (e) => {
+        const target = e.target;
+        if (!(target instanceof HTMLInputElement)) return;
+        if (!target.classList.contains('fad-checkbox')) return;
+
+        e.stopPropagation();
+        toggleSelection(target.dataset.cardId, target.checked);
+      },
+      true
+    );
   }
 
   // Scroll handler
@@ -530,6 +580,9 @@
     const startTime = performance.now();
     const adCards = findAdCards();
 
+    // Keep the DOM clean (Facebook can clone/reuse nodes)
+    cleanupDuplicateButtons();
+
     let totalCount = 0;
     let whatsappCount = 0;
     let processedCount = 0;
@@ -537,7 +590,6 @@
     for (const card of adCards) {
       // Skip if this card already has our buttons (avoid duplicates)
       if (card.querySelector('.fad-actions-container')) {
-        // Just count it
         const isWhatsapp = card.dataset.fadWhatsapp === 'true';
         if (isWhatsapp) whatsappCount++;
         totalCount++;
@@ -594,28 +646,6 @@
         ` : ''}
       `;
 
-      // Event listeners
-      const downloadBtn = actionsContainer.querySelector('.fad-btn-download');
-      const saveBtn = actionsContainer.querySelector('.fad-btn-save');
-      const checkbox = actionsContainer.querySelector('.fad-checkbox');
-
-      downloadBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        downloadAd(card, downloadBtn);
-      });
-
-      saveBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        showSaveOfferModal(card);
-      });
-
-      checkbox.addEventListener('change', (e) => {
-        e.stopPropagation();
-        toggleSelection(cardId, e.target.checked);
-      });
-
       card.style.position = 'relative';
       card.appendChild(actionsContainer);
     }
@@ -645,6 +675,12 @@
       const adLibraryLink = getAdLibraryLink(card);
       if (!adLibraryLink) {
         showToast('Não consegui pegar o link deste anúncio. Abra o menu (…) do anúncio e garanta que apareça “Identificação da biblioteca”, depois tente salvar de novo.', 'error');
+        return;
+      }
+
+      // Safety: never save the page URL; only allow the manually constructed link by Library ID
+      if (!/facebook\.com\/ads\/library\/\?id=\d{10,30}/i.test(adLibraryLink)) {
+        showToast('Link inválido detectado. Vou precisar do “ID da Biblioteca” (Identificação da biblioteca) desse anúncio para salvar corretamente.', 'error');
         return;
       }
 
