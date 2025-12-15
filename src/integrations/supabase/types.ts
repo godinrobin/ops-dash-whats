@@ -86,6 +86,39 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_notifications: {
+        Row: {
+          action_description: string
+          action_type: string
+          amount: number | null
+          created_at: string
+          id: string
+          is_read: boolean
+          user_email: string
+          user_id: string
+        }
+        Insert: {
+          action_description: string
+          action_type: string
+          amount?: number | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          user_email: string
+          user_id: string
+        }
+        Update: {
+          action_description?: string
+          action_type?: string
+          amount?: number | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          user_email?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       admin_user_rankings: {
         Row: {
           id: string

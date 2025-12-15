@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { RechargeModal } from "@/components/RechargeModal";
 import { InsufficientBalanceModal } from "@/components/InsufficientBalanceModal";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
+import { createAdminNotification } from "@/utils/adminNotifications";
 
 // Import product images
 import bmVerificadaImg from "@/assets/bm-verificada.png";
@@ -253,6 +254,13 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
       setCustomerName("");
       setCustomerWhatsApp("");
       loadProducts();
+      
+      // Notifica admin
+      createAdminNotification({
+        actionType: "marketplace_purchase",
+        actionDescription: `Comprou ${quantity}x ${selectedProduct.name}`,
+        amount: totalPrice,
+      });
     } catch (err) {
       console.error("Error purchasing:", err);
       toast.error("Erro ao processar compra");

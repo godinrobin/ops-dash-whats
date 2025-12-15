@@ -15,6 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { RechargeModal } from "@/components/RechargeModal";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
+import { createAdminNotification } from "@/utils/adminNotifications";
 
 interface Service {
   id: string;
@@ -226,6 +227,13 @@ const SMMPanel = () => {
         setOrderQuantity(100);
         setCustomComments("");
         fetchOrders();
+        
+        // Notifica admin
+        createAdminNotification({
+          actionType: "smm_purchase",
+          actionDescription: `Comprou ${orderQuantity}x ${selectedService.name}`,
+          amount: priceBrl,
+        });
         
         // Redireciona para a aba de pedidos
         const ordersTab = document.querySelector('[value="orders"]') as HTMLButtonElement;
