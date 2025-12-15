@@ -862,18 +862,22 @@
         if (isWhatsapp) whatsappVisibleCount++;
 
         if (shownCount < state.visibleAdsLimit) {
-          // Reset all hiding styles to show the card properly
-          card.style.cssText = '';
+          // Show card - only reset display and visibility, keep position for buttons
+          card.style.display = '';
+          card.style.visibility = '';
+          card.style.opacity = '';
+          card.style.pointerEvents = '';
+          card.style.position = 'relative';
           card.classList.remove('fad-hidden');
           shownCount++;
         } else {
-          // Hide excess cards completely
-          card.style.cssText = 'display: none !important;';
+          // Hide excess cards
+          card.style.display = 'none';
           card.classList.add('fad-hidden');
         }
       } else {
-        // Hide filtered-out cards completely
-        card.style.cssText = 'display: none !important;';
+        // Hide filtered-out cards
+        card.style.display = 'none';
         card.classList.add('fad-hidden');
       }
     });
