@@ -169,6 +169,11 @@ serve(async (req) => {
       const countryData = data[countryCode];
       if (countryData) {
         for (const [serviceCode, serviceData] of Object.entries(countryData)) {
+          // Mostrar apenas serviços com nomes traduzidos
+          if (!popularServices[serviceCode]) {
+            continue;
+          }
+          
           const sData = serviceData as { cost: number; count: number };
           const priceUsd = sData.cost;
           const available = sData.count;
@@ -181,7 +186,7 @@ serve(async (req) => {
             
             services.push({
               code: serviceCode,
-              name: popularServices[serviceCode] || serviceCode.toUpperCase(),
+              name: popularServices[serviceCode],
               priceUsd,
               priceBrl: priceBrlBase,
               priceWithMarkup,
