@@ -1,104 +1,16 @@
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Download, Chrome, CheckCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, Download, Chrome, CheckCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
-import { useState } from "react";
-import JSZip from "jszip";
-import { toast } from "sonner";
 
 const ExtensaoAdsWhatsApp = () => {
   useActivityTracker("page_visit", "Extensão Ads WhatsApp");
   const navigate = useNavigate();
-  const [isDownloading, setIsDownloading] = useState(false);
 
-  const handleDownload = async () => {
-    setIsDownloading(true);
-    try {
-      const zip = new JSZip();
-      const cacheBust = Date.now();
-      let zipVersion = "";
-      let filesAdded = 0;
-
-      const extensionFiles = [
-        "background.js",
-        "content.css",
-        "content.js",
-        "manifest.json",
-        "popup.css",
-        "popup.html",
-        "popup.js",
-        "icons/icon128.png",
-        "icons/icon16.svg",
-        "icons/icon48.svg",
-        "icons/icon128.svg",
-      ];
-
-      for (const file of extensionFiles) {
-        try {
-          const response = await fetch(`/chrome-extension/${file}?v=${cacheBust}`, {
-            cache: "no-store",
-          });
-          
-          if (!response.ok) {
-            console.warn(`File not found: ${file} (status ${response.status})`);
-            continue;
-          }
-
-          // For manifest.json, keep as text so we can read the version
-          if (file === "manifest.json") {
-            const text = await response.text();
-            if (text && text.length > 10) {
-              zip.file(file, text);
-              filesAdded++;
-              try {
-                const parsed = JSON.parse(text);
-                if (typeof parsed?.version === "string") zipVersion = parsed.version;
-              } catch {
-                // ignore parse errors
-              }
-            }
-            continue;
-          }
-
-          const content = await response.blob();
-          if (content && content.size > 0) {
-            zip.file(file, content);
-            filesAdded++;
-          }
-        } catch (error) {
-          console.warn(`Could not fetch ${file}:`, error);
-        }
-      }
-
-      // Check if we got any files
-      if (filesAdded === 0) {
-        toast.error("Erro: Arquivos da extensão não encontrados. Clique em 'Update' para publicar as alterações.");
-        return;
-      }
-
-      if (filesAdded < 5) {
-        toast.warning(`Atenção: Apenas ${filesAdded} arquivos encontrados. A extensão pode estar incompleta.`);
-      }
-
-      const blob = await zip.generateAsync({ type: "blob" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = zipVersion ? `FB-ADS-ZAPDATA-v${zipVersion}.zip` : "FB-ADS-ZAPDATA.zip";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      toast.success(`Download iniciado! (v${zipVersion || "?"}, ${filesAdded} arquivos)`);
-    } catch (error) {
-      console.error("Error creating ZIP:", error);
-      toast.error("Erro ao baixar extensão. Tente novamente.");
-    } finally {
-      setIsDownloading(false);
-    }
+  const handleDownload = () => {
+    window.open("https://joaolucassps.co/EXTENS%C3%83O%20ZAPDATA.zip/", "_blank");
   };
 
   const features = [
@@ -155,15 +67,10 @@ const ExtensaoAdsWhatsApp = () => {
               </p>
               <Button 
                 onClick={handleDownload}
-                disabled={isDownloading}
                 className="bg-accent hover:bg-accent/90 text-accent-foreground px-8 py-6 text-lg"
               >
-                {isDownloading ? (
-                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                ) : (
-                  <Download className="h-5 w-5 mr-2" />
-                )}
-                {isDownloading ? "Baixando..." : "Baixar Extensão"}
+                <Download className="h-5 w-5 mr-2" />
+                Baixar Extensão
               </Button>
             </CardContent>
           </Card>
