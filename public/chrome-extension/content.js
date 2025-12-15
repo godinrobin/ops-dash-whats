@@ -379,6 +379,12 @@
         const hasMedia = parent.querySelector('img, video');
         const hasText = parent.textContent && parent.textContent.length > 50;
         if (hasMedia && hasText && !parent.closest('.fad-actions-container')) {
+          // Generate a stable fingerprint for this card based on its Library ID if available
+          const cardText = parent.textContent || '';
+          const idMatch = cardText.match(/(?:Identifica[çc][ãa]o\s*da\s*biblioteca|Library\s*ID)[:\s]*(\d{10,30})/i);
+          if (idMatch && idMatch[1]) {
+            parent.dataset.fadLibraryId = idMatch[1];
+          }
           return parent;
         }
       }
@@ -402,12 +408,22 @@
 
   // Get ad library link from card - generates a link using the card's "Identificação da biblioteca" (Library ID)
   function getAdLibraryLink(card) {
+    // 0) Check if we already have a cached library ID on this card
+    if (card.dataset.fadLibraryId) {
+      console.log('📌 Using cached Library ID:', card.dataset.fadLibraryId);
+      return `https://www.facebook.com/ads/library/?id=${card.dataset.fadLibraryId}`;
+    }
+
     const LABEL_PATTERNS = [
       /Identifica[çc][ãa]o\s*da\s*biblioteca\s*[:：]?\s*(\d{10,30})/i,
       /Library\s*ID\s*[:：]?\s*(\d{10,30})/i,
     ];
 
-    const buildUrl = (id) => `https://www.facebook.com/ads/library/?id=${id}`;
+    const buildUrl = (id) => {
+      // Cache the ID on the card for future use
+      card.dataset.fadLibraryId = id;
+      return `https://www.facebook.com/ads/library/?id=${id}`;
+    };
 
     const extractIdsFromText = (text) => {
       if (!text) return [];
@@ -507,9 +523,6 @@
     // 3) Do NOT scan the whole page (can grab the wrong ad and create an incorrect link)
     console.warn('⚠️ Could not extract a Library ID for this card.');
     return null;
-
-    console.warn('⚠️ Could not extract a Library ID for this card.');
-    return null;
   }
 
   // Inject buttons into ad cards
@@ -517,20 +530,19 @@
     const startTime = performance.now();
     const adCards = findAdCards();
 
-    // Hard reset: remove all existing action bars (prevents duplicates and stale handlers)
-    const existingBars = document.querySelectorAll('.fad-actions-container');
-    if (existingBars.length) {
-      existingBars.forEach((el) => el.remove());
-      console.log(`🧽 Removed ${existingBars.length} existing action bars (re-inject)`);
-    }
-
     let totalCount = 0;
     let whatsappCount = 0;
     let processedCount = 0;
 
     for (const card of adCards) {
-      // Always (re)inject exactly one set of buttons per detected card
-      card.querySelectorAll('.fad-actions-container').forEach((el) => el.remove());
+      // Skip if this card already has our buttons (avoid duplicates)
+      if (card.querySelector('.fad-actions-container')) {
+        // Just count it
+        const isWhatsapp = card.dataset.fadWhatsapp === 'true';
+        if (isWhatsapp) whatsappCount++;
+        totalCount++;
+        continue;
+      }
 
       card.dataset.fadProcessed = 'true';
       state.processedAds.add(card);
