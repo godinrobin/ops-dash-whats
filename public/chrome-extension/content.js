@@ -340,20 +340,35 @@
     return [...adContainers];
   }
 
-  // Find parent card container
+  // Find parent card container - look for the outermost container with media
   function findCardContainer(element) {
     let parent = element.parentElement;
-    for (let i = 0; i < 12 && parent; i++) {
-      if (parent.offsetWidth > 250 && parent.offsetHeight > 300) {
-        const hasMedia = parent.querySelector('img, video');
-        const hasText = parent.textContent && parent.textContent.length > 50;
-        if (hasMedia && hasText && !parent.closest('.fad-actions-container')) {
-          return parent;
+    let bestMatch = null;
+    
+    for (let i = 0; i < 15 && parent; i++) {
+      // Check if this parent contains media
+      const hasMedia = parent.querySelector('img[src], video');
+      const hasText = parent.textContent && parent.textContent.length > 50;
+      
+      if (hasMedia && hasText && !parent.closest('.fad-actions-container')) {
+        // Check for reasonable card dimensions
+        const rect = parent.getBoundingClientRect();
+        if (rect.width > 200 && rect.height > 200) {
+          bestMatch = parent;
         }
       }
+      
+      // Stop if we hit a known layout container or body
+      if (parent.tagName === 'BODY' || 
+          parent.getAttribute('role') === 'main' ||
+          parent.classList.contains('fad-filter-bar')) {
+        break;
+      }
+      
       parent = parent.parentElement;
     }
-    return null;
+    
+    return bestMatch;
   }
 
   // Get number of active ads from card
@@ -526,6 +541,10 @@
 
       card.style.position = 'relative';
       card.appendChild(actionsContainer);
+      
+      // Debug: log card info
+      const mediaElements = card.querySelectorAll('img, video');
+      console.log(`📦 Card processed: hasMedia=${mediaElements.length}, cardHeight=${card.offsetHeight}, cardWidth=${card.offsetWidth}`);
     }
 
     const elapsed = (performance.now() - startTime).toFixed(0);
@@ -863,12 +882,17 @@
         if (isWhatsapp) whatsappVisibleCount++;
 
         if (shownCount < state.visibleAdsLimit) {
-          // Show card - only reset display and visibility, keep position for buttons
-          card.style.display = '';
-          card.style.visibility = '';
-          card.style.opacity = '';
-          card.style.pointerEvents = '';
-          card.style.position = 'relative';
+          // Show card - remove hiding styles completely
+          card.style.removeProperty('display');
+          card.style.removeProperty('visibility');
+          card.style.removeProperty('opacity');
+          card.style.removeProperty('pointer-events');
+          card.style.removeProperty('height');
+          card.style.removeProperty('overflow');
+          // Keep position relative for our buttons
+          if (!card.style.position || card.style.position === 'static') {
+            card.style.position = 'relative';
+          }
           card.classList.remove('fad-hidden');
           shownCount++;
         } else {
