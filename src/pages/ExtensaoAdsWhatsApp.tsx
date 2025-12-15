@@ -1,21 +1,70 @@
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Download, Chrome, CheckCircle } from "lucide-react";
+import { ArrowLeft, Download, Chrome, CheckCircle, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
+import { useState } from "react";
+import JSZip from "jszip";
+import { toast } from "sonner";
 
 const ExtensaoAdsWhatsApp = () => {
   useActivityTracker("page_visit", "Extensão Ads WhatsApp");
   const navigate = useNavigate();
+  const [isDownloading, setIsDownloading] = useState(false);
 
-  const handleDownload = () => {
-    window.open("https://joaolucassps.co/FB-ADS-ZAPDATA.zip", "_blank");
+  const handleDownload = async () => {
+    setIsDownloading(true);
+    try {
+      const zip = new JSZip();
+      
+      const extensionFiles = [
+        'background.js',
+        'content.css',
+        'content.js',
+        'manifest.json',
+        'popup.css',
+        'popup.html',
+        'popup.js',
+        'icons/icon128.png',
+        'icons/icon16.svg',
+        'icons/icon48.svg',
+        'icons/icon128.svg'
+      ];
+
+      for (const file of extensionFiles) {
+        try {
+          const response = await fetch(`/chrome-extension/${file}`);
+          if (response.ok) {
+            const content = await response.blob();
+            zip.file(file, content);
+          }
+        } catch (error) {
+          console.warn(`Could not fetch ${file}:`, error);
+        }
+      }
+
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'FB-ADS-ZAPDATA.zip';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success("Download iniciado!");
+    } catch (error) {
+      console.error("Error creating ZIP:", error);
+      toast.error("Erro ao baixar extensão. Tente novamente.");
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   const features = [
     "Filtrar apenas anúncios relacionados a WhatsApp",
-    "Filtrar por quantidade mínima de anúncios ativos",
     "Selecionar múltiplos anúncios de uma vez",
     "Salvar ofertas diretamente no Track Ofertas",
     "Integração automática com sua conta Zapdata"
@@ -68,10 +117,15 @@ const ExtensaoAdsWhatsApp = () => {
               </p>
               <Button 
                 onClick={handleDownload}
+                disabled={isDownloading}
                 className="bg-accent hover:bg-accent/90 text-accent-foreground px-8 py-6 text-lg"
               >
-                <Download className="h-5 w-5 mr-2" />
-                Baixar Extensão
+                {isDownloading ? (
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                ) : (
+                  <Download className="h-5 w-5 mr-2" />
+                )}
+                {isDownloading ? "Baixando..." : "Baixar Extensão"}
               </Button>
             </CardContent>
           </Card>
@@ -135,8 +189,7 @@ const ExtensaoAdsWhatsApp = () => {
                 Ao clicar, você poderá dar um nome para a oferta e ela será salva automaticamente no seu Track Ofertas.
               </p>
               <p className="text-muted-foreground text-sm">
-                Você pode usar os filtros da extensão para encontrar apenas anúncios relacionados a WhatsApp 
-                e filtrar por quantidade mínima de anúncios ativos do anunciante.
+                Você pode usar os filtros da extensão para encontrar apenas anúncios relacionados a WhatsApp.
               </p>
             </CardContent>
           </Card>
