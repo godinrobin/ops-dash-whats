@@ -10,7 +10,7 @@ const ExtensaoAdsWhatsApp = () => {
   const navigate = useNavigate();
 
   const handleDownload = () => {
-    window.open("https://joaolucassps.co/EXTENS%C3%83O%20ZAPDATA.zip/", "_blank");
+    window.open("https://joaolucassps.co/EXTENSAO-ZAPDATA.zip", "_blank");
   };
 
   const features = [
