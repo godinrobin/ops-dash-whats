@@ -17,7 +17,15 @@ Deno.serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-    const { action, email, password, offer_name, ad_library_link, access_token } = await req.json();
+    const body = await req.json();
+    const { action, email, password, offer_name, ad_library_link, access_token } = body;
+    
+    console.log("Extension auth action:", action);
+    console.log("Has access_token:", !!access_token);
+    if (action === "save_offer") {
+      console.log("Offer name:", offer_name);
+      console.log("Ad library link:", ad_library_link);
+    }
 
     // LOGIN ACTION
     if (action === "login") {
