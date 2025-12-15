@@ -10,6 +10,38 @@
   }
   window.__FAD_ZAPDATA_LOADED__ = true;
 
+  // Content script version marker (used to remove old injected buttons after updates)
+  const SCRIPT_VERSION = '2.0.0-2025-12-15c';
+
+  // Library ID extraction (used to build ads/library/?id=... links and deduplicate cards)
+  const LIBRARY_ID_REGEXES = [
+    /Identifica[çc][ãa]o\s*da\s*biblioteca\s*[:：]?\s*(\d{10,30})/i,
+    /Library\s*ID\s*[:：]?\s*(\d{10,30})/i,
+  ];
+
+  function extractLibraryId(text) {
+    if (!text) return null;
+    const t = String(text);
+    for (const re of LIBRARY_ID_REGEXES) {
+      const m = t.match(re);
+      if (m && m[1]) return m[1];
+    }
+    return null;
+  }
+
+  function getLibraryIdLoose(node) {
+    if (!node) return null;
+    if (node.dataset && node.dataset.fadLibraryId) return node.dataset.fadLibraryId;
+
+    let el = node;
+    for (let depth = 0; depth < 14 && el; depth++) {
+      const id = extractLibraryId(el.textContent || '');
+      if (id) return id;
+      el = el.parentElement;
+    }
+    return null;
+  }
+
   // State
   let state = {
     whatsappFilter: false,
@@ -133,24 +165,53 @@
   // Cleanup duplicate buttons (best-effort, non-destructive)
   // IMPORTANT: do NOT remove "orphan" buttons on scroll because Facebook reuses DOM nodes.
   function cleanupDuplicateButtons() {
-    let cleanedCount = 0;
+    let removed = 0;
 
-    // Deduplicate within the same parent container: keep only the last actions bar
-    const bars = Array.from(document.querySelectorAll('.fad-actions-container'));
-    const parents = new Set(bars.map((b) => b.parentElement).filter(Boolean));
+    // 1) Remove stale containers from previous extension versions ("top buttons" not updated)
+    const all = Array.from(document.querySelectorAll('.fad-actions-container'));
+    for (const bar of all) {
+      if (bar.dataset.fadVersion !== SCRIPT_VERSION) {
+        bar.remove();
+        removed++;
+      }
+    }
+
+    // 2) Deduplicate by Library ID across the whole page
+    const currentBars = Array.from(document.querySelectorAll('.fad-actions-container'));
+    const byLibraryId = new Map();
+
+    for (const bar of currentBars) {
+      const libId = bar.dataset.fadLibraryId;
+      if (!libId) continue;
+      if (!byLibraryId.has(libId)) byLibraryId.set(libId, []);
+      byLibraryId.get(libId).push(bar);
+    }
+
+    for (const [, list] of byLibraryId) {
+      if (list.length <= 1) continue;
+      // Keep the last one in DOM order
+      for (let i = 0; i < list.length - 1; i++) {
+        list[i].remove();
+        removed++;
+      }
+    }
+
+    // 3) Final guard: deduplicate within the same parent container
+    const remaining = Array.from(document.querySelectorAll('.fad-actions-container'));
+    const parents = new Set(remaining.map((b) => b.parentElement).filter(Boolean));
 
     parents.forEach((parent) => {
       const siblings = parent.querySelectorAll('.fad-actions-container');
       if (siblings.length > 1) {
         for (let i = 0; i < siblings.length - 1; i++) {
           siblings[i].remove();
-          cleanedCount++;
+          removed++;
         }
       }
     });
 
-    if (cleanedCount > 0) {
-      console.log(`🧹 Cleaned up ${cleanedCount} duplicate button containers`);
+    if (removed > 0) {
+      console.log(`🧹 Cleaned up ${removed} duplicate/stale button containers`);
     }
   }
 
@@ -458,12 +519,13 @@
 
   // Get ad library link from card - generates a link using the card's "Identificação da biblioteca" (Library ID)
   function getAdLibraryLink(card) {
-    // 0) Check if we already have a cached library ID on this card
-    if (card.dataset.fadLibraryId) {
-      console.log('📌 Using cached Library ID:', card.dataset.fadLibraryId);
-      return `https://www.facebook.com/ads/library/?id=${card.dataset.fadLibraryId}`;
+    // 0) Prefer cached/loose extracted Library ID (fast + stable)
+    const looseId = card.dataset.fadLibraryId || getLibraryIdLoose(card);
+    if (looseId) {
+      card.dataset.fadLibraryId = looseId;
+      console.log('📌 Using Library ID:', looseId);
+      return `https://www.facebook.com/ads/library/?id=${looseId}`;
     }
-
     const LABEL_PATTERNS = [
       /Identifica[çc][ãa]o\s*da\s*biblioteca\s*[:：]?\s*(\d{10,30})/i,
       /Library\s*ID\s*[:：]?\s*(\d{10,30})/i,
@@ -587,15 +649,34 @@
     let whatsappCount = 0;
     let processedCount = 0;
 
+    const seenLibraryIds = new Set();
+
     for (const card of adCards) {
-      // Skip if this card already has our buttons (avoid duplicates)
-      if (card.querySelector('.fad-actions-container')) {
-        const isWhatsapp = card.dataset.fadWhatsapp === 'true';
-        if (isWhatsapp) whatsappCount++;
-        totalCount++;
-        continue;
+      const libraryId = card.dataset.fadLibraryId || getLibraryIdLoose(card);
+      if (libraryId) {
+        card.dataset.fadLibraryId = libraryId;
+
+        // Same ad can appear in multiple containers; keep only the first container we see
+        if (seenLibraryIds.has(libraryId)) {
+          card.querySelectorAll('.fad-actions-container').forEach((el) => el.remove());
+          continue;
+        }
+        seenLibraryIds.add(libraryId);
       }
 
+      // If this card already has our bar, keep it only if it's from the current script version
+      const existingBar = card.querySelector('.fad-actions-container');
+      if (existingBar) {
+        if (existingBar.dataset.fadVersion !== SCRIPT_VERSION) {
+          existingBar.remove();
+        } else {
+          if (libraryId) existingBar.dataset.fadLibraryId = libraryId;
+          const isWhatsapp = card.dataset.fadWhatsapp === 'true';
+          if (isWhatsapp) whatsappCount++;
+          totalCount++;
+          continue;
+        }
+      }
       card.dataset.fadProcessed = 'true';
       state.processedAds.add(card);
 
@@ -617,6 +698,8 @@
 
       const actionsContainer = document.createElement('div');
       actionsContainer.className = 'fad-actions-container';
+      actionsContainer.dataset.fadVersion = SCRIPT_VERSION;
+      if (libraryId) actionsContainer.dataset.fadLibraryId = libraryId;
       actionsContainer.innerHTML = `
         <button class="fad-btn fad-btn-download" data-card-id="${cardId}" title="Baixar mídia">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
