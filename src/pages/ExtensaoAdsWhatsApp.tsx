@@ -17,43 +17,60 @@ const ExtensaoAdsWhatsApp = () => {
     setIsDownloading(true);
     try {
       const zip = new JSZip();
-      
+      const cacheBust = Date.now();
+      let zipVersion = "";
+
       const extensionFiles = [
-        'background.js',
-        'content.css',
-        'content.js',
-        'manifest.json',
-        'popup.css',
-        'popup.html',
-        'popup.js',
-        'icons/icon128.png',
-        'icons/icon16.svg',
-        'icons/icon48.svg',
-        'icons/icon128.svg'
+        "background.js",
+        "content.css",
+        "content.js",
+        "manifest.json",
+        "popup.css",
+        "popup.html",
+        "popup.js",
+        "icons/icon128.png",
+        "icons/icon16.svg",
+        "icons/icon48.svg",
+        "icons/icon128.svg",
       ];
 
       for (const file of extensionFiles) {
         try {
-          const response = await fetch(`/chrome-extension/${file}`);
-          if (response.ok) {
-            const content = await response.blob();
-            zip.file(file, content);
+          const response = await fetch(`/chrome-extension/${file}?v=${cacheBust}`, {
+            cache: "no-store",
+          });
+          if (!response.ok) continue;
+
+          // For manifest.json, keep as text so we can read the version and bust browser caches reliably.
+          if (file === "manifest.json") {
+            const text = await response.text();
+            zip.file(file, text);
+            try {
+              const parsed = JSON.parse(text);
+              if (typeof parsed?.version === "string") zipVersion = parsed.version;
+            } catch {
+              // ignore
+            }
+            continue;
           }
+
+          const content = await response.blob();
+          zip.file(file, content);
         } catch (error) {
           console.warn(`Could not fetch ${file}:`, error);
         }
       }
 
-      const blob = await zip.generateAsync({ type: 'blob' });
+      const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
-      a.download = 'FB-ADS-ZAPDATA.zip';
+      a.download = zipVersion ? `FB-ADS-ZAPDATA-v${zipVersion}.zip` : "FB-ADS-ZAPDATA.zip";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      
+
       toast.success("Download iniciado!");
     } catch (error) {
       console.error("Error creating ZIP:", error);
