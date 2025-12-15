@@ -3,6 +3,13 @@
 (function() {
   'use strict';
 
+  // Prevent multiple injections (SPA navigations / duplicated executions)
+  if (window.__FAD_ZAPDATA_LOADED__) {
+    console.log('ℹ️ FB Ads - Zapdata already loaded, skipping re-init');
+    return;
+  }
+  window.__FAD_ZAPDATA_LOADED__ = true;
+
   // State
   let state = {
     whatsappFilter: false,
@@ -111,34 +118,27 @@
       const text = el.textContent?.trim().toLowerCase() || '';
       if (text === 'ver detalhes do anúncio' || text === 'ver resumo') {
         const card = findCardContainer(el);
-        if (card && !card.querySelector('.fad-actions-container') && card.dataset.fadProcessed !== 'true') {
+        if (card && !card.querySelector('.fad-actions-container')) {
           count++;
         }
       }
     }
+
     return count;
   }
 
-  // Cleanup duplicate buttons - remove ALL buttons from cards first, then re-inject
+  // Cleanup duplicate buttons (best-effort, non-destructive)
+  // IMPORTANT: do NOT remove "orphan" buttons on scroll because Facebook reuses DOM nodes.
   function cleanupDuplicateButtons() {
-    // Remove ALL orphaned button containers (not attached to a valid processed card)
-    const allButtonContainers = document.querySelectorAll('.fad-actions-container');
     let cleanedCount = 0;
 
-    allButtonContainers.forEach(container => {
-      const parentCard = container.closest('[data-fad-processed="true"]');
-      
-      // If container is not inside a processed card, remove it
-      if (!parentCard) {
-        container.remove();
-        cleanedCount++;
-        return;
-      }
-      
-      // Check for duplicates within the same card
-      const siblings = parentCard.querySelectorAll('.fad-actions-container');
+    // Deduplicate within the same parent container: keep only the last actions bar
+    const bars = Array.from(document.querySelectorAll('.fad-actions-container'));
+    const parents = new Set(bars.map((b) => b.parentElement).filter(Boolean));
+
+    parents.forEach((parent) => {
+      const siblings = parent.querySelectorAll('.fad-actions-container');
       if (siblings.length > 1) {
-        // Keep only the last one (most recent), remove others
         for (let i = 0; i < siblings.length - 1; i++) {
           siblings[i].remove();
           cleanedCount++;
@@ -146,18 +146,8 @@
       }
     });
 
-    // Also cleanup cards that lost their processed flag but still have buttons
-    const orphanButtons = document.querySelectorAll('.fad-actions-container');
-    orphanButtons.forEach(container => {
-      const card = container.parentElement;
-      if (card && card.dataset.fadProcessed !== 'true') {
-        container.remove();
-        cleanedCount++;
-      }
-    });
-
     if (cleanedCount > 0) {
-      console.log(`🧹 Cleaned up ${cleanedCount} duplicate/orphan button containers`);
+      console.log(`🧹 Cleaned up ${cleanedCount} duplicate button containers`);
     }
   }
 
@@ -182,7 +172,7 @@
   function onScroll() {
     if (scrollTimeout) clearTimeout(scrollTimeout);
     scrollTimeout = setTimeout(() => {
-      cleanupDuplicateButtons();
+      // Only schedule reinjection; avoid removing buttons here (Facebook virtualizes DOM on scroll)
       scheduleInjection(300);
     }, 150);
   }
@@ -344,11 +334,12 @@
       if (cardsFound >= MAX_CARDS_PER_BATCH) break;
 
       const text = el.textContent?.trim().toLowerCase() || '';
-      if (text === 'ver detalhes do anúncio' ||
-          text === 'see ad details' ||
-          text === 'ver resumo' ||
-          text === 'see summary') {
-
+      if (
+        text === 'ver detalhes do anúncio' ||
+        text === 'see ad details' ||
+        text === 'ver resumo' ||
+        text === 'see summary'
+      ) {
         const card = findCardContainer(el);
         if (card && !adContainers.has(card)) {
           adContainers.add(card);
@@ -371,8 +362,13 @@
       }
     }
 
-    console.log(`📊 Found ${adContainers.size} ad cards`);
-    return [...adContainers];
+    // Remove nested containers (Facebook often has multiple ancestors matching our heuristics).
+    // Keep only the most specific (leaf) containers to avoid duplicated buttons.
+    const cards = [...adContainers];
+    const leafCards = cards.filter((c) => !cards.some((o) => o !== c && c.contains(o)));
+
+    console.log(`📊 Found ${leafCards.length} ad cards (leaf filtered from ${cards.length})`);
+    return leafCards;
   }
 
   // Find parent card container
@@ -508,14 +504,9 @@
       el = parent;
     }
 
-    // 3) As a last attempt, scan the main content and pick the closest labeled ID to this card.
-    // This avoids falling back to the page URL and still targets the selected card.
-    const main = document.querySelector('[role="main"]') || document.body;
-    const idFromMain = findNearestLabeledId(main);
-    if (idFromMain) {
-      console.log('📌 Found Library ID via nearest labeled node in main:', idFromMain);
-      return buildUrl(idFromMain);
-    }
+    // 3) Do NOT scan the whole page (can grab the wrong ad and create an incorrect link)
+    console.warn('⚠️ Could not extract a Library ID for this card.');
+    return null;
 
     console.warn('⚠️ Could not extract a Library ID for this card.');
     return null;
@@ -525,35 +516,25 @@
   function injectButtons() {
     const startTime = performance.now();
     const adCards = findAdCards();
+
+    // Hard reset: remove all existing action bars (prevents duplicates and stale handlers)
+    const existingBars = document.querySelectorAll('.fad-actions-container');
+    if (existingBars.length) {
+      existingBars.forEach((el) => el.remove());
+      console.log(`🧽 Removed ${existingBars.length} existing action bars (re-inject)`);
+    }
+
     let totalCount = 0;
     let whatsappCount = 0;
     let processedCount = 0;
 
-    cleanupDuplicateButtons();
-
     for (const card of adCards) {
-      // Skip if already has our buttons
-      const existingButtons = card.querySelector('.fad-actions-container');
-      if (existingButtons) {
-        // Already processed - just count it
-        const isWhatsapp = card.dataset.fadWhatsapp === 'true';
-        if (isWhatsapp) whatsappCount++;
-        totalCount++;
-        continue;
-      }
-      
-      // Remove stale processed flag if buttons were removed
-      if (card.dataset.fadProcessed === 'true' && !existingButtons) {
-        card.dataset.fadProcessed = 'false';
-      }
-      
-      // Skip if already processed (double check)
-      if (card.dataset.fadProcessed === 'true') {
-        continue;
-      }
+      // Always (re)inject exactly one set of buttons per detected card
+      card.querySelectorAll('.fad-actions-container').forEach((el) => el.remove());
 
       card.dataset.fadProcessed = 'true';
       state.processedAds.add(card);
+
       totalCount++;
       processedCount++;
 
