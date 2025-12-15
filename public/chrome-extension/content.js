@@ -247,7 +247,6 @@
     document.getElementById('fadMinAds').addEventListener('change', (e) => {
       state.minAds = parseInt(e.target.value) || 0;
       chrome.storage.local.set({ minAds: state.minAds });
-      state.visibleAdsLimit = ADS_PER_LOAD; // Reset limit when filter changes
       applyFilters();
     });
 
@@ -340,35 +339,20 @@
     return [...adContainers];
   }
 
-  // Find parent card container - look for the outermost container with media
+  // Find parent card container
   function findCardContainer(element) {
     let parent = element.parentElement;
-    let bestMatch = null;
-    
-    for (let i = 0; i < 15 && parent; i++) {
-      // Check if this parent contains media
-      const hasMedia = parent.querySelector('img[src], video');
-      const hasText = parent.textContent && parent.textContent.length > 50;
-      
-      if (hasMedia && hasText && !parent.closest('.fad-actions-container')) {
-        // Check for reasonable card dimensions
-        const rect = parent.getBoundingClientRect();
-        if (rect.width > 200 && rect.height > 200) {
-          bestMatch = parent;
+    for (let i = 0; i < 12 && parent; i++) {
+      if (parent.offsetWidth > 250 && parent.offsetHeight > 300) {
+        const hasMedia = parent.querySelector('img, video');
+        const hasText = parent.textContent && parent.textContent.length > 50;
+        if (hasMedia && hasText && !parent.closest('.fad-actions-container')) {
+          return parent;
         }
       }
-      
-      // Stop if we hit a known layout container or body
-      if (parent.tagName === 'BODY' || 
-          parent.getAttribute('role') === 'main' ||
-          parent.classList.contains('fad-filter-bar')) {
-        break;
-      }
-      
       parent = parent.parentElement;
     }
-    
-    return bestMatch;
+    return null;
   }
 
   // Get number of active ads from card
@@ -541,10 +525,6 @@
 
       card.style.position = 'relative';
       card.appendChild(actionsContainer);
-      
-      // Debug: log card info
-      const mediaElements = card.querySelectorAll('img, video');
-      console.log(`📦 Card processed: hasMedia=${mediaElements.length}, cardHeight=${card.offsetHeight}, cardWidth=${card.offsetWidth}`);
     }
 
     const elapsed = (performance.now() - startTime).toFixed(0);
@@ -860,7 +840,10 @@
       const hasButtons = card.querySelector('.fad-actions-container');
 
       if (!hasButtons) {
-        // Card without buttons - just skip, don't hide
+        card.style.opacity = '0';
+        card.style.pointerEvents = 'none';
+        card.style.position = 'absolute';
+        card.style.visibility = 'hidden';
         return;
       }
 
@@ -882,26 +865,18 @@
         if (isWhatsapp) whatsappVisibleCount++;
 
         if (shownCount < state.visibleAdsLimit) {
-          // Show card - remove hiding styles completely
-          card.style.removeProperty('display');
-          card.style.removeProperty('visibility');
-          card.style.removeProperty('opacity');
-          card.style.removeProperty('pointer-events');
-          card.style.removeProperty('height');
-          card.style.removeProperty('overflow');
-          // Keep position relative for our buttons
-          if (!card.style.position || card.style.position === 'static') {
-            card.style.position = 'relative';
-          }
+          card.style.display = '';
+          card.style.opacity = '';
+          card.style.pointerEvents = '';
+          card.style.position = '';
+          card.style.visibility = '';
           card.classList.remove('fad-hidden');
           shownCount++;
         } else {
-          // Hide excess cards
           card.style.display = 'none';
           card.classList.add('fad-hidden');
         }
       } else {
-        // Hide filtered-out cards
         card.style.display = 'none';
         card.classList.add('fad-hidden');
       }
@@ -941,45 +916,13 @@
 
   // Load more ads
   function loadMoreAds() {
-    const button = document.getElementById('fadLoadMore');
-    const info = document.getElementById('fadLoadMoreInfo');
-    
-    // If filter is active and we need more matching ads, scroll to load from Facebook
-    if (state.minAds > 0 || state.whatsappFilter) {
-      const originalHTML = button.innerHTML;
-      button.innerHTML = '<span class="fad-spinner"></span> Carregando...';
-      button.style.pointerEvents = 'none';
-      
-      // Scroll to load more ads from Facebook
-      let scrollCount = 0;
-      const maxScrolls = 5;
-      
-      const scrollInterval = setInterval(() => {
-        window.scrollTo(0, document.body.scrollHeight);
-        scrollCount++;
-        
-        if (scrollCount >= maxScrolls) {
-          clearInterval(scrollInterval);
-          
-          setTimeout(() => {
-            safeInjectButtons();
-            state.visibleAdsLimit += ADS_PER_LOAD;
-            applyFilters();
-            button.innerHTML = originalHTML;
-            button.style.pointerEvents = 'auto';
-          }, 1500);
-        }
-      }, 500);
-    } else {
-      // No filter - just show more already loaded ads
-      state.visibleAdsLimit += ADS_PER_LOAD;
-      applyFilters();
+    state.visibleAdsLimit += ADS_PER_LOAD;
+    applyFilters();
 
-      const visibleCards = document.querySelectorAll('[data-fad-id]:not(.fad-hidden)');
-      if (visibleCards.length > 0) {
-        const lastCard = visibleCards[visibleCards.length - 1];
-        lastCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+    const visibleCards = document.querySelectorAll('[data-fad-id]:not(.fad-hidden)');
+    if (visibleCards.length > 0) {
+      const lastCard = visibleCards[visibleCards.length - 1];
+      lastCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }
 
@@ -992,20 +935,14 @@
     if (!container || !button || !info) return;
 
     const remaining = totalAvailable - currentShown;
-    const hasActiveFilter = state.minAds > 0 || state.whatsappFilter;
 
-    container.style.display = 'flex';
-    
     if (remaining > 0) {
+      container.style.display = 'flex';
       info.textContent = `Mostrando ${currentShown} de ${totalAvailable} anúncios`;
       button.style.opacity = '1';
       button.style.pointerEvents = 'auto';
-    } else if (hasActiveFilter) {
-      // When filter is active, always allow loading more from Facebook
-      info.textContent = `Mostrando todos os ${currentShown} anúncios (filtrados)`;
-      button.style.opacity = '1';
-      button.style.pointerEvents = 'auto';
     } else {
+      container.style.display = 'flex';
       info.textContent = `Mostrando todos os ${currentShown} anúncios`;
       button.style.opacity = '0.5';
       button.style.pointerEvents = 'none';
