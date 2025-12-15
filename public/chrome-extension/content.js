@@ -207,13 +207,6 @@
       <div class="fad-filter-item">
         <span class="fad-filter-label">Mínimo de anúncios:</span>
         <input type="number" class="fad-number-input" id="fadMinAds" min="0" value="${state.minAds}">
-        <button class="fad-btn-load-filter" id="fadLoadAdsBtn" title="Carregar mais anúncios da página">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-            <path d="M21 12a9 9 0 11-6.219-8.56"/>
-            <path d="M21 3v9h-9"/>
-          </svg>
-          Carregar
-        </button>
       </div>
 
       <div class="fad-separator"></div>
@@ -254,46 +247,11 @@
     document.getElementById('fadMinAds').addEventListener('change', (e) => {
       state.minAds = parseInt(e.target.value) || 0;
       chrome.storage.local.set({ minAds: state.minAds });
+      state.visibleAdsLimit = ADS_PER_LOAD; // Reset limit when filter changes
       applyFilters();
     });
 
-    document.getElementById('fadLoadAdsBtn').addEventListener('click', () => {
-      scrollToLoadMoreAds();
-    });
-
     document.getElementById('fadDownloadAll').addEventListener('click', downloadSelected);
-  }
-
-  // Scroll to load more ads from Facebook page
-  function scrollToLoadMoreAds() {
-    const loadBtn = document.getElementById('fadLoadAdsBtn');
-    const originalText = loadBtn.innerHTML;
-    loadBtn.innerHTML = '<span class="fad-spinner"></span> Carregando...';
-    loadBtn.disabled = true;
-
-    // Scroll to bottom to trigger Facebook lazy load
-    let scrollCount = 0;
-    const maxScrolls = 5;
-    
-    const scrollInterval = setInterval(() => {
-      window.scrollTo(0, document.body.scrollHeight);
-      scrollCount++;
-      
-      if (scrollCount >= maxScrolls) {
-        clearInterval(scrollInterval);
-        
-        // Wait for new ads to load, then inject buttons
-        setTimeout(() => {
-          safeInjectButtons();
-          applyFilters();
-          loadBtn.innerHTML = originalText;
-          loadBtn.disabled = false;
-          
-          // Scroll back to top
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }, 1500);
-      }
-    }, 500);
   }
 
   // Observe for new ads
@@ -959,13 +917,45 @@
 
   // Load more ads
   function loadMoreAds() {
-    state.visibleAdsLimit += ADS_PER_LOAD;
-    applyFilters();
+    const button = document.getElementById('fadLoadMore');
+    const info = document.getElementById('fadLoadMoreInfo');
+    
+    // If filter is active and we need more matching ads, scroll to load from Facebook
+    if (state.minAds > 0 || state.whatsappFilter) {
+      const originalHTML = button.innerHTML;
+      button.innerHTML = '<span class="fad-spinner"></span> Carregando...';
+      button.style.pointerEvents = 'none';
+      
+      // Scroll to load more ads from Facebook
+      let scrollCount = 0;
+      const maxScrolls = 5;
+      
+      const scrollInterval = setInterval(() => {
+        window.scrollTo(0, document.body.scrollHeight);
+        scrollCount++;
+        
+        if (scrollCount >= maxScrolls) {
+          clearInterval(scrollInterval);
+          
+          setTimeout(() => {
+            safeInjectButtons();
+            state.visibleAdsLimit += ADS_PER_LOAD;
+            applyFilters();
+            button.innerHTML = originalHTML;
+            button.style.pointerEvents = 'auto';
+          }, 1500);
+        }
+      }, 500);
+    } else {
+      // No filter - just show more already loaded ads
+      state.visibleAdsLimit += ADS_PER_LOAD;
+      applyFilters();
 
-    const visibleCards = document.querySelectorAll('[data-fad-id]:not(.fad-hidden)');
-    if (visibleCards.length > 0) {
-      const lastCard = visibleCards[visibleCards.length - 1];
-      lastCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const visibleCards = document.querySelectorAll('[data-fad-id]:not(.fad-hidden)');
+      if (visibleCards.length > 0) {
+        const lastCard = visibleCards[visibleCards.length - 1];
+        lastCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
     }
   }
 
@@ -978,14 +968,20 @@
     if (!container || !button || !info) return;
 
     const remaining = totalAvailable - currentShown;
+    const hasActiveFilter = state.minAds > 0 || state.whatsappFilter;
 
+    container.style.display = 'flex';
+    
     if (remaining > 0) {
-      container.style.display = 'flex';
       info.textContent = `Mostrando ${currentShown} de ${totalAvailable} anúncios`;
       button.style.opacity = '1';
       button.style.pointerEvents = 'auto';
+    } else if (hasActiveFilter) {
+      // When filter is active, always allow loading more from Facebook
+      info.textContent = `Mostrando todos os ${currentShown} anúncios (filtrados)`;
+      button.style.opacity = '1';
+      button.style.pointerEvents = 'auto';
     } else {
-      container.style.display = 'flex';
       info.textContent = `Mostrando todos os ${currentShown} anúncios`;
       button.style.opacity = '0.5';
       button.style.pointerEvents = 'none';
