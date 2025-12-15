@@ -365,52 +365,142 @@
 
   // Get ad library link from card - extracts the specific ad ID
   function getAdLibraryLink(card) {
-    const cardText = card.textContent || '';
-    
-    // Method 1 (PRIORITY): Look for "Identificação da biblioteca:" followed by the ID number
-    // This is the most reliable method - extract the ID shown in the card header
-    const bibliotecaPatterns = [
-      /Identifica[çc][ãa]o\s*da\s*biblioteca[:\s]*(\d{12,20})/i,
-      /Library\s*ID[:\s]*(\d{12,20})/i,
-      /biblioteca[:\s]*(\d{12,20})/i,
+    const LABEL_PATTERNS = [
+      /Identifica[çc][ãa]o\s*da\s*biblioteca[:\s]*(\d{10,25})/i,
+      /Library\s*ID[:\s]*(\d{10,25})/i,
     ];
-    
-    for (const pattern of bibliotecaPatterns) {
-      const match = cardText.match(pattern);
-      if (match && match[1]) {
-        console.log('📌 Found ad ID via biblioteca text:', match[1]);
-        return `https://www.facebook.com/ads/library/?id=${match[1]}`;
+
+    const buildUrl = (id) => `https://www.facebook.com/ads/library/?id=${id}`;
+
+    const extractIdsFromText = (text) => {
+      if (!text) return [];
+      const ids = new Set();
+
+      for (const pattern of LABEL_PATTERNS) {
+        const re = new RegExp(pattern.source, 'ig');
+        for (const m of String(text).matchAll(re)) {
+          if (m && m[1]) ids.add(m[1]);
+        }
       }
-    }
-    
-    // Method 2: Look for 15-digit numbers (typical FB ad IDs like 782262974824268)
-    const adIdMatch = cardText.match(/\b(\d{15})\b/);
-    if (adIdMatch && adIdMatch[1]) {
-      console.log('📌 Found ad ID via 15-digit number:', adIdMatch[1]);
-      return `https://www.facebook.com/ads/library/?id=${adIdMatch[1]}`;
-    }
-    
-    // Method 3: Look for any 14-18 digit numbers (FB ad ID range)
-    const longNumberMatch = cardText.match(/\b(\d{14,18})\b/);
-    if (longNumberMatch && longNumberMatch[1]) {
-      console.log('📌 Found ad ID via long number:', longNumberMatch[1]);
-      return `https://www.facebook.com/ads/library/?id=${longNumberMatch[1]}`;
-    }
-    
-    // Method 4: Look for links with ad ID in href
-    const allLinks = card.querySelectorAll('a[href*="id="]');
-    for (const link of allLinks) {
-      const href = link.href || '';
-      const urlIdMatch = href.match(/[?&]id=(\d{10,20})/);
-      if (urlIdMatch && urlIdMatch[1]) {
-        console.log('📌 Found ad ID via link href:', urlIdMatch[1]);
-        return `https://www.facebook.com/ads/library/?id=${urlIdMatch[1]}`;
+
+      return Array.from(ids);
+    };
+
+    const extractUniqueIdFromText = (text) => {
+      const ids = extractIdsFromText(text);
+      return ids.length === 1 ? ids[0] : null;
+    };
+
+    const extractIdFromLinks = (root) => {
+      if (!root) return null;
+      const links = root.querySelectorAll('a[href]');
+      for (const link of links) {
+        const href = link.href || '';
+        if (!href) continue;
+
+        // Direct library URL already present
+        const libraryMatch = href.match(/facebook\.com\/ads\/library\/\?id=(\d{10,25})/i);
+        if (libraryMatch && libraryMatch[1]) return libraryMatch[1];
+
+        // ID in query params
+        const urlIdMatch = href.match(/[?&]id=(\d{10,25})/);
+        if (urlIdMatch && urlIdMatch[1]) return urlIdMatch[1];
       }
+      return null;
+    };
+
+    const findClosestLabeledId = (root) => {
+      if (!root) return null;
+
+      const cardRect = card.getBoundingClientRect();
+      const candidates = [];
+
+      const nodes = root.querySelectorAll('span, div');
+      let scanned = 0;
+      for (const node of nodes) {
+        if (scanned++ > 400) break;
+
+        const t = node.textContent || '';
+        const tl = t.toLowerCase();
+        if (!tl.includes('biblioteca') && !tl.includes('library id')) continue;
+
+        const id = extractUniqueIdFromText(t);
+        if (!id) continue;
+
+        candidates.push({ id, node });
+        if (candidates.length >= 40) break;
+      }
+
+      if (candidates.length === 0) return null;
+      if (candidates.length === 1) return candidates[0].id;
+
+      // Multiple IDs found within this context; pick the one closest to the current card.
+      let best = candidates[0];
+      let bestDist = Infinity;
+
+      for (const c of candidates) {
+        const r = c.node.getBoundingClientRect();
+        const dist = Math.abs(r.top - cardRect.top) + Math.abs(r.left - cardRect.left);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = c;
+        }
+      }
+
+      return best?.id || null;
+    };
+
+    // A) Card itself
+    const idFromCardLink = extractIdFromLinks(card);
+    if (idFromCardLink) {
+      console.log('📌 Found ad ID via link on card:', idFromCardLink);
+      return buildUrl(idFromCardLink);
     }
-    
-    // Fallback - log warning and use page URL
-    console.warn('⚠️ Could not extract ad ID from card. Card text sample:', cardText.substring(0, 300));
-    return window.location.href;
+
+    // Only accept the card text when it's uniquely identified (avoid grabbing IDs from other cards)
+    const idFromCardText = extractUniqueIdFromText(card.textContent || '');
+    if (idFromCardText) {
+      console.log('📌 Found ad ID via text on card:', idFromCardText);
+      return buildUrl(idFromCardText);
+    }
+
+    const idFromClosestCardLabel = findClosestLabeledId(card);
+    if (idFromClosestCardLabel) {
+      console.log('📌 Found ad ID via closest labeled node on card:', idFromClosestCardLabel);
+      return buildUrl(idFromClosestCardLabel);
+    }
+
+    // B) Walk up parents to find the header ("Identificação da biblioteca") that might be outside the injected container
+    let el = card;
+    for (let depth = 0; depth < 12 && el; depth++) {
+      const parent = el.parentElement;
+      if (!parent) break;
+
+      const idFromParentLink = extractIdFromLinks(parent);
+      if (idFromParentLink) {
+        console.log('📌 Found ad ID via link in parent:', idFromParentLink);
+        return buildUrl(idFromParentLink);
+      }
+
+      // Only accept parent text if it contains a single labeled ID
+      const idFromParentTextUnique = extractUniqueIdFromText(parent.textContent || '');
+      if (idFromParentTextUnique) {
+        console.log('📌 Found ad ID via unique labeled text in parent:', idFromParentTextUnique);
+        return buildUrl(idFromParentTextUnique);
+      }
+
+      const idFromClosestParentLabel = findClosestLabeledId(parent);
+      if (idFromClosestParentLabel) {
+        console.log('📌 Found ad ID via closest labeled node in parent:', idFromClosestParentLabel);
+        return buildUrl(idFromClosestParentLabel);
+      }
+
+      el = parent;
+    }
+
+    // If we can't reliably extract the ad ID, DO NOT fallback to the current page URL (it saves the wrong link).
+    console.warn('⚠️ Could not reliably extract the ad ID for this card.');
+    return null;
   }
 
   // Inject buttons into ad cards
@@ -529,6 +619,10 @@
       if (existingModal) existingModal.remove();
 
       const adLibraryLink = getAdLibraryLink(card);
+      if (!adLibraryLink) {
+        showToast('Não consegui pegar o link deste anúncio. Abra o menu (…) do anúncio e garanta que apareça “Identificação da biblioteca”, depois tente salvar de novo.', 'error');
+        return;
+      }
 
       const modalOverlay = document.createElement('div');
       modalOverlay.className = 'fad-modal-overlay';
