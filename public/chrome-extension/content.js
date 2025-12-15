@@ -367,37 +367,37 @@
   function getAdLibraryLink(card) {
     const cardText = card.textContent || '';
     
-    // Method 1: Look for "Copiar link do anúncio" button/link in dropdown
-    const copyLinkElements = card.querySelectorAll('a[href*="facebook.com/ads/library"], a[role="link"], div[role="button"]');
-    for (const el of copyLinkElements) {
-      const text = el.textContent?.toLowerCase() || '';
-      if (text.includes('copiar link') || text.includes('copy link')) {
-        // Try to get href
-        if (el.href && el.href.includes('id=')) {
-          const urlIdMatch = el.href.match(/[?&]id=(\d{10,20})/);
-          if (urlIdMatch && urlIdMatch[1]) {
-            console.log('📌 Found ad ID via copy link button:', urlIdMatch[1]);
-            return `https://www.facebook.com/ads/library/?id=${urlIdMatch[1]}`;
-          }
-        }
-      }
-    }
-    
-    // Method 2: Look for "Identificação da biblioteca:" text and extract the ID
-    const patterns = [
-      /Identifica[çc][ãa]o\s*da\s*biblioteca[:\s]*(\d{10,20})/i,
-      /Library\s*ID[:\s]*(\d{10,20})/i,
+    // Method 1 (PRIORITY): Look for "Identificação da biblioteca:" followed by the ID number
+    // This is the most reliable method - extract the ID shown in the card header
+    const bibliotecaPatterns = [
+      /Identifica[çc][ãa]o\s*da\s*biblioteca[:\s]*(\d{12,20})/i,
+      /Library\s*ID[:\s]*(\d{12,20})/i,
+      /biblioteca[:\s]*(\d{12,20})/i,
     ];
     
-    for (const pattern of patterns) {
+    for (const pattern of bibliotecaPatterns) {
       const match = cardText.match(pattern);
       if (match && match[1]) {
-        console.log('📌 Found ad ID via text pattern:', match[1]);
+        console.log('📌 Found ad ID via biblioteca text:', match[1]);
         return `https://www.facebook.com/ads/library/?id=${match[1]}`;
       }
     }
     
-    // Method 3: Look for links with ad ID in href
+    // Method 2: Look for 15-digit numbers (typical FB ad IDs like 782262974824268)
+    const adIdMatch = cardText.match(/\b(\d{15})\b/);
+    if (adIdMatch && adIdMatch[1]) {
+      console.log('📌 Found ad ID via 15-digit number:', adIdMatch[1]);
+      return `https://www.facebook.com/ads/library/?id=${adIdMatch[1]}`;
+    }
+    
+    // Method 3: Look for any 14-18 digit numbers (FB ad ID range)
+    const longNumberMatch = cardText.match(/\b(\d{14,18})\b/);
+    if (longNumberMatch && longNumberMatch[1]) {
+      console.log('📌 Found ad ID via long number:', longNumberMatch[1]);
+      return `https://www.facebook.com/ads/library/?id=${longNumberMatch[1]}`;
+    }
+    
+    // Method 4: Look for links with ad ID in href
     const allLinks = card.querySelectorAll('a[href*="id="]');
     for (const link of allLinks) {
       const href = link.href || '';
@@ -406,22 +406,6 @@
         console.log('📌 Found ad ID via link href:', urlIdMatch[1]);
         return `https://www.facebook.com/ads/library/?id=${urlIdMatch[1]}`;
       }
-    }
-    
-    // Method 4: Look for any long number sequence that could be an ad ID (15-20 digits)
-    // Match the ID shown next to "Identificação da biblioteca:"
-    const longNumberMatch = cardText.match(/biblioteca[:\s]*(\d{13,20})/i);
-    if (longNumberMatch && longNumberMatch[1]) {
-      console.log('📌 Found ad ID via biblioteca number:', longNumberMatch[1]);
-      return `https://www.facebook.com/ads/library/?id=${longNumberMatch[1]}`;
-    }
-    
-    // Method 5: Extract any 16-digit number (typical FB ad IDs)
-    const allNumbers = cardText.match(/\b(\d{16})\b/g);
-    if (allNumbers && allNumbers.length > 0) {
-      // Use the first 16-digit number found (likely the ad ID)
-      console.log('📌 Found potential ad ID via 16-digit number:', allNumbers[0]);
-      return `https://www.facebook.com/ads/library/?id=${allNumbers[0]}`;
     }
     
     // Fallback - log warning and use page URL
