@@ -106,10 +106,6 @@ async function showMainContent(email) {
   document.getElementById('loginSection').style.display = 'none';
   document.getElementById('mainContent').style.display = 'flex';
   document.getElementById('userEmail').textContent = email || 'Usuário';
-  
-  // Load saved settings
-  const settings = await chrome.storage.local.get(['whatsappFilter']);
-  document.getElementById('whatsappFilter').checked = settings.whatsappFilter || false;
 
   // Check if we're on the Facebook Ads Library page
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -136,21 +132,11 @@ async function showMainContent(email) {
   }
 
   // Event Listeners
-  document.getElementById('whatsappFilter').addEventListener('change', async (e) => {
-    await chrome.storage.local.set({ whatsappFilter: e.target.checked });
-    sendToContentScript({ action: 'updateFilter', filter: 'whatsapp', value: e.target.checked });
-  });
-
-
   document.getElementById('refreshBtn').addEventListener('click', async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab) {
       chrome.tabs.reload(tab.id);
     }
-  });
-
-  document.getElementById('selectAllBtn').addEventListener('click', () => {
-    sendToContentScript({ action: 'selectAll' });
   });
 }
 
