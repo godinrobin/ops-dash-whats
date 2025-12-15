@@ -59,7 +59,7 @@ const App = () => (
             <Route path="/gerador-audio" element={<MemberRoute featureName="Gerador de Áudio"><AudioGenerator /></MemberRoute>} />
             <Route path="/transcricao-audio" element={<MemberRoute featureName="Transcrição de Áudio"><AudioTranscriber /></MemberRoute>} />
             <Route path="/tag-whats" element={<MemberRoute featureName="Tag Whats"><TagWhats /></MemberRoute>} />
-            <Route path="/extensao-ads" element={<MemberRoute featureName="Extensão Ads WhatsApp"><ExtensaoAdsWhatsApp /></MemberRoute>} />
+            <Route path="/extensao-ads" element={<ProtectedRoute><ExtensaoAdsWhatsApp /></ProtectedRoute>} />
             
             {/* ADMIN ROUTES */}
             <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />
