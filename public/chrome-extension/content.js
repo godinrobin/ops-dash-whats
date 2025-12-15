@@ -863,22 +863,17 @@
 
         if (shownCount < state.visibleAdsLimit) {
           // Reset all hiding styles to show the card properly
-          card.style.display = '';
-          card.style.opacity = '';
-          card.style.pointerEvents = '';
-          card.style.position = '';
-          card.style.visibility = '';
-          card.style.height = '';
-          card.style.overflow = '';
+          card.style.cssText = '';
           card.classList.remove('fad-hidden');
           shownCount++;
         } else {
-          card.style.display = 'none';
+          // Hide excess cards completely
+          card.style.cssText = 'display: none !important;';
           card.classList.add('fad-hidden');
         }
       } else {
-        // Hide card but preserve its space in the layout
-        card.style.display = 'none';
+        // Hide filtered-out cards completely
+        card.style.cssText = 'display: none !important;';
         card.classList.add('fad-hidden');
       }
     });
