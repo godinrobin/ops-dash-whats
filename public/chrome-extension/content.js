@@ -840,10 +840,7 @@
       const hasButtons = card.querySelector('.fad-actions-container');
 
       if (!hasButtons) {
-        card.style.opacity = '0';
-        card.style.pointerEvents = 'none';
-        card.style.position = 'absolute';
-        card.style.visibility = 'hidden';
+        // Card without buttons - just skip, don't hide
         return;
       }
 
@@ -865,11 +862,14 @@
         if (isWhatsapp) whatsappVisibleCount++;
 
         if (shownCount < state.visibleAdsLimit) {
+          // Reset all hiding styles to show the card properly
           card.style.display = '';
           card.style.opacity = '';
           card.style.pointerEvents = '';
           card.style.position = '';
           card.style.visibility = '';
+          card.style.height = '';
+          card.style.overflow = '';
           card.classList.remove('fad-hidden');
           shownCount++;
         } else {
@@ -877,6 +877,7 @@
           card.classList.add('fad-hidden');
         }
       } else {
+        // Hide card but preserve its space in the layout
         card.style.display = 'none';
         card.classList.add('fad-hidden');
       }
