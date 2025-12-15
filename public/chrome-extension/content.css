@@ -221,6 +221,39 @@
   border-color: var(--fad-primary);
 }
 
+/* Load Filter Button */
+.fad-btn-load-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--fad-bg-card);
+  color: var(--fad-text);
+  border: 1px solid var(--fad-primary);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.fad-btn-load-filter:hover {
+  background: rgba(255, 107, 0, 0.15);
+  transform: translateY(-1px);
+}
+
+.fad-btn-load-filter:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.fad-btn-load-filter svg {
+  width: 14px;
+  height: 14px;
+}
+
 /* Download All Button */
 .fad-btn-download-all {
   display: flex;
