@@ -11,9 +11,9 @@ import fs from "fs";
 const obfuscatorOptions = {
   compact: true,
   controlFlowFlattening: true,
-  controlFlowFlatteningThreshold: 0.75,
+  controlFlowFlatteningThreshold: 0.5, // Reduzido de 0.75 para melhor performance
   deadCodeInjection: true,
-  deadCodeInjectionThreshold: 0.4,
+  deadCodeInjectionThreshold: 0.2, // Reduzido de 0.4 para melhor performance
   debugProtection: true,
   debugProtectionInterval: 2000,
   disableConsoleOutput: true,
@@ -27,7 +27,7 @@ const obfuscatorOptions = {
   splitStringsChunkLength: 5,
   stringArray: true,
   stringArrayCallsTransform: true,
-  stringArrayCallsTransformThreshold: 0.75,
+  stringArrayCallsTransformThreshold: 0.5, // Reduzido de 0.75 para melhor performance
   stringArrayEncoding: ['base64'],
   stringArrayIndexShift: true,
   stringArrayRotate: true,
@@ -36,7 +36,7 @@ const obfuscatorOptions = {
   stringArrayWrappersChainedCalls: true,
   stringArrayWrappersParametersMaxCount: 4,
   stringArrayWrappersType: 'function' as const,
-  stringArrayThreshold: 0.75,
+  stringArrayThreshold: 0.5, // Reduzido de 0.75 para melhor performance
   transformObjectKeys: true,
   unicodeEscapeSequence: true,
 };
