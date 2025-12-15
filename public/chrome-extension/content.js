@@ -368,15 +368,42 @@
     return 1;
   }
 
-  // Get current page URL for ad library link
+  // Get ad library link from card - extracts the specific ad ID
   function getAdLibraryLink(card) {
-    // Try to find the ad detail link
-    const detailLink = card.querySelector('a[href*="ad_detail"]');
-    if (detailLink) {
-      return detailLink.href;
+    // Method 1: Look for "Identificação da biblioteca:" text and extract the ID
+    const cardText = card.textContent || '';
+    const idMatch = cardText.match(/Identifica[çc][ãa]o\s+da\s+biblioteca[:\s]+(\d+)/i);
+    if (idMatch && idMatch[1]) {
+      return `https://www.facebook.com/ads/library/?id=${idMatch[1]}`;
     }
     
-    // Fallback to current URL
+    // Method 2: English version "Library ID:"
+    const idMatchEn = cardText.match(/Library\s+ID[:\s]+(\d+)/i);
+    if (idMatchEn && idMatchEn[1]) {
+      return `https://www.facebook.com/ads/library/?id=${idMatchEn[1]}`;
+    }
+    
+    // Method 3: Try to find the ad detail link with ID parameter
+    const detailLink = card.querySelector('a[href*="id="]');
+    if (detailLink) {
+      const href = detailLink.href;
+      const urlIdMatch = href.match(/[?&]id=(\d+)/);
+      if (urlIdMatch && urlIdMatch[1]) {
+        return `https://www.facebook.com/ads/library/?id=${urlIdMatch[1]}`;
+      }
+    }
+    
+    // Method 4: Look for any link containing the ad ID
+    const allLinks = card.querySelectorAll('a[href*="facebook.com"]');
+    for (const link of allLinks) {
+      const urlIdMatch = link.href.match(/[?&]id=(\d+)/);
+      if (urlIdMatch && urlIdMatch[1]) {
+        return `https://www.facebook.com/ads/library/?id=${urlIdMatch[1]}`;
+      }
+    }
+    
+    // Fallback to current URL (less ideal)
+    console.warn('⚠️ Could not extract ad ID from card, using page URL');
     return window.location.href;
   }
 
