@@ -108,9 +108,8 @@ async function showMainContent(email) {
   document.getElementById('userEmail').textContent = email || 'Usuário';
   
   // Load saved settings
-  const settings = await chrome.storage.local.get(['whatsappFilter', 'minAds']);
+  const settings = await chrome.storage.local.get(['whatsappFilter']);
   document.getElementById('whatsappFilter').checked = settings.whatsappFilter || false;
-  document.getElementById('minAds').value = settings.minAds || 0;
 
   // Check if we're on the Facebook Ads Library page
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -142,11 +141,6 @@ async function showMainContent(email) {
     sendToContentScript({ action: 'updateFilter', filter: 'whatsapp', value: e.target.checked });
   });
 
-  document.getElementById('minAds').addEventListener('change', async (e) => {
-    const value = parseInt(e.target.value) || 0;
-    await chrome.storage.local.set({ minAds: value });
-    sendToContentScript({ action: 'updateFilter', filter: 'minAds', value });
-  });
 
   document.getElementById('refreshBtn').addEventListener('click', async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
