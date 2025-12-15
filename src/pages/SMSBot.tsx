@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { RechargeModal } from "@/components/RechargeModal";
+import { createAdminNotification } from "@/utils/adminNotifications";
 
 interface Country {
   code: string;
@@ -188,6 +189,13 @@ const SMSBot = () => {
       setBalance(data.newBalance);
       setServiceQuantities(prev => ({ ...prev, [service.code]: 1 }));
       loadOrders();
+      
+      // Notifica admin
+      createAdminNotification({
+        actionType: "sms_purchase",
+        actionDescription: `Comprou ${quantity}x ${service.name}`,
+        amount: service.priceWithMarkup * quantity,
+      });
       
       // Redireciona para a aba de pedidos
       const tabsElement = document.querySelector('[data-state="active"][value="buy"]');

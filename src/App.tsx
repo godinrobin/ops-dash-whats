@@ -8,6 +8,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { MemberRoute } from "@/components/MemberRoute";
 import { AdminRoute } from "@/components/AdminRoute";
 import { AnnouncementPopup } from "@/components/AnnouncementPopup";
+import { AdminNotifications } from "@/components/AdminNotifications";
 import Home from "./pages/Home";
 import Index from "./pages/Index";
 import ProductMetrics from "./pages/ProductMetrics";
@@ -38,6 +39,7 @@ const App = () => (
       <HashRouter>
         <AuthProvider>
           <AnnouncementPopup />
+          <AdminNotifications />
           <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
