@@ -74,6 +74,9 @@
       console.log('Could not load settings, using defaults');
     }
 
+    // Full cleanup on init to remove any stale buttons from previous page state
+    fullCleanup();
+
     createFilterBar();
     createLoadMoreButton();
     observeAds();
@@ -116,24 +119,62 @@
     return count;
   }
 
-  // Cleanup duplicate buttons
+  // Cleanup duplicate buttons - remove ALL buttons from cards first, then re-inject
   function cleanupDuplicateButtons() {
-    const allCards = document.querySelectorAll('[data-fad-processed="true"]');
+    // Remove ALL orphaned button containers (not attached to a valid processed card)
+    const allButtonContainers = document.querySelectorAll('.fad-actions-container');
     let cleanedCount = 0;
 
-    allCards.forEach(card => {
-      const buttons = card.querySelectorAll('.fad-actions-container');
-      if (buttons.length > 1) {
-        for (let i = 1; i < buttons.length; i++) {
-          buttons[i].remove();
+    allButtonContainers.forEach(container => {
+      const parentCard = container.closest('[data-fad-processed="true"]');
+      
+      // If container is not inside a processed card, remove it
+      if (!parentCard) {
+        container.remove();
+        cleanedCount++;
+        return;
+      }
+      
+      // Check for duplicates within the same card
+      const siblings = parentCard.querySelectorAll('.fad-actions-container');
+      if (siblings.length > 1) {
+        // Keep only the last one (most recent), remove others
+        for (let i = 0; i < siblings.length - 1; i++) {
+          siblings[i].remove();
           cleanedCount++;
         }
       }
     });
 
+    // Also cleanup cards that lost their processed flag but still have buttons
+    const orphanButtons = document.querySelectorAll('.fad-actions-container');
+    orphanButtons.forEach(container => {
+      const card = container.parentElement;
+      if (card && card.dataset.fadProcessed !== 'true') {
+        container.remove();
+        cleanedCount++;
+      }
+    });
+
     if (cleanedCount > 0) {
-      console.log(`🧹 Cleaned up ${cleanedCount} duplicate button containers`);
+      console.log(`🧹 Cleaned up ${cleanedCount} duplicate/orphan button containers`);
     }
+  }
+
+  // Full cleanup on page refresh - called once at init
+  function fullCleanup() {
+    const allButtons = document.querySelectorAll('.fad-actions-container');
+    allButtons.forEach(btn => btn.remove());
+    
+    // Reset all processed flags
+    const processedCards = document.querySelectorAll('[data-fad-processed="true"]');
+    processedCards.forEach(card => {
+      card.dataset.fadProcessed = 'false';
+      card.classList.remove('fad-whatsapp-highlight');
+    });
+    
+    state.processedAds = new WeakSet();
+    console.log('🔄 Full cleanup completed');
   }
 
   // Scroll handler
@@ -491,10 +532,23 @@
     cleanupDuplicateButtons();
 
     for (const card of adCards) {
-      if (card.dataset.fadProcessed === 'true' || card.querySelector('.fad-actions-container')) {
+      // Skip if already has our buttons
+      const existingButtons = card.querySelector('.fad-actions-container');
+      if (existingButtons) {
+        // Already processed - just count it
         const isWhatsapp = card.dataset.fadWhatsapp === 'true';
         if (isWhatsapp) whatsappCount++;
         totalCount++;
+        continue;
+      }
+      
+      // Remove stale processed flag if buttons were removed
+      if (card.dataset.fadProcessed === 'true' && !existingButtons) {
+        card.dataset.fadProcessed = 'false';
+      }
+      
+      // Skip if already processed (double check)
+      if (card.dataset.fadProcessed === 'true') {
         continue;
       }
 
