@@ -146,6 +146,126 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_creative_learnings: {
+        Row: {
+          analysis_result: Json
+          created_at: string
+          creative_type: string
+          creative_url: string | null
+          id: string
+          improvement_points: Json | null
+          niche: string | null
+          transcription: string | null
+          user_feedback: string | null
+          user_id: string
+          user_rating: number | null
+        }
+        Insert: {
+          analysis_result: Json
+          created_at?: string
+          creative_type: string
+          creative_url?: string | null
+          id?: string
+          improvement_points?: Json | null
+          niche?: string | null
+          transcription?: string | null
+          user_feedback?: string | null
+          user_id: string
+          user_rating?: number | null
+        }
+        Update: {
+          analysis_result?: Json
+          created_at?: string
+          creative_type?: string
+          creative_url?: string | null
+          id?: string
+          improvement_points?: Json | null
+          niche?: string | null
+          transcription?: string | null
+          user_feedback?: string | null
+          user_id?: string
+          user_rating?: number | null
+        }
+        Relationships: []
+      }
+      ai_funnel_learnings: {
+        Row: {
+          created_at: string
+          edit_suggestions: string[] | null
+          funnel_config: Json
+          funnel_content: Json
+          id: string
+          niche: string | null
+          pegada: string | null
+          tone: string | null
+          user_feedback: string | null
+          user_id: string
+          user_rating: number | null
+        }
+        Insert: {
+          created_at?: string
+          edit_suggestions?: string[] | null
+          funnel_config: Json
+          funnel_content: Json
+          id?: string
+          niche?: string | null
+          pegada?: string | null
+          tone?: string | null
+          user_feedback?: string | null
+          user_id: string
+          user_rating?: number | null
+        }
+        Update: {
+          created_at?: string
+          edit_suggestions?: string[] | null
+          funnel_config?: Json
+          funnel_content?: Json
+          id?: string
+          niche?: string | null
+          pegada?: string | null
+          tone?: string | null
+          user_feedback?: string | null
+          user_id?: string
+          user_rating?: number | null
+        }
+        Relationships: []
+      }
+      ai_success_patterns: {
+        Row: {
+          created_at: string
+          id: string
+          pattern_data: Json
+          pattern_description: string
+          pattern_name: string
+          pattern_type: string
+          success_rate: number | null
+          updated_at: string
+          usage_count: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          pattern_data: Json
+          pattern_description: string
+          pattern_name: string
+          pattern_type: string
+          success_rate?: number | null
+          updated_at?: string
+          usage_count?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          pattern_data?: Json
+          pattern_description?: string
+          pattern_name?: string
+          pattern_type?: string
+          success_rate?: number | null
+          updated_at?: string
+          usage_count?: number
+        }
+        Relationships: []
+      }
       daily_update_status: {
         Row: {
           completed_at: string | null
