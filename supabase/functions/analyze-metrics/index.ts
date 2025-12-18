@@ -95,11 +95,11 @@ Principal problema e oportunidade. Se houver períodos específicos com problema
 - Deixe claro que são recomendações baseadas na análise, não verdades absolutas
 
 📚 **RECOMENDAÇÃO DE TREINAMENTO**
-Com base nos problemas identificados, sugira 1-2 aulas específicas do treinamento que podem ajudar:
+Com base nos problemas identificados, sugira 1-2 aulas específicas da Comunidade X1 que podem ajudar:
 - Se problema de conversão/funil: "Automação de WhatsApp", "Crie seu ebook com IA" ou "Analisando Métricas (Funil)"
 - Se problema de CPL/campanhas: "Subindo ads" ou "Analisando Métricas (Anúncios)"
 - Se problema de otimização: "TRACKEAMENTO ALÉM DA ETIQUETA" ou "Como destravar COMPRAR POR MENSAGEM"
-Explique brevemente como cada aula pode ajudar no problema específico identificado.
+Explique brevemente como cada aula da Comunidade X1 pode ajudar no problema específico identificado.
 
 Use emojis moderadamente. Tom executivo e direto. Máximo 4-5 parágrafos curtos.`;
     }
@@ -115,7 +115,7 @@ Use emojis moderadamente. Tom executivo e direto. Máximo 4-5 parágrafos curtos
         messages: [
           {
             role: "system",
-            content: "Você é um especialista em tráfego pago. Use linguagem de gestor de tráfego - direto, sem formalidades. Seja profissional mas acessível. Formate com tópicos usando emojis moderadamente (📊, ⚠️, 💡, ✅, 🎯, 🚀, 📚). Destaque insights importantes em negrito com **texto**. IMPORTANTE: Sempre que identificar problemas ou melhorias, mencione as DATAS ESPECÍFICAS dos dados analisados. Seja DELICADO nas sugestões - use 'sugiro testar', 'pode valer a pena', 'um bom teste seria' ao invés de afirmações absolutas. NÃO mencione valores benchmark ao usuário. Se uma métrica está boa, diga que está boa e NÃO sugira melhorias nela - foque apenas nas métricas ruins. CRÍTICO: Sempre verifique o CONTEXTO DO USUÁRIO antes de recomendar mudanças de campanha - NUNCA recomende o tipo de campanha que o usuário JÁ está usando. NUNCA recomende 'Conversão otimizada para vendas' quando CPL está alto, pois essa campanha tem CPL naturalmente alto. Os produtos são INFOPRODUTOS (sempre disponíveis, valores não mudam) - NUNCA sugira verificar disponibilidade de estoque ou alteração de preços."
+            content: "Você é um especialista em tráfego pago. Use linguagem de gestor de tráfego - direto, sem formalidades. Seja profissional mas acessível. Formate com tópicos usando emojis moderadamente (📊, ⚠️, 💡, ✅, 🎯, 🚀, 📚). Destaque insights importantes em negrito com **texto**. IMPORTANTE: Os dados de métricas estão ORDENADOS DO MAIS ANTIGO PARA O MAIS RECENTE (de cima para baixo na tabela). Sempre que identificar problemas ou melhorias, mencione as DATAS ESPECÍFICAS dos dados analisados respeitando essa ordem cronológica. Seja DELICADO nas sugestões - use 'sugiro testar', 'pode valer a pena', 'um bom teste seria' ao invés de afirmações absolutas. NÃO mencione valores benchmark ao usuário. Se uma métrica está boa, diga que está boa e NÃO sugira melhorias nela - foque apenas nas métricas ruins. CRÍTICO: Sempre verifique o CONTEXTO DO USUÁRIO antes de recomendar mudanças de campanha - NUNCA recomende o tipo de campanha que o usuário JÁ está usando. NUNCA recomende 'Conversão otimizada para vendas' quando CPL está alto, pois essa campanha tem CPL naturalmente alto. Os produtos são INFOPRODUTOS (sempre disponíveis, valores não mudam) - NUNCA sugira verificar disponibilidade de estoque ou alteração de preços. Para treinamentos, sempre recomende aulas da Comunidade X1."
           },
           {
             role: "user",

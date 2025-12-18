@@ -12,7 +12,7 @@ import { useActivityTracker } from "@/hooks/useActivityTracker";
 interface Voice {
   id: string;
   name: string;
-  category: 'mulher' | 'homem' | 'famosos' | 'bonus';
+  category: 'mulher' | 'homem' | 'crianca' | 'bonus';
 }
 
 const voices: Voice[] = [
@@ -25,12 +25,21 @@ const voices: Voice[] = [
   { id: "TU0AKFEDB4rOIzrirWl0", name: "Voz de IA", category: "mulher" },
   { id: "erMftXUmGTCGs1yArsUh", name: "Voz Para Demonstração", category: "mulher" },
   { id: "QTisrsrrHxSoMiznY2EJ", name: "Voz Famosa de Criativo", category: "mulher" },
+  { id: "7bLMZKlZ5YeFS6ALdAvc", name: "Voz de Mulher Calma", category: "mulher" },
+  { id: "neKWZWCXetZ17gvsMvek", name: "Voz de Mãe", category: "mulher" },
   // Homem
   { id: "4vbXGL1xAN936MeSCtyJ", name: "Voz de Pastor na Igreja", category: "homem" },
   { id: "ZA5HAcCWFlMQVFIL9S9a", name: "Voz de Homem Séria", category: "homem" },
   { id: "RMB4btomRahyVcqXwrav", name: "Voz de Homem Velho", category: "homem" },
+  // Criança
+  { id: "YqYpIHI7eZmw49lUGLnb", name: "Voz de Criança (Menina)", category: "crianca" },
+  { id: "DeM8H9SpaWcLIGAQZ3oz", name: "Voz de Criança (Menino)", category: "crianca" },
   // Bônus
   { id: "6r7vE9xvBmx115WCR9tR", name: "Voz do Frei Gilson", category: "bonus" },
+  { id: "X68g7aHdoQtNGel10ep6", name: "Voz do Renato Cariani", category: "bonus" },
+  { id: "kMEv5aToYRCssv2CIVuw", name: "Voz da Ana Maria Braga", category: "bonus" },
+  { id: "qrEIwKTSkTuEue7RuF9n", name: "Voz da Marcia Sensitiva", category: "bonus" },
+  { id: "v6ztLTVuY9k1rdRLQnQU", name: "Voz do Dráuzio Varela", category: "bonus" },
 ];
 
 const AudioGenerator = () => {
@@ -172,6 +181,14 @@ const AudioGenerator = () => {
                     <SelectGroup>
                       <SelectLabel>👨 Homem</SelectLabel>
                       {voices.filter(v => v.category === 'homem').map((voice) => (
+                        <SelectItem key={voice.id} value={voice.id}>
+                          {voice.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                    <SelectGroup>
+                      <SelectLabel>👶 Criança</SelectLabel>
+                      {voices.filter(v => v.category === 'crianca').map((voice) => (
                         <SelectItem key={voice.id} value={voice.id}>
                           {voice.name}
                         </SelectItem>

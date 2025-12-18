@@ -82,6 +82,12 @@ const toneOptions = [
   { value: "leve", label: "Leve" },
 ];
 
+const pegadaOptions = [
+  { value: "white", label: "White", description: "Copy padrão, equilibrada e natural" },
+  { value: "black", label: "Black", description: "Copy mais agressiva para aumentar conversão" },
+  { value: "muito-black", label: "Muito Black", description: "Copy extremamente agressiva com promessas fortes" },
+];
+
 const WhatsAppFunnelCreator = () => {
   useActivityTracker("page_visit", "Criador de Funil");
   const { user } = useAuth();
@@ -116,6 +122,7 @@ const WhatsAppFunnelCreator = () => {
     customAngle: "",
     tickets: "",
     tone: "informal",
+    pegada: "white",
     pixKey: "",
     pixName: "",
     pixBank: "",
@@ -181,6 +188,7 @@ const WhatsAppFunnelCreator = () => {
           angle: formData.angle === "Outro" ? formData.customAngle : formData.angle,
           tickets: ticketsList.join(", "),
           tone: formData.tone,
+          pegada: formData.pegada,
           pixKey: formData.pixKey,
           pixName: formData.pixName,
           pixBank: formData.pixBank,
@@ -364,6 +372,7 @@ const WhatsAppFunnelCreator = () => {
       customAngle: "",
       tickets: "",
       tone: "informal",
+      pegada: "white",
       pixKey: "",
       pixName: "",
       pixBank: "",
@@ -881,7 +890,29 @@ const WhatsAppFunnelCreator = () => {
                   </Select>
                 </div>
 
-                {/* Ticket */}
+                {/* Pegada */}
+                <div className="space-y-2">
+                  <Label htmlFor="pegada">Qual a pegada do funil? *</Label>
+                  <Select
+                    value={formData.pegada}
+                    onValueChange={(value) => setFormData({ ...formData, pegada: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a pegada" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pegadaOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          <div className="flex flex-col">
+                            <span>{option.label}</span>
+                            <span className="text-xs text-muted-foreground">{option.description}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="tickets">Qual ticket de venda? *</Label>
                   <TicketTagInput
