@@ -104,18 +104,21 @@ const CreativeAnalyzer = () => {
 
         if (error) throw error;
 
+        // The edge function returns { success, analysis: { ...scores, transcription } }
+        const analysis = data.analysis || data;
+
         setAnalysisResult({
-          hookScore: data.hookScore,
-          hookAnalysis: data.hookAnalysis,
-          bodyScore: data.bodyScore,
-          bodyAnalysis: data.bodyAnalysis,
-          ctaScore: data.ctaScore,
-          ctaAnalysis: data.ctaAnalysis,
-          coherenceScore: data.coherenceScore,
-          coherenceAnalysis: data.coherenceAnalysis,
-          overallScore: data.overallScore,
-          overallAnalysis: data.overallAnalysis,
-          transcription: data.transcription
+          hookScore: analysis.hookScore,
+          hookAnalysis: analysis.hookAnalysis,
+          bodyScore: analysis.bodyScore,
+          bodyAnalysis: analysis.bodyAnalysis,
+          ctaScore: analysis.ctaScore,
+          ctaAnalysis: analysis.ctaAnalysis,
+          coherenceScore: analysis.coherenceScore,
+          coherenceAnalysis: analysis.coherenceAnalysis,
+          overallScore: analysis.overallScore,
+          overallAnalysis: analysis.overallAnalysis,
+          transcription: analysis.transcription
         });
 
         // Save to learnings table
@@ -123,8 +126,8 @@ const CreativeAnalyzer = () => {
           user_id: user.id,
           creative_type: 'video',
           creative_url: fileUrl,
-          analysis_result: data,
-          transcription: data.transcription
+          analysis_result: analysis,
+          transcription: analysis.transcription
         });
 
       } else {
