@@ -14,9 +14,9 @@ serve(async (req) => {
   }
 
   try {
-    const { niche, product, expertName, angle, tickets, tone, pixKey, pixName, pixBank, pixKeyType, siteUrl, bonus, ebookContent } = await req.json();
+    const { niche, product, expertName, angle, tickets, tone, pegada, pixKey, pixName, pixBank, pixKeyType, siteUrl, bonus, ebookContent } = await req.json();
 
-    console.log('Generating funnel for:', { niche, product, expertName, angle, tickets, tone, pixName, pixBank, pixKeyType });
+    console.log('Generating funnel for:', { niche, product, expertName, angle, tickets, tone, pegada, pixName, pixBank, pixKeyType });
 
     // Check if niche is religious
     const isReligiousNiche = niche?.toLowerCase().includes('religi') || 
@@ -42,6 +42,22 @@ serve(async (req) => {
 
     const toneInstruction = toneDescriptions[tone || 'informal'] || toneDescriptions.informal;
 
+    // Define pegada (approach) descriptions
+    const pegadaDescriptions: Record<string, string> = {
+      white: "Copy equilibrada e natural - use técnicas de persuasão éticas, promessas realistas e linguagem honesta. Foque em benefícios reais do produto.",
+      black: "Copy mais agressiva - use mais gatilhos mentais de urgência, escassez e prova social. Promessas mais fortes mas ainda plausíveis. Aumente a pressão nas mensagens de cobrança.",
+      "muito-black": `Copy EXTREMAMENTE agressiva - use TODOS os mecanismos de conversão possíveis. Faça promessas muito fortes. Use argumentos emocionais intensos como:
+        - Mencionar Jesus/Deus dizendo que foi Ele quem mandou a mensagem
+        - Na cobrança, dizer que tem uma filha passando dificuldades
+        - Dizer que confiou na pessoa para fazer o pagamento
+        - Criar urgência extrema dizendo que é a última chance
+        - Usar culpa emocional para pressionar o pagamento
+        - Fazer promessas exageradas de transformação
+        IMPORTANTE: Seja extremamente agressivo mas SEM DESRESPEITAR a pessoa. O objetivo é CONVERTER usando todos os artifícios possíveis.`,
+    };
+
+    const pegadaInstruction = pegadaDescriptions[pegada || 'white'] || pegadaDescriptions.white;
+
     const systemPrompt = `Você é um especialista em marketing digital e criação de funis de vendas para WhatsApp. Você cria funis de vendas altamente persuasivos e personalizados para infoprodutos.
 
 IMPORTANTE: Você DEVE retornar APENAS um JSON válido, sem nenhum texto adicional antes ou depois.
@@ -63,10 +79,25 @@ REGRAS CRÍTICAS:
 1. Use emojis de forma natural e acolhedora.
 2. Personalize com o nome da expert, produto, nicho e ângulo informados.
 3. O TOM DEVE SER: ${toneInstruction}
-4. O tom deve ser PESSOAL - lembre-se que é uma conversa de WhatsApp individual, não um broadcast para várias pessoas. Trate como se fosse uma conversa única com UMA pessoa.
-5. NUNCA fale como se estivesse falando com várias pessoas (evite "vocês", "pessoal", "galera").
-6. Use linguagem acolhedora e próxima: "você", "meu amor", "querida", etc.
-7. NÃO repita saudações como "Olá" ou "Oi" em todos os áudios - varie a abordagem.
+4. A PEGADA/ABORDAGEM DEVE SER: ${pegadaInstruction}
+5. O tom deve ser PESSOAL - lembre-se que é uma conversa de WhatsApp individual, não um broadcast para várias pessoas. Trate como se fosse uma conversa única com UMA pessoa.
+6. NUNCA fale como se estivesse falando com várias pessoas (evite "vocês", "pessoal", "galera").
+7. Use linguagem acolhedora e próxima: "você", "meu amor", "querida", etc.
+8. NÃO repita saudações como "Olá" ou "Oi" em todos os áudios - varie a abordagem.
+
+REGRAS PARA SEÇÃO PRODUTO:
+- Ao listar os entregáveis/conteúdos do produto, use SEMPRE o emoji ✅ (check) no início de cada item
+- NÃO use setas (➡️) para listar itens
+- Exemplo de formatação correta:
+  "Com ele, você terá acesso à:
+  
+  ✅ Guia completo
+  ✅ Tutoriais passo a passo
+  ✅ Lista de materiais
+  ✅ Certificado Digital
+  
+  🎁 + Bônus especiais"
+- Use ✅ também para listar os bônus
 
 REGRAS ESPECIAIS PARA CHAVE PIX:
 - Na seção COBRANÇA, primeiro envie uma mensagem com os dados completos do pagamento incluindo:
