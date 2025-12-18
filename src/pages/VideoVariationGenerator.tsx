@@ -1247,15 +1247,15 @@ export default function VideoVariationGenerator() {
 
       {/* Video Preview Modal */}
       <Dialog open={!!previewVideo} onOpenChange={() => setPreviewVideo(null)}>
-        <DialogContent className="max-w-4xl bg-background border-2 border-accent">
-          <DialogHeader>
-            <DialogTitle>Preview do Vídeo</DialogTitle>
+        <DialogContent className="max-w-md bg-background border-2 border-accent p-4">
+          <DialogHeader className="pb-2">
+            <DialogTitle className="text-base">Preview do Vídeo</DialogTitle>
           </DialogHeader>
           {previewVideo && (
             <video 
               src={previewVideo} 
               controls 
-              className="w-full rounded-lg"
+              className="w-full rounded-lg max-h-[50vh]"
               autoPlay
             />
           )}
