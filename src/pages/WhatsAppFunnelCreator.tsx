@@ -903,7 +903,7 @@ const WhatsAppFunnelCreator = () => {
                     <SelectContent>
                       {pegadaOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
-                          <div className="flex flex-col">
+                          <div className="flex flex-col text-left">
                             <span>{option.label}</span>
                             <span className="text-xs text-muted-foreground">{option.description}</span>
                           </div>
