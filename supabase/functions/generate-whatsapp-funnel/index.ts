@@ -76,7 +76,7 @@ Cada mensagem deve ter um tipo:
 - "ebook": Instrução para enviar PDF/Ebook
 
 REGRAS CRÍTICAS:
-1. Use emojis de forma natural e acolhedora.
+1. Use emojis de forma MODERADA nas mensagens de TEXTO - não exagere, apenas alguns emojis estratégicos para dar emoção. NÃO use emojis em mensagens de ÁUDIO (type: "audio").
 2. Personalize com o nome da expert, produto, nicho e ângulo informados.
 3. O TOM DEVE SER: ${toneInstruction}
 4. A PEGADA/ABORDAGEM DEVE SER: ${pegadaInstruction}
