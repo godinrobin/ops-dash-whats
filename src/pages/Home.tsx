@@ -130,7 +130,16 @@ const Home = () => {
       restricted: true
     },
     { 
-      path: "/zap-spy", 
+      path: "/analisador-criativos", 
+      emoji: "🔬", 
+      title: "Analisador de Criativos",
+      description: "Analise seus criativos com IA",
+      subtext: "Receba feedback detalhado sobre vídeos e imagens",
+      gradient: "from-cyan-400 to-blue-500",
+      restricted: true
+    },
+    { 
+      path: "/zap-spy",
       emoji: "🔍", 
       title: "Zap Spy",
       description: "Acesse as ofertas mais escaladas de X1",
