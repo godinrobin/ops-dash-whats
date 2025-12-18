@@ -57,6 +57,9 @@ verify_jwt = true
 [functions.generate-creative-image]
 verify_jwt = true
 
+[functions.analyze-creative-image]
+verify_jwt = true
+
 [functions.sms-get-services]
 verify_jwt = true
 

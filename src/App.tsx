@@ -20,6 +20,7 @@ import CreativeGenerator from "./pages/CreativeGenerator";
 import VideoVariationGenerator from "./pages/VideoVariationGenerator";
 import AudioGenerator from "./pages/AudioGenerator";
 import AudioTranscriber from "./pages/AudioTranscriber";
+import CreativeAnalyzer from "./pages/CreativeAnalyzer";
 import ZapSpy from "./pages/ZapSpy";
 import TagWhats from "./pages/TagWhats";
 import ExtensaoAdsWhatsApp from "./pages/ExtensaoAdsWhatsApp";
@@ -60,6 +61,7 @@ const App = () => (
             <Route path="/gerador-variacoes-video" element={<MemberRoute featureName="Gerador de Criativos em Vídeo"><VideoVariationGenerator /></MemberRoute>} />
             <Route path="/gerador-audio" element={<MemberRoute featureName="Gerador de Áudio"><AudioGenerator /></MemberRoute>} />
             <Route path="/transcricao-audio" element={<MemberRoute featureName="Transcrição de Áudio"><AudioTranscriber /></MemberRoute>} />
+            <Route path="/analisador-criativos" element={<MemberRoute featureName="Analisador de Criativos"><CreativeAnalyzer /></MemberRoute>} />
             <Route path="/tag-whats" element={<MemberRoute featureName="Tag Whats"><TagWhats /></MemberRoute>} />
             <Route path="/extensao-ads" element={<ProtectedRoute><ExtensaoAdsWhatsApp /></ProtectedRoute>} />
             
