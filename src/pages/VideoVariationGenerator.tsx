@@ -1354,12 +1354,6 @@ export default function VideoVariationGenerator() {
                   <p className="text-sm text-muted-foreground">{analysisResult.overallAnalysis}</p>
                 </div>
 
-                {analysisResult.transcription && (
-                  <div className="p-4 bg-muted/30 rounded-lg">
-                    <h4 className="font-semibold mb-2 text-sm">📝 Transcrição</h4>
-                    <p className="text-xs text-muted-foreground italic">"{analysisResult.transcription}"</p>
-                  </div>
-                )}
               </div>
             </div>
           )}
