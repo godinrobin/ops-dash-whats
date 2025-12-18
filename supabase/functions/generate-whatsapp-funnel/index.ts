@@ -164,8 +164,28 @@ ${siteUrl ? `- **Site/URL do Produto**: ${siteUrl}` : '- **Site/URL do Produto**
 ${bonus ? `- **Bônus oferecido**: ${bonus}` : ''}
 ${ebookContent ? `- **Conteúdo do E-book/Material**: ${ebookContent}` : ''}
 
+INSTRUÇÕES CRÍTICAS DE TOM E PEGADA:
+1. UTILIZE O TOM: ${toneInstruction}
+2. UTILIZE A PEGADA: ${pegadaInstruction}
+${pegada === 'muito-black' ? `
+ATENÇÃO - PEGADA MUITO BLACK SELECIONADA:
+- Seja EXTREMAMENTE agressivo nas mensagens
+- Use gatilhos emocionais fortes em TODAS as seções
+- Na APRESENTAÇÃO: crie urgência desde o início, mencione que foi enviado por uma força maior
+- No PRODUTO: exagere os benefícios, prometa transformações radicais
+- Na COBRANÇA: use todos os artifícios emocionais - mencione dificuldades pessoais, filhos, confiança depositada, última chance
+- Pressione fortemente o pagamento usando culpa emocional
+- Lembre-se: ser agressivo mas SEM desrespeitar a pessoa
+` : ''}
+${pegada === 'black' ? `
+ATENÇÃO - PEGADA BLACK SELECIONADA:
+- Seja mais agressivo que o normal
+- Use mais gatilhos de urgência e escassez
+- Pressione mais nas mensagens de cobrança
+- Use mais gatilhos emocionais
+` : ''}
+
 LEMBRE-SE: É uma conversa de WhatsApp individual, 1 para 1. Não fale como se fosse para várias pessoas.
-UTILIZE O TOM: ${toneInstruction}
 
 Crie o funil seguindo a estrutura de APRESENTAÇÃO, PRODUTO e COBRANÇA.
 

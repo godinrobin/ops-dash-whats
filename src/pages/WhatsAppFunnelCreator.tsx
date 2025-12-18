@@ -498,7 +498,7 @@ const WhatsAppFunnelCreator = () => {
           </DialogHeader>
           <div className="py-4">
             <p className="text-sm text-muted-foreground mb-4">
-              Isso é ensinado no treinamento <strong className="text-accent">Starter Whats</strong>. Um site bem estruturado pode aumentar significativamente suas vendas!
+              Isso é ensinado na <strong className="text-accent">Comunidade X1 do João</strong>. Um site bem estruturado pode aumentar significativamente suas vendas!
             </p>
             <div className="flex gap-3">
               <Button
