@@ -344,19 +344,6 @@ const CreativeAnalyzer = () => {
               </CardContent>
             </Card>
 
-            {/* Transcription (for videos) */}
-            {analysisResult.transcription && (
-              <Card className="border-2 border-accent">
-                <CardHeader>
-                  <CardTitle className="text-lg">Transcrição do Áudio</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                    {analysisResult.transcription}
-                  </p>
-                </CardContent>
-              </Card>
-            )}
 
             {/* Individual Scores */}
             <div className="grid md:grid-cols-2 gap-4">
