@@ -54,14 +54,25 @@ serve(async (req) => {
         - Usar gatilhos emocionais ("imagine você daqui 30 dias", "sua família merece")
         - Criar senso de OPORTUNIDADE ÚNICA
         IMPORTANTE: Seja agressivo nas vendas, pressione o lead, mas sem desrespeitar.`,
-      "muito-black": `Copy EXTREMAMENTE agressiva - use TODOS os mecanismos de conversão possíveis. Faça promessas muito fortes. Use argumentos emocionais intensos como:
-        - Mencionar Jesus/Deus dizendo que foi Ele quem mandou a mensagem
-        - Na cobrança, dizer que tem uma filha passando dificuldades
-        - Dizer que confiou na pessoa para fazer o pagamento
-        - Criar urgência extrema dizendo que é a última chance
-        - Usar culpa emocional para pressionar o pagamento
-        - Fazer promessas exageradas de transformação
-        IMPORTANTE: Seja extremamente agressivo mas SEM DESRESPEITAR a pessoa. O objetivo é CONVERTER usando todos os artifícios possíveis.`,
+      "muito-black": `Copy EXTREMAMENTE agressiva - seja o MAIS PERSUASIVO e AGRESSIVO possível para CONVERTER.
+        
+        IMPORTANTE: Seja CRIATIVO e VARIADO - NÃO use sempre os mesmos gatilhos. INVENTE novos mecanismos de persuasão agressiva para cada funil ser ÚNICO.
+        
+        EXEMPLOS de níveis de agressividade (use como INSPIRAÇÃO, mas CRIE NOVOS e DIFERENTES a cada funil):
+        - Gatilhos religiosos/espirituais ("Deus colocou você aqui", "isso é um sinal divino")
+        - Gatilhos familiares ("sua família precisa disso", "filhos passando necessidade")
+        - Gatilhos de culpa ("não desperdice essa chance", "não me decepcione", "confiei em você")
+        - Gatilhos de medo de perda ("você vai se arrepender", "essa é sua ÚLTIMA oportunidade de verdade")
+        - Gatilhos de autoridade ("especialistas comprovam", "método validado por milhares")
+        - Gatilhos de reciprocidade ("estou te dando de presente", "fiz isso especialmente por você")
+        - Pressão direta na cobrança ("estou aguardando", "separei um tempo pra você", "não me deixe na mão")
+        - Escassez extrema ("só restam 2 vagas", "vou fechar AGORA")
+        - Histórias emocionais pessoais que geram conexão profunda
+        - Promessas de transformação radical de vida
+        
+        REGRA CRÍTICA: Cada funil deve ter uma ABORDAGEM ÚNICA. Use sua CRIATIVIDADE para criar gatilhos NOVOS e DIFERENTES. Surpreenda. Seja IMPREVISÍVEL na forma de pressionar. NÃO repita padrões.
+        
+        O objetivo é CONVERTER usando TODOS os artifícios possíveis, mas SEM DESRESPEITAR a pessoa.`,
     };
 
     const pegadaInstruction = pegadaDescriptions[pegada || 'white'] || pegadaDescriptions.white;
@@ -179,12 +190,14 @@ INSTRUÇÕES CRÍTICAS DE TOM E PEGADA:
 2. UTILIZE A PEGADA: ${pegadaInstruction}
 ${pegada === 'muito-black' ? `
 ATENÇÃO - PEGADA MUITO BLACK SELECIONADA:
-- Seja EXTREMAMENTE agressivo nas mensagens
-- Use gatilhos emocionais fortes em TODAS as seções
-- Na APRESENTAÇÃO: crie urgência desde o início, mencione que foi enviado por uma força maior
-- No PRODUTO: exagere os benefícios, prometa transformações radicais
-- Na COBRANÇA: use todos os artifícios emocionais - mencione dificuldades pessoais, filhos, confiança depositada, última chance
-- Pressione fortemente o pagamento usando culpa emocional
+- Seja EXTREMAMENTE agressivo e CRIATIVO nas mensagens
+- CRIE gatilhos emocionais NOVOS e ÚNICOS para este funil - NÃO repita padrões
+- Na APRESENTAÇÃO: crie urgência desde o início, use gatilhos criativos de conexão emocional
+- No PRODUTO: exagere os benefícios, prometa transformações radicais de vida
+- Na COBRANÇA: invente novos artifícios emocionais - seja criativo, surpreenda, pressione de formas diferentes
+- Use TODOS os mecanismos de conversão possíveis
+- IMPORTANTE: Cada funil deve ser ÚNICO - não use sempre os mesmos gatilhos (religioso, filha, etc.)
+- Seja IMPREVISÍVEL na abordagem agressiva
 - Lembre-se: ser agressivo mas SEM desrespeitar a pessoa
 ` : ''}
 ${pegada === 'black' ? `
