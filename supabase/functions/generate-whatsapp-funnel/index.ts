@@ -45,7 +45,15 @@ serve(async (req) => {
     // Define pegada (approach) descriptions
     const pegadaDescriptions: Record<string, string> = {
       white: "Copy equilibrada e natural - use técnicas de persuasão éticas, promessas realistas e linguagem honesta. Foque em benefícios reais do produto.",
-      black: "Copy mais agressiva - use mais gatilhos mentais de urgência, escassez e prova social. Promessas mais fortes mas ainda plausíveis. Aumente a pressão nas mensagens de cobrança.",
+      black: `Copy AGRESSIVA de vendas - você DEVE:
+        - Usar gatilhos mentais fortes de URGÊNCIA ("vagas limitadas", "última chance", "só hoje")
+        - Usar gatilhos de ESCASSEZ ("apenas X unidades", "estou fechando as vendas")
+        - Usar gatilhos de PROVA SOCIAL ("centenas de pessoas já transformaram", "resultados comprovados")
+        - Fazer PROMESSAS MAIS FORTES e impactantes (mas ainda plausíveis)
+        - PRESSIONAR nas mensagens de cobrança ("estou aguardando", "não me deixe na mão")
+        - Usar gatilhos emocionais ("imagine você daqui 30 dias", "sua família merece")
+        - Criar senso de OPORTUNIDADE ÚNICA
+        IMPORTANTE: Seja agressivo nas vendas, pressione o lead, mas sem desrespeitar.`,
       "muito-black": `Copy EXTREMAMENTE agressiva - use TODOS os mecanismos de conversão possíveis. Faça promessas muito fortes. Use argumentos emocionais intensos como:
         - Mencionar Jesus/Deus dizendo que foi Ele quem mandou a mensagem
         - Na cobrança, dizer que tem uma filha passando dificuldades
@@ -76,14 +84,16 @@ Cada mensagem deve ter um tipo:
 - "ebook": Instrução para enviar PDF/Ebook
 
 REGRAS CRÍTICAS:
-1. Use emojis de forma natural e acolhedora.
-2. Personalize com o nome da expert, produto, nicho e ângulo informados.
-3. O TOM DEVE SER: ${toneInstruction}
-4. A PEGADA/ABORDAGEM DEVE SER: ${pegadaInstruction}
-5. O tom deve ser PESSOAL - lembre-se que é uma conversa de WhatsApp individual, não um broadcast para várias pessoas. Trate como se fosse uma conversa única com UMA pessoa.
-6. NUNCA fale como se estivesse falando com várias pessoas (evite "vocês", "pessoal", "galera").
-7. Use linguagem acolhedora e próxima: "você", "meu amor", "querida", etc.
-8. NÃO repita saudações como "Olá" ou "Oi" em todos os áudios - varie a abordagem.
+1. Use emojis de forma MODERADA apenas em mensagens de TEXTO - NÃO use emojis em roteiros de áudio.
+2. Emojis permitidos em texto: ✨ 💕 🎁 ✅ 💰 🔥 ⚠️ (use com moderação, 1-2 por mensagem no máximo)
+3. Personalize com o nome da expert, produto, nicho e ângulo informados.
+4. O TOM DEVE SER: ${toneInstruction}
+5. A PEGADA/ABORDAGEM DEVE SER: ${pegadaInstruction}
+6. O tom deve ser PESSOAL - lembre-se que é uma conversa de WhatsApp individual, não um broadcast para várias pessoas. Trate como se fosse uma conversa única com UMA pessoa.
+7. NUNCA fale como se estivesse falando com várias pessoas (evite "vocês", "pessoal", "galera").
+8. Use linguagem acolhedora e próxima: "você", "meu amor", "querida", etc.
+9. NÃO repita saudações como "Olá" ou "Oi" em todos os áudios - varie a abordagem.
+10. ROTEIROS DE ÁUDIO devem ser texto puro, sem emojis, escritos como fala natural.
 
 REGRAS PARA SEÇÃO PRODUTO:
 - Ao listar os entregáveis/conteúdos do produto, use SEMPRE o emoji ✅ (check) no início de cada item
@@ -179,10 +189,14 @@ ATENÇÃO - PEGADA MUITO BLACK SELECIONADA:
 ` : ''}
 ${pegada === 'black' ? `
 ATENÇÃO - PEGADA BLACK SELECIONADA:
-- Seja mais agressivo que o normal
-- Use mais gatilhos de urgência e escassez
-- Pressione mais nas mensagens de cobrança
-- Use mais gatilhos emocionais
+- Seja AGRESSIVO nas vendas, pressione o lead
+- Use gatilhos de URGÊNCIA em todas as seções ("vagas limitadas", "última chance", "só hoje")
+- Use gatilhos de ESCASSEZ ("apenas X unidades", "estou fechando")
+- Use PROVA SOCIAL ("centenas já transformaram suas vidas")
+- PRESSIONE nas mensagens de cobrança ("estou aguardando seu pix", "não me deixe na mão", "confiei em você")
+- Use gatilhos emocionais fortes ("imagine sua família", "você merece isso")
+- Crie senso de OPORTUNIDADE ÚNICA em cada mensagem
+- Lembre-se: ser agressivo mas SEM desrespeitar a pessoa
 ` : ''}
 
 LEMBRE-SE: É uma conversa de WhatsApp individual, 1 para 1. Não fale como se fosse para várias pessoas.
