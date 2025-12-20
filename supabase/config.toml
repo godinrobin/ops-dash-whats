@@ -113,3 +113,6 @@ verify_jwt = true
 
 [functions.maturador-evolution]
 verify_jwt = true
+
+[functions.remove-watermark]
+verify_jwt = true
