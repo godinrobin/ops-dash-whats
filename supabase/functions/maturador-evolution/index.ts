@@ -1059,7 +1059,7 @@ Regras IMPORTANTES:
 
       // Fetch single contact profile info
       case 'fetch-single-contact': {
-        const { instanceName, phone, contactId } = params;
+        const { instanceName, phone, contactId, customName } = params;
         
         if (!instanceName || !phone || !contactId) {
           return new Response(JSON.stringify({ error: 'instanceName, phone and contactId are required' }), {
@@ -1077,7 +1077,7 @@ Regras IMPORTANTES:
         try {
           const cleanPhone = phone.replace(/\D/g, '');
           let profilePic = null;
-          let name = null;
+          let fetchedName = null;
 
           // Try to get profile picture
           try {
@@ -1090,38 +1090,56 @@ Regras IMPORTANTES:
             console.log(`Could not fetch profile picture for ${cleanPhone}:`, picError);
           }
 
-          // Try to get contact name from business profile
-          try {
-            const businessResult = await callEvolution(`/chat/fetchBusinessProfile/${instanceName}`, 'POST', {
-              number: cleanPhone,
-            });
-            console.log(`Business profile for ${cleanPhone}:`, JSON.stringify(businessResult, null, 2));
-            name = businessResult?.name || businessResult?.pushname || businessResult?.description || null;
-          } catch (businessError) {
-            console.log(`Could not fetch business profile for ${cleanPhone}:`, businessError);
-          }
-
-          // If no name from business profile, try regular profile
-          if (!name) {
+          // Only fetch name if user didn't set a custom name
+          if (!customName) {
+            // Try to get contact name from business profile
             try {
-              const profileResult = await callEvolution(`/chat/fetchProfile/${instanceName}`, 'POST', {
+              const businessResult = await callEvolution(`/chat/fetchBusinessProfile/${instanceName}`, 'POST', {
                 number: cleanPhone,
               });
-              console.log(`Profile for ${cleanPhone}:`, JSON.stringify(profileResult, null, 2));
-              name = profileResult?.name || profileResult?.pushname || profileResult?.notify || profileResult?.verifiedName || null;
-            } catch (profileError) {
-              console.log(`Could not fetch profile for ${cleanPhone}:`, profileError);
+              console.log(`Business profile for ${cleanPhone}:`, JSON.stringify(businessResult, null, 2));
+              fetchedName = businessResult?.name || businessResult?.pushname || businessResult?.description || null;
+            } catch (businessError) {
+              console.log(`Could not fetch business profile for ${cleanPhone}:`, businessError);
+            }
+
+            // If no name from business profile, try regular profile
+            if (!fetchedName) {
+              try {
+                const profileResult = await callEvolution(`/chat/fetchProfile/${instanceName}`, 'POST', {
+                  number: cleanPhone,
+                });
+                console.log(`Profile for ${cleanPhone}:`, JSON.stringify(profileResult, null, 2));
+                fetchedName = profileResult?.name || profileResult?.pushname || profileResult?.notify || profileResult?.verifiedName || null;
+              } catch (profileError) {
+                console.log(`Could not fetch profile for ${cleanPhone}:`, profileError);
+              }
             }
           }
 
-          // Update the contact in the database
+          // Use custom name if provided, otherwise use fetched name
+          const finalName = customName || fetchedName || null;
+
+          // Update the contact in the database (only update profile_pic_url if fetched, always respect custom name)
+          const updateData: any = {
+            last_fetched_at: new Date().toISOString(),
+          };
+          
+          // Only update profile picture if we got one
+          if (profilePic) {
+            updateData.profile_pic_url = profilePic;
+          }
+          
+          // Only update name if custom name was provided or if we fetched a name and there's no custom name
+          if (customName) {
+            updateData.name = customName;
+          } else if (fetchedName) {
+            updateData.name = fetchedName;
+          }
+
           const { error: updateError } = await serviceClient
             .from('maturador_verified_contacts')
-            .update({
-              name: name || null,
-              profile_pic_url: profilePic,
-              last_fetched_at: new Date().toISOString(),
-            })
+            .update(updateData)
             .eq('id', contactId);
 
           if (updateError) {
@@ -1129,7 +1147,7 @@ Regras IMPORTANTES:
             throw updateError;
           }
 
-          result = { success: true, name, profilePic };
+          result = { success: true, name: finalName, profilePic };
         } catch (error) {
           console.error('Error fetching single contact:', error);
           return new Response(JSON.stringify({ error: 'Erro ao buscar informações do contato' }), {
