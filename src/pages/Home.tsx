@@ -173,6 +173,15 @@ const Home = () => {
       subtext: "Download grátis em MP4 ou MP3",
       gradient: "from-pink-500 to-cyan-400",
       restricted: false
+    },
+    { 
+      path: "/maturador", 
+      emoji: "🔥", 
+      title: "Maturador de WhatsApp",
+      description: "Aqueça seus chips com conversas naturais entre instâncias",
+      subtext: "Integração com Evolution API",
+      gradient: "from-green-400 to-emerald-500",
+      restricted: true
     }
   ];
 
