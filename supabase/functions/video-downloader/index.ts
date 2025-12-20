@@ -355,6 +355,99 @@ async function tryPiped(
   return null;
 }
 
+// ============================== COBALT DOWNLOADER =============================
+async function tryCobalt(
+  url: string,
+  videoId: string,
+  opts: DownloadOpts
+): Promise<any | null> {
+  const downloadMode = opts.downloadMode || "auto";
+  const isAudioOnly = downloadMode === "audio";
+
+  const requestedHeight = (() => {
+    const n = parseInt(String(opts.videoQuality || ""), 10);
+    return Number.isFinite(n) ? n : 1080;
+  })();
+
+  const vQuality = String(Math.max(144, Math.min(2160, requestedHeight)));
+  const thumbnail = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+
+  try {
+    console.log("Trying YouTube download via Cobalt...");
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+    const res = await fetch("https://api.cobalt.tools/api/json", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url,
+        isAudioOnly,
+        aFormat: "best",
+        vCodec: "h264",
+        vQuality,
+        filenamePattern: "basic",
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      console.log("Cobalt non-OK:", res.status);
+      return null;
+    }
+
+    const data = (await res.json()) as any;
+
+    if (data?.status === "error") {
+      console.log("Cobalt error:", data?.error?.code || "unknown");
+      return null;
+    }
+
+    // tunnel / redirect
+    if (typeof data?.url === "string" && data.url) {
+      return {
+        success: true,
+        url: data.url,
+        filename: isAudioOnly ? `youtube-${videoId}.mp3` : `youtube-${videoId}.mp4`,
+        thumbnail,
+        title: "YouTube",
+      };
+    }
+
+    // picker
+    if (data?.status === "picker" && Array.isArray(data?.picker) && data.picker.length) {
+      const pickBest = data.picker
+        .slice()
+        .sort((a: any, b: any) => {
+          const qa = parseInt(String(a?.quality || a?.height || 0), 10) || 0;
+          const qb = parseInt(String(b?.quality || b?.height || 0), 10) || 0;
+          return qb - qa;
+        })[0];
+
+      if (pickBest?.url) {
+        return {
+          success: true,
+          url: pickBest.url,
+          filename: isAudioOnly ? `youtube-${videoId}.mp3` : `youtube-${videoId}.mp4`,
+          thumbnail,
+          title: "YouTube",
+        };
+      }
+    }
+
+    return null;
+  } catch (e: any) {
+    console.log("Cobalt failed:", e?.message || e);
+    return null;
+  }
+}
+
 // ============================== MAIN YOUTUBE ================================
 async function downloadYouTube(url: string, opts: DownloadOpts = {}): Promise<any> {
   console.log("Trying YouTube download...");
@@ -366,13 +459,17 @@ async function downloadYouTube(url: string, opts: DownloadOpts = {}): Promise<an
 
   const videoId = match[1];
 
-  // 1) Try Invidious first (more reliable recently)
+  // 1) Try Invidious first
   const invResult = await tryInvidious(videoId, opts);
   if (invResult) return invResult;
 
   // 2) Fallback to Piped
   const pipedResult = await tryPiped(videoId, opts);
   if (pipedResult) return pipedResult;
+
+  // 3) Final fallback: Cobalt
+  const cobaltResult = await tryCobalt(url, videoId, opts);
+  if (cobaltResult) return cobaltResult;
 
   throw new Error("YouTube indisponível no momento. Todas as instâncias falharam.");
 }
