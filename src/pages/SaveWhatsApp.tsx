@@ -1,10 +1,13 @@
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Download, Chrome, FolderOpen, ToggleRight, CheckCircle, MessageSquare } from "lucide-react";
+import { Download, Chrome, FolderOpen, ToggleRight, CheckCircle } from "lucide-react";
 import whatsappLogo from "@/assets/whatsapp-logo.png";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 
 const SaveWhatsApp = () => {
+  useActivityTracker("page_visit", "Save WhatsApp");
+  
   const steps = [
     {
       icon: Download,
@@ -94,7 +97,7 @@ const SaveWhatsApp = () => {
           </Card>
 
           {/* Installation Steps */}
-          <div className="mb-12">
+          <div>
             <h2 className="text-2xl font-bold text-center mb-8">Como instalar</h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {steps.map((step, index) => (
@@ -116,28 +119,6 @@ const SaveWhatsApp = () => {
               ))}
             </div>
           </div>
-
-          {/* Video Tutorial Placeholder */}
-          <Card className="border-accent/30">
-            <CardHeader>
-              <CardTitle className="text-xl text-center">Dúvidas?</CardTitle>
-            </CardHeader>
-            <CardContent className="text-center">
-              <p className="text-muted-foreground mb-4">
-                Se tiver dificuldades na instalação, entre em contato com o suporte.
-              </p>
-              <a 
-                href="https://wa.me/5511999999999" 
-                target="_blank" 
-                rel="noopener noreferrer"
-              >
-                <Button variant="outline" className="gap-2 border-green-500/50 text-green-500 hover:bg-green-500/10">
-                  <MessageSquare className="w-4 h-4" />
-                  Falar com Suporte
-                </Button>
-              </a>
-            </CardContent>
-          </Card>
         </div>
       </div>
     </>
