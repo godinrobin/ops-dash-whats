@@ -184,13 +184,13 @@ const Home = () => {
       restricted: true
     },
     { 
-      path: "/watermark-remover", 
-      emoji: "✨", 
-      title: "Removedor de Marca d'Água",
-      description: "Remova marcas d'água de vídeos gerados pela Sora 2",
-      subtext: "Processe vídeos com IA para remover watermarks",
-      gradient: "from-indigo-400 to-purple-500",
-      restricted: true
+      path: "/save-whatsapp", 
+      emoji: "💾", 
+      title: "Save WhatsApp",
+      description: "Extensão para salvar contatos do WhatsApp",
+      subtext: "Baixe e instale a extensão no Chrome",
+      gradient: "from-green-400 to-green-600",
+      restricted: false
     }
   ];
 
