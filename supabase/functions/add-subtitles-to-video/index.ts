@@ -46,7 +46,7 @@ serve(async (req) => {
       console.log(`Checking subtitle status for request: ${requestId}`);
 
       const statusResponse = await fetch(
-        `https://queue.fal.run/fal-ai/ffmpeg-api/requests/${requestId}/status`,
+        `https://queue.fal.run/fal-ai/workflow-utilities/auto-subtitle/requests/${requestId}/status`,
         {
           method: 'GET',
           headers: {
@@ -62,7 +62,7 @@ serve(async (req) => {
       if (statusData.status === 'COMPLETED') {
         // Fetch the result
         const resultResponse = await fetch(
-          `https://queue.fal.run/fal-ai/ffmpeg-api/requests/${requestId}`,
+          `https://queue.fal.run/fal-ai/workflow-utilities/auto-subtitle/requests/${requestId}`,
           {
             method: 'GET',
             headers: {
@@ -136,8 +136,8 @@ serve(async (req) => {
 
       console.log('Submitting to Fal.ai auto-subtitle:', JSON.stringify(falPayload));
 
-      // Submit to Fal.ai queue
-      const response = await fetch('https://queue.fal.run/fal-ai/auto-subtitle', {
+      // Submit to Fal.ai queue - correct endpoint is workflow-utilities/auto-subtitle
+      const response = await fetch('https://queue.fal.run/fal-ai/workflow-utilities/auto-subtitle', {
         method: 'POST',
         headers: {
           'Authorization': `Key ${FAL_KEY}`,
