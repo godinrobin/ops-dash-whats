@@ -643,6 +643,39 @@ export type Database = {
         }
         Relationships: []
       }
+      maturador_verified_contacts: {
+        Row: {
+          created_at: string
+          id: string
+          is_verified: boolean
+          last_fetched_at: string | null
+          name: string | null
+          phone: string
+          profile_pic_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_verified?: boolean
+          last_fetched_at?: string | null
+          name?: string | null
+          phone: string
+          profile_pic_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_verified?: boolean
+          last_fetched_at?: string | null
+          name?: string | null
+          phone?: string
+          profile_pic_url?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       metrics: {
         Row: {
           conversion: number

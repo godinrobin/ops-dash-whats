@@ -1,14 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowLeft, Loader2, Send, ShieldCheck, User, AlertCircle, RefreshCw } from "lucide-react";
+import { ArrowLeft, Loader2, Send, ShieldCheck, User, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -23,42 +22,24 @@ interface Instance {
 }
 
 interface VerifiedContact {
+  id: string;
   phone: string;
   name: string | null;
-  profilePic: string | null;
-  loading: boolean;
+  profile_pic_url: string | null;
+  last_fetched_at: string | null;
 }
-
-// Lista de contatos verificados pela Meta
-const VERIFIED_PHONE_NUMBERS = [
-  "551128326088",
-  "551140044828",
-  "551123575200",
-  "5511943763874",
-  "5521995027179",
-  "5511999910621",
-  "554141414141",
-  "5511999151515",
-  "5511941042222",
-  "5511974529842",
-  "5511997177777",
-  "5511964874908",
-  "5511976731540",
-  "551140049090",
-  "556140040001",
-  "553130034070",
-  "551140027007",
-];
 
 // Formata número para exibição
 const formatPhoneDisplay = (phone: string) => {
   const cleaned = phone.replace(/\D/g, '');
   if (cleaned.length === 13) {
-    // 55 11 9XXXX-XXXX
     return `+${cleaned.slice(0,2)} (${cleaned.slice(2,4)}) ${cleaned.slice(4,9)}-${cleaned.slice(9)}`;
   } else if (cleaned.length === 12) {
-    // 55 11 XXXX-XXXX
     return `+${cleaned.slice(0,2)} (${cleaned.slice(2,4)}) ${cleaned.slice(4,8)}-${cleaned.slice(8)}`;
+  } else if (cleaned.length === 11) {
+    return `(${cleaned.slice(0,2)}) ${cleaned.slice(2,7)}-${cleaned.slice(7)}`;
+  } else if (cleaned.length === 10) {
+    return `(${cleaned.slice(0,2)}) ${cleaned.slice(2,6)}-${cleaned.slice(6)}`;
   }
   return phone;
 };
@@ -69,7 +50,7 @@ export default function MaturadorVerifiedContacts() {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [contacts, setContacts] = useState<VerifiedContact[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingContacts, setLoadingContacts] = useState(false);
+  const hasFetchedRef = useRef(false);
   
   // Send message modal
   const [sendModalOpen, setSendModalOpen] = useState(false);
@@ -80,7 +61,7 @@ export default function MaturadorVerifiedContacts() {
 
   // Fetch instances
   const fetchInstances = async () => {
-    if (!user) return;
+    if (!user) return [];
 
     try {
       const { data, error } = await supabase
@@ -91,90 +72,77 @@ export default function MaturadorVerifiedContacts() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setInstances(data || []);
+      return data || [];
     } catch (error) {
       console.error('Error fetching instances:', error);
-      toast.error('Erro ao carregar instâncias');
+      return [];
     }
   };
 
-  // Initialize contacts list
-  const initializeContacts = () => {
-    const initialContacts = VERIFIED_PHONE_NUMBERS.map(phone => ({
-      phone,
-      name: null,
-      profilePic: null,
-      loading: false,
-    }));
-    setContacts(initialContacts);
-  };
-
-  // Fetch contact info via Evolution API
-  const fetchContactInfo = async (phone: string, instanceName: string) => {
+  // Fetch verified contacts from database
+  const fetchContacts = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('maturador-evolution', {
-        body: {
-          action: 'get-contact-info',
-          instanceName,
-          phone,
-        },
-      });
+      const { data, error } = await supabase
+        .from('maturador_verified_contacts')
+        .select('*')
+        .order('phone');
 
       if (error) throw error;
-      return data;
+      return data || [];
     } catch (error) {
-      console.error('Error fetching contact info:', error);
-      return null;
+      console.error('Error fetching contacts:', error);
+      return [];
     }
   };
 
-  // Load all contact info
-  const loadAllContactsInfo = async () => {
-    if (instances.length === 0) {
-      toast.error('Você precisa de pelo menos uma instância conectada');
+  // Trigger background fetch of contact info if needed
+  const triggerContactInfoFetch = async (instancesData: Instance[], contactsData: VerifiedContact[]) => {
+    // Check if any contacts haven't been fetched yet
+    const unfetchedContacts = contactsData.filter(c => !c.last_fetched_at);
+    
+    if (unfetchedContacts.length === 0 || instancesData.length === 0) {
       return;
     }
 
-    setLoadingContacts(true);
-    const instanceToUse = instances[0];
+    // Use the first connected instance to fetch contact info
+    const instanceToUse = instancesData[0];
+    
+    console.log(`Fetching info for ${unfetchedContacts.length} contacts using instance ${instanceToUse.instance_name}`);
+    
+    try {
+      await supabase.functions.invoke('maturador-evolution', {
+        body: {
+          action: 'fetch-verified-contacts',
+          instanceName: instanceToUse.instance_name,
+        },
+      });
 
-    for (let i = 0; i < contacts.length; i++) {
-      const contact = contacts[i];
-      
-      // Update loading state
-      setContacts(prev => prev.map((c, idx) => 
-        idx === i ? { ...c, loading: true } : c
-      ));
-
-      const info = await fetchContactInfo(contact.phone, instanceToUse.instance_name);
-
-      // Update contact with info
-      setContacts(prev => prev.map((c, idx) => 
-        idx === i ? {
-          ...c,
-          name: info?.name || null,
-          profilePic: info?.profilePic || null,
-          loading: false,
-        } : c
-      ));
-
-      // Small delay between requests
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Refetch contacts after update
+      const updatedContacts = await fetchContacts();
+      setContacts(updatedContacts);
+    } catch (error) {
+      console.error('Error triggering contact fetch:', error);
     }
-
-    setLoadingContacts(false);
-    toast.success('Informações dos contatos carregadas');
   };
 
   useEffect(() => {
-    initializeContacts();
-  }, []);
-
-  useEffect(() => {
     const init = async () => {
-      await fetchInstances();
+      const [instancesData, contactsData] = await Promise.all([
+        fetchInstances(),
+        fetchContacts(),
+      ]);
+      
+      setInstances(instancesData);
+      setContacts(contactsData);
       setLoading(false);
+
+      // Trigger background fetch only once per session
+      if (!hasFetchedRef.current && instancesData.length > 0) {
+        hasFetchedRef.current = true;
+        triggerContactInfoFetch(instancesData, contactsData);
+      }
     };
+    
     init();
   }, [user]);
 
@@ -244,16 +212,6 @@ export default function MaturadorVerifiedContacts() {
               <p className="text-muted-foreground">Contatos verificados pela Meta para aquecer seu número</p>
             </div>
           </div>
-          {instances.length > 0 && (
-            <Button onClick={loadAllContactsInfo} disabled={loadingContacts}>
-              {loadingContacts ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              Carregar Fotos e Nomes
-            </Button>
-          )}
         </div>
 
         {/* Info Banner */}
@@ -296,19 +254,15 @@ export default function MaturadorVerifiedContacts() {
         {/* Contacts Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {contacts.map((contact) => (
-            <Card key={contact.phone} className="hover:border-primary/50 transition-colors">
+            <Card key={contact.id} className="hover:border-primary/50 transition-colors">
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
                   <Avatar className="h-12 w-12">
-                    {contact.profilePic ? (
-                      <AvatarImage src={contact.profilePic} alt={contact.name || 'Contato'} />
+                    {contact.profile_pic_url ? (
+                      <AvatarImage src={contact.profile_pic_url} alt={contact.name || 'Contato'} />
                     ) : null}
                     <AvatarFallback className="bg-green-500/10 text-green-500">
-                      {contact.loading ? (
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                      ) : (
-                        <User className="h-5 w-5" />
-                      )}
+                      <User className="h-5 w-5" />
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
