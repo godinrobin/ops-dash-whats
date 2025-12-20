@@ -173,15 +173,6 @@ const Home = () => {
       subtext: "Download grátis em MP4 ou MP3",
       gradient: "from-pink-500 to-cyan-400",
       restricted: false
-    },
-    { 
-      path: "/biblioteca-prompts", 
-      emoji: "✨", 
-      title: "Biblioteca de Prompts",
-      description: "Prompts prontos para gerar vídeos com IA",
-      subtext: "Sora, Veo, Runway, Kling e mais",
-      gradient: "from-purple-400 to-pink-500",
-      restricted: true
     }
   ];
 
