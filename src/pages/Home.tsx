@@ -167,11 +167,11 @@ const Home = () => {
     },
     { 
       path: "/video-downloader", 
-      emoji: "⬇️", 
-      title: "Downloader de Vídeos",
-      description: "Baixe vídeos do YouTube, TikTok e Instagram",
-      subtext: "Download rápido com opção de áudio ou vídeo",
-      gradient: "from-red-500 to-pink-500",
+      emoji: "🎵", 
+      title: "Download Vídeos TikTok",
+      description: "Baixe vídeos do TikTok sem marca d'água",
+      subtext: "Download grátis em MP4 ou MP3",
+      gradient: "from-pink-500 to-cyan-400",
       restricted: false
     }
   ];
