@@ -6,9 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Fixed Evolution API credentials
+// Evolution API credentials from environment
 const EVOLUTION_BASE_URL = 'https://api.chatwp.xyz';
-const EVOLUTION_API_KEY = '157e8ba13b2a576199d483ea5f0eb7c3';
+const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || '';
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -70,11 +70,41 @@ serve(async (req) => {
       }
 
       if (!response.ok) {
-        console.error('Evolution API error:', data);
+        console.error('Evolution API error:', { status: response.status, error: response.statusText, response: data });
         throw new Error(data.message || data.error || `Evolution API error: ${response.status}`);
       }
 
       return data;
+    };
+
+    // Helper to extract phone number from Evolution instance data
+    const extractPhoneFromInstance = (instanceData: any): string | null => {
+      // Log the full structure for debugging
+      console.log('Instance data structure:', JSON.stringify(instanceData, null, 2));
+      
+      // Try multiple paths where phone might be stored
+      const possiblePaths = [
+        instanceData?.instance?.owner,
+        instanceData?.owner,
+        instanceData?.instance?.wuid,
+        instanceData?.wuid,
+        instanceData?.instance?.profilePictureUrl?.split('@')[0],
+        instanceData?.profileNumber,
+        instanceData?.instance?.profileNumber,
+      ];
+      
+      for (const value of possiblePaths) {
+        if (typeof value === 'string' && value) {
+          const cleaned = value.split('@')[0].replace(/\D/g, '');
+          if (cleaned.length >= 8) {
+            console.log(`Found phone number: ${cleaned} from value: ${value}`);
+            return cleaned;
+          }
+        }
+      }
+      
+      console.log('No phone number found in instance data');
+      return null;
     };
 
     let result;
@@ -210,6 +240,7 @@ serve(async (req) => {
         }
 
         result = await callEvolution(`/instance/connectionState/${instanceName}`, 'GET');
+        console.log('Connection state result:', JSON.stringify(result, null, 2));
 
         // Update status in database
         const newStatus = result.instance?.state === 'open' ? 'connected' : 'disconnected';
@@ -218,21 +249,24 @@ serve(async (req) => {
         let phoneNumber: string | null = null;
         if (newStatus === 'connected') {
           try {
+            // Fetch all instances to find the phone number
             const allInstances = await callEvolution('/instance/fetchInstances', 'GET');
-            const target = Array.isArray(allInstances)
-              ? allInstances.find((i: any) =>
-                  i?.instance?.instanceName === instanceName ||
-                  i?.instanceName === instanceName ||
-                  i?.name === instanceName
-                )
-              : null;
-
-            const rawOwner = target?.instance?.owner ?? target?.owner ?? null;
-            if (typeof rawOwner === 'string' && rawOwner) {
-              phoneNumber = rawOwner.split('@')[0].replace(/\D/g, '') || null;
+            console.log('All instances response:', JSON.stringify(allInstances, null, 2));
+            
+            if (Array.isArray(allInstances)) {
+              // Find the matching instance
+              for (const inst of allInstances) {
+                const name = inst?.instance?.instanceName || inst?.instanceName || inst?.name;
+                console.log(`Checking instance: ${name} vs ${instanceName}`);
+                
+                if (name === instanceName) {
+                  phoneNumber = extractPhoneFromInstance(inst);
+                  break;
+                }
+              }
             }
           } catch (e) {
-            console.log('Could not fetch phone number:', e);
+            console.error('Could not fetch phone number:', e);
           }
         }
 
@@ -243,6 +277,7 @@ serve(async (req) => {
 
         if (phoneNumber) {
           updateData.phone_number = phoneNumber;
+          console.log(`Updating phone_number to: ${phoneNumber}`);
         }
 
         await supabaseClient
@@ -254,8 +289,82 @@ serve(async (req) => {
         break;
       }
 
+      case 'sync-phone-numbers': {
+        // Sync phone numbers for all instances from Evolution API
+        const { data: userInstances, error: fetchError } = await supabaseClient
+          .from('maturador_instances')
+          .select('*')
+          .eq('user_id', user.id);
+
+        if (fetchError) {
+          console.error('Error fetching user instances:', fetchError);
+          return new Response(JSON.stringify({ error: 'Erro ao buscar instâncias' }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Fetch all instances from Evolution
+        const allEvolutionInstances = await callEvolution('/instance/fetchInstances', 'GET');
+        console.log('Evolution instances for sync:', JSON.stringify(allEvolutionInstances, null, 2));
+
+        const syncResults: { instanceName: string; phoneNumber: string | null; status: string }[] = [];
+
+        // Create a map of Evolution instances by name
+        const evolutionMap = new Map<string, any>();
+        if (Array.isArray(allEvolutionInstances)) {
+          for (const inst of allEvolutionInstances) {
+            const name = inst?.instance?.instanceName || inst?.instanceName || inst?.name;
+            if (name) {
+              evolutionMap.set(name, inst);
+            }
+          }
+        }
+
+        // Update each user instance
+        for (const userInst of userInstances || []) {
+          const evoInst = evolutionMap.get(userInst.instance_name);
+          
+          if (evoInst) {
+            const phone = extractPhoneFromInstance(evoInst);
+            const state = evoInst?.instance?.state || evoInst?.state;
+            const newStatus = state === 'open' ? 'connected' : 'disconnected';
+            
+            const updateData: any = { status: newStatus };
+            if (phone) {
+              updateData.phone_number = phone;
+            }
+            if (newStatus === 'connected') {
+              updateData.last_seen = new Date().toISOString();
+            }
+            
+            await supabaseClient
+              .from('maturador_instances')
+              .update(updateData)
+              .eq('id', userInst.id)
+              .eq('user_id', user.id);
+            
+            syncResults.push({
+              instanceName: userInst.instance_name,
+              phoneNumber: phone,
+              status: newStatus,
+            });
+          } else {
+            syncResults.push({
+              instanceName: userInst.instance_name,
+              phoneNumber: null,
+              status: 'not_found_in_evolution',
+            });
+          }
+        }
+
+        result = { success: true, synced: syncResults.length, results: syncResults };
+        break;
+      }
+
       case 'fetch-instances': {
         result = await callEvolution('/instance/fetchInstances', 'GET');
+        console.log('Fetch instances result:', JSON.stringify(result, null, 2));
         break;
       }
 
@@ -341,7 +450,15 @@ serve(async (req) => {
           });
         }
 
-        result = await callEvolution(`/instance/restart/${instanceName}`, 'PUT');
+        // Try POST method instead of PUT for restart
+        try {
+          result = await callEvolution(`/instance/restart/${instanceName}`, 'POST');
+        } catch (e) {
+          // If POST fails, try DELETE + reconnect approach
+          console.log('Restart with POST failed, trying logout + connect');
+          await callEvolution(`/instance/logout/${instanceName}`, 'DELETE');
+          result = await callEvolution(`/instance/connect/${instanceName}`, 'GET');
+        }
         break;
       }
 
@@ -396,6 +513,9 @@ serve(async (req) => {
           });
         }
 
+        console.log('Instance A:', JSON.stringify(instanceA, null, 2));
+        console.log('Instance B:', JSON.stringify(instanceB, null, 2));
+
         if (instanceA.status !== 'connected' || instanceB.status !== 'connected') {
           return new Response(JSON.stringify({ error: 'Ambos os números precisam estar conectados' }), {
             status: 400,
@@ -414,6 +534,59 @@ serve(async (req) => {
 
         if ((todayCount || 0) >= conversation.daily_limit) {
           return new Response(JSON.stringify({ error: 'Limite diário atingido', dailyLimitReached: true }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Fetch phone numbers from Evolution API if not in DB
+        const allEvolutionInstances = await callEvolution('/instance/fetchInstances', 'GET');
+        console.log('Evolution instances for conversation:', JSON.stringify(allEvolutionInstances, null, 2));
+        
+        const phoneMap = new Map<string, string>();
+        if (Array.isArray(allEvolutionInstances)) {
+          for (const inst of allEvolutionInstances) {
+            const name = inst?.instance?.instanceName || inst?.instanceName || inst?.name;
+            const phone = extractPhoneFromInstance(inst);
+            if (name && phone) {
+              phoneMap.set(name, phone);
+              console.log(`Mapped ${name} -> ${phone}`);
+            }
+          }
+        }
+
+        // Resolve phone for each instance
+        const resolvePhone = async (inst: any): Promise<string | null> => {
+          // First try from DB
+          if (inst.phone_number && inst.phone_number.length >= 8) {
+            return inst.phone_number;
+          }
+          // Then try from Evolution map
+          const fromMap = phoneMap.get(inst.instance_name);
+          if (fromMap) {
+            // Update DB with this phone
+            await supabaseClient
+              .from('maturador_instances')
+              .update({ phone_number: fromMap })
+              .eq('id', inst.id)
+              .eq('user_id', user.id);
+            return fromMap;
+          }
+          return null;
+        };
+
+        const phoneA = await resolvePhone(instanceA);
+        const phoneB = await resolvePhone(instanceB);
+
+        console.log(`Phone A (${instanceA.instance_name}): ${phoneA}`);
+        console.log(`Phone B (${instanceB.instance_name}): ${phoneB}`);
+
+        if (!phoneA || !phoneB) {
+          return new Response(JSON.stringify({ 
+            error: 'Não foi possível obter os números de telefone. Clique em "Sincronizar Números" na página de Números.',
+            phoneA,
+            phoneB
+          }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
@@ -442,49 +615,6 @@ serve(async (req) => {
         });
 
         // Send messages
-        const extractPhone = (value: unknown): string | null => {
-          if (typeof value !== 'string' || !value) return null;
-          const withoutDomain = value.includes('@') ? value.split('@')[0] : value;
-          const digits = withoutDomain.replace(/\D/g, '');
-          return digits.length >= 8 ? digits : null;
-        };
-
-        const phoneByInstanceName = new Map<string, string>();
-        try {
-          const allInstances = await callEvolution('/instance/fetchInstances', 'GET');
-          if (Array.isArray(allInstances)) {
-            for (const i of allInstances) {
-              const name = i?.instance?.instanceName ?? i?.instanceName ?? i?.name;
-              const owner = i?.instance?.owner ?? i?.owner;
-              const phone = extractPhone(owner);
-              if (typeof name === 'string' && name && phone) {
-                phoneByInstanceName.set(name, phone);
-              }
-            }
-          }
-        } catch (e) {
-          console.log('Could not preload phone numbers from Evolution:', e);
-        }
-
-        const resolvePhone = async (inst: any) => {
-          const fromDb = extractPhone(inst?.phone_number);
-          if (fromDb) return fromDb;
-          const fromEvo = phoneByInstanceName.get(inst?.instance_name);
-          if (fromEvo) {
-            try {
-              await supabaseClient
-                .from('maturador_instances')
-                .update({ phone_number: fromEvo })
-                .eq('id', inst.id)
-                .eq('user_id', user.id);
-            } catch (_) {
-              // ignore
-            }
-            return fromEvo;
-          }
-          return null;
-        };
-
         const messagesSent = [];
         const messagesPerRound = Math.min(conversation.messages_per_round, conversation.daily_limit - (todayCount || 0));
 
@@ -492,21 +622,18 @@ serve(async (req) => {
           const isAToB = i % 2 === 0;
           const fromInstance = isAToB ? instanceA : instanceB;
           const toInstance = isAToB ? instanceB : instanceA;
+          const toPhone = isAToB ? phoneB : phoneA;
           const message = topicMessages[Math.floor(Math.random() * topicMessages.length)];
 
           try {
-            // Resolve phone number (DB or Evolution)
-            const toPhone = await resolvePhone(toInstance);
-            const toNumber = (toPhone || '').replace(/\D/g, '');
-            if (!toNumber) {
-              console.log(`Skipping message: ${toInstance.instance_name} has no phone number`);
-              continue;
-            }
-
+            console.log(`Sending message from ${fromInstance.instance_name} to ${toPhone}: ${message}`);
+            
             const sendResult = await callEvolution(`/message/sendText/${fromInstance.instance_name}`, 'POST', {
-              number: toNumber,
+              number: toPhone,
               text: message,
             });
+
+            console.log('Send result:', JSON.stringify(sendResult, null, 2));
 
             // Save to database
             await supabaseClient
