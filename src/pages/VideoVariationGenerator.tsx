@@ -1503,9 +1503,21 @@ export default function VideoVariationGenerator() {
                           </Badge>
                         )}
                         {video.subtitleStatus === 'failed' && (
-                          <Badge variant="destructive">
-                            <XCircle className="h-3 w-3 mr-1" />
-                            Legenda falhou
+                          <Badge 
+                            variant="destructive" 
+                            className="cursor-pointer hover:bg-destructive/80"
+                            onClick={() => {
+                              // Reset subtitle status to allow retry
+                              setGeneratedVideos(prev => prev.map(v => 
+                                v.id === video.id 
+                                  ? { ...v, subtitleStatus: undefined, subtitleRequestId: undefined }
+                                  : v
+                              ));
+                              toast.success('Status resetado! Selecione o vídeo e tente legendar novamente.');
+                            }}
+                          >
+                            <RotateCcw className="h-3 w-3 mr-1" />
+                            Tentar novamente
                           </Badge>
                         )}
                       </div>
