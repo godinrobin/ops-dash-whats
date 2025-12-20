@@ -607,43 +607,104 @@ serve(async (req) => {
 
         // Get topics for messages
         const topics = Array.isArray(conversation.topics) ? conversation.topics : [];
-        const topicMessages = [
-          "Oi, tudo bem?",
-          "E aí, beleza?",
-          "Opa, como você está?",
-          "Fala aí!",
-          "Bom dia! Como vai?",
-          "Boa tarde! Tudo certo?",
-          "E aí, firmeza?",
-          "Opa! Sumido(a) hein",
-          "Oi! Quanto tempo!",
-          "Tudo bem por aí?",
-        ];
+        const topicsText = topics.length > 0 ? topics.join(', ') : 'conversa casual, dia a dia';
 
-        // Add topic-based messages
-        topics.forEach((topic: string) => {
-          topicMessages.push(`O que você acha sobre ${topic.toLowerCase()}?`);
-          topicMessages.push(`Viu as novidades sobre ${topic.toLowerCase()}?`);
-          topicMessages.push(`Você gosta de ${topic.toLowerCase()}?`);
-        });
-
-        // Determine who sends next by checking the last message
-        const { data: lastMessage } = await supabaseClient
+        // Fetch last 10 messages for context
+        const { data: messageHistory } = await supabaseClient
           .from('maturador_messages')
-          .select('from_instance_id')
+          .select('from_instance_id, body, created_at')
           .eq('conversation_id', conversationId)
           .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+          .limit(10);
 
-        // Alternate: if last sender was A, now B sends (and vice versa). If no messages yet, A starts.
-        const lastSenderId = lastMessage?.from_instance_id;
+        const historyReversed = (messageHistory || []).reverse();
+
+        // Determine who sends next by checking the last message
+        const lastSenderId = historyReversed.length > 0 ? historyReversed[historyReversed.length - 1].from_instance_id : null;
         const isAToB = lastSenderId !== instanceA.id; // A sends if last wasn't A (or no messages yet)
 
         const fromInstance = isAToB ? instanceA : instanceB;
         const toInstance = isAToB ? instanceB : instanceA;
         const toPhone = isAToB ? phoneB : phoneA;
-        const message = topicMessages[Math.floor(Math.random() * topicMessages.length)];
+
+        // Generate message using AI
+        const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+        
+        let message = "Oi, tudo bem?"; // Fallback message
+        
+        if (LOVABLE_API_KEY) {
+          try {
+            const systemPrompt = `Você está simulando uma conversa natural entre dois amigos no WhatsApp brasileiro.
+Tema principal da conversa: ${topicsText}
+
+Regras IMPORTANTES:
+- Responda com UMA mensagem curta (máximo 80 caracteres)
+- Use linguagem informal e natural de WhatsApp brasileiro
+- Use gírias e expressões brasileiras naturais
+- Use emojis ocasionalmente (1-2 no máximo)
+- NÃO faça perguntas demais, alterne entre afirmações e perguntas
+- Se for a primeira mensagem, inicie com uma saudação casual
+- Varie MUITO o estilo, evite repetições
+- Seja criativo e imprevisível
+- Considere o contexto das mensagens anteriores`;
+
+            const aiMessages: Array<{role: string, content: string}> = [
+              { role: 'system', content: systemPrompt }
+            ];
+
+            // Add conversation history as context
+            if (historyReversed.length > 0) {
+              for (const msg of historyReversed) {
+                const role = msg.from_instance_id === fromInstance.id ? 'assistant' : 'user';
+                aiMessages.push({ role, content: msg.body });
+              }
+              aiMessages.push({ role: 'user', content: 'Agora gere a próxima mensagem da conversa. Responda APENAS com a mensagem, sem explicações.' });
+            } else {
+              aiMessages.push({ role: 'user', content: 'Inicie a conversa com uma saudação casual. Responda APENAS com a mensagem, sem explicações.' });
+            }
+
+            console.log('Calling AI to generate message...');
+            
+            const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: 'google/gemini-2.5-flash',
+                messages: aiMessages,
+                max_tokens: 100,
+                temperature: 0.9,
+              }),
+            });
+
+            if (aiResponse.ok) {
+              const aiData = await aiResponse.json();
+              const generatedMessage = aiData.choices?.[0]?.message?.content?.trim();
+              if (generatedMessage && generatedMessage.length > 0 && generatedMessage.length <= 200) {
+                message = generatedMessage;
+                console.log('AI generated message:', message);
+              } else {
+                console.log('AI response invalid, using fallback');
+              }
+            } else {
+              console.error('AI API error:', await aiResponse.text());
+            }
+          } catch (aiError) {
+            console.error('Error calling AI:', aiError);
+          }
+        } else {
+          console.log('LOVABLE_API_KEY not found, using fallback messages');
+          const fallbackMessages = [
+            "Oi, tudo bem?",
+            "E aí, beleza?",
+            "Opa, como vai?",
+            "Fala aí!",
+            "Boa! Tudo certo?",
+          ];
+          message = fallbackMessages[Math.floor(Math.random() * fallbackMessages.length)];
+        }
 
         let messageSent = null;
 
