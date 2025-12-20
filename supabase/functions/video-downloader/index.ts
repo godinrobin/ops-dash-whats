@@ -360,43 +360,118 @@ async function downloadYouTube(url: string, opts: DownloadOpts = {}): Promise<an
   throw new Error("YouTube indisponível no momento. Todas as instâncias falharam.");
 }
 
-// Instagram download via igram.io
+// Instagram download via multiple fallback APIs
 async function downloadInstagram(url: string): Promise<any> {
-  console.log('Trying Instagram download...');
-  
-  // Try saveig.app API
-  const response = await fetch('https://v3.saveig.app/api/ajaxSearch', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Origin': 'https://saveig.app',
-      'Referer': 'https://saveig.app/',
-    },
-    body: `q=${encodeURIComponent(url)}&t=media&lang=en`,
-  });
-  
-  if (!response.ok) {
-    throw new Error(`SaveIG error: ${response.status}`);
-  }
-  
-  const data = await response.json();
-  console.log('SaveIG response status:', data.status);
-  
-  if (data.status === 'ok' && data.data) {
-    // Parse HTML response to get video URL
-    const html = data.data;
-    const videoMatch = html.match(/href="([^"]+)"[^>]*download/);
-    if (videoMatch) {
-      return {
-        success: true,
-        url: videoMatch[1],
-        filename: 'instagram-video.mp4',
-        title: 'Instagram Video',
-      };
+  console.log("Trying Instagram download...");
+
+  // Extract post/reel ID from URL for logging
+  const idMatch = url.match(/(?:p|reel|reels|tv)\/([\w-]+)/i);
+  const postId = idMatch?.[1] || "unknown";
+  console.log("Instagram post ID:", postId);
+
+  // ===================== Method 1: SnapInsta (igdownloader) =====================
+  try {
+    console.log("Trying SnapInsta...");
+    const snapRes = await fetch("https://snapinsta.app/api/ajaxSearch", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Origin: "https://snapinsta.app",
+        Referer: "https://snapinsta.app/",
+      },
+      body: `q=${encodeURIComponent(url)}&t=media&lang=en`,
+    });
+
+    if (snapRes.ok) {
+      const snapData = await snapRes.json();
+      if (snapData.status === "ok" && snapData.data) {
+        const html = snapData.data;
+        const videoMatch = html.match(/href="([^"]+\.mp4[^"]*)"/i) || html.match(/href="([^"]+)"[^>]*download/i);
+        if (videoMatch) {
+          console.log("SnapInsta success");
+          return {
+            success: true,
+            url: videoMatch[1],
+            filename: `instagram-${postId}.mp4`,
+            title: "Instagram Video",
+          };
+        }
+      }
     }
+  } catch (e: any) {
+    console.log("SnapInsta failed:", e?.message || e);
   }
-  
-  throw new Error('Instagram download failed');
+
+  // ===================== Method 2: SSSTik-style igram =====================
+  try {
+    console.log("Trying igram.world...");
+    const igramRes = await fetch("https://igram.world/api/convert", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://igram.world",
+        Referer: "https://igram.world/",
+      },
+      body: JSON.stringify({ url }),
+    });
+
+    if (igramRes.ok) {
+      const ct = (igramRes.headers.get("content-type") || "").toLowerCase();
+      if (ct.includes("application/json")) {
+        const igramData = await igramRes.json();
+        const items = igramData?.items || igramData?.result || [];
+        const video = (Array.isArray(items) ? items : [items]).find(
+          (i: any) => i?.url && (String(i?.type || "").includes("video") || String(i?.url || "").includes(".mp4"))
+        );
+        if (video?.url) {
+          console.log("igram.world success");
+          return {
+            success: true,
+            url: video.url,
+            filename: `instagram-${postId}.mp4`,
+            title: "Instagram Video",
+          };
+        }
+      }
+    }
+  } catch (e: any) {
+    console.log("igram.world failed:", e?.message || e);
+  }
+
+  // ===================== Method 3: FastDL =====================
+  try {
+    console.log("Trying FastDL...");
+    const fastRes = await fetch("https://fastdl.app/api/convert", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://fastdl.app",
+        Referer: "https://fastdl.app/",
+      },
+      body: JSON.stringify({ url }),
+    });
+
+    if (fastRes.ok) {
+      const ct = (fastRes.headers.get("content-type") || "").toLowerCase();
+      if (ct.includes("application/json")) {
+        const fastData = await fastRes.json();
+        const videoUrl = fastData?.url || fastData?.video?.url || fastData?.result?.[0]?.url;
+        if (videoUrl) {
+          console.log("FastDL success");
+          return {
+            success: true,
+            url: videoUrl,
+            filename: `instagram-${postId}.mp4`,
+            title: "Instagram Video",
+          };
+        }
+      }
+    }
+  } catch (e: any) {
+    console.log("FastDL failed:", e?.message || e);
+  }
+
+  throw new Error("Instagram: nenhum provedor disponível no momento");
 }
 
 // Twitter/X download
