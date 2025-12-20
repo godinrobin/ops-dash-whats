@@ -501,19 +501,9 @@ export default function MaturadorConversations() {
                     </Badge>
                   </div>
                   <CardDescription className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{getInstanceName(conversation.chip_a_id)}</span>
-                      {getInstancePhone(conversation.chip_a_id) && (
-                        <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{getInstancePhone(conversation.chip_a_id)}</span>
-                      )}
-                    </div>
-                    <div className="text-muted-foreground">↕</div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{getInstanceName(conversation.chip_b_id)}</span>
-                      {getInstancePhone(conversation.chip_b_id) && (
-                        <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{getInstancePhone(conversation.chip_b_id)}</span>
-                      )}
-                    </div>
+                    <p className="font-medium">{getInstancePhone(conversation.chip_a_id) || getInstanceName(conversation.chip_a_id)}</p>
+                    <p className="text-muted-foreground">↕</p>
+                    <p className="font-medium">{getInstancePhone(conversation.chip_b_id) || getInstanceName(conversation.chip_b_id)}</p>
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -565,25 +555,6 @@ export default function MaturadorConversations() {
                       </Button>
                     )}
 
-                    <Button 
-                      size="sm" 
-                      variant={conversation.is_active ? "outline" : "default"}
-                      className={!conversation.is_active ? 'bg-green-500 hover:bg-green-600 text-white' : ''}
-                      onClick={() => handleToggleActive(conversation)}
-                      disabled={activeLoops.has(conversation.id)}
-                    >
-                      {conversation.is_active ? (
-                        <>
-                          <Pause className="h-3 w-3 mr-1" />
-                          Desativar
-                        </>
-                      ) : (
-                        <>
-                          <Play className="h-3 w-3 mr-1" />
-                          Ativar
-                        </>
-                      )}
-                    </Button>
                     
                     <Button 
                       size="sm" 
