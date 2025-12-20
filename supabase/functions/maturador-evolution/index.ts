@@ -398,9 +398,15 @@ serve(async (req) => {
           });
         }
 
-        result = await callEvolution(`/instance/delete/${instanceName}`, 'DELETE');
+        // Try to delete from Evolution API, but don't fail if instance doesn't exist
+        try {
+          result = await callEvolution(`/instance/delete/${instanceName}`, 'DELETE');
+        } catch (error) {
+          console.log(`Instance ${instanceName} not found in Evolution API, proceeding with local deletion`);
+          result = { deleted: true, note: 'Instance was not found in Evolution API' };
+        }
 
-        // Delete from database
+        // Always delete from local database
         await supabaseClient
           .from('maturador_instances')
           .delete()
