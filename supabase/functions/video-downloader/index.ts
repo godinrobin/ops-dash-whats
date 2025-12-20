@@ -24,44 +24,61 @@ function detectPlatform(url: string): string {
   return 'unknown';
 }
 
-// TikWM API (free, no auth) - for TikTok only
-async function downloadTikTok(url: string): Promise<any> {
-  console.log('Trying TikWM API for TikTok...');
-  
-  const response = await fetch('https://www.tikwm.com/api/', {
-    method: 'POST',
+// TikWM API (free, no auth) - for TikTok
+async function downloadTikTok(url: string, opts: { downloadMode?: "auto" | "audio" } = {}): Promise<any> {
+  console.log("Trying TikWM API for TikTok...");
+
+  const response = await fetch("https://www.tikwm.com/api/", {
+    method: "POST",
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Accept': 'application/json',
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json",
     },
     body: `url=${encodeURIComponent(url)}&hd=1`,
   });
-  
+
   if (!response.ok) {
     throw new Error(`TikWM error: ${response.status}`);
   }
-  
+
   const data = await response.json();
-  console.log('TikWM response code:', data.code);
-  
+  console.log("TikWM response code:", data.code);
+
   if (data.code === 0 && data.data) {
+    const title = data.data.title;
+    const cover = data.data.cover;
+
+    if (opts.downloadMode === "audio") {
+      const audioUrl = data.data.music || data.data.music_info?.play;
+      if (!audioUrl) throw new Error("TikWM: No audio URL found");
+
+      return {
+        success: true,
+        url: audioUrl,
+        filename: `${title?.substring(0, 50) || "tiktok-audio"}.mp3`,
+        thumbnail: cover,
+        title,
+      };
+    }
+
     const videoUrl = data.data.hdplay || data.data.play;
     if (videoUrl) {
       return {
         success: true,
         url: videoUrl,
-        filename: `${data.data.title?.substring(0, 50) || 'tiktok-video'}.mp4`,
-        thumbnail: data.data.cover,
-        title: data.data.title,
+        filename: `${title?.substring(0, 50) || "tiktok-video"}.mp4`,
+        thumbnail: cover,
+        title,
       };
     }
   }
-  
-  throw new Error('TikWM: No video URL found');
+
+  throw new Error("TikWM: No media URL found");
 }
 
 // YouTube download via Piped public API (no auth)
-const PIPED_INSTANCES = [
+const PIPED_INSTANCES_API = "https://piped-instances.kavin.rocks/";
+const PIPED_FALLBACKS = [
   "https://pipedapi.kavin.rocks",
   "https://pipedapi.in.projectsegfau.lt",
 ];
@@ -70,6 +87,34 @@ type DownloadOpts = {
   downloadMode?: "auto" | "audio";
   videoQuality?: string;
 };
+
+async function getPipedApiUrls(): Promise<string[]> {
+  try {
+    const res = await fetch(PIPED_INSTANCES_API, { headers: { Accept: "application/json" } });
+    if (!res.ok) return PIPED_FALLBACKS;
+
+    const list = (await res.json()) as Array<any>;
+    const apiUrls = (Array.isArray(list) ? list : [])
+      .map((x) => String(x?.api_url || "").trim())
+      .filter(Boolean);
+
+    // Prefer higher uptime when available
+    const scored = (Array.isArray(list) ? list : [])
+      .map((x) => ({
+        api_url: String(x?.api_url || "").trim(),
+        score: Number(x?.uptime_24h ?? 0) * 2 + Number(x?.uptime_7d ?? 0),
+      }))
+      .filter((x) => x.api_url)
+      .sort((a, b) => b.score - a.score)
+      .map((x) => x.api_url);
+
+    const merged = [...new Set([...(scored.length ? scored : apiUrls), ...PIPED_FALLBACKS])];
+    return merged.slice(0, 8);
+  } catch (e) {
+    console.log("Failed to fetch Piped instances API, using fallbacks.");
+    return PIPED_FALLBACKS;
+  }
+}
 
 async function downloadYouTube(url: string, opts: DownloadOpts = {}): Promise<any> {
   console.log("Trying YouTube download via Piped...");
@@ -87,9 +132,10 @@ async function downloadYouTube(url: string, opts: DownloadOpts = {}): Promise<an
     return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY;
   })();
 
+  const instances = await getPipedApiUrls();
   let lastError = "";
 
-  for (const base of PIPED_INSTANCES) {
+  for (const base of instances) {
     try {
       const endpoint = `${base}/streams/${videoId}`;
       console.log("Piped endpoint:", endpoint);
@@ -104,10 +150,30 @@ async function downloadYouTube(url: string, opts: DownloadOpts = {}): Promise<an
         continue;
       }
 
-      const data = await res.json();
+      // Some instances return HTML like "Service has been ..." with 200.
+      const ct = (res.headers.get("content-type") || "").toLowerCase();
+      const raw = await res.text();
+
+      if (!ct.includes("application/json")) {
+        const snippet = raw.slice(0, 60).replace(/\s+/g, " ");
+        lastError = `Piped: resposta inválida (${snippet})`;
+        console.log("Piped invalid content-type:", ct, snippet);
+        continue;
+      }
+
+      let data: any;
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        const snippet = raw.slice(0, 60).replace(/\s+/g, " ");
+        lastError = `Piped: JSON inválido (${snippet})`;
+        console.log("Piped JSON parse error:", snippet);
+        continue;
+      }
 
       const title = data?.title || "youtube-video";
-      const thumbnail = data?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+      const thumbnail =
+        data?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
 
       if (downloadMode === "audio") {
         const audioStreams = Array.isArray(data?.audioStreams) ? data.audioStreams : [];
@@ -133,16 +199,20 @@ async function downloadYouTube(url: string, opts: DownloadOpts = {}): Promise<an
       }
 
       const videoStreams = Array.isArray(data?.videoStreams) ? data.videoStreams : [];
-      const mp4Streams = videoStreams.filter((s: any) => String(s?.mimeType || "").includes("video/") && String(s?.mimeType || "").includes("mp4"));
+      const mp4Streams = videoStreams.filter(
+        (s: any) =>
+          String(s?.mimeType || "").includes("video/") && String(s?.mimeType || "").includes("mp4")
+      );
       const candidates = mp4Streams.length ? mp4Streams : videoStreams;
 
       if (!candidates.length) throw new Error("Piped: No video streams");
 
-      const bestVideo = candidates
+      const sorted = candidates
         .slice()
-        .sort((a: any, b: any) => (Number(b?.height || 0) - Number(a?.height || 0)))
-        .find((s: any) => Number(s?.height || 0) <= requestedHeight) ||
-        candidates.slice().sort((a: any, b: any) => (Number(b?.height || 0) - Number(a?.height || 0)))[0];
+        .sort((a: any, b: any) => Number(b?.height || 0) - Number(a?.height || 0));
+
+      const bestVideo =
+        sorted.find((s: any) => Number(s?.height || 0) <= requestedHeight) || sorted[0];
 
       if (!bestVideo?.url) throw new Error("Piped: Missing video URL");
 
@@ -159,7 +229,7 @@ async function downloadYouTube(url: string, opts: DownloadOpts = {}): Promise<an
     }
   }
 
-  throw new Error(lastError || "YouTube download failed");
+  throw new Error(lastError || "YouTube indisponível no momento");
 }
 
 // Instagram download via igram.io
@@ -279,7 +349,7 @@ serve(async (req) => {
     try {
       switch (platform) {
         case "tiktok":
-          result = await downloadTikTok(url);
+          result = await downloadTikTok(url, { downloadMode });
           break;
         case "youtube":
           result = await downloadYouTube(url, { downloadMode, videoQuality });
