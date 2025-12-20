@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Plus, RefreshCw, Loader2, Smartphone, QrCode, Trash2, PowerOff, RotateCcw } from "lucide-react";
+import { ArrowLeft, Plus, RefreshCw, Loader2, Smartphone, QrCode, Trash2, PowerOff, RotateCcw, Phone } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -48,6 +48,7 @@ export default function MaturadorInstances() {
   const [deleting, setDeleting] = useState(false);
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   const fetchInstances = async () => {
     if (!user) return;
@@ -92,6 +93,27 @@ export default function MaturadorInstances() {
     await fetchInstances();
     setRefreshing(false);
     toast.success('Status atualizado');
+  };
+
+  const handleSyncPhoneNumbers = async () => {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('maturador-evolution', {
+        body: { action: 'sync-phone-numbers' },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      const syncedCount = data.results?.filter((r: any) => r.phoneNumber).length || 0;
+      toast.success(`${syncedCount} número(s) sincronizado(s)!`);
+      await fetchInstances();
+    } catch (error: any) {
+      console.error('Error syncing phone numbers:', error);
+      toast.error(error.message || 'Erro ao sincronizar números');
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const handleCreateInstance = async () => {
@@ -296,7 +318,15 @@ export default function MaturadorInstances() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={handleRefresh} disabled={refreshing}>
+            <Button variant="outline" onClick={handleSyncPhoneNumbers} disabled={syncing || refreshing}>
+              {syncing ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Phone className="h-4 w-4 mr-2" />
+              )}
+              Sincronizar Números
+            </Button>
+            <Button variant="outline" size="icon" onClick={handleRefresh} disabled={refreshing || syncing}>
               <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             </Button>
             <Button onClick={() => setCreateModalOpen(true)}>
