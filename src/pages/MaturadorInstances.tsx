@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Plus, RefreshCw, Loader2, Smartphone, QrCode, Trash2, Power, PowerOff, RotateCcw } from "lucide-react";
+import { ArrowLeft, Plus, RefreshCw, Loader2, Smartphone, QrCode, Trash2, PowerOff, RotateCcw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -29,7 +29,6 @@ export default function MaturadorInstances() {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [hasConfig, setHasConfig] = useState(false);
 
   // Create instance modal
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -54,15 +53,6 @@ export default function MaturadorInstances() {
     if (!user) return;
 
     try {
-      // Check config
-      const { data: config } = await supabase
-        .from('maturador_config')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
-
-      setHasConfig(!!config);
-
       // Fetch instances from database
       const { data, error } = await supabase
         .from('maturador_instances')
@@ -75,7 +65,7 @@ export default function MaturadorInstances() {
 
     } catch (error) {
       console.error('Error fetching instances:', error);
-      toast.error('Erro ao carregar instâncias');
+      toast.error('Erro ao carregar números');
     } finally {
       setLoading(false);
     }
@@ -106,13 +96,13 @@ export default function MaturadorInstances() {
 
   const handleCreateInstance = async () => {
     if (!newInstanceName.trim()) {
-      toast.error('Nome da instância é obrigatório');
+      toast.error('Nome do número é obrigatório');
       return;
     }
 
     // Validate instance name (only alphanumeric and underscores)
     if (!/^[a-zA-Z0-9_]+$/.test(newInstanceName)) {
-      toast.error('O nome da instância deve conter apenas letras, números e underscores');
+      toast.error('O nome deve conter apenas letras, números e underscores');
       return;
     }
 
@@ -125,7 +115,7 @@ export default function MaturadorInstances() {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
-      toast.success('Instância criada com sucesso!');
+      toast.success('Número criado com sucesso!');
       setCreateModalOpen(false);
       setNewInstanceName("");
       
@@ -147,7 +137,7 @@ export default function MaturadorInstances() {
 
     } catch (error: any) {
       console.error('Error creating instance:', error);
-      toast.error(error.message || 'Erro ao criar instância');
+      toast.error(error.message || 'Erro ao criar número');
     } finally {
       setCreating(false);
     }
@@ -213,7 +203,7 @@ export default function MaturadorInstances() {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
-      toast.success('Instância desconectada');
+      toast.success('Número desconectado');
       await fetchInstances();
     } catch (error: any) {
       console.error('Error logging out:', error);
@@ -233,7 +223,7 @@ export default function MaturadorInstances() {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
-      toast.success('Instância reiniciada');
+      toast.success('Número reiniciado');
       await fetchInstances();
     } catch (error: any) {
       console.error('Error restarting:', error);
@@ -255,13 +245,13 @@ export default function MaturadorInstances() {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
-      toast.success('Instância removida');
+      toast.success('Número removido');
       setDeleteDialogOpen(false);
       setInstanceToDelete(null);
       await fetchInstances();
     } catch (error: any) {
       console.error('Error deleting:', error);
-      toast.error(error.message || 'Erro ao remover instância');
+      toast.error(error.message || 'Erro ao remover número');
     } finally {
       setDeleting(false);
     }
@@ -291,32 +281,6 @@ export default function MaturadorInstances() {
     );
   }
 
-  if (!hasConfig) {
-    return (
-      <div className="min-h-screen bg-background">
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex items-center gap-4 mb-8">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/maturador')}>
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <h1 className="text-2xl font-bold">Instâncias</h1>
-          </div>
-          
-          <Card className="max-w-md mx-auto">
-            <CardContent className="p-8 text-center">
-              <Smartphone className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-              <h3 className="text-lg font-medium mb-2">Configuração Necessária</h3>
-              <p className="text-muted-foreground mb-4">Configure sua Evolution API antes de adicionar instâncias.</p>
-              <Button onClick={() => navigate('/maturador/config')}>
-                Configurar Evolution API
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
@@ -327,7 +291,7 @@ export default function MaturadorInstances() {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>
-              <h1 className="text-2xl font-bold">Instâncias de WhatsApp</h1>
+              <h1 className="text-2xl font-bold">Números de WhatsApp</h1>
               <p className="text-muted-foreground">Gerencie seus chips conectados</p>
             </div>
           </div>
@@ -337,7 +301,7 @@ export default function MaturadorInstances() {
             </Button>
             <Button onClick={() => setCreateModalOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
-              Nova Instância
+              Novo Número
             </Button>
           </div>
         </div>
@@ -347,11 +311,11 @@ export default function MaturadorInstances() {
           <Card className="max-w-md mx-auto">
             <CardContent className="p-8 text-center">
               <Smartphone className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-              <h3 className="text-lg font-medium mb-2">Nenhuma instância</h3>
-              <p className="text-muted-foreground mb-4">Adicione sua primeira instância de WhatsApp</p>
+              <h3 className="text-lg font-medium mb-2">Nenhum número</h3>
+              <p className="text-muted-foreground mb-4">Adicione seu primeiro número de WhatsApp</p>
               <Button onClick={() => setCreateModalOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" />
-                Criar Instância
+                Criar Número
               </Button>
             </CardContent>
           </Card>
@@ -361,8 +325,8 @@ export default function MaturadorInstances() {
               <Card key={instance.id}>
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">{instance.label || instance.instance_name}</CardTitle>
-                    <Badge variant="outline" className="flex items-center gap-1">
+                    <CardTitle className="text-base">{instance.label || instance.phone_number || instance.instance_name}</CardTitle>
+                    <Badge variant="outline" className={`flex items-center gap-1 ${instance.status === 'connected' ? 'border-green-500 text-green-500' : ''}`}>
                       <div className={`w-2 h-2 rounded-full ${getStatusColor(instance.status)}`} />
                       {getStatusText(instance.status)}
                     </Badge>
@@ -445,17 +409,17 @@ export default function MaturadorInstances() {
         <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Nova Instância</DialogTitle>
+              <DialogTitle>Novo Número</DialogTitle>
               <DialogDescription>
-                Crie uma nova instância para conectar um número de WhatsApp
+                Crie um novo registro para conectar um número de WhatsApp
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="instanceName">Nome da Instância</Label>
+                <Label htmlFor="instanceName">Nome identificador</Label>
                 <Input
                   id="instanceName"
-                  placeholder="meu_chip_01"
+                  placeholder="meu_numero_01"
                   value={newInstanceName}
                   onChange={(e) => setNewInstanceName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
                 />
@@ -486,43 +450,36 @@ export default function MaturadorInstances() {
             <DialogHeader>
               <DialogTitle>Conectar WhatsApp</DialogTitle>
               <DialogDescription>
-                Escaneie o QR Code com o WhatsApp do número {currentQrInstance?.instance_name}
+                Escaneie o QR Code com seu WhatsApp para conectar o número
               </DialogDescription>
             </DialogHeader>
-            <div className="flex flex-col items-center justify-center py-6">
+            <div className="flex flex-col items-center justify-center py-4">
               {loadingQr ? (
-                <div className="w-64 h-64 flex items-center justify-center bg-muted rounded-lg">
-                  <Loader2 className="h-8 w-8 animate-spin" />
+                <div className="flex flex-col items-center gap-4">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p className="text-sm text-muted-foreground">Gerando QR Code...</p>
                 </div>
               ) : qrCode ? (
-                <div className="p-4 bg-white rounded-lg">
-                  <img 
-                    src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`} 
-                    alt="QR Code" 
-                    className="w-64 h-64"
-                  />
+                <div className="space-y-4">
+                  <div className="border rounded-lg p-4 bg-white">
+                    <img src={qrCode} alt="QR Code WhatsApp" className="w-64 h-64" />
+                  </div>
+                  <p className="text-sm text-center text-muted-foreground">
+                    Abra o WhatsApp &gt; Menu &gt; Dispositivos conectados &gt; Conectar dispositivo
+                  </p>
                 </div>
               ) : (
-                <div className="w-64 h-64 flex items-center justify-center bg-muted rounded-lg">
-                  <p className="text-muted-foreground">QR Code não disponível</p>
-                </div>
+                <p className="text-sm text-muted-foreground">Erro ao carregar QR Code</p>
               )}
-              
-              <p className="text-sm text-muted-foreground mt-4 text-center">
-                Abra o WhatsApp no seu celular, vá em Aparelhos Conectados e escaneie o código
-              </p>
             </div>
-            <DialogFooter className="flex-col sm:flex-row gap-2">
-              <Button variant="outline" onClick={() => handleGetQrCode(currentQrInstance!)} disabled={loadingQr}>
-                <RefreshCw className={`h-4 w-4 mr-2 ${loadingQr ? 'animate-spin' : ''}`} />
-                Atualizar QR
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setQrModalOpen(false)}>
+                Fechar
               </Button>
-              <Button onClick={handleCheckQrStatus} disabled={checkingStatus}>
+              <Button onClick={handleCheckQrStatus} disabled={checkingStatus || loadingQr}>
                 {checkingStatus ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Power className="h-4 w-4 mr-2" />
-                )}
+                ) : null}
                 Verificar Conexão
               </Button>
             </DialogFooter>
@@ -533,17 +490,16 @@ export default function MaturadorInstances() {
         <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Excluir Instância</AlertDialogTitle>
+              <AlertDialogTitle>Excluir Número</AlertDialogTitle>
               <AlertDialogDescription>
-                Tem certeza que deseja excluir a instância "{instanceToDelete?.instance_name}"? 
+                Tem certeza que deseja excluir "{instanceToDelete?.label || instanceToDelete?.phone_number || instanceToDelete?.instance_name}"? 
                 Esta ação não pode ser desfeita.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDelete} disabled={deleting} className="bg-destructive text-destructive-foreground">
-                {deleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                Excluir
+              <AlertDialogAction onClick={handleDelete} disabled={deleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Excluir'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

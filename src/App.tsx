@@ -28,7 +28,6 @@ import VideoDownloader from "./pages/VideoDownloader";
 import SMSBot from "./pages/SMSBot";
 import SMMPanel from "./pages/SMMPanel";
 import MaturadorDashboard from "./pages/MaturadorDashboard";
-import MaturadorConfig from "./pages/MaturadorConfig";
 import MaturadorInstances from "./pages/MaturadorInstances";
 import MaturadorConversations from "./pages/MaturadorConversations";
 import AdminPanelNew from "./pages/AdminPanelNew";
@@ -71,7 +70,6 @@ const App = () => (
             <Route path="/extensao-ads" element={<ProtectedRoute><ExtensaoAdsWhatsApp /></ProtectedRoute>} />
             <Route path="/video-downloader" element={<ProtectedRoute><VideoDownloader /></ProtectedRoute>} />
             <Route path="/maturador" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorDashboard /></MemberRoute>} />
-            <Route path="/maturador/config" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorConfig /></MemberRoute>} />
             <Route path="/maturador/instances" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorInstances /></MemberRoute>} />
             <Route path="/maturador/conversations" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorConversations /></MemberRoute>} />
             
