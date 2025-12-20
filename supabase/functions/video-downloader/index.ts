@@ -695,6 +695,66 @@ async function downloadInstagram(url: string): Promise<any> {
     errors.push(`FastDL: ${e?.message || e}`);
   }
 
+  // ===================== Method 4: Cobalt (final fallback) =====================
+  try {
+    console.log("Trying Cobalt for Instagram...");
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+    const cobaltRes = await fetch("https://api.cobalt.tools/api/json", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url,
+        isAudioOnly: false,
+        aFormat: "best",
+        vCodec: "h264",
+        vQuality: "1080",
+        filenamePattern: "basic",
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!cobaltRes.ok) {
+      errors.push(`Cobalt HTTP ${cobaltRes.status}`);
+    } else {
+      const cobaltData = (await cobaltRes.json()) as any;
+
+      if (cobaltData?.status === "error") {
+        errors.push(`Cobalt: ${cobaltData?.error?.code || "unknown"}`);
+      } else if (typeof cobaltData?.url === "string" && cobaltData.url) {
+        console.log("Cobalt success for Instagram");
+        return {
+          success: true,
+          url: cobaltData.url,
+          filename: `instagram-${postId}.mp4`,
+          title: "Instagram Video",
+        };
+      } else if (cobaltData?.status === "picker" && Array.isArray(cobaltData?.picker) && cobaltData.picker.length) {
+        const pickBest = cobaltData.picker[0];
+        if (pickBest?.url) {
+          console.log("Cobalt picker success for Instagram");
+          return {
+            success: true,
+            url: pickBest.url,
+            filename: `instagram-${postId}.mp4`,
+            title: "Instagram Video",
+          };
+        }
+        errors.push("Cobalt: picker sem URL");
+      } else {
+        errors.push("Cobalt: sem URL");
+      }
+    }
+  } catch (e: any) {
+    errors.push(`Cobalt: ${e?.message || e}`);
+  }
+
   throw new Error(`Instagram: nenhum provedor disponível no momento (${errors.slice(0, 3).join("; ")})`);
 }
 
