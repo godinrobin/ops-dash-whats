@@ -11,6 +11,9 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { AudioSection } from "@/components/AudioSection";
+import subtitleTiktok from "@/assets/subtitle-style-tiktok.png";
+import subtitleYoutube from "@/assets/subtitle-style-youtube.png";
+import subtitleClassic from "@/assets/subtitle-style-classic.png";
 import { 
   Upload, 
   Trash2, 
@@ -1815,31 +1818,76 @@ export default function VideoVariationGenerator() {
           </DialogHeader>
           
           <div className="space-y-6 py-4">
-            {/* Preset Selection */}
+            {/* Preset Selection with Previews */}
             <div className="space-y-2">
               <Label>Estilo de Legenda</Label>
               <div className="grid grid-cols-3 gap-3">
-                <Button
-                  variant={subtitleConfig.style === 'tiktok' ? 'default' : 'outline'}
+                <button
                   onClick={() => applySubtitlePreset('tiktok')}
-                  className={subtitleConfig.style === 'tiktok' ? 'bg-orange-500 hover:bg-orange-600' : ''}
+                  className={`relative rounded-lg overflow-hidden border-2 transition-all ${
+                    subtitleConfig.style === 'tiktok' 
+                      ? 'border-orange-500 ring-2 ring-orange-500/30' 
+                      : 'border-border hover:border-orange-500/50'
+                  }`}
                 >
-                  TikTok/Reels
-                </Button>
-                <Button
-                  variant={subtitleConfig.style === 'youtube' ? 'default' : 'outline'}
+                  <img 
+                    src={subtitleTiktok} 
+                    alt="TikTok style preview" 
+                    className="w-full h-24 object-cover"
+                  />
+                  <div className={`absolute inset-0 flex items-end justify-center pb-2 bg-gradient-to-t from-black/70 to-transparent`}>
+                    <span className="text-xs font-medium text-white">TikTok/Reels</span>
+                  </div>
+                  {subtitleConfig.style === 'tiktok' && (
+                    <div className="absolute top-1 right-1 w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center">
+                      <Check className="w-3 h-3 text-white" />
+                    </div>
+                  )}
+                </button>
+                <button
                   onClick={() => applySubtitlePreset('youtube')}
-                  className={subtitleConfig.style === 'youtube' ? 'bg-orange-500 hover:bg-orange-600' : ''}
+                  className={`relative rounded-lg overflow-hidden border-2 transition-all ${
+                    subtitleConfig.style === 'youtube' 
+                      ? 'border-orange-500 ring-2 ring-orange-500/30' 
+                      : 'border-border hover:border-orange-500/50'
+                  }`}
                 >
-                  YouTube
-                </Button>
-                <Button
-                  variant={subtitleConfig.style === 'classic' ? 'default' : 'outline'}
+                  <img 
+                    src={subtitleYoutube} 
+                    alt="YouTube style preview" 
+                    className="w-full h-24 object-cover"
+                  />
+                  <div className={`absolute inset-0 flex items-end justify-center pb-2 bg-gradient-to-t from-black/70 to-transparent`}>
+                    <span className="text-xs font-medium text-white">YouTube</span>
+                  </div>
+                  {subtitleConfig.style === 'youtube' && (
+                    <div className="absolute top-1 right-1 w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center">
+                      <Check className="w-3 h-3 text-white" />
+                    </div>
+                  )}
+                </button>
+                <button
                   onClick={() => applySubtitlePreset('classic')}
-                  className={subtitleConfig.style === 'classic' ? 'bg-orange-500 hover:bg-orange-600' : ''}
+                  className={`relative rounded-lg overflow-hidden border-2 transition-all ${
+                    subtitleConfig.style === 'classic' 
+                      ? 'border-orange-500 ring-2 ring-orange-500/30' 
+                      : 'border-border hover:border-orange-500/50'
+                  }`}
                 >
-                  Clássico
-                </Button>
+                  <img 
+                    src={subtitleClassic} 
+                    alt="Classic style preview" 
+                    className="w-full h-24 object-cover"
+                  />
+                  <div className={`absolute inset-0 flex items-end justify-center pb-2 bg-gradient-to-t from-black/70 to-transparent`}>
+                    <span className="text-xs font-medium text-white">Clássico</span>
+                  </div>
+                  {subtitleConfig.style === 'classic' && (
+                    <div className="absolute top-1 right-1 w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center">
+                      <Check className="w-3 h-3 text-white" />
+                    </div>
+                  )}
+                </button>
               </div>
             </div>
 
