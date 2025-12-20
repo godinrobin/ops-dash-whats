@@ -312,6 +312,8 @@ export default function MaturadorDashboard() {
       // Fetch profile info from Evolution API
       toast.info('Buscando foto de perfil...');
       
+      const customName = editName.trim() || null;
+      
       try {
         const { data: fetchResult, error: fetchError } = await supabase.functions.invoke('maturador-evolution', {
           body: {
@@ -319,6 +321,7 @@ export default function MaturadorDashboard() {
             instanceName: connectedInstance.instance_name,
             phone: cleanedPhone,
             contactId,
+            customName, // Pass custom name to preserve it
           },
         });
 
