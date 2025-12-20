@@ -24,217 +24,182 @@ function detectPlatform(url: string): string {
   return 'unknown';
 }
 
-// Apify Actor API (uses existing APIFY_API_TOKEN)
-async function downloadWithApify(url: string): Promise<any> {
-  const apifyToken = Deno.env.get('APIFY_API_TOKEN');
+// TikWM API (free, no auth) - for TikTok only
+async function downloadTikTok(url: string): Promise<any> {
+  console.log('Trying TikWM API for TikTok...');
   
-  if (!apifyToken) {
-    throw new Error('APIFY_API_TOKEN not configured');
-  }
-  
-  console.log('Starting Apify actor run...');
-  
-  // Start the actor run
-  const startResponse = await fetch(
-    `https://api.apify.com/v2/acts/wilcode~all-social-media-video-downloader/runs?token=${apifyToken}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url,
-        proxySettings: {
-          useApifyProxy: true,
-          apifyProxyGroups: ['RESIDENTIAL'],
-        },
-        mergeAV: true,
-      }),
-    }
-  );
-  
-  if (!startResponse.ok) {
-    const errorText = await startResponse.text();
-    console.log('Apify start error:', startResponse.status, errorText);
-    throw new Error(`Apify API error: ${startResponse.status}`);
-  }
-  
-  const runData = await startResponse.json();
-  const runId = runData.data?.id;
-  
-  if (!runId) {
-    throw new Error('Failed to get Apify run ID');
-  }
-  
-  console.log('Apify run started:', runId);
-  
-  // Poll for completion (max 60 seconds)
-  const maxAttempts = 30;
-  const pollInterval = 2000;
-  
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    await new Promise(resolve => setTimeout(resolve, pollInterval));
-    
-    const statusResponse = await fetch(
-      `https://api.apify.com/v2/actor-runs/${runId}?token=${apifyToken}`
-    );
-    
-    if (!statusResponse.ok) {
-      continue;
-    }
-    
-    const statusData = await statusResponse.json();
-    const status = statusData.data?.status;
-    
-    console.log(`Apify run status (attempt ${attempt + 1}):`, status);
-    
-    if (status === 'SUCCEEDED') {
-      // Get the results
-      const datasetId = statusData.data?.defaultDatasetId;
-      
-      if (datasetId) {
-        const resultsResponse = await fetch(
-          `https://api.apify.com/v2/datasets/${datasetId}/items?token=${apifyToken}`
-        );
-        
-        if (resultsResponse.ok) {
-          const results = await resultsResponse.json();
-          console.log('Apify results:', JSON.stringify(results));
-          
-          if (results && results.length > 0) {
-            const result = results[0];
-            
-            // Handle different result formats
-            if (result.downloadUrl) {
-              return {
-                success: true,
-                url: result.downloadUrl,
-                filename: result.title ? `${result.title}.mp4` : 'video.mp4',
-                thumbnail: result.thumbnailUrl || result.thumbnail,
-                title: result.title,
-              };
-            }
-            
-            if (result.videoUrl) {
-              return {
-                success: true,
-                url: result.videoUrl,
-                filename: result.title ? `${result.title}.mp4` : 'video.mp4',
-                thumbnail: result.thumbnailUrl || result.thumbnail,
-                title: result.title,
-              };
-            }
-            
-            if (result.url) {
-              return {
-                success: true,
-                url: result.url,
-                filename: 'video.mp4',
-                thumbnail: result.thumbnail,
-                title: result.title,
-              };
-            }
-          }
-        }
-      }
-      
-      throw new Error('No download URL in Apify results');
-    }
-    
-    if (status === 'FAILED' || status === 'ABORTED' || status === 'TIMED-OUT') {
-      throw new Error(`Apify run ${status.toLowerCase()}`);
-    }
-  }
-  
-  throw new Error('Apify run timed out');
-}
-
-// RapidAPI fallback
-async function downloadWithRapidAPI(url: string): Promise<any> {
-  const rapidApiKey = Deno.env.get('RAPIDAPI_KEY');
-  
-  if (!rapidApiKey) {
-    throw new Error('RapidAPI key not configured');
-  }
-  
-  console.log('Attempting RapidAPI fallback...');
-  
-  const response = await fetch('https://all-social-media-video-downloader.p.rapidapi.com/v1/social/autolink', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-RapidAPI-Key': rapidApiKey,
-      'X-RapidAPI-Host': 'all-social-media-video-downloader.p.rapidapi.com',
-    },
-    body: JSON.stringify({ url }),
-  });
-  
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.log('RapidAPI error:', response.status, errorText);
-    throw new Error(`RapidAPI error: ${response.status}`);
-  }
-  
-  const data = await response.json();
-  console.log('RapidAPI response:', JSON.stringify(data));
-  
-  if (data.medias && data.medias.length > 0) {
-    const sortedMedias = data.medias.sort((a: any, b: any) => {
-      const qualityA = parseInt(a.quality) || 0;
-      const qualityB = parseInt(b.quality) || 0;
-      return qualityB - qualityA;
-    });
-    
-    const bestMedia = sortedMedias[0];
-    return {
-      success: true,
-      url: bestMedia.url,
-      filename: data.title ? `${data.title}.mp4` : 'video.mp4',
-      thumbnail: data.thumbnail,
-      title: data.title,
-    };
-  }
-  
-  if (data.url) {
-    return {
-      success: true,
-      url: data.url,
-      filename: 'video.mp4',
-    };
-  }
-  
-  throw new Error('No download URL found in RapidAPI response');
-}
-
-// Simple direct scraping for TikTok (backup)
-async function downloadTikTokDirect(url: string): Promise<any> {
-  console.log('Trying TikTok direct method...');
-  
-  // Try tikwm.com API (free, no auth)
-  const tikwmResponse = await fetch('https://www.tikwm.com/api/', {
+  const response = await fetch('https://www.tikwm.com/api/', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json',
     },
     body: `url=${encodeURIComponent(url)}&hd=1`,
   });
   
-  if (tikwmResponse.ok) {
-    const data = await tikwmResponse.json();
-    console.log('TikWM response:', JSON.stringify(data));
-    
-    if (data.code === 0 && data.data) {
+  if (!response.ok) {
+    throw new Error(`TikWM error: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  console.log('TikWM response code:', data.code);
+  
+  if (data.code === 0 && data.data) {
+    const videoUrl = data.data.hdplay || data.data.play;
+    if (videoUrl) {
       return {
         success: true,
-        url: data.data.hdplay || data.data.play,
-        filename: `${data.data.title || 'tiktok-video'}.mp4`,
+        url: videoUrl,
+        filename: `${data.data.title?.substring(0, 50) || 'tiktok-video'}.mp4`,
         thumbnail: data.data.cover,
         title: data.data.title,
       };
     }
   }
   
-  throw new Error('TikTok direct download failed');
+  throw new Error('TikWM: No video URL found');
+}
+
+// SaveFrom/Y2mate style API for YouTube
+async function downloadYouTube(url: string): Promise<any> {
+  console.log('Trying YouTube download...');
+  
+  // Extract video ID
+  const match = url.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  if (!match) {
+    throw new Error('Invalid YouTube URL');
+  }
+  const videoId = match[1];
+  
+  // Try yt1s.com API
+  const apiUrl = 'https://yt1s.com/api/ajaxSearch/index';
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Origin': 'https://yt1s.com',
+      'Referer': 'https://yt1s.com/',
+    },
+    body: `q=${encodeURIComponent(url)}&vt=mp4`,
+  });
+  
+  if (!response.ok) {
+    throw new Error(`yt1s error: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  console.log('yt1s response status:', data.status);
+  
+  if (data.status === 'ok' && data.links?.mp4) {
+    // Get the best quality available
+    const qualities = Object.entries(data.links.mp4);
+    if (qualities.length > 0) {
+      // Sort by quality (720p, 480p, etc)
+      const sorted = qualities.sort((a: any, b: any) => {
+        const qA = parseInt(a[1].q) || 0;
+        const qB = parseInt(b[1].q) || 0;
+        return qB - qA;
+      });
+      
+      const best = sorted[0][1] as any;
+      
+      // Get the direct download link
+      const convertUrl = 'https://yt1s.com/api/ajaxConvert/convert';
+      const convertResponse = await fetch(convertUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Origin': 'https://yt1s.com',
+          'Referer': 'https://yt1s.com/',
+        },
+        body: `vid=${data.vid}&k=${encodeURIComponent(best.k)}`,
+      });
+      
+      const convertData = await convertResponse.json();
+      console.log('yt1s convert status:', convertData.status);
+      
+      if (convertData.status === 'ok' && convertData.dlink) {
+        return {
+          success: true,
+          url: convertData.dlink,
+          filename: `${data.title || 'youtube-video'}.mp4`,
+          thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+          title: data.title,
+        };
+      }
+    }
+  }
+  
+  throw new Error('YouTube download failed');
+}
+
+// Instagram download via igram.io
+async function downloadInstagram(url: string): Promise<any> {
+  console.log('Trying Instagram download...');
+  
+  // Try saveig.app API
+  const response = await fetch('https://v3.saveig.app/api/ajaxSearch', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Origin': 'https://saveig.app',
+      'Referer': 'https://saveig.app/',
+    },
+    body: `q=${encodeURIComponent(url)}&t=media&lang=en`,
+  });
+  
+  if (!response.ok) {
+    throw new Error(`SaveIG error: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  console.log('SaveIG response status:', data.status);
+  
+  if (data.status === 'ok' && data.data) {
+    // Parse HTML response to get video URL
+    const html = data.data;
+    const videoMatch = html.match(/href="([^"]+)"[^>]*download/);
+    if (videoMatch) {
+      return {
+        success: true,
+        url: videoMatch[1],
+        filename: 'instagram-video.mp4',
+        title: 'Instagram Video',
+      };
+    }
+  }
+  
+  throw new Error('Instagram download failed');
+}
+
+// Twitter/X download
+async function downloadTwitter(url: string): Promise<any> {
+  console.log('Trying Twitter download...');
+  
+  const response = await fetch('https://twitsave.com/info?url=' + encodeURIComponent(url), {
+    headers: {
+      'Accept': 'text/html,application/xhtml+xml',
+    },
+  });
+  
+  if (!response.ok) {
+    throw new Error(`TwitSave error: ${response.status}`);
+  }
+  
+  const html = await response.text();
+  
+  // Extract video URL from HTML
+  const videoMatch = html.match(/https:\/\/[^"]+\.mp4[^"]*/);
+  if (videoMatch) {
+    return {
+      success: true,
+      url: videoMatch[0],
+      filename: 'twitter-video.mp4',
+      title: 'Twitter Video',
+    };
+  }
+  
+  throw new Error('Twitter download failed');
 }
 
 serve(async (req) => {
@@ -243,7 +208,7 @@ serve(async (req) => {
   }
   
   try {
-    const { url, downloadMode = 'auto', videoQuality = '1080' } = await req.json();
+    const { url } = await req.json();
     
     if (!url) {
       return new Response(
@@ -259,47 +224,42 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: 'Plataforma não suportada. Use YouTube, TikTok, Instagram, Twitter ou Facebook.' 
+          error: 'Plataforma não suportada. Use YouTube, TikTok, Instagram ou Twitter.' 
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
     
     let result;
+    let error;
     
-    // For TikTok, try the free tikwm API first
-    if (platform === 'tiktok') {
-      try {
-        result = await downloadTikTokDirect(url);
-        console.log('TikTok direct succeeded');
-      } catch (tikErr: any) {
-        console.log('TikTok direct failed:', tikErr.message);
+    try {
+      switch (platform) {
+        case 'tiktok':
+          result = await downloadTikTok(url);
+          break;
+        case 'youtube':
+          result = await downloadYouTube(url);
+          break;
+        case 'instagram':
+          result = await downloadInstagram(url);
+          break;
+        case 'twitter':
+          result = await downloadTwitter(url);
+          break;
+        default:
+          throw new Error('Plataforma não suportada');
       }
-    }
-    
-    // If no result yet, try Apify (we have the token)
-    if (!result) {
-      try {
-        result = await downloadWithApify(url);
-        console.log('Apify succeeded');
-      } catch (apifyError: any) {
-        console.log('Apify failed:', apifyError.message);
-        
-        // Try RapidAPI as final fallback
-        try {
-          result = await downloadWithRapidAPI(url);
-          console.log('RapidAPI succeeded');
-        } catch (rapidError: any) {
-          console.log('RapidAPI also failed:', rapidError.message);
-        }
-      }
+    } catch (e: any) {
+      error = e.message;
+      console.log(`${platform} download failed:`, error);
     }
     
     if (!result) {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: 'Não foi possível baixar o vídeo. Verifique se o link está correto e o vídeo está disponível publicamente.' 
+          error: `Não foi possível baixar o vídeo do ${platform}. ${error || 'Verifique se o link está correto e o vídeo está disponível publicamente.'}` 
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
