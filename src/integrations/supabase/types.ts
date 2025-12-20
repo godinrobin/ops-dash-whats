@@ -553,6 +553,7 @@ export type Database = {
           created_at: string
           from_instance_id: string | null
           id: string
+          message_type: string | null
           status: string
           to_instance_id: string | null
           user_id: string
@@ -563,6 +564,7 @@ export type Database = {
           created_at?: string
           from_instance_id?: string | null
           id?: string
+          message_type?: string | null
           status?: string
           to_instance_id?: string | null
           user_id: string
@@ -573,6 +575,7 @@ export type Database = {
           created_at?: string
           from_instance_id?: string | null
           id?: string
+          message_type?: string | null
           status?: string
           to_instance_id?: string | null
           user_id?: string

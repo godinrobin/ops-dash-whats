@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -111,6 +112,162 @@ serve(async (req) => {
       
       console.log('No phone number found in instance data');
       return null;
+    };
+
+    // Helper to generate audio copy with OpenAI
+    const generateAudioCopy = async (topicsText: string): Promise<string> => {
+      const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+      if (!OPENAI_API_KEY) {
+        return 'Opa, tudo bem?';
+      }
+
+      try {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${OPENAI_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini',
+            messages: [
+              {
+                role: 'system',
+                content: `Gere uma mensagem curta (máximo 100 caracteres) para ser convertida em áudio de WhatsApp.
+Tema: ${topicsText}
+Regras:
+- Linguagem informal brasileira
+- Como se fosse um áudio rápido entre amigos
+- Pode usar gírias e expressões
+- NÃO use emojis (é áudio)
+- Responda APENAS com o texto, sem aspas ou explicações`
+              }
+            ],
+            max_tokens: 100,
+            temperature: 0.9,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          return data.choices?.[0]?.message?.content?.trim() || 'E aí, beleza?';
+        }
+      } catch (e) {
+        console.error('Error generating audio copy:', e);
+      }
+
+      return 'E aí, tudo bem?';
+    };
+
+    // Helper to generate audio with ElevenLabs
+    const generateAudioWithElevenLabs = async (text: string): Promise<string> => {
+      const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
+      if (!ELEVENLABS_API_KEY) {
+        throw new Error('ELEVENLABS_API_KEY not configured');
+      }
+
+      // Using Sarah voice - female Brazilian Portuguese compatible
+      const voiceId = 'EXAVITQu4vr4xnSDxMaL';
+
+      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+        method: 'POST',
+        headers: {
+          'xi-api-key': ELEVENLABS_API_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text,
+          model_id: 'eleven_multilingual_v2',
+          output_format: 'mp3_44100_128',
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.75,
+            style: 0.5,
+            use_speaker_boost: true,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('ElevenLabs error:', errorText);
+        throw new Error('Failed to generate audio');
+      }
+
+      const audioBuffer = await response.arrayBuffer();
+      return base64Encode(audioBuffer);
+    };
+
+    // Helper to generate image with OpenAI DALL-E
+    const generateImageWithDallE = async (topicsText: string): Promise<string> => {
+      const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+      if (!OPENAI_API_KEY) {
+        throw new Error('OPENAI_API_KEY not configured');
+      }
+
+      const response = await fetch('https://api.openai.com/v1/images/generations', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'dall-e-3',
+          prompt: `Uma imagem casual e realista relacionada ao tema: ${topicsText}. Estilo informal, como uma foto compartilhada no WhatsApp entre amigos. Não inclua texto na imagem.`,
+          n: 1,
+          size: '1024x1024',
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('DALL-E error:', errorText);
+        throw new Error('Failed to generate image');
+      }
+
+      const data = await response.json();
+      return data.data[0].url;
+    };
+
+    // Helper to determine message type based on history
+    const determineMessageType = async (
+      fromInstanceId: string,
+      conversationId: string
+    ): Promise<'text' | 'audio' | 'image'> => {
+      // Get message counts by type for this instance in this conversation
+      const { data: messages } = await supabaseClient
+        .from('maturador_messages')
+        .select('message_type')
+        .eq('conversation_id', conversationId)
+        .eq('from_instance_id', fromInstanceId);
+
+      const totalCount = messages?.length || 0;
+      const textCount = messages?.filter(m => m.message_type === 'text').length || 0;
+
+      console.log(`Message stats for instance ${fromInstanceId}: total=${totalCount}, text=${textCount}`);
+
+      // First message: always text
+      if (totalCount === 0) {
+        return 'text';
+      }
+
+      // After 1st text message: send audio
+      if (totalCount === 1) {
+        return 'audio';
+      }
+
+      // After audio: send image
+      if (totalCount === 2) {
+        return 'image';
+      }
+
+      // After that, every 10 messages: random audio or image
+      if ((totalCount - 2) % 10 === 0) {
+        return Math.random() > 0.5 ? 'audio' : 'image';
+      }
+
+      // Default: text
+      return 'text';
     };
 
     let result;
@@ -448,6 +605,7 @@ serve(async (req) => {
               to_instance_id: toInstanceId,
               body: text,
               status: 'sent',
+              message_type: 'text',
             });
         }
 
@@ -612,7 +770,7 @@ serve(async (req) => {
         // Fetch last 10 messages for context
         const { data: messageHistory } = await supabaseClient
           .from('maturador_messages')
-          .select('from_instance_id, body, created_at')
+          .select('from_instance_id, body, created_at, message_type')
           .eq('conversation_id', conversationId)
           .order('created_at', { ascending: false })
           .limit(10);
@@ -627,14 +785,62 @@ serve(async (req) => {
         const toInstance = isAToB ? instanceB : instanceA;
         const toPhone = isAToB ? phoneB : phoneA;
 
-        // Generate message using AI
-        const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-        
-        let message = "Oi, tudo bem?"; // Fallback message
-        
-        if (LOVABLE_API_KEY) {
-          try {
-            const systemPrompt = `Você está simulando uma conversa natural entre dois amigos no WhatsApp brasileiro.
+        // Determine message type based on history
+        const messageType = await determineMessageType(fromInstance.id, conversationId);
+        console.log(`Determined message type: ${messageType}`);
+
+        let messageSent: any = null;
+        let messageBody = '';
+
+        try {
+          if (messageType === 'audio') {
+            // Generate audio
+            console.log('Generating audio message...');
+            const audioCopy = await generateAudioCopy(topicsText);
+            console.log('Audio copy:', audioCopy);
+            
+            const audioBase64 = await generateAudioWithElevenLabs(audioCopy);
+            console.log('Audio generated, sending via Evolution API...');
+
+            // Send audio via Evolution API
+            const sendResult = await callEvolution(`/message/sendWhatsAppAudio/${fromInstance.instance_name}`, 'POST', {
+              number: toPhone,
+              audio: `data:audio/mpeg;base64,${audioBase64}`,
+            });
+
+            console.log('Audio send result:', JSON.stringify(sendResult, null, 2));
+            messageBody = `[ÁUDIO] ${audioCopy}`;
+            messageSent = { from: fromInstance.instance_name, to: toInstance.instance_name, type: 'audio', text: audioCopy };
+
+          } else if (messageType === 'image') {
+            // Generate image
+            console.log('Generating image message...');
+            const imageUrl = await generateImageWithDallE(topicsText);
+            console.log('Image URL:', imageUrl);
+
+            // Send image via Evolution API
+            const sendResult = await callEvolution(`/message/sendMedia/${fromInstance.instance_name}`, 'POST', {
+              number: toPhone,
+              mediatype: 'image',
+              mimetype: 'image/png',
+              caption: '',
+              media: imageUrl,
+              fileName: 'image.png',
+            });
+
+            console.log('Image send result:', JSON.stringify(sendResult, null, 2));
+            messageBody = `[IMAGEM] ${topicsText}`;
+            messageSent = { from: fromInstance.instance_name, to: toInstance.instance_name, type: 'image', url: imageUrl };
+
+          } else {
+            // Generate text message using AI
+            const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+            
+            let message = "Oi, tudo bem?"; // Fallback message
+            
+            if (LOVABLE_API_KEY) {
+              try {
+                const systemPrompt = `Você está simulando uma conversa natural entre dois amigos no WhatsApp brasileiro.
 Tema principal da conversa: ${topicsText}
 
 Regras IMPORTANTES:
@@ -648,75 +854,77 @@ Regras IMPORTANTES:
 - Seja criativo e imprevisível
 - Considere o contexto das mensagens anteriores`;
 
-            const aiMessages: Array<{role: string, content: string}> = [
-              { role: 'system', content: systemPrompt }
-            ];
+                const aiMessages: Array<{role: string, content: string}> = [
+                  { role: 'system', content: systemPrompt }
+                ];
 
-            // Add conversation history as context
-            if (historyReversed.length > 0) {
-              for (const msg of historyReversed) {
-                const role = msg.from_instance_id === fromInstance.id ? 'assistant' : 'user';
-                aiMessages.push({ role, content: msg.body });
+                // Add conversation history as context
+                if (historyReversed.length > 0) {
+                  for (const msg of historyReversed) {
+                    if (msg.message_type === 'text') {
+                      const role = msg.from_instance_id === fromInstance.id ? 'assistant' : 'user';
+                      aiMessages.push({ role, content: msg.body });
+                    }
+                  }
+                  aiMessages.push({ role: 'user', content: 'Agora gere a próxima mensagem da conversa. Responda APENAS com a mensagem, sem explicações.' });
+                } else {
+                  aiMessages.push({ role: 'user', content: 'Inicie a conversa com uma saudação casual. Responda APENAS com a mensagem, sem explicações.' });
+                }
+
+                console.log('Calling AI to generate message...');
+                
+                const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    model: 'google/gemini-2.5-flash',
+                    messages: aiMessages,
+                    max_tokens: 100,
+                    temperature: 0.9,
+                  }),
+                });
+
+                if (aiResponse.ok) {
+                  const aiData = await aiResponse.json();
+                  const generatedMessage = aiData.choices?.[0]?.message?.content?.trim();
+                  if (generatedMessage && generatedMessage.length > 0 && generatedMessage.length <= 200) {
+                    message = generatedMessage;
+                    console.log('AI generated message:', message);
+                  } else {
+                    console.log('AI response invalid, using fallback');
+                  }
+                } else {
+                  console.error('AI API error:', await aiResponse.text());
+                }
+              } catch (aiError) {
+                console.error('Error calling AI:', aiError);
               }
-              aiMessages.push({ role: 'user', content: 'Agora gere a próxima mensagem da conversa. Responda APENAS com a mensagem, sem explicações.' });
             } else {
-              aiMessages.push({ role: 'user', content: 'Inicie a conversa com uma saudação casual. Responda APENAS com a mensagem, sem explicações.' });
+              console.log('LOVABLE_API_KEY not found, using fallback messages');
+              const fallbackMessages = [
+                "Oi, tudo bem?",
+                "E aí, beleza?",
+                "Opa, como vai?",
+                "Fala aí!",
+                "Boa! Tudo certo?",
+              ];
+              message = fallbackMessages[Math.floor(Math.random() * fallbackMessages.length)];
             }
 
-            console.log('Calling AI to generate message...');
+            console.log(`Sending text message from ${fromInstance.instance_name} to ${toPhone}: ${message}`);
             
-            const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                model: 'google/gemini-2.5-flash',
-                messages: aiMessages,
-                max_tokens: 100,
-                temperature: 0.9,
-              }),
+            const sendResult = await callEvolution(`/message/sendText/${fromInstance.instance_name}`, 'POST', {
+              number: toPhone,
+              text: message,
             });
 
-            if (aiResponse.ok) {
-              const aiData = await aiResponse.json();
-              const generatedMessage = aiData.choices?.[0]?.message?.content?.trim();
-              if (generatedMessage && generatedMessage.length > 0 && generatedMessage.length <= 200) {
-                message = generatedMessage;
-                console.log('AI generated message:', message);
-              } else {
-                console.log('AI response invalid, using fallback');
-              }
-            } else {
-              console.error('AI API error:', await aiResponse.text());
-            }
-          } catch (aiError) {
-            console.error('Error calling AI:', aiError);
+            console.log('Send result:', JSON.stringify(sendResult, null, 2));
+            messageBody = message;
+            messageSent = { from: fromInstance.instance_name, to: toInstance.instance_name, type: 'text', message };
           }
-        } else {
-          console.log('LOVABLE_API_KEY not found, using fallback messages');
-          const fallbackMessages = [
-            "Oi, tudo bem?",
-            "E aí, beleza?",
-            "Opa, como vai?",
-            "Fala aí!",
-            "Boa! Tudo certo?",
-          ];
-          message = fallbackMessages[Math.floor(Math.random() * fallbackMessages.length)];
-        }
-
-        let messageSent = null;
-
-        try {
-          console.log(`Sending message from ${fromInstance.instance_name} to ${toPhone}: ${message}`);
-          
-          const sendResult = await callEvolution(`/message/sendText/${fromInstance.instance_name}`, 'POST', {
-            number: toPhone,
-            text: message,
-          });
-
-          console.log('Send result:', JSON.stringify(sendResult, null, 2));
 
           // Save to database
           await supabaseClient
@@ -726,15 +934,14 @@ Regras IMPORTANTES:
               conversation_id: conversationId,
               from_instance_id: fromInstance.id,
               to_instance_id: toInstance.id,
-              body: message,
+              body: messageBody,
               status: 'sent',
+              message_type: messageType,
             });
 
-          messageSent = { from: fromInstance.instance_name, to: toInstance.instance_name, message };
-
         } catch (error) {
-          console.error(`Error sending message:`, error);
-          return new Response(JSON.stringify({ error: 'Erro ao enviar mensagem' }), {
+          console.error(`Error sending ${messageType} message:`, error);
+          return new Response(JSON.stringify({ error: `Erro ao enviar ${messageType}` }), {
             status: 500,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
