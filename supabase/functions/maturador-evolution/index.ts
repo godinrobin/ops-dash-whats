@@ -805,12 +805,14 @@ Regras:
             const audioBase64 = await generateAudioWithElevenLabs(audioCopy);
             console.log('Audio generated, sending via Evolution API...');
 
-            // Send audio via Evolution API - using sendMedia endpoint with ptt (push-to-talk) type
+            // Send audio via Evolution API
+            // IMPORTANT: Evolution expects raw base64 or URL; data-URI prefix breaks validation.
             const sendResult = await callEvolution(`/message/sendMedia/${fromInstance.instance_name}`, 'POST', {
               number: toPhone,
               mediatype: 'audio',
               mimetype: 'audio/mpeg',
-              media: `data:audio/mpeg;base64,${audioBase64}`,
+              media: audioBase64,
+              fileName: 'audio.mp3',
             });
 
             console.log('Audio send result:', JSON.stringify(sendResult, null, 2));
