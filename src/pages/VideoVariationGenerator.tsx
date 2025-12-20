@@ -65,6 +65,8 @@ interface GeneratedVideo {
   isSubtitled?: boolean;
   subtitleRequestId?: string;
   subtitleStatus?: 'queued' | 'processing' | 'done' | 'failed';
+  subtitledUrl?: string; // URL do vídeo legendado
+  originalUrl?: string; // URL original (sem legenda)
 }
 
 interface SubtitleConfig {
@@ -722,7 +724,9 @@ export default function VideoVariationGenerator() {
                 ? { 
                     ...v, 
                     subtitleStatus: 'done' as const,
-                    url: result.videoUrl,
+                    subtitledUrl: result.videoUrl,
+                    originalUrl: v.originalUrl || v.url, // Preserve original URL
+                    url: result.videoUrl, // Update main URL to subtitled version
                     isSubtitled: true
                   }
                 : v
@@ -1562,26 +1566,82 @@ export default function VideoVariationGenerator() {
                       
                       {video.status === 'done' && video.url && (
                         <div className="space-y-2">
+                          {/* Preview buttons */}
                           <div className="flex gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setPreviewVideo(video.url!)}
-                              className="flex-1"
-                            >
-                              <Eye className="mr-1 h-3 w-3" />
-                              Preview
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => downloadVideo(video.url!, video.name + (video.isSubtitled ? '-legendado' : ''))}
-                              className="flex-1 border-accent"
-                            >
-                              <Download className="mr-1 h-3 w-3" />
-                              Baixar
-                            </Button>
+                            {video.isSubtitled && video.subtitledUrl ? (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setPreviewVideo(video.subtitledUrl!)}
+                                  className="flex-1 border-orange-500 text-orange-500 hover:bg-orange-500/10"
+                                >
+                                  <Eye className="mr-1 h-3 w-3" />
+                                  Preview Legendado
+                                </Button>
+                                {video.originalUrl && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setPreviewVideo(video.originalUrl!)}
+                                    className="flex-1"
+                                  >
+                                    <Eye className="mr-1 h-3 w-3" />
+                                    Original
+                                  </Button>
+                                )}
+                              </>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPreviewVideo(video.url!)}
+                                className="flex-1"
+                              >
+                                <Eye className="mr-1 h-3 w-3" />
+                                Preview
+                              </Button>
+                            )}
                           </div>
+                          
+                          {/* Download buttons */}
+                          <div className="flex gap-2">
+                            {video.isSubtitled && video.subtitledUrl ? (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => downloadVideo(video.subtitledUrl!, video.name + '-legendado')}
+                                  className="flex-1 border-orange-500 text-orange-500 hover:bg-orange-500/10"
+                                >
+                                  <Download className="mr-1 h-3 w-3" />
+                                  Baixar Legendado
+                                </Button>
+                                {video.originalUrl && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => downloadVideo(video.originalUrl!, video.name)}
+                                    className="flex-1"
+                                  >
+                                    <Download className="mr-1 h-3 w-3" />
+                                    Original
+                                  </Button>
+                                )}
+                              </>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => downloadVideo(video.url!, video.name)}
+                                className="flex-1 border-accent"
+                              >
+                                <Download className="mr-1 h-3 w-3" />
+                                Baixar
+                              </Button>
+                            )}
+                          </div>
+                          
                           <Button
                             variant="outline"
                             size="sm"
