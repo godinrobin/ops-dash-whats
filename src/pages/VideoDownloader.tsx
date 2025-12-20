@@ -7,27 +7,14 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Download, Loader2, Video, Music, Instagram, ArrowLeft } from "lucide-react";
+import { Download, Loader2, Video, Music, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-// Platform detection patterns - only TikTok and Instagram
-const PLATFORM_PATTERNS: Record<string, RegExp> = {
-  tiktok: /(?:tiktok\.com\/@[\w.-]+\/video\/|vm\.tiktok\.com\/|tiktok\.com\/t\/|vt\.tiktok\.com\/)(\w+)/i,
-  instagram: /(?:instagram\.com\/(?:p|reel|reels|tv)\/)([\w-]+)/i,
-};
+// Platform detection pattern - only TikTok
+const TIKTOK_PATTERN = /(?:tiktok\.com\/@[\w.-]+\/video\/|vm\.tiktok\.com\/|tiktok\.com\/t\/|vt\.tiktok\.com\/)(\w+)/i;
 
-const PLATFORM_INFO: Record<string, { name: string; icon: React.ReactNode; color: string }> = {
-  tiktok: { name: "TikTok", icon: <span className="text-lg">🎵</span>, color: "text-pink-500" },
-  instagram: { name: "Instagram", icon: <Instagram className="w-5 h-5" />, color: "text-purple-500" },
-};
-
-function detectPlatform(url: string): string | null {
-  for (const [platform, pattern] of Object.entries(PLATFORM_PATTERNS)) {
-    if (pattern.test(url)) {
-      return platform;
-    }
-  }
-  return null;
+function isTikTokUrl(url: string): boolean {
+  return TIKTOK_PATTERN.test(url);
 }
 
 const VideoDownloader = () => {
@@ -36,28 +23,27 @@ const VideoDownloader = () => {
   const [url, setUrl] = useState("");
   const [downloadMode, setDownloadMode] = useState<"auto" | "audio">("auto");
   const [isLoading, setIsLoading] = useState(false);
-  const [detectedPlatform, setDetectedPlatform] = useState<string | null>(null);
+  const [isTikTok, setIsTikTok] = useState(false);
 
   const handleUrlChange = (value: string) => {
     setUrl(value);
-    const platform = detectPlatform(value);
-    setDetectedPlatform(platform);
+    setIsTikTok(isTikTokUrl(value));
   };
 
   const handleDownload = async () => {
     if (!url.trim()) {
       toast({
         title: "URL obrigatória",
-        description: "Cole o link do vídeo que deseja baixar",
+        description: "Cole o link do vídeo do TikTok que deseja baixar",
         variant: "destructive",
       });
       return;
     }
 
-    if (!detectedPlatform) {
+    if (!isTikTok) {
       toast({
-        title: "Plataforma não suportada",
-        description: "Use links do TikTok ou Instagram",
+        title: "Link inválido",
+        description: "Use apenas links do TikTok",
         variant: "destructive",
       });
       return;
@@ -78,24 +64,34 @@ const VideoDownloader = () => {
         throw new Error(data.error || "Erro ao processar download");
       }
 
-       // Try to trigger a real download (especially for audio)
-       const a = document.createElement("a");
-       a.href = data.url;
-       a.download = data.filename || "download";
-       a.rel = "noopener noreferrer";
-       document.body.appendChild(a);
-       a.click();
-       a.remove();
+      // Fetch the video/audio as blob and trigger real download
+      toast({
+        title: "Baixando...",
+        description: "Aguarde enquanto preparamos seu arquivo",
+      });
 
-       // Fallback: some providers ignore download attribute
-       if (downloadMode !== "audio") {
-         window.open(data.url, "_blank");
-       }
+      const response = await fetch(data.url);
+      if (!response.ok) {
+        throw new Error("Erro ao baixar arquivo");
+      }
 
-       toast({
-         title: "Download iniciado!",
-         description: data.title || "O download será iniciado em instantes",
-       });
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = data.filename || (downloadMode === "audio" ? "tiktok-audio.mp3" : "tiktok-video.mp4");
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
+      // Clean up blob URL
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+
+      toast({
+        title: "Download concluído!",
+        description: data.title || "Arquivo baixado com sucesso",
+      });
     } catch (error: any) {
       console.error("Download error:", error);
       toast({
@@ -107,8 +103,6 @@ const VideoDownloader = () => {
       setIsLoading(false);
     }
   };
-
-  const platformInfo = detectedPlatform ? PLATFORM_INFO[detectedPlatform] : null;
 
   return (
     <>
@@ -128,13 +122,13 @@ const VideoDownloader = () => {
           <Card className="border-2 border-accent">
             <CardHeader className="text-center">
               <div className="flex justify-center mb-4">
-                <span className="text-6xl">⬇️</span>
+                <span className="text-6xl">🎵</span>
               </div>
-              <CardTitle className="text-2xl md:text-3xl bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">
-                Downloader de Vídeos
+              <CardTitle className="text-2xl md:text-3xl bg-gradient-to-r from-pink-500 to-cyan-400 bg-clip-text text-transparent">
+                Download Vídeos TikTok
               </CardTitle>
               <CardDescription className="text-base">
-                Baixe vídeos do TikTok e Instagram gratuitamente
+                Baixe vídeos do TikTok sem marca d'água gratuitamente
               </CardDescription>
             </CardHeader>
 
@@ -146,60 +140,58 @@ const VideoDownloader = () => {
                   <Input
                     id="url"
                     type="url"
-                    placeholder="Cole o link do vídeo aqui..."
+                    placeholder="Cole o link do TikTok aqui..."
                     value={url}
                     onChange={(e) => handleUrlChange(e.target.value)}
                     className="pr-12"
                   />
-                  {platformInfo && (
-                    <div className={`absolute right-3 top-1/2 -translate-y-1/2 ${platformInfo.color}`}>
-                      {platformInfo.icon}
+                  {isTikTok && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-pink-500">
+                      <span className="text-lg">🎵</span>
                     </div>
                   )}
                 </div>
-                {platformInfo && (
-                  <p className={`text-sm ${platformInfo.color}`}>
-                    {platformInfo.name} detectado
+                {isTikTok && (
+                  <p className="text-sm text-pink-500">
+                    TikTok detectado ✓
                   </p>
                 )}
               </div>
 
-              {/* Format Selection - Only for TikTok */}
-              {detectedPlatform === "tiktok" && (
-                <div className="space-y-2">
-                  <Label>Formato</Label>
-                  <Select value={downloadMode} onValueChange={(v) => setDownloadMode(v as "auto" | "audio")}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="auto">
-                        <div className="flex items-center gap-2">
-                          <Video className="w-4 h-4" />
-                          Vídeo (MP4)
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="audio">
-                        <div className="flex items-center gap-2">
-                          <Music className="w-4 h-4" />
-                          Áudio (MP3)
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+              {/* Format Selection */}
+              <div className="space-y-2">
+                <Label>Formato</Label>
+                <Select value={downloadMode} onValueChange={(v) => setDownloadMode(v as "auto" | "audio")}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">
+                      <div className="flex items-center gap-2">
+                        <Video className="w-4 h-4" />
+                        Vídeo (MP4) - Sem marca d'água
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="audio">
+                      <div className="flex items-center gap-2">
+                        <Music className="w-4 h-4" />
+                        Apenas Áudio (MP3)
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
               {/* Download Button */}
               <Button
                 onClick={handleDownload}
-                disabled={isLoading || !url.trim()}
-                className="w-full h-12 text-lg bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600"
+                disabled={isLoading || !url.trim() || !isTikTok}
+                className="w-full h-12 text-lg bg-gradient-to-r from-pink-500 to-cyan-400 hover:from-pink-600 hover:to-cyan-500"
               >
                 {isLoading ? (
                   <>
                     <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    Processando...
+                    Baixando...
                   </>
                 ) : (
                   <>
@@ -208,36 +200,18 @@ const VideoDownloader = () => {
                   </>
                 )}
               </Button>
-
-              {/* Supported Platforms */}
-              <div className="pt-4 border-t border-border">
-                <p className="text-sm text-muted-foreground text-center mb-3">
-                  Plataformas suportadas
-                </p>
-                <div className="flex justify-center gap-8">
-                  {Object.entries(PLATFORM_INFO).map(([key, info]) => (
-                    <div
-                      key={key}
-                      className={`flex flex-col items-center gap-1 ${info.color} opacity-70`}
-                    >
-                      {info.icon}
-                      <span className="text-xs">{info.name}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </CardContent>
           </Card>
 
           {/* Info Card */}
           <Card className="mt-6 bg-muted/50">
             <CardContent className="pt-6">
-              <h3 className="font-semibold mb-2">💡 Dicas</h3>
+              <h3 className="font-semibold mb-2">💡 Como usar</h3>
               <ul className="text-sm text-muted-foreground space-y-1">
-                <li>• Cole o link completo do vídeo</li>
-                <li>• O vídeo precisa estar público</li>
-                <li>• Alguns vídeos podem não estar disponíveis por restrições da plataforma</li>
-                <li>• Para TikTok, o vídeo será baixado sem marca d'água</li>
+                <li>1. Abra o TikTok e encontre o vídeo que deseja baixar</li>
+                <li>2. Toque em "Compartilhar" e copie o link</li>
+                <li>3. Cole o link aqui e clique em "Baixar"</li>
+                <li>4. O vídeo será baixado sem marca d'água!</li>
               </ul>
             </CardContent>
           </Card>
