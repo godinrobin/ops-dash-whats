@@ -7,24 +7,18 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Download, Loader2, Video, Music, Youtube, Instagram, ArrowLeft } from "lucide-react";
+import { Download, Loader2, Video, Music, Instagram, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-// Platform detection patterns
+// Platform detection patterns - only TikTok and Instagram
 const PLATFORM_PATTERNS: Record<string, RegExp> = {
-  youtube: /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
   tiktok: /(?:tiktok\.com\/@[\w.-]+\/video\/|vm\.tiktok\.com\/|tiktok\.com\/t\/|vt\.tiktok\.com\/)(\w+)/i,
   instagram: /(?:instagram\.com\/(?:p|reel|reels|tv)\/)([\w-]+)/i,
-  twitter: /(?:twitter\.com|x\.com)\/\w+\/status\/(\d+)/i,
-  facebook: /(?:facebook\.com|fb\.watch)\/(?:watch\/?\?v=|reel\/|[\w.]+\/videos\/)(\d+)?/i,
 };
 
 const PLATFORM_INFO: Record<string, { name: string; icon: React.ReactNode; color: string }> = {
-  youtube: { name: "YouTube", icon: <Youtube className="w-5 h-5" />, color: "text-red-500" },
   tiktok: { name: "TikTok", icon: <span className="text-lg">🎵</span>, color: "text-pink-500" },
   instagram: { name: "Instagram", icon: <Instagram className="w-5 h-5" />, color: "text-purple-500" },
-  twitter: { name: "Twitter/X", icon: <span className="text-lg">𝕏</span>, color: "text-foreground" },
-  facebook: { name: "Facebook", icon: <span className="text-lg">📘</span>, color: "text-blue-500" },
 };
 
 function detectPlatform(url: string): string | null {
@@ -41,7 +35,6 @@ const VideoDownloader = () => {
   const { toast } = useToast();
   const [url, setUrl] = useState("");
   const [downloadMode, setDownloadMode] = useState<"auto" | "audio">("auto");
-  const [videoQuality, setVideoQuality] = useState("1080");
   const [isLoading, setIsLoading] = useState(false);
   const [detectedPlatform, setDetectedPlatform] = useState<string | null>(null);
 
@@ -64,7 +57,7 @@ const VideoDownloader = () => {
     if (!detectedPlatform) {
       toast({
         title: "Plataforma não suportada",
-        description: "Use links do YouTube, TikTok, Instagram, Twitter ou Facebook",
+        description: "Use links do TikTok ou Instagram",
         variant: "destructive",
       });
       return;
@@ -74,7 +67,7 @@ const VideoDownloader = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke("video-downloader", {
-        body: { url, downloadMode, videoQuality },
+        body: { url, downloadMode },
       });
 
       if (error) {
@@ -137,11 +130,11 @@ const VideoDownloader = () => {
               <div className="flex justify-center mb-4">
                 <span className="text-6xl">⬇️</span>
               </div>
-              <CardTitle className="text-2xl md:text-3xl bg-gradient-to-r from-red-500 to-pink-500 bg-clip-text text-transparent">
+              <CardTitle className="text-2xl md:text-3xl bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">
                 Downloader de Vídeos
               </CardTitle>
               <CardDescription className="text-base">
-                Baixe vídeos do YouTube, TikTok, Instagram, Twitter e Facebook
+                Baixe vídeos do TikTok e Instagram gratuitamente
               </CardDescription>
             </CardHeader>
 
@@ -171,8 +164,8 @@ const VideoDownloader = () => {
                 )}
               </div>
 
-              {/* Format Selection */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* Format Selection - Only for TikTok */}
+              {detectedPlatform === "tiktok" && (
                 <div className="space-y-2">
                   <Label>Formato</Label>
                   <Select value={downloadMode} onValueChange={(v) => setDownloadMode(v as "auto" | "audio")}>
@@ -195,29 +188,13 @@ const VideoDownloader = () => {
                     </SelectContent>
                   </Select>
                 </div>
-
-                <div className="space-y-2">
-                  <Label>Qualidade</Label>
-                  <Select value={videoQuality} onValueChange={setVideoQuality} disabled={downloadMode === "audio"}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="360">360p</SelectItem>
-                      <SelectItem value="480">480p</SelectItem>
-                      <SelectItem value="720">720p (HD)</SelectItem>
-                      <SelectItem value="1080">1080p (Full HD)</SelectItem>
-                      <SelectItem value="max">Máxima</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              )}
 
               {/* Download Button */}
               <Button
                 onClick={handleDownload}
                 disabled={isLoading || !url.trim()}
-                className="w-full h-12 text-lg bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600"
+                className="w-full h-12 text-lg bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600"
               >
                 {isLoading ? (
                   <>
@@ -237,7 +214,7 @@ const VideoDownloader = () => {
                 <p className="text-sm text-muted-foreground text-center mb-3">
                   Plataformas suportadas
                 </p>
-                <div className="flex justify-center gap-6">
+                <div className="flex justify-center gap-8">
                   {Object.entries(PLATFORM_INFO).map(([key, info]) => (
                     <div
                       key={key}
