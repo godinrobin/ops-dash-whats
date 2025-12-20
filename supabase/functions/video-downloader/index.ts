@@ -76,7 +76,16 @@ async function downloadTikTok(url: string, opts: { downloadMode?: "auto" | "audi
   throw new Error("TikWM: No media URL found");
 }
 
-// YouTube download via Piped public API (no auth)
+// =============================================================================
+// YOUTUBE DOWNLOAD via Invidious & Piped public APIs (no auth)
+// =============================================================================
+
+const INVIDIOUS_INSTANCES_API = "https://api.invidious.io/instances.json?sort_by=type,users";
+const INVIDIOUS_FALLBACKS = [
+  "https://inv.tux.pizza",
+  "https://invidious.nerdvpn.de",
+  "https://yt.artemislena.eu",
+];
 const PIPED_INSTANCES_API = "https://piped-instances.kavin.rocks/";
 const PIPED_FALLBACKS = [
   "https://pipedapi.kavin.rocks",
@@ -88,17 +97,33 @@ type DownloadOpts = {
   videoQuality?: string;
 };
 
+// Fetch working Invidious API URLs
+async function getInvidiousApiUrls(): Promise<string[]> {
+  try {
+    const res = await fetch(INVIDIOUS_INSTANCES_API, { headers: { Accept: "application/json" } });
+    if (!res.ok) return INVIDIOUS_FALLBACKS;
+
+    const list = (await res.json()) as Array<any>;
+    const apiUrls = (Array.isArray(list) ? list : [])
+      .map(([hostname, data]: any) => {
+        if (!data?.api || data?.type !== "https") return null;
+        return `https://${hostname}`;
+      })
+      .filter(Boolean) as string[];
+
+    return [...new Set([...apiUrls.slice(0, 6), ...INVIDIOUS_FALLBACKS])];
+  } catch {
+    return INVIDIOUS_FALLBACKS;
+  }
+}
+
+// Fetch working Piped API URLs
 async function getPipedApiUrls(): Promise<string[]> {
   try {
     const res = await fetch(PIPED_INSTANCES_API, { headers: { Accept: "application/json" } });
     if (!res.ok) return PIPED_FALLBACKS;
 
     const list = (await res.json()) as Array<any>;
-    const apiUrls = (Array.isArray(list) ? list : [])
-      .map((x) => String(x?.api_url || "").trim())
-      .filter(Boolean);
-
-    // Prefer higher uptime when available
     const scored = (Array.isArray(list) ? list : [])
       .map((x) => ({
         api_url: String(x?.api_url || "").trim(),
@@ -108,56 +133,42 @@ async function getPipedApiUrls(): Promise<string[]> {
       .sort((a, b) => b.score - a.score)
       .map((x) => x.api_url);
 
-    const merged = [...new Set([...(scored.length ? scored : apiUrls), ...PIPED_FALLBACKS])];
-    return merged.slice(0, 8);
-  } catch (e) {
-    console.log("Failed to fetch Piped instances API, using fallbacks.");
+    return [...new Set([...scored.slice(0, 6), ...PIPED_FALLBACKS])];
+  } catch {
     return PIPED_FALLBACKS;
   }
 }
 
-async function downloadYouTube(url: string, opts: DownloadOpts = {}): Promise<any> {
-  console.log("Trying YouTube download via Piped...");
-
-  const match = url.match(
-    /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
-  );
-  if (!match) throw new Error("Invalid YouTube URL");
-
-  const videoId = match[1];
+// =========================== INVIDIOUS DOWNLOADER ===========================
+async function tryInvidious(
+  videoId: string,
+  opts: DownloadOpts
+): Promise<any | null> {
   const downloadMode = opts.downloadMode || "auto";
-
   const requestedHeight = (() => {
     const n = parseInt(String(opts.videoQuality || ""), 10);
     return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY;
   })();
 
-  const instances = await getPipedApiUrls();
-  let lastError = "";
+  const instances = await getInvidiousApiUrls();
+  console.log("Invidious instances to try:", instances.length);
 
   for (const base of instances) {
     try {
-      const endpoint = `${base}/streams/${videoId}`;
-      console.log("Piped endpoint:", endpoint);
+      const endpoint = `${base}/api/v1/videos/${videoId}`;
+      console.log("Invidious endpoint:", endpoint);
 
-      const res = await fetch(endpoint, {
-        headers: { Accept: "application/json" },
-      });
-
+      const res = await fetch(endpoint, { headers: { Accept: "application/json" } });
       if (!res.ok) {
-        lastError = `Piped error: ${res.status}`;
-        console.log("Piped non-OK:", lastError);
+        console.log(`Invidious ${base} HTTP ${res.status}`);
         continue;
       }
 
-      // Some instances return HTML like "Service has been ..." with 200.
       const ct = (res.headers.get("content-type") || "").toLowerCase();
       const raw = await res.text();
 
-      if (!ct.includes("application/json")) {
-        const snippet = raw.slice(0, 60).replace(/\s+/g, " ");
-        lastError = `Piped: resposta inválida (${snippet})`;
-        console.log("Piped invalid content-type:", ct, snippet);
+      if (!ct.includes("application/json") || raw.includes("<!DOCTYPE")) {
+        console.log("Invidious invalid response:", raw.slice(0, 60));
         continue;
       }
 
@@ -165,9 +176,108 @@ async function downloadYouTube(url: string, opts: DownloadOpts = {}): Promise<an
       try {
         data = JSON.parse(raw);
       } catch {
-        const snippet = raw.slice(0, 60).replace(/\s+/g, " ");
-        lastError = `Piped: JSON inválido (${snippet})`;
-        console.log("Piped JSON parse error:", snippet);
+        continue;
+      }
+
+      const title = data?.title || "youtube-video";
+      const thumbnail =
+        data?.videoThumbnails?.[0]?.url || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+
+      // adaptiveFormats + formatStreams available
+      const adaptiveFormats: any[] = Array.isArray(data?.adaptiveFormats) ? data.adaptiveFormats : [];
+      const formatStreams: any[] = Array.isArray(data?.formatStreams) ? data.formatStreams : [];
+
+      if (downloadMode === "audio") {
+        const audios = adaptiveFormats.filter((f) => String(f?.type || "").startsWith("audio/"));
+        if (!audios.length) {
+          console.log("Invidious no audio streams found");
+          continue;
+        }
+        const best = audios.sort(
+          (a, b) => Number(b?.bitrate || 0) - Number(a?.bitrate || 0)
+        )[0];
+        if (!best?.url) continue;
+
+        return {
+          success: true,
+          url: best.url,
+          filename: `${title}`.slice(0, 80) + ".m4a",
+          thumbnail,
+          title,
+        };
+      }
+
+      // Video
+      const allVideos = [
+        ...formatStreams,
+        ...adaptiveFormats.filter((f) => String(f?.type || "").startsWith("video/")),
+      ];
+      if (!allVideos.length) {
+        console.log("Invidious no video streams");
+        continue;
+      }
+
+      const getHeight = (f: any) => {
+        const m = String(f?.resolution || f?.qualityLabel || "").match(/(\d+)/);
+        return m ? parseInt(m[1], 10) : 0;
+      };
+
+      const sorted = allVideos.slice().sort((a, b) => getHeight(b) - getHeight(a));
+      const best = sorted.find((f) => getHeight(f) <= requestedHeight) || sorted[0];
+      if (!best?.url) continue;
+
+      return {
+        success: true,
+        url: best.url,
+        filename: `${title}`.slice(0, 80) + ".mp4",
+        thumbnail,
+        title,
+      };
+    } catch (e: any) {
+      console.log("Invidious instance failed:", base, e?.message || e);
+    }
+  }
+
+  return null;
+}
+
+// ============================= PIPED DOWNLOADER =============================
+async function tryPiped(
+  videoId: string,
+  opts: DownloadOpts
+): Promise<any | null> {
+  const downloadMode = opts.downloadMode || "auto";
+  const requestedHeight = (() => {
+    const n = parseInt(String(opts.videoQuality || ""), 10);
+    return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY;
+  })();
+
+  const instances = await getPipedApiUrls();
+  console.log("Piped instances to try:", instances.length);
+
+  for (const base of instances) {
+    try {
+      const endpoint = `${base}/streams/${videoId}`;
+      console.log("Piped endpoint:", endpoint);
+
+      const res = await fetch(endpoint, { headers: { Accept: "application/json" } });
+      if (!res.ok) {
+        console.log(`Piped ${base} HTTP ${res.status}`);
+        continue;
+      }
+
+      const ct = (res.headers.get("content-type") || "").toLowerCase();
+      const raw = await res.text();
+
+      if (!ct.includes("application/json") || raw.includes("<!DOCTYPE") || raw.includes("Service has been")) {
+        console.log("Piped invalid response:", raw.slice(0, 60));
+        continue;
+      }
+
+      let data: any;
+      try {
+        data = JSON.parse(raw);
+      } catch {
         continue;
       }
 
@@ -177,9 +287,9 @@ async function downloadYouTube(url: string, opts: DownloadOpts = {}): Promise<an
 
       if (downloadMode === "audio") {
         const audioStreams = Array.isArray(data?.audioStreams) ? data.audioStreams : [];
-        if (!audioStreams.length) throw new Error("Piped: No audio streams");
+        if (!audioStreams.length) continue;
 
-        const bestAudio = audioStreams
+        const best = audioStreams
           .slice()
           .sort((a: any, b: any) => {
             const qA = parseInt(String(a?.quality || "0"), 10) || 0;
@@ -187,11 +297,11 @@ async function downloadYouTube(url: string, opts: DownloadOpts = {}): Promise<an
             return qB - qA;
           })[0];
 
-        if (!bestAudio?.url) throw new Error("Piped: Missing audio URL");
+        if (!best?.url) continue;
 
         return {
           success: true,
-          url: bestAudio.url,
+          url: best.url,
           filename: `${title}`.slice(0, 80) + ".m4a",
           thumbnail,
           title,
@@ -199,37 +309,55 @@ async function downloadYouTube(url: string, opts: DownloadOpts = {}): Promise<an
       }
 
       const videoStreams = Array.isArray(data?.videoStreams) ? data.videoStreams : [];
-      const mp4Streams = videoStreams.filter(
-        (s: any) =>
-          String(s?.mimeType || "").includes("video/") && String(s?.mimeType || "").includes("mp4")
+      const mp4Streams = videoStreams.filter((s: any) =>
+        String(s?.mimeType || "").includes("video/") && String(s?.mimeType || "").includes("mp4")
       );
       const candidates = mp4Streams.length ? mp4Streams : videoStreams;
 
-      if (!candidates.length) throw new Error("Piped: No video streams");
+      if (!candidates.length) continue;
 
       const sorted = candidates
         .slice()
         .sort((a: any, b: any) => Number(b?.height || 0) - Number(a?.height || 0));
 
-      const bestVideo =
-        sorted.find((s: any) => Number(s?.height || 0) <= requestedHeight) || sorted[0];
-
-      if (!bestVideo?.url) throw new Error("Piped: Missing video URL");
+      const best = sorted.find((s: any) => Number(s?.height || 0) <= requestedHeight) || sorted[0];
+      if (!best?.url) continue;
 
       return {
         success: true,
-        url: bestVideo.url,
+        url: best.url,
         filename: `${title}`.slice(0, 80) + ".mp4",
         thumbnail,
         title,
       };
     } catch (e: any) {
-      lastError = e?.message || String(e);
-      console.log("Piped instance failed:", base, lastError);
+      console.log("Piped instance failed:", base, e?.message || e);
     }
   }
 
-  throw new Error(lastError || "YouTube indisponível no momento");
+  return null;
+}
+
+// ============================== MAIN YOUTUBE ================================
+async function downloadYouTube(url: string, opts: DownloadOpts = {}): Promise<any> {
+  console.log("Trying YouTube download...");
+
+  const match = url.match(
+    /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+  );
+  if (!match) throw new Error("Invalid YouTube URL");
+
+  const videoId = match[1];
+
+  // 1) Try Invidious first (more reliable recently)
+  const invResult = await tryInvidious(videoId, opts);
+  if (invResult) return invResult;
+
+  // 2) Fallback to Piped
+  const pipedResult = await tryPiped(videoId, opts);
+  if (pipedResult) return pipedResult;
+
+  throw new Error("YouTube indisponível no momento. Todas as instâncias falharam.");
 }
 
 // Instagram download via igram.io
