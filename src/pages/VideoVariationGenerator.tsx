@@ -27,8 +27,14 @@ import {
   Sparkles,
   Music,
   Pause,
-  RefreshCw
+  RefreshCw,
+  Subtitles,
+  Check,
+  Square,
+  CheckSquare
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface VideoClip {
   id: string;
@@ -56,6 +62,19 @@ interface GeneratedVideo {
   requestId?: string;
   responseUrl?: string;
   hasAudio?: boolean;
+  isSubtitled?: boolean;
+  subtitleRequestId?: string;
+  subtitleStatus?: 'queued' | 'processing' | 'done' | 'failed';
+}
+
+interface SubtitleConfig {
+  style: 'tiktok' | 'youtube' | 'classic' | 'custom';
+  font: string;
+  fontSize: number;
+  primaryColor: string;
+  highlightColor: string;
+  yPosition: number;
+  maxWordsPerSegment: number;
 }
 
 interface VideoAnalysis {
@@ -97,7 +116,22 @@ export default function VideoVariationGenerator() {
   // Pause state
   const [isPaused, setIsPaused] = useState(false);
   
+  // Subtitle state
+  const [selectedForSubtitle, setSelectedForSubtitle] = useState<string[]>([]);
+  const [showSubtitleModal, setShowSubtitleModal] = useState(false);
+  const [subtitleConfig, setSubtitleConfig] = useState<SubtitleConfig>({
+    style: 'tiktok',
+    font: 'Montserrat/Montserrat-ExtraBold.ttf',
+    fontSize: 80,
+    primaryColor: 'white',
+    highlightColor: 'yellow',
+    yPosition: 70,
+    maxWordsPerSegment: 3
+  });
+  const [isAddingSubtitles, setIsAddingSubtitles] = useState(false);
+  
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const subtitlePollingRef = useRef<NodeJS.Timeout | null>(null);
   const generatedVideosRef = useRef<GeneratedVideo[]>();
 
   const canShowAudioSection = hookVideos.length > 0 && bodyVideos.length > 0 && ctaVideos.length > 0;
@@ -123,6 +157,9 @@ export default function VideoVariationGenerator() {
     return () => {
       if (pollingRef.current) {
         clearInterval(pollingRef.current);
+      }
+      if (subtitlePollingRef.current) {
+        clearInterval(subtitlePollingRef.current);
       }
     };
   }, []);
@@ -465,6 +502,207 @@ export default function VideoVariationGenerator() {
     }
     
     toast.success('Tudo limpo! Pronto para gerar novas variações.');
+  };
+
+  // Subtitle functions
+  const toggleVideoSelection = (videoId: string) => {
+    setSelectedForSubtitle(prev => 
+      prev.includes(videoId) 
+        ? prev.filter(id => id !== videoId)
+        : [...prev, videoId]
+    );
+  };
+
+  const selectAllCompleted = () => {
+    const completedIds = generatedVideos
+      .filter(v => v.status === 'done' && v.url && !v.isSubtitled)
+      .map(v => v.id);
+    setSelectedForSubtitle(completedIds);
+  };
+
+  const deselectAll = () => {
+    setSelectedForSubtitle([]);
+  };
+
+  const applySubtitlePreset = (preset: 'tiktok' | 'youtube' | 'classic') => {
+    const presets: Record<string, SubtitleConfig> = {
+      tiktok: {
+        style: 'tiktok',
+        font: 'Montserrat/Montserrat-ExtraBold.ttf',
+        fontSize: 100,
+        primaryColor: 'white',
+        highlightColor: 'yellow',
+        yPosition: 70,
+        maxWordsPerSegment: 1
+      },
+      youtube: {
+        style: 'youtube',
+        font: 'Poppins/Poppins-Bold.ttf',
+        fontSize: 70,
+        primaryColor: 'white',
+        highlightColor: '#00ff00',
+        yPosition: 80,
+        maxWordsPerSegment: 3
+      },
+      classic: {
+        style: 'classic',
+        font: 'Arial',
+        fontSize: 50,
+        primaryColor: 'white',
+        highlightColor: 'yellow',
+        yPosition: 90,
+        maxWordsPerSegment: 10
+      }
+    };
+    setSubtitleConfig(presets[preset]);
+  };
+
+  const startSubtitleProcess = async () => {
+    if (selectedForSubtitle.length === 0) {
+      toast.error('Selecione pelo menos um vídeo para legendar');
+      return;
+    }
+
+    setShowSubtitleModal(false);
+    setIsAddingSubtitles(true);
+
+    const videosToSubtitle = generatedVideos.filter(
+      v => selectedForSubtitle.includes(v.id) && v.status === 'done' && v.url
+    );
+
+    // Submit subtitle jobs for each selected video
+    for (const video of videosToSubtitle) {
+      try {
+        setGeneratedVideos(prev => prev.map(v => 
+          v.id === video.id 
+            ? { ...v, subtitleStatus: 'queued' as const }
+            : v
+        ));
+
+        const { data, error } = await supabase.functions.invoke('add-subtitles-to-video', {
+          body: {
+            action: 'add-subtitles',
+            videoUrl: video.url,
+            subtitleConfig: {
+              font: subtitleConfig.font,
+              fontSize: subtitleConfig.fontSize,
+              primaryColor: subtitleConfig.primaryColor,
+              highlightColor: subtitleConfig.highlightColor,
+              yPosition: subtitleConfig.yPosition,
+              maxWordsPerSegment: subtitleConfig.maxWordsPerSegment,
+              wordLevel: subtitleConfig.maxWordsPerSegment <= 3,
+              language: 'pt'
+            }
+          }
+        });
+
+        if (error || !data?.success) {
+          console.error('Error submitting subtitle job:', error || data?.error);
+          setGeneratedVideos(prev => prev.map(v => 
+            v.id === video.id 
+              ? { ...v, subtitleStatus: 'failed' as const }
+              : v
+          ));
+          continue;
+        }
+
+        setGeneratedVideos(prev => prev.map(v => 
+          v.id === video.id 
+            ? { 
+                ...v, 
+                subtitleStatus: 'processing' as const,
+                subtitleRequestId: data.requestId
+              }
+            : v
+        ));
+      } catch (err) {
+        console.error('Error submitting subtitle job:', err);
+        setGeneratedVideos(prev => prev.map(v => 
+          v.id === video.id 
+            ? { ...v, subtitleStatus: 'failed' as const }
+            : v
+        ));
+      }
+    }
+
+    // Start polling for subtitle completion
+    startSubtitlePolling();
+    setSelectedForSubtitle([]);
+    toast.success(`${videosToSubtitle.length} vídeos enviados para legendagem!`);
+  };
+
+  const checkSubtitleStatus = async (requestId: string): Promise<{ status: string; videoUrl?: string }> => {
+    const { data, error } = await supabase.functions.invoke('add-subtitles-to-video', {
+      body: { action: 'status', requestId }
+    });
+
+    if (error) {
+      console.error('Subtitle status check error:', error);
+      return { status: 'failed' };
+    }
+
+    return {
+      status: data.status,
+      videoUrl: data.videoUrl
+    };
+  };
+
+  const startSubtitlePolling = () => {
+    if (subtitlePollingRef.current) {
+      clearInterval(subtitlePollingRef.current);
+    }
+
+    subtitlePollingRef.current = setInterval(async () => {
+      const currentVideos = generatedVideosRef.current;
+      const pendingSubtitles = currentVideos?.filter(
+        v => v.subtitleRequestId && (v.subtitleStatus === 'processing' || v.subtitleStatus === 'queued')
+      ) || [];
+
+      if (pendingSubtitles.length === 0) {
+        if (subtitlePollingRef.current) {
+          clearInterval(subtitlePollingRef.current);
+          subtitlePollingRef.current = null;
+        }
+        setIsAddingSubtitles(false);
+        
+        const hasSubtitled = currentVideos?.some(v => v.isSubtitled);
+        if (hasSubtitled) {
+          toast.success('Legendagem concluída!');
+        }
+        return;
+      }
+
+      console.log(`Checking subtitle status for ${pendingSubtitles.length} videos...`);
+
+      for (const video of pendingSubtitles) {
+        if (!video.subtitleRequestId) continue;
+
+        try {
+          const result = await checkSubtitleStatus(video.subtitleRequestId);
+          
+          if (result.status === 'done' && result.videoUrl) {
+            setGeneratedVideos(prev => prev.map(v => 
+              v.id === video.id 
+                ? { 
+                    ...v, 
+                    subtitleStatus: 'done' as const,
+                    url: result.videoUrl,
+                    isSubtitled: true
+                  }
+                : v
+            ));
+          } else if (result.status === 'failed') {
+            setGeneratedVideos(prev => prev.map(v => 
+              v.id === video.id 
+                ? { ...v, subtitleStatus: 'failed' as const }
+                : v
+            ));
+          }
+        } catch (err) {
+          console.error(`Error checking subtitle status for ${video.name}:`, err);
+        }
+      }
+    }, 5000);
   };
 
   const uploadAudioToStorage = async (file: File): Promise<string | null> => {
@@ -1150,6 +1388,48 @@ export default function VideoVariationGenerator() {
                     )}
                   </div>
                 </CardTitle>
+                
+                {/* Subtitle Selection Bar */}
+                {completedCount > 0 && (
+                  <div className="flex items-center justify-between gap-4 p-3 bg-muted/30 rounded-lg border border-muted mt-4">
+                    <div className="flex items-center gap-3">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={selectedForSubtitle.length > 0 ? deselectAll : selectAllCompleted}
+                        className="h-8 px-2"
+                      >
+                        {selectedForSubtitle.length > 0 ? (
+                          <CheckSquare className="h-4 w-4 mr-1 text-accent" />
+                        ) : (
+                          <Square className="h-4 w-4 mr-1" />
+                        )}
+                        {selectedForSubtitle.length > 0 
+                          ? `${selectedForSubtitle.length} selecionado(s)` 
+                          : 'Selecionar todos'}
+                      </Button>
+                    </div>
+                    <Button
+                      onClick={() => setShowSubtitleModal(true)}
+                      disabled={selectedForSubtitle.length === 0 || isAddingSubtitles}
+                      size="sm"
+                      className="bg-orange-500 hover:bg-orange-600 text-white"
+                    >
+                      {isAddingSubtitles ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Legendando...
+                        </>
+                      ) : (
+                        <>
+                          <Subtitles className="mr-2 h-4 w-4" />
+                          Legendar Selecionados
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+                
                 {pendingCount > 0 && (
                   <Progress 
                     value={(completedCount / generatedVideos.length) * 100} 
@@ -1162,11 +1442,24 @@ export default function VideoVariationGenerator() {
                   {generatedVideos.map((video) => (
                     <div 
                       key={video.id}
-                      className="p-4 bg-muted/50 rounded-lg space-y-3"
+                      className={`p-4 bg-muted/50 rounded-lg space-y-3 relative ${
+                        selectedForSubtitle.includes(video.id) ? 'ring-2 ring-orange-500' : ''
+                      }`}
                     >
-                      <div className="flex items-center justify-between">
+                      {/* Selection checkbox for completed videos */}
+                      {video.status === 'done' && video.url && !video.isSubtitled && !video.subtitleStatus && (
+                        <div className="absolute top-2 left-2">
+                          <Checkbox
+                            checked={selectedForSubtitle.includes(video.id)}
+                            onCheckedChange={() => toggleVideoSelection(video.id)}
+                            className="border-orange-500 data-[state=checked]:bg-orange-500 data-[state=checked]:border-orange-500"
+                          />
+                        </div>
+                      )}
+                      
+                      <div className="flex items-center justify-between pl-6">
                         <span className="text-sm font-medium truncate">{video.name}</span>
-                        {video.status === 'done' && (
+                        {video.status === 'done' && !video.subtitleStatus && (
                           <CheckCircle className="h-4 w-4 text-green-500" />
                         )}
                         {video.status === 'failed' && (
@@ -1179,20 +1472,44 @@ export default function VideoVariationGenerator() {
                           <Pause className="h-4 w-4 text-yellow-500" />
                         )}
                       </div>
-                      <Badge 
-                        variant={
-                          video.status === 'done' ? 'default' :
-                          video.status === 'failed' ? 'destructive' : 
-                          video.status === 'paused' ? 'outline' : 'secondary'
-                        }
-                        className={video.status === 'paused' ? 'border-yellow-500 text-yellow-500' : ''}
-                      >
-                        {video.status === 'queued' && 'Processando'}
-                        {video.status === 'processing' && 'Processando'}
-                        {video.status === 'done' && 'Finalizado'}
-                        {video.status === 'failed' && 'Falhou'}
-                        {video.status === 'paused' && 'Pausado'}
-                      </Badge>
+                      
+                      <div className="flex gap-2 flex-wrap">
+                        <Badge 
+                          variant={
+                            video.status === 'done' ? 'default' :
+                            video.status === 'failed' ? 'destructive' : 
+                            video.status === 'paused' ? 'outline' : 'secondary'
+                          }
+                          className={video.status === 'paused' ? 'border-yellow-500 text-yellow-500' : ''}
+                        >
+                          {video.status === 'queued' && 'Processando'}
+                          {video.status === 'processing' && 'Processando'}
+                          {video.status === 'done' && 'Finalizado'}
+                          {video.status === 'failed' && 'Falhou'}
+                          {video.status === 'paused' && 'Pausado'}
+                        </Badge>
+                        
+                        {/* Subtitle status badge */}
+                        {video.isSubtitled && (
+                          <Badge className="bg-orange-500 hover:bg-orange-600">
+                            <Subtitles className="h-3 w-3 mr-1" />
+                            Legendado
+                          </Badge>
+                        )}
+                        {video.subtitleStatus === 'processing' && (
+                          <Badge variant="secondary" className="bg-orange-500/20 text-orange-500 border-orange-500/50">
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            Legendando...
+                          </Badge>
+                        )}
+                        {video.subtitleStatus === 'failed' && (
+                          <Badge variant="destructive">
+                            <XCircle className="h-3 w-3 mr-1" />
+                            Legenda falhou
+                          </Badge>
+                        )}
+                      </div>
+                      
                       {video.status === 'done' && video.url && (
                         <div className="space-y-2">
                           <div className="flex gap-2">
@@ -1208,7 +1525,7 @@ export default function VideoVariationGenerator() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => downloadVideo(video.url!, video.name)}
+                              onClick={() => downloadVideo(video.url!, video.name + (video.isSubtitled ? '-legendado' : ''))}
                               className="flex-1 border-accent"
                             >
                               <Download className="mr-1 h-3 w-3" />
@@ -1357,6 +1674,127 @@ export default function VideoVariationGenerator() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Subtitle Configuration Modal */}
+      <Dialog open={showSubtitleModal} onOpenChange={setShowSubtitleModal}>
+        <DialogContent className="max-w-lg bg-background border-2 border-orange-500">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Subtitles className="h-5 w-5 text-orange-500" />
+              Configurar Legendas
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            {/* Preset Selection */}
+            <div className="space-y-2">
+              <Label>Estilo de Legenda</Label>
+              <div className="grid grid-cols-3 gap-3">
+                <Button
+                  variant={subtitleConfig.style === 'tiktok' ? 'default' : 'outline'}
+                  onClick={() => applySubtitlePreset('tiktok')}
+                  className={subtitleConfig.style === 'tiktok' ? 'bg-orange-500 hover:bg-orange-600' : ''}
+                >
+                  TikTok/Reels
+                </Button>
+                <Button
+                  variant={subtitleConfig.style === 'youtube' ? 'default' : 'outline'}
+                  onClick={() => applySubtitlePreset('youtube')}
+                  className={subtitleConfig.style === 'youtube' ? 'bg-orange-500 hover:bg-orange-600' : ''}
+                >
+                  YouTube
+                </Button>
+                <Button
+                  variant={subtitleConfig.style === 'classic' ? 'default' : 'outline'}
+                  onClick={() => applySubtitlePreset('classic')}
+                  className={subtitleConfig.style === 'classic' ? 'bg-orange-500 hover:bg-orange-600' : ''}
+                >
+                  Clássico
+                </Button>
+              </div>
+            </div>
+
+            {/* Color Options */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Cor do Texto</Label>
+                <Select
+                  value={subtitleConfig.primaryColor}
+                  onValueChange={(value) => setSubtitleConfig(prev => ({ ...prev, primaryColor: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="white">Branco</SelectItem>
+                    <SelectItem value="yellow">Amarelo</SelectItem>
+                    <SelectItem value="#00ff00">Verde</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Cor do Destaque</Label>
+                <Select
+                  value={subtitleConfig.highlightColor}
+                  onValueChange={(value) => setSubtitleConfig(prev => ({ ...prev, highlightColor: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="yellow">Amarelo</SelectItem>
+                    <SelectItem value="#00ff00">Verde</SelectItem>
+                    <SelectItem value="orange">Laranja</SelectItem>
+                    <SelectItem value="#ff00ff">Rosa</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Position */}
+            <div className="space-y-2">
+              <Label>Posição da Legenda</Label>
+              <Select
+                value={subtitleConfig.yPosition.toString()}
+                onValueChange={(value) => setSubtitleConfig(prev => ({ ...prev, yPosition: parseInt(value) }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="50">Centro</SelectItem>
+                  <SelectItem value="70">Abaixo do Centro</SelectItem>
+                  <SelectItem value="85">Inferior</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Info */}
+            <div className="p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg text-sm text-muted-foreground">
+              <strong className="text-orange-500">{selectedForSubtitle.length}</strong> vídeo(s) selecionado(s) para legendar.
+              O processo pode levar alguns minutos por vídeo.
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowSubtitleModal(false)}
+                className="flex-1"
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={startSubtitleProcess}
+                className="flex-1 bg-orange-500 hover:bg-orange-600"
+              >
+                <Subtitles className="mr-2 h-4 w-4" />
+                Iniciar Legendagem
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
