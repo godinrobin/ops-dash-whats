@@ -60,77 +60,106 @@ async function downloadTikTok(url: string): Promise<any> {
   throw new Error('TikWM: No video URL found');
 }
 
-// SaveFrom/Y2mate style API for YouTube
-async function downloadYouTube(url: string): Promise<any> {
-  console.log('Trying YouTube download...');
-  
-  // Extract video ID
-  const match = url.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-  if (!match) {
-    throw new Error('Invalid YouTube URL');
-  }
+// YouTube download via Piped public API (no auth)
+const PIPED_INSTANCES = [
+  "https://pipedapi.kavin.rocks",
+  "https://pipedapi.in.projectsegfau.lt",
+];
+
+type DownloadOpts = {
+  downloadMode?: "auto" | "audio";
+  videoQuality?: string;
+};
+
+async function downloadYouTube(url: string, opts: DownloadOpts = {}): Promise<any> {
+  console.log("Trying YouTube download via Piped...");
+
+  const match = url.match(
+    /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+  );
+  if (!match) throw new Error("Invalid YouTube URL");
+
   const videoId = match[1];
-  
-  // Try yt1s.com API
-  const apiUrl = 'https://yt1s.com/api/ajaxSearch/index';
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Origin': 'https://yt1s.com',
-      'Referer': 'https://yt1s.com/',
-    },
-    body: `q=${encodeURIComponent(url)}&vt=mp4`,
-  });
-  
-  if (!response.ok) {
-    throw new Error(`yt1s error: ${response.status}`);
-  }
-  
-  const data = await response.json();
-  console.log('yt1s response status:', data.status);
-  
-  if (data.status === 'ok' && data.links?.mp4) {
-    // Get the best quality available
-    const qualities = Object.entries(data.links.mp4);
-    if (qualities.length > 0) {
-      // Sort by quality (720p, 480p, etc)
-      const sorted = qualities.sort((a: any, b: any) => {
-        const qA = parseInt(a[1].q) || 0;
-        const qB = parseInt(b[1].q) || 0;
-        return qB - qA;
+  const downloadMode = opts.downloadMode || "auto";
+
+  const requestedHeight = (() => {
+    const n = parseInt(String(opts.videoQuality || ""), 10);
+    return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY;
+  })();
+
+  let lastError = "";
+
+  for (const base of PIPED_INSTANCES) {
+    try {
+      const endpoint = `${base}/streams/${videoId}`;
+      console.log("Piped endpoint:", endpoint);
+
+      const res = await fetch(endpoint, {
+        headers: { Accept: "application/json" },
       });
-      
-      const best = sorted[0][1] as any;
-      
-      // Get the direct download link
-      const convertUrl = 'https://yt1s.com/api/ajaxConvert/convert';
-      const convertResponse = await fetch(convertUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Origin': 'https://yt1s.com',
-          'Referer': 'https://yt1s.com/',
-        },
-        body: `vid=${data.vid}&k=${encodeURIComponent(best.k)}`,
-      });
-      
-      const convertData = await convertResponse.json();
-      console.log('yt1s convert status:', convertData.status);
-      
-      if (convertData.status === 'ok' && convertData.dlink) {
+
+      if (!res.ok) {
+        lastError = `Piped error: ${res.status}`;
+        console.log("Piped non-OK:", lastError);
+        continue;
+      }
+
+      const data = await res.json();
+
+      const title = data?.title || "youtube-video";
+      const thumbnail = data?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+
+      if (downloadMode === "audio") {
+        const audioStreams = Array.isArray(data?.audioStreams) ? data.audioStreams : [];
+        if (!audioStreams.length) throw new Error("Piped: No audio streams");
+
+        const bestAudio = audioStreams
+          .slice()
+          .sort((a: any, b: any) => {
+            const qA = parseInt(String(a?.quality || "0"), 10) || 0;
+            const qB = parseInt(String(b?.quality || "0"), 10) || 0;
+            return qB - qA;
+          })[0];
+
+        if (!bestAudio?.url) throw new Error("Piped: Missing audio URL");
+
         return {
           success: true,
-          url: convertData.dlink,
-          filename: `${data.title || 'youtube-video'}.mp4`,
-          thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
-          title: data.title,
+          url: bestAudio.url,
+          filename: `${title}`.slice(0, 80) + ".m4a",
+          thumbnail,
+          title,
         };
       }
+
+      const videoStreams = Array.isArray(data?.videoStreams) ? data.videoStreams : [];
+      const mp4Streams = videoStreams.filter((s: any) => String(s?.mimeType || "").includes("video/") && String(s?.mimeType || "").includes("mp4"));
+      const candidates = mp4Streams.length ? mp4Streams : videoStreams;
+
+      if (!candidates.length) throw new Error("Piped: No video streams");
+
+      const bestVideo = candidates
+        .slice()
+        .sort((a: any, b: any) => (Number(b?.height || 0) - Number(a?.height || 0)))
+        .find((s: any) => Number(s?.height || 0) <= requestedHeight) ||
+        candidates.slice().sort((a: any, b: any) => (Number(b?.height || 0) - Number(a?.height || 0)))[0];
+
+      if (!bestVideo?.url) throw new Error("Piped: Missing video URL");
+
+      return {
+        success: true,
+        url: bestVideo.url,
+        filename: `${title}`.slice(0, 80) + ".mp4",
+        thumbnail,
+        title,
+      };
+    } catch (e: any) {
+      lastError = e?.message || String(e);
+      console.log("Piped instance failed:", base, lastError);
     }
   }
-  
-  throw new Error('YouTube download failed');
+
+  throw new Error(lastError || "YouTube download failed");
 }
 
 // Instagram download via igram.io
@@ -223,6 +252,8 @@ serve(async (req) => {
     }
 
     const url = typeof body?.url === "string" ? body.url : "";
+    const downloadMode = typeof body?.downloadMode === "string" ? body.downloadMode : "auto";
+    const videoQuality = typeof body?.videoQuality === "string" ? body.videoQuality : "1080";
 
     if (!url) {
       // IMPORTANT: always return 200 so the web client can read the error message
@@ -251,7 +282,7 @@ serve(async (req) => {
           result = await downloadTikTok(url);
           break;
         case "youtube":
-          result = await downloadYouTube(url);
+          result = await downloadYouTube(url, { downloadMode, videoQuality });
           break;
         case "instagram":
           result = await downloadInstagram(url);
