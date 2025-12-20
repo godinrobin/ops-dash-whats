@@ -8,8 +8,26 @@ const corsHeaders = {
 
 // Taxa de conversão USD para BRL (a API retorna preços em USD)
 const USD_TO_BRL = 6.10;
-const PROFIT_MARGIN = 1.30; // 30% de margem base
-const PLATFORM_MARKUP = 1.10; // 10% de lucro da plataforma
+
+async function getMarginPercent(supabase: any): Promise<number> {
+  try {
+    const { data, error } = await supabase
+      .from('platform_margins')
+      .select('margin_percent')
+      .eq('system_name', 'sms')
+      .maybeSingle();
+
+    if (error || !data?.margin_percent) {
+      console.log('Using default margin (30%)');
+      return 30;
+    }
+
+    return Number(data.margin_percent);
+  } catch (err) {
+    console.error('Error fetching margin:', err);
+    return 30;
+  }
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -87,12 +105,15 @@ serve(async (req) => {
       });
     }
 
-    // Preço real (custo interno)
-    const priceBrlUnit = Math.ceil(priceUsd * USD_TO_BRL * PROFIT_MARGIN * 100) / 100;
-    // Preço com markup (cobrado do usuário)
-    const priceWithMarkupUnit = Math.ceil(priceBrlUnit * PLATFORM_MARKUP * 100) / 100;
-    // Total a cobrar do usuário
+    // Margem deve bater com a usada no sms-get-services (para preço exibido = preço cobrado)
+    const marginPercent = await getMarginPercent(supabase);
+    const marginMultiplier = 1 + (marginPercent / 100);
+
+    // Preço cobrado do usuário (já com margem)
+    const priceWithMarkupUnit = Math.ceil(priceUsd * USD_TO_BRL * marginMultiplier * 100) / 100;
     const totalCharge = Math.ceil(priceWithMarkupUnit * buyQuantity * 100) / 100;
+
+    console.log(`Pricing | margin=${marginPercent}% unit=R$${priceWithMarkupUnit} total=R$${totalCharge}`);
 
     // Verifica saldo do usuário
     const { data: wallet, error: walletError } = await supabase
@@ -106,13 +127,16 @@ serve(async (req) => {
       throw new Error('Erro ao verificar saldo');
     }
 
-    const currentBalance = wallet?.balance || 0;
-    
+    const currentBalance = Number(wallet?.balance || 0);
+
+    console.log(`Wallet | balance=R$${currentBalance} required=R$${totalCharge}`);
+
     if (currentBalance < totalCharge) {
-      return new Response(JSON.stringify({ 
+      console.log('Insufficient balance');
+      return new Response(JSON.stringify({
         error: 'Saldo insuficiente',
         required: totalCharge,
-        current: currentBalance 
+        current: currentBalance,
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
