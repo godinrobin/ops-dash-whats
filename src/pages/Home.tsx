@@ -164,6 +164,15 @@ const Home = () => {
       subtext: "Filtre e salve ofertas da Biblioteca de Anúncios",
       gradient: "from-orange-400 to-amber-500",
       restricted: false
+    },
+    { 
+      path: "/video-downloader", 
+      emoji: "⬇️", 
+      title: "Downloader de Vídeos",
+      description: "Baixe vídeos do YouTube, TikTok e Instagram",
+      subtext: "Download rápido com opção de áudio ou vídeo",
+      gradient: "from-red-500 to-pink-500",
+      restricted: false
     }
   ];
 

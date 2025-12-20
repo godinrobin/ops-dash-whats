@@ -104,3 +104,6 @@ verify_jwt = false
 
 [functions.add-subtitles-to-video]
 verify_jwt = true
+
+[functions.video-downloader]
+verify_jwt = true
