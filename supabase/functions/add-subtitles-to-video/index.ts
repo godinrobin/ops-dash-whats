@@ -51,12 +51,27 @@ serve(async (req) => {
           method: 'GET',
           headers: {
             'Authorization': `Key ${FAL_KEY}`,
-            'Content-Type': 'application/json',
           },
         }
       );
 
-      const statusData = await statusResponse.json();
+      // First get raw text to debug
+      const statusText = await statusResponse.text();
+      console.log('Raw status response:', statusText);
+
+      // Try to parse as JSON
+      let statusData;
+      try {
+        statusData = JSON.parse(statusText);
+      } catch (e) {
+        console.error('Failed to parse status response:', statusText);
+        // If it's not JSON, return processing status
+        return new Response(
+          JSON.stringify({ status: 'processing' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
       console.log('Status response:', JSON.stringify(statusData));
 
       if (statusData.status === 'COMPLETED') {
@@ -67,12 +82,21 @@ serve(async (req) => {
             method: 'GET',
             headers: {
               'Authorization': `Key ${FAL_KEY}`,
-              'Content-Type': 'application/json',
             },
           }
         );
 
-        const resultData = await resultResponse.json();
+        const resultText = await resultResponse.text();
+        console.log('Raw result response:', resultText);
+        
+        let resultData;
+        try {
+          resultData = JSON.parse(resultText);
+        } catch (e) {
+          console.error('Failed to parse result response:', resultText);
+          throw new Error('Failed to parse subtitle result');
+        }
+        
         console.log('Result data:', JSON.stringify(resultData));
 
         return new Response(
