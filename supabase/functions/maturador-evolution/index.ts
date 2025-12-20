@@ -1057,6 +1057,89 @@ Regras IMPORTANTES:
         break;
       }
 
+      // Fetch single contact profile info
+      case 'fetch-single-contact': {
+        const { instanceName, phone, contactId } = params;
+        
+        if (!instanceName || !phone || !contactId) {
+          return new Response(JSON.stringify({ error: 'instanceName, phone and contactId are required' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Use service role client to update the table
+        const serviceClient = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        );
+
+        try {
+          const cleanPhone = phone.replace(/\D/g, '');
+          let profilePic = null;
+          let name = null;
+
+          // Try to get profile picture
+          try {
+            const picResult = await callEvolution(`/chat/fetchProfilePictureUrl/${instanceName}`, 'POST', {
+              number: cleanPhone,
+            });
+            profilePic = picResult?.profilePictureUrl || picResult?.picture || picResult?.url || null;
+            console.log(`Profile picture for ${cleanPhone}:`, profilePic);
+          } catch (picError) {
+            console.log(`Could not fetch profile picture for ${cleanPhone}:`, picError);
+          }
+
+          // Try to get contact name from business profile
+          try {
+            const businessResult = await callEvolution(`/chat/fetchBusinessProfile/${instanceName}`, 'POST', {
+              number: cleanPhone,
+            });
+            console.log(`Business profile for ${cleanPhone}:`, JSON.stringify(businessResult, null, 2));
+            name = businessResult?.name || businessResult?.pushname || businessResult?.description || null;
+          } catch (businessError) {
+            console.log(`Could not fetch business profile for ${cleanPhone}:`, businessError);
+          }
+
+          // If no name from business profile, try regular profile
+          if (!name) {
+            try {
+              const profileResult = await callEvolution(`/chat/fetchProfile/${instanceName}`, 'POST', {
+                number: cleanPhone,
+              });
+              console.log(`Profile for ${cleanPhone}:`, JSON.stringify(profileResult, null, 2));
+              name = profileResult?.name || profileResult?.pushname || profileResult?.notify || profileResult?.verifiedName || null;
+            } catch (profileError) {
+              console.log(`Could not fetch profile for ${cleanPhone}:`, profileError);
+            }
+          }
+
+          // Update the contact in the database
+          const { error: updateError } = await serviceClient
+            .from('maturador_verified_contacts')
+            .update({
+              name: name || null,
+              profile_pic_url: profilePic,
+              last_fetched_at: new Date().toISOString(),
+            })
+            .eq('id', contactId);
+
+          if (updateError) {
+            console.error(`Error updating contact ${cleanPhone}:`, updateError);
+            throw updateError;
+          }
+
+          result = { success: true, name, profilePic };
+        } catch (error) {
+          console.error('Error fetching single contact:', error);
+          return new Response(JSON.stringify({ error: 'Erro ao buscar informações do contato' }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        break;
+      }
+
       // Send message to verified contact
       case 'send-verified-message': {
         const { instanceName, phone, message } = params;
