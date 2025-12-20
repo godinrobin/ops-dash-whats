@@ -228,8 +228,17 @@ export default function MaturadorVerifiedContacts() {
       return;
     }
 
+    // Find a connected instance to use for fetching profile info
+    const connectedInstance = instances.find(i => i.status === 'connected');
+    if (!connectedInstance) {
+      toast.error('Nenhum número conectado para buscar informações do contato');
+      return;
+    }
+
     setSaving(true);
     try {
+      let contactId: string;
+      
       if (editingContact) {
         const { error } = await supabase
           .from('maturador_verified_contacts')
@@ -241,19 +250,44 @@ export default function MaturadorVerifiedContacts() {
           .eq('id', editingContact.id);
 
         if (error) throw error;
-        toast.success('Contato atualizado!');
+        contactId = editingContact.id;
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('maturador_verified_contacts')
           .insert({ 
             phone: cleanedPhone, 
             name: editName.trim() || null 
-          });
+          })
+          .select('id')
+          .single();
 
         if (error) throw error;
-        toast.success('Contato adicionado!');
+        contactId = data.id;
       }
 
+      // Fetch profile info from Evolution API
+      toast.info('Buscando foto de perfil...');
+      
+      try {
+        const { data: fetchResult, error: fetchError } = await supabase.functions.invoke('maturador-evolution', {
+          body: {
+            action: 'fetch-single-contact',
+            instanceName: connectedInstance.instance_name,
+            phone: cleanedPhone,
+            contactId,
+          },
+        });
+
+        if (fetchError) {
+          console.error('Error fetching profile:', fetchError);
+        } else if (fetchResult?.success) {
+          console.log('Profile fetched:', fetchResult);
+        }
+      } catch (profileError) {
+        console.error('Error fetching profile info:', profileError);
+      }
+
+      toast.success(editingContact ? 'Contato atualizado!' : 'Contato adicionado!');
       setEditModalOpen(false);
       const updatedContacts = await fetchContacts();
       setContacts(updatedContacts);
