@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Plus, Loader2, MessageSquare, Trash2, Pencil, Play, Pause, Send } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, MessageSquare, Trash2, Pencil, Play, Pause, Send, Square } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -68,8 +68,11 @@ export default function MaturadorConversations() {
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Run conversation
-  const [runningConversation, setRunningConversation] = useState<string | null>(null);
+  // Loop automático de conversas
+  const [activeLoops, setActiveLoops] = useState<Set<string>>(new Set());
+  const [sessionMessageCounts, setSessionMessageCounts] = useState<Map<string, number>>(new Map());
+  const loopTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const loopActive = useRef<Set<string>>(new Set());
 
   const fetchData = async () => {
     if (!user) return;
@@ -234,42 +237,127 @@ export default function MaturadorConversations() {
     }
   };
 
-  const handleRunConversation = async (conversation: Conversation) => {
-    if (!conversation.is_active) {
-      toast.error('Ative a conversa antes de executar');
+  // Função para enviar uma mensagem e agendar a próxima
+  const runLoopIteration = useCallback(async (conversation: Conversation) => {
+    // Verifica se o loop ainda está ativo
+    if (!loopActive.current.has(conversation.id)) {
       return;
     }
 
-    setRunningConversation(conversation.id);
     try {
       const { data, error } = await supabase.functions.invoke('maturador-evolution', {
         body: { action: 'run-conversation', conversationId: conversation.id },
       });
 
       if (error) throw error;
-      if (data.error) {
-        if (data.dailyLimitReached) {
-          toast.warning('Limite diário de mensagens atingido');
-        } else {
-          throw new Error(data.error);
-        }
+
+      // Verifica se o loop ainda está ativo após a chamada
+      if (!loopActive.current.has(conversation.id)) {
         return;
       }
 
-      if ((data?.messagesSent || 0) === 0) {
-        toast.error('Nenhuma mensagem enviada. Confirme se ambos os números estão conectados e tente novamente.');
-      } else {
-        toast.success(`${data.messagesSent} mensagens enviadas!`);
+      if (data.error) {
+        if (data.dailyLimitReached) {
+          toast.warning(`${conversation.name}: Limite diário atingido. Loop parado.`);
+          stopConversationLoop(conversation.id);
+          return;
+        }
+        throw new Error(data.error);
       }
-      await fetchData();
+
+      if ((data?.messagesSent || 0) > 0) {
+        // Atualiza contador de mensagens da sessão
+        setSessionMessageCounts(prev => {
+          const newMap = new Map(prev);
+          newMap.set(conversation.id, (prev.get(conversation.id) || 0) + 1);
+          return newMap;
+        });
+        
+        // Atualiza dados
+        fetchData();
+      }
+
+      // Verifica novamente se o loop ainda está ativo antes de agendar próxima
+      if (!loopActive.current.has(conversation.id)) {
+        return;
+      }
+
+      // Calcula delay aleatório para próxima mensagem
+      const delay = Math.floor(
+        Math.random() * (conversation.max_delay_seconds - conversation.min_delay_seconds + 1)
+      ) + conversation.min_delay_seconds;
+
+      console.log(`Próxima mensagem de "${conversation.name}" em ${delay} segundos`);
+
+      // Agenda próxima execução
+      const timeout = setTimeout(() => {
+        runLoopIteration(conversation);
+      }, delay * 1000);
+
+      loopTimeouts.current.set(conversation.id, timeout);
 
     } catch (error: any) {
-      console.error('Error running conversation:', error);
-      toast.error(error.message || 'Erro ao executar conversa');
-    } finally {
-      setRunningConversation(null);
+      console.error('Erro no loop:', error);
+      toast.error(`${conversation.name}: ${error.message || 'Erro ao enviar mensagem'}`);
+      stopConversationLoop(conversation.id);
     }
-  };
+  }, []);
+
+  // Inicia o loop automático de uma conversa
+  const startConversationLoop = useCallback((conversation: Conversation) => {
+    if (!conversation.is_active) {
+      toast.error('Ative a conversa antes de executar');
+      return;
+    }
+
+    // Adiciona ao set de loops ativos
+    loopActive.current.add(conversation.id);
+    setActiveLoops(prev => new Set(prev).add(conversation.id));
+    setSessionMessageCounts(prev => {
+      const newMap = new Map(prev);
+      newMap.set(conversation.id, 0);
+      return newMap;
+    });
+
+    toast.success(`Loop iniciado: ${conversation.name}`);
+
+    // Inicia imediatamente a primeira iteração
+    runLoopIteration(conversation);
+  }, [runLoopIteration]);
+
+  // Para o loop automático de uma conversa
+  const stopConversationLoop = useCallback((conversationId: string) => {
+    // Remove do set de loops ativos
+    loopActive.current.delete(conversationId);
+    
+    // Limpa o timeout pendente
+    const timeout = loopTimeouts.current.get(conversationId);
+    if (timeout) {
+      clearTimeout(timeout);
+      loopTimeouts.current.delete(conversationId);
+    }
+
+    // Atualiza estado
+    setActiveLoops(prev => {
+      const next = new Set(prev);
+      next.delete(conversationId);
+      return next;
+    });
+
+    const conversation = conversations.find(c => c.id === conversationId);
+    const messagesInSession = sessionMessageCounts.get(conversationId) || 0;
+    toast.info(`Loop parado: ${conversation?.name || 'Conversa'}. ${messagesInSession} mensagens enviadas nesta sessão.`);
+  }, [conversations, sessionMessageCounts]);
+
+  // Cleanup ao desmontar o componente
+  useEffect(() => {
+    return () => {
+      // Para todos os loops ativos ao desmontar
+      loopTimeouts.current.forEach((timeout) => clearTimeout(timeout));
+      loopTimeouts.current.clear();
+      loopActive.current.clear();
+    };
+  }, []);
 
   const handleDelete = async () => {
     if (!conversationToDelete) return;
@@ -386,15 +474,21 @@ export default function MaturadorConversations() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
                       <MessageSquare className="h-3 w-3 mr-1" />
                       {conversation.messageCount || 0} mensagens trocadas
                     </Badge>
+                    {activeLoops.has(conversation.id) && (
+                      <Badge className="bg-blue-500 hover:bg-blue-600 text-white animate-pulse">
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        Executando... ({sessionMessageCounts.get(conversation.id) || 0} nesta sessão)
+                      </Badge>
+                    )}
                   </div>
                   <div className="text-xs text-muted-foreground space-y-1">
                     <p>Delay: {conversation.min_delay_seconds}s - {conversation.max_delay_seconds}s</p>
-                    <p>Mensagens/round: {conversation.messages_per_round} | Limite diário: {conversation.daily_limit}</p>
+                    <p>Limite diário: {conversation.daily_limit}</p>
                     <p>Silêncio: {conversation.quiet_hours_start} - {conversation.quiet_hours_end}</p>
                     {conversation.topics.length > 0 && (
                       <p>Tópicos: {conversation.topics.length}</p>
@@ -402,31 +496,43 @@ export default function MaturadorConversations() {
                   </div>
                   
                   <div className="flex gap-2 flex-wrap">
-                    <Button 
-                      size="sm" 
-                      className={conversation.is_active ? 'bg-green-500 hover:bg-green-600 text-white' : ''}
-                      variant={conversation.is_active ? 'default' : 'outline'}
-                      onClick={() => handleRunConversation(conversation)}
-                      disabled={runningConversation === conversation.id || !conversation.is_active}
-                    >
-                      {runningConversation === conversation.id ? (
-                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                      ) : (
-                        <Send className="h-3 w-3 mr-1" />
-                      )}
-                      Executar
-                    </Button>
+                    {/* Botão Executar - visível apenas quando NÃO está em loop */}
+                    {!activeLoops.has(conversation.id) && (
+                      <Button 
+                        size="sm" 
+                        className={conversation.is_active ? 'bg-green-500 hover:bg-green-600 text-white' : ''}
+                        variant={conversation.is_active ? 'default' : 'outline'}
+                        onClick={() => startConversationLoop(conversation)}
+                        disabled={!conversation.is_active}
+                      >
+                        <Play className="h-3 w-3 mr-1" />
+                        Executar
+                      </Button>
+                    )}
+
+                    {/* Botão Parar - visível apenas quando ESTÁ em loop */}
+                    {activeLoops.has(conversation.id) && (
+                      <Button 
+                        size="sm" 
+                        variant="destructive"
+                        onClick={() => stopConversationLoop(conversation.id)}
+                      >
+                        <Square className="h-3 w-3 mr-1" />
+                        Parar
+                      </Button>
+                    )}
 
                     <Button 
                       size="sm" 
                       variant={conversation.is_active ? "outline" : "default"}
                       className={!conversation.is_active ? 'bg-green-500 hover:bg-green-600 text-white' : ''}
                       onClick={() => handleToggleActive(conversation)}
+                      disabled={activeLoops.has(conversation.id)}
                     >
                       {conversation.is_active ? (
                         <>
                           <Pause className="h-3 w-3 mr-1" />
-                          Pausar
+                          Desativar
                         </>
                       ) : (
                         <>
