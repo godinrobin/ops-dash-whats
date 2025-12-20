@@ -96,11 +96,12 @@ serve(async (req) => {
 
     // Verifica disponibilidade
     if (available < buyQuantity) {
-      return new Response(JSON.stringify({ 
+      // Business rule error: return 200 so the client can show a friendly message
+      return new Response(JSON.stringify({
+        success: false,
         error: `Apenas ${available} números disponíveis`,
-        available 
+        available,
       }), {
-        status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -133,12 +134,13 @@ serve(async (req) => {
 
     if (currentBalance < totalCharge) {
       console.log('Insufficient balance');
+      // Business rule error: return 200 so the client can show a friendly message
       return new Response(JSON.stringify({
+        success: false,
         error: 'Saldo insuficiente',
         required: totalCharge,
         current: currentBalance,
       }), {
-        status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
