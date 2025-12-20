@@ -1015,6 +1015,57 @@ export type Database = {
         }
         Relationships: []
       }
+      video_prompts: {
+        Row: {
+          ai_model: string | null
+          category: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_featured: boolean
+          is_hidden: boolean
+          preview_thumbnail: string | null
+          preview_url: string | null
+          prompt_text: string
+          source: string
+          tags: string[] | null
+          title: string
+          uses_count: number
+        }
+        Insert: {
+          ai_model?: string | null
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_featured?: boolean
+          is_hidden?: boolean
+          preview_thumbnail?: string | null
+          preview_url?: string | null
+          prompt_text: string
+          source?: string
+          tags?: string[] | null
+          title: string
+          uses_count?: number
+        }
+        Update: {
+          ai_model?: string | null
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_featured?: boolean
+          is_hidden?: boolean
+          preview_thumbnail?: string | null
+          preview_url?: string | null
+          prompt_text?: string
+          source?: string
+          tags?: string[] | null
+          title?: string
+          uses_count?: number
+        }
+        Relationships: []
+      }
       voice_previews: {
         Row: {
           audio_base64: string

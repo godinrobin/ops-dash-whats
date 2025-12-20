@@ -107,3 +107,6 @@ verify_jwt = true
 
 [functions.video-downloader]
 verify_jwt = true
+
+[functions.import-video-prompts]
+verify_jwt = true
