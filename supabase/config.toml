@@ -110,3 +110,6 @@ verify_jwt = true
 
 [functions.import-video-prompts]
 verify_jwt = true
+
+[functions.maturador-evolution]
+verify_jwt = true
