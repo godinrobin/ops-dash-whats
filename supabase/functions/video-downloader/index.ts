@@ -377,67 +377,165 @@ async function downloadYouTube(url: string, opts: DownloadOpts = {}): Promise<an
   throw new Error("YouTube indisponível no momento. Todas as instâncias falharam.");
 }
 
-// Instagram download via multiple fallback APIs
+// Instagram download via Apify (primary) + lightweight public fallbacks
 async function downloadInstagram(url: string): Promise<any> {
   console.log("Trying Instagram download...");
+
+  const defaultUA =
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+  const withTimeout = async (input: RequestInfo | URL, init: RequestInit = {}, ms = 12000) => {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), ms);
+    try {
+      const res = await fetch(input, { ...init, signal: controller.signal });
+      return res;
+    } finally {
+      clearTimeout(t);
+    }
+  };
 
   // Extract post/reel ID from URL for logging
   const idMatch = url.match(/(?:p|reel|reels|tv)\/([\w-]+)/i);
   const postId = idMatch?.[1] || "unknown";
   console.log("Instagram post ID:", postId);
 
-  // ===================== Method 1: SnapInsta (igdownloader) =====================
-  try {
-    console.log("Trying SnapInsta...");
-    const snapRes = await fetch("https://snapinsta.app/api/ajaxSearch", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Origin: "https://snapinsta.app",
-        Referer: "https://snapinsta.app/",
-      },
-      body: `q=${encodeURIComponent(url)}&t=media&lang=en`,
-    });
+  const errors: string[] = [];
 
-    if (snapRes.ok) {
-      const snapData = await snapRes.json();
-      if (snapData.status === "ok" && snapData.data) {
-        const html = snapData.data;
-        const videoMatch = html.match(/href="([^"]+\.mp4[^"]*)"/i) || html.match(/href="([^"]+)"[^>]*download/i);
-        if (videoMatch) {
-          console.log("SnapInsta success");
+  // ===================== Method 0: Apify (reliable) =====================
+  try {
+    const apifyToken = Deno.env.get("APIFY_API_TOKEN");
+    if (apifyToken) {
+      console.log("Trying Apify Instagram downloader...");
+
+      const endpoint = `https://api.apify.com/v2/acts/epctex~instagram-video-downloader/run-sync-get-dataset-items?token=${encodeURIComponent(
+        apifyToken
+      )}&timeout=60`;
+
+      const res = await withTimeout(
+        endpoint,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            "User-Agent": defaultUA,
+          },
+          body: JSON.stringify({
+            startUrls: [url],
+            quality: "highest",
+            compression: "none",
+            proxy: { useApifyProxy: true },
+          }),
+        },
+        20000
+      );
+
+      if (!res.ok) {
+        errors.push(`Apify HTTP ${res.status}`);
+      } else {
+        const items = (await res.json()) as any[];
+        const item = Array.isArray(items) ? items[0] : null;
+        const downloadUrl = item?.downloadUrl || item?.download_link || item?.url;
+
+        if (downloadUrl) {
+          console.log("Apify success");
           return {
             success: true,
-            url: videoMatch[1],
+            url: downloadUrl,
             filename: `instagram-${postId}.mp4`,
             title: "Instagram Video",
           };
         }
+
+        errors.push("Apify: sem URL de download");
+      }
+    } else {
+      errors.push("Apify: token ausente");
+    }
+  } catch (e: any) {
+    errors.push(`Apify: ${e?.message || e}`);
+  }
+
+  // ===================== Method 1: SnapInsta =====================
+  try {
+    console.log("Trying SnapInsta...");
+    const snapRes = await withTimeout(
+      "https://snapinsta.app/api/ajaxSearch",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+          "User-Agent": defaultUA,
+          Origin: "https://snapinsta.app",
+          Referer: "https://snapinsta.app/",
+        },
+        body: `q=${encodeURIComponent(url)}&t=media&lang=en`,
+      },
+      12000
+    );
+
+    if (!snapRes.ok) {
+      errors.push(`SnapInsta HTTP ${snapRes.status}`);
+    } else {
+      const ct = (snapRes.headers.get("content-type") || "").toLowerCase();
+      if (!ct.includes("application/json")) {
+        errors.push(`SnapInsta: content-type inválido (${ct || "n/a"})`);
+      } else {
+        const snapData = await snapRes.json();
+        if (snapData.status === "ok" && snapData.data) {
+          const html = String(snapData.data);
+          const videoMatch =
+            html.match(/href="([^"]+\.mp4[^"]*)"/i) ||
+            html.match(/href="([^"]+)"[^>]*download/i);
+          if (videoMatch?.[1]) {
+            console.log("SnapInsta success");
+            return {
+              success: true,
+              url: videoMatch[1],
+              filename: `instagram-${postId}.mp4`,
+              title: "Instagram Video",
+            };
+          }
+        }
+        errors.push("SnapInsta: sem link mp4");
       }
     }
   } catch (e: any) {
-    console.log("SnapInsta failed:", e?.message || e);
+    errors.push(`SnapInsta: ${e?.message || e}`);
   }
 
-  // ===================== Method 2: SSSTik-style igram =====================
+  // ===================== Method 2: igram.world =====================
   try {
     console.log("Trying igram.world...");
-    const igramRes = await fetch("https://igram.world/api/convert", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Origin: "https://igram.world",
-        Referer: "https://igram.world/",
+    const igramRes = await withTimeout(
+      "https://igram.world/api/convert",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "User-Agent": defaultUA,
+          Origin: "https://igram.world",
+          Referer: "https://igram.world/",
+        },
+        body: JSON.stringify({ url }),
       },
-      body: JSON.stringify({ url }),
-    });
+      12000
+    );
 
-    if (igramRes.ok) {
+    if (!igramRes.ok) {
+      errors.push(`igram.world HTTP ${igramRes.status}`);
+    } else {
       const ct = (igramRes.headers.get("content-type") || "").toLowerCase();
-      if (ct.includes("application/json")) {
+      if (!ct.includes("application/json")) {
+        errors.push(`igram.world: content-type inválido (${ct || "n/a"})`);
+      } else {
         const igramData = await igramRes.json();
         const items = igramData?.items || igramData?.result || [];
-        const video = (Array.isArray(items) ? items : [items]).find(
+        const list = Array.isArray(items) ? items : [items];
+        const video = list.find(
           (i: any) => i?.url && (String(i?.type || "").includes("video") || String(i?.url || "").includes(".mp4"))
         );
         if (video?.url) {
@@ -449,28 +547,39 @@ async function downloadInstagram(url: string): Promise<any> {
             title: "Instagram Video",
           };
         }
+        errors.push("igram.world: sem link mp4");
       }
     }
   } catch (e: any) {
-    console.log("igram.world failed:", e?.message || e);
+    errors.push(`igram.world: ${e?.message || e}`);
   }
 
   // ===================== Method 3: FastDL =====================
   try {
     console.log("Trying FastDL...");
-    const fastRes = await fetch("https://fastdl.app/api/convert", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Origin: "https://fastdl.app",
-        Referer: "https://fastdl.app/",
+    const fastRes = await withTimeout(
+      "https://fastdl.app/api/convert",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "User-Agent": defaultUA,
+          Origin: "https://fastdl.app",
+          Referer: "https://fastdl.app/",
+        },
+        body: JSON.stringify({ url }),
       },
-      body: JSON.stringify({ url }),
-    });
+      12000
+    );
 
-    if (fastRes.ok) {
+    if (!fastRes.ok) {
+      errors.push(`FastDL HTTP ${fastRes.status}`);
+    } else {
       const ct = (fastRes.headers.get("content-type") || "").toLowerCase();
-      if (ct.includes("application/json")) {
+      if (!ct.includes("application/json")) {
+        errors.push(`FastDL: content-type inválido (${ct || "n/a"})`);
+      } else {
         const fastData = await fastRes.json();
         const videoUrl = fastData?.url || fastData?.video?.url || fastData?.result?.[0]?.url;
         if (videoUrl) {
@@ -482,13 +591,14 @@ async function downloadInstagram(url: string): Promise<any> {
             title: "Instagram Video",
           };
         }
+        errors.push("FastDL: sem link mp4");
       }
     }
   } catch (e: any) {
-    console.log("FastDL failed:", e?.message || e);
+    errors.push(`FastDL: ${e?.message || e}`);
   }
 
-  throw new Error("Instagram: nenhum provedor disponível no momento");
+  throw new Error(`Instagram: nenhum provedor disponível no momento (${errors.slice(0, 3).join("; ")})`);
 }
 
 // Twitter/X download
