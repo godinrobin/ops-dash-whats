@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Plus, Loader2, MessageSquare, Trash2, Pencil, Play, Pause, Send, Square } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, MessageSquare, Trash2, Pencil, Play, Pause, Send, Square, MessageCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -549,6 +549,15 @@ export default function MaturadorConversations() {
                     >
                       <Pencil className="h-3 w-3 mr-1" />
                       Editar
+                    </Button>
+                    
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => navigate(`/maturador/chat?conversation=${conversation.id}`)}
+                    >
+                      <MessageCircle className="h-3 w-3 mr-1" />
+                      Chat
                     </Button>
                     
                     <Button 

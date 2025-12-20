@@ -30,6 +30,7 @@ import SMMPanel from "./pages/SMMPanel";
 import MaturadorDashboard from "./pages/MaturadorDashboard";
 import MaturadorInstances from "./pages/MaturadorInstances";
 import MaturadorConversations from "./pages/MaturadorConversations";
+import MaturadorChat from "./pages/MaturadorChat";
 import AdminPanelNew from "./pages/AdminPanelNew";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
@@ -72,6 +73,7 @@ const App = () => (
             <Route path="/maturador" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorDashboard /></MemberRoute>} />
             <Route path="/maturador/instances" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorInstances /></MemberRoute>} />
             <Route path="/maturador/conversations" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorConversations /></MemberRoute>} />
+            <Route path="/maturador/chat" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorChat /></MemberRoute>} />
             
             {/* ADMIN ROUTES */}
             <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />

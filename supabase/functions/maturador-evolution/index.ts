@@ -242,27 +242,30 @@ Regras:
         .eq('from_instance_id', fromInstanceId);
 
       const totalCount = messages?.length || 0;
-      const textCount = messages?.filter(m => m.message_type === 'text').length || 0;
+      const audioCount = messages?.filter(m => m.message_type === 'audio').length || 0;
+      const imageCount = messages?.filter(m => m.message_type === 'image').length || 0;
+      const mediaCount = audioCount + imageCount;
 
-      console.log(`Message stats for instance ${fromInstanceId}: total=${totalCount}, text=${textCount}`);
+      console.log(`Message stats for instance ${fromInstanceId}: total=${totalCount}, audio=${audioCount}, image=${imageCount}`);
 
       // First message: always text
       if (totalCount === 0) {
         return 'text';
       }
 
-      // After 1st text message: send audio
-      if (totalCount === 1) {
+      // No audio sent yet? Send audio
+      if (audioCount === 0) {
         return 'audio';
       }
 
-      // After audio: send image
-      if (totalCount === 2) {
+      // No image sent yet? Send image
+      if (imageCount === 0) {
         return 'image';
       }
 
-      // After that, every 10 messages: random audio or image
-      if ((totalCount - 2) % 10 === 0) {
+      // After initial audio+image, every 10 text messages: random audio or image
+      const textsSinceLastMedia = totalCount - mediaCount;
+      if (textsSinceLastMedia >= 10 && textsSinceLastMedia % 10 === 0) {
         return Math.random() > 0.5 ? 'audio' : 'image';
       }
 
