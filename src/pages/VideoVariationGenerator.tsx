@@ -211,13 +211,16 @@ export default function VideoVariationGenerator() {
           console.log(`Loading ${allJobs.length} existing jobs`);
           
           // Convert database jobs to GeneratedVideo format
-          const existingVideos: GeneratedVideo[] = allJobs.map((job) => ({
+          const existingVideos: GeneratedVideo[] = allJobs.map((job: any) => ({
             id: job.id,
             name: job.variation_name,
             status: job.status as 'queued' | 'processing' | 'done' | 'failed',
             requestId: job.render_id,
             responseUrl: `https://queue.fal.run/fal-ai/ffmpeg-api/requests/${job.render_id}`,
-            url: job.video_url || undefined
+            url: job.is_subtitled ? (job.subtitled_video_url || job.video_url) : (job.video_url || undefined),
+            isSubtitled: job.is_subtitled || false,
+            subtitledUrl: job.subtitled_video_url || undefined,
+            originalUrl: job.original_video_url || job.video_url || undefined
           }));
 
           setGeneratedVideos(existingVideos);
@@ -719,18 +722,32 @@ export default function VideoVariationGenerator() {
           const result = await checkSubtitleStatus(video.subtitleRequestId);
           
           if (result.status === 'done' && result.videoUrl) {
+            const originalUrl = video.originalUrl || video.url;
+            
+            // Update state
             setGeneratedVideos(prev => prev.map(v => 
               v.id === video.id 
                 ? { 
                     ...v, 
                     subtitleStatus: 'done' as const,
                     subtitledUrl: result.videoUrl,
-                    originalUrl: v.originalUrl || v.url, // Preserve original URL
-                    url: result.videoUrl, // Update main URL to subtitled version
+                    originalUrl: originalUrl,
+                    url: result.videoUrl,
                     isSubtitled: true
                   }
                 : v
             ));
+            
+            // Persist to database
+            await supabase
+              .from('video_generation_jobs')
+              .update({ 
+                is_subtitled: true,
+                subtitled_video_url: result.videoUrl,
+                original_video_url: originalUrl,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', video.id);
           } else if (result.status === 'failed') {
             setGeneratedVideos(prev => prev.map(v => 
               v.id === video.id 
