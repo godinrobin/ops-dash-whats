@@ -1001,14 +1001,29 @@ Regras IMPORTANTES:
               console.log(`Could not fetch profile picture for ${contact.phone}:`, picError);
             }
 
-            // Try to get contact name
+            // Try to get contact name from business profile or regular profile
             try {
-              const profileResult = await callEvolution(`/chat/fetchProfile/${instanceName}`, 'POST', {
+              // First try business profile
+              const businessResult = await callEvolution(`/chat/fetchBusinessProfile/${instanceName}`, 'POST', {
                 number: contact.phone,
               });
-              name = profileResult?.name || profileResult?.pushname || profileResult?.notify || null;
-            } catch (profileError) {
-              console.log(`Could not fetch profile for ${contact.phone}:`, profileError);
+              console.log(`Business profile for ${contact.phone}:`, JSON.stringify(businessResult, null, 2));
+              name = businessResult?.name || businessResult?.pushname || businessResult?.description || null;
+            } catch (businessError) {
+              console.log(`Could not fetch business profile for ${contact.phone}:`, businessError);
+            }
+
+            // If no name from business profile, try regular profile
+            if (!name) {
+              try {
+                const profileResult = await callEvolution(`/chat/fetchProfile/${instanceName}`, 'POST', {
+                  number: contact.phone,
+                });
+                console.log(`Profile for ${contact.phone}:`, JSON.stringify(profileResult, null, 2));
+                name = profileResult?.name || profileResult?.pushname || profileResult?.notify || profileResult?.verifiedName || null;
+              } catch (profileError) {
+                console.log(`Could not fetch profile for ${contact.phone}:`, profileError);
+              }
             }
 
             // Update the contact in the database
