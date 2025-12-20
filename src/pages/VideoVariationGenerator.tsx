@@ -11,10 +11,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { AudioSection } from "@/components/AudioSection";
-import subtitleTiktok from "@/assets/subtitle-style-tiktok.png";
-import subtitleYoutube from "@/assets/subtitle-style-youtube.png";
-import subtitleClassic from "@/assets/subtitle-style-classic.png";
-import { 
+import {
   Upload, 
   Trash2, 
   Play, 
@@ -34,7 +31,10 @@ import {
   Subtitles,
   Check,
   Square,
-  CheckSquare
+  CheckSquare,
+  Mic,
+  Minus,
+  Zap
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -73,7 +73,7 @@ interface GeneratedVideo {
 }
 
 interface SubtitleConfig {
-  style: 'tiktok' | 'youtube' | 'classic' | 'custom';
+  style: 'tiktok' | 'youtube' | 'classic' | 'karaoke' | 'minimal' | 'neon' | 'custom';
   font: string;
   fontSize: number;
   primaryColor: string;
@@ -565,7 +565,7 @@ export default function VideoVariationGenerator() {
     return allowedSubtitleColors.has(v) ? v : fallback;
   };
 
-  const applySubtitlePreset = (preset: 'tiktok' | 'youtube' | 'classic') => {
+  const applySubtitlePreset = (preset: 'tiktok' | 'youtube' | 'classic' | 'karaoke' | 'minimal' | 'neon') => {
     const presets: Record<string, SubtitleConfig> = {
       tiktok: {
         style: 'tiktok',
@@ -593,6 +593,33 @@ export default function VideoVariationGenerator() {
         highlightColor: 'yellow',
         yPosition: 90,
         maxWordsPerSegment: 10
+      },
+      karaoke: {
+        style: 'karaoke',
+        font: 'Montserrat/Montserrat-ExtraBold.ttf',
+        fontSize: 90,
+        primaryColor: 'yellow',
+        highlightColor: 'green',
+        yPosition: 70,
+        maxWordsPerSegment: 1
+      },
+      minimal: {
+        style: 'minimal',
+        font: 'Arial',
+        fontSize: 40,
+        primaryColor: 'white',
+        highlightColor: 'white',
+        yPosition: 85,
+        maxWordsPerSegment: 8
+      },
+      neon: {
+        style: 'neon',
+        font: 'Montserrat/Montserrat-ExtraBold.ttf',
+        fontSize: 80,
+        primaryColor: 'cyan',
+        highlightColor: 'magenta',
+        yPosition: 70,
+        maxWordsPerSegment: 2
       }
     };
     setSubtitleConfig(presets[preset]);
@@ -1818,76 +1845,39 @@ export default function VideoVariationGenerator() {
           </DialogHeader>
           
           <div className="space-y-6 py-4">
-            {/* Preset Selection with Previews */}
+            {/* Preset Selection */}
             <div className="space-y-2">
               <Label>Estilo de Legenda</Label>
               <div className="grid grid-cols-3 gap-3">
-                <button
-                  onClick={() => applySubtitlePreset('tiktok')}
-                  className={`relative rounded-lg overflow-hidden border-2 transition-all ${
-                    subtitleConfig.style === 'tiktok' 
-                      ? 'border-orange-500 ring-2 ring-orange-500/30' 
-                      : 'border-border hover:border-orange-500/50'
-                  }`}
-                >
-                  <img 
-                    src={subtitleTiktok} 
-                    alt="TikTok style preview" 
-                    className="w-full h-24 object-cover"
-                  />
-                  <div className={`absolute inset-0 flex items-end justify-center pb-2 bg-gradient-to-t from-black/70 to-transparent`}>
-                    <span className="text-xs font-medium text-white">TikTok/Reels</span>
-                  </div>
-                  {subtitleConfig.style === 'tiktok' && (
-                    <div className="absolute top-1 right-1 w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center">
-                      <Check className="w-3 h-3 text-white" />
+                {[
+                  { id: 'tiktok', name: 'TikTok/Reels', icon: Play, desc: 'Destaque palavra a palavra' },
+                  { id: 'youtube', name: 'YouTube', icon: FileVideo, desc: 'Estilo clássico de vídeos' },
+                  { id: 'classic', name: 'Clássico', icon: Subtitles, desc: 'Legenda simples tradicional' },
+                  { id: 'karaoke', name: 'Karaokê', icon: Mic, desc: 'Amarelo com destaque verde' },
+                  { id: 'minimal', name: 'Minimalista', icon: Minus, desc: 'Discreto e elegante' },
+                  { id: 'neon', name: 'Neon', icon: Zap, desc: 'Ciano com destaque magenta' },
+                ].map((preset) => (
+                  <button
+                    key={preset.id}
+                    onClick={() => applySubtitlePreset(preset.id as any)}
+                    className={`relative p-3 rounded-lg border-2 transition-all text-left ${
+                      subtitleConfig.style === preset.id 
+                        ? 'border-orange-500 ring-2 ring-orange-500/30 bg-orange-500/10' 
+                        : 'border-border hover:border-orange-500/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <preset.icon className="w-4 h-4 text-orange-500" />
+                      <span className="text-sm font-medium">{preset.name}</span>
                     </div>
-                  )}
-                </button>
-                <button
-                  onClick={() => applySubtitlePreset('youtube')}
-                  className={`relative rounded-lg overflow-hidden border-2 transition-all ${
-                    subtitleConfig.style === 'youtube' 
-                      ? 'border-orange-500 ring-2 ring-orange-500/30' 
-                      : 'border-border hover:border-orange-500/50'
-                  }`}
-                >
-                  <img 
-                    src={subtitleYoutube} 
-                    alt="YouTube style preview" 
-                    className="w-full h-24 object-cover"
-                  />
-                  <div className={`absolute inset-0 flex items-end justify-center pb-2 bg-gradient-to-t from-black/70 to-transparent`}>
-                    <span className="text-xs font-medium text-white">YouTube</span>
-                  </div>
-                  {subtitleConfig.style === 'youtube' && (
-                    <div className="absolute top-1 right-1 w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center">
-                      <Check className="w-3 h-3 text-white" />
-                    </div>
-                  )}
-                </button>
-                <button
-                  onClick={() => applySubtitlePreset('classic')}
-                  className={`relative rounded-lg overflow-hidden border-2 transition-all ${
-                    subtitleConfig.style === 'classic' 
-                      ? 'border-orange-500 ring-2 ring-orange-500/30' 
-                      : 'border-border hover:border-orange-500/50'
-                  }`}
-                >
-                  <img 
-                    src={subtitleClassic} 
-                    alt="Classic style preview" 
-                    className="w-full h-24 object-cover"
-                  />
-                  <div className={`absolute inset-0 flex items-end justify-center pb-2 bg-gradient-to-t from-black/70 to-transparent`}>
-                    <span className="text-xs font-medium text-white">Clássico</span>
-                  </div>
-                  {subtitleConfig.style === 'classic' && (
-                    <div className="absolute top-1 right-1 w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center">
-                      <Check className="w-3 h-3 text-white" />
-                    </div>
-                  )}
-                </button>
+                    <p className="text-xs text-muted-foreground">{preset.desc}</p>
+                    {subtitleConfig.style === preset.id && (
+                      <div className="absolute top-1 right-1 w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center">
+                        <Check className="w-3 h-3 text-white" />
+                      </div>
+                    )}
+                  </button>
+                ))}
               </div>
             </div>
 
