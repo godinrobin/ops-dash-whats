@@ -397,6 +397,249 @@ export type Database = {
         }
         Relationships: []
       }
+      maturador_config: {
+        Row: {
+          created_at: string
+          evolution_api_key: string
+          evolution_base_url: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          evolution_api_key: string
+          evolution_base_url: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          evolution_api_key?: string
+          evolution_base_url?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      maturador_conversations: {
+        Row: {
+          chip_a_id: string | null
+          chip_b_id: string | null
+          created_at: string
+          daily_limit: number
+          id: string
+          is_active: boolean
+          max_delay_seconds: number
+          messages_per_round: number
+          min_delay_seconds: number
+          name: string
+          quiet_hours_end: string | null
+          quiet_hours_start: string | null
+          schedule: Json | null
+          topics: Json | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          chip_a_id?: string | null
+          chip_b_id?: string | null
+          created_at?: string
+          daily_limit?: number
+          id?: string
+          is_active?: boolean
+          max_delay_seconds?: number
+          messages_per_round?: number
+          min_delay_seconds?: number
+          name: string
+          quiet_hours_end?: string | null
+          quiet_hours_start?: string | null
+          schedule?: Json | null
+          topics?: Json | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          chip_a_id?: string | null
+          chip_b_id?: string | null
+          created_at?: string
+          daily_limit?: number
+          id?: string
+          is_active?: boolean
+          max_delay_seconds?: number
+          messages_per_round?: number
+          min_delay_seconds?: number
+          name?: string
+          quiet_hours_end?: string | null
+          quiet_hours_start?: string | null
+          schedule?: Json | null
+          topics?: Json | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maturador_conversations_chip_a_id_fkey"
+            columns: ["chip_a_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maturador_conversations_chip_b_id_fkey"
+            columns: ["chip_b_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      maturador_instances: {
+        Row: {
+          created_at: string
+          id: string
+          instance_name: string
+          label: string | null
+          last_seen: string | null
+          persona_id: string | null
+          phone_number: string | null
+          qrcode: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          instance_name: string
+          label?: string | null
+          last_seen?: string | null
+          persona_id?: string | null
+          phone_number?: string | null
+          qrcode?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          instance_name?: string
+          label?: string | null
+          last_seen?: string | null
+          persona_id?: string | null
+          phone_number?: string | null
+          qrcode?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maturador_instances_persona_id_fkey"
+            columns: ["persona_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_personas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      maturador_messages: {
+        Row: {
+          body: string
+          conversation_id: string | null
+          created_at: string
+          from_instance_id: string | null
+          id: string
+          status: string
+          to_instance_id: string | null
+          user_id: string
+        }
+        Insert: {
+          body: string
+          conversation_id?: string | null
+          created_at?: string
+          from_instance_id?: string | null
+          id?: string
+          status?: string
+          to_instance_id?: string | null
+          user_id: string
+        }
+        Update: {
+          body?: string
+          conversation_id?: string | null
+          created_at?: string
+          from_instance_id?: string | null
+          id?: string
+          status?: string
+          to_instance_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maturador_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maturador_messages_from_instance_id_fkey"
+            columns: ["from_instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maturador_messages_to_instance_id_fkey"
+            columns: ["to_instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      maturador_personas: {
+        Row: {
+          created_at: string
+          greeting_afternoon: string | null
+          greeting_evening: string | null
+          greeting_morning: string | null
+          id: string
+          message_templates: Json | null
+          name: string
+          style: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          greeting_afternoon?: string | null
+          greeting_evening?: string | null
+          greeting_morning?: string | null
+          id?: string
+          message_templates?: Json | null
+          name: string
+          style?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          greeting_afternoon?: string | null
+          greeting_evening?: string | null
+          greeting_morning?: string | null
+          id?: string
+          message_templates?: Json | null
+          name?: string
+          style?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       metrics: {
         Row: {
           conversion: number
