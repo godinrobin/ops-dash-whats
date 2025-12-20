@@ -2,6 +2,7 @@ import { Header } from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Download, Chrome, FolderOpen, ToggleRight, CheckCircle, MessageSquare } from "lucide-react";
+import whatsappLogo from "@/assets/whatsapp-logo.png";
 
 const SaveWhatsApp = () => {
   const steps = [
@@ -45,9 +46,7 @@ const SaveWhatsApp = () => {
         <div className="container mx-auto max-w-4xl">
           <header className="text-center mb-12">
             <div className="flex justify-center mb-4">
-              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
-                <MessageSquare className="w-10 h-10 text-white" />
-              </div>
+              <img src={whatsappLogo} alt="WhatsApp" className="w-20 h-20 object-contain" />
             </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent">
               Save WhatsApp
