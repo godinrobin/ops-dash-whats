@@ -25,7 +25,6 @@ import ZapSpy from "./pages/ZapSpy";
 import TagWhats from "./pages/TagWhats";
 import ExtensaoAdsWhatsApp from "./pages/ExtensaoAdsWhatsApp";
 import VideoDownloader from "./pages/VideoDownloader";
-import VideoPromptsLibrary from "./pages/VideoPromptsLibrary";
 import SMSBot from "./pages/SMSBot";
 import SMMPanel from "./pages/SMMPanel";
 import AdminPanelNew from "./pages/AdminPanelNew";
@@ -67,7 +66,6 @@ const App = () => (
             <Route path="/tag-whats" element={<MemberRoute featureName="Tag Whats"><TagWhats /></MemberRoute>} />
             <Route path="/extensao-ads" element={<ProtectedRoute><ExtensaoAdsWhatsApp /></ProtectedRoute>} />
             <Route path="/video-downloader" element={<ProtectedRoute><VideoDownloader /></ProtectedRoute>} />
-            <Route path="/biblioteca-prompts" element={<MemberRoute featureName="Biblioteca de Prompts"><VideoPromptsLibrary /></MemberRoute>} />
             
             {/* ADMIN ROUTES */}
             <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />
