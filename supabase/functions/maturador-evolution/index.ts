@@ -957,6 +957,84 @@ Regras IMPORTANTES:
         break;
       }
 
+      // Get contact info (name and profile picture) via Evolution API
+      case 'get-contact-info': {
+        const { instanceName, phone } = params;
+        
+        if (!instanceName || !phone) {
+          return new Response(JSON.stringify({ error: 'instanceName and phone are required' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        try {
+          // Clean phone number
+          const cleanPhone = phone.replace(/\D/g, '');
+          
+          // Try to get profile picture
+          let profilePic = null;
+          try {
+            const picResult = await callEvolution(`/chat/fetchProfilePictureUrl/${instanceName}`, 'POST', {
+              number: cleanPhone,
+            });
+            profilePic = picResult?.profilePictureUrl || picResult?.picture || picResult?.url || null;
+          } catch (picError) {
+            console.log('Could not fetch profile picture:', picError);
+          }
+
+          // Try to get contact name via profile
+          let name = null;
+          try {
+            const profileResult = await callEvolution(`/chat/fetchProfile/${instanceName}`, 'POST', {
+              number: cleanPhone,
+            });
+            name = profileResult?.name || profileResult?.pushname || profileResult?.notify || null;
+          } catch (profileError) {
+            console.log('Could not fetch profile:', profileError);
+          }
+
+          result = { phone: cleanPhone, name, profilePic };
+        } catch (error) {
+          console.error('Error getting contact info:', error);
+          result = { phone, name: null, profilePic: null };
+        }
+        break;
+      }
+
+      // Send message to verified contact
+      case 'send-verified-message': {
+        const { instanceName, phone, message } = params;
+        
+        if (!instanceName || !phone || !message) {
+          return new Response(JSON.stringify({ error: 'instanceName, phone and message are required' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        try {
+          // Clean phone number
+          const cleanPhone = phone.replace(/\D/g, '');
+          
+          // Send text message
+          const sendResult = await callEvolution(`/message/sendText/${instanceName}`, 'POST', {
+            number: cleanPhone,
+            text: message,
+          });
+
+          console.log('Verified message send result:', JSON.stringify(sendResult, null, 2));
+          result = { success: true, sendResult };
+        } catch (error) {
+          console.error('Error sending verified message:', error);
+          return new Response(JSON.stringify({ error: 'Erro ao enviar mensagem' }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        break;
+      }
+
       default:
         return new Response(JSON.stringify({ error: `Ação desconhecida: ${action}` }), {
           status: 400,

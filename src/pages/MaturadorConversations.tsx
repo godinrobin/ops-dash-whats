@@ -173,6 +173,21 @@ export default function MaturadorConversations() {
       return;
     }
 
+    // Validate that numbers are not already in use in other conversations
+    const numbersInUse = getNumbersInUse();
+    const currentConvId = editingConversation?.id;
+    
+    if (numbersInUse.has(chipAId) && numbersInUse.get(chipAId) !== currentConvId) {
+      const instance = instances.find(i => i.id === chipAId);
+      toast.error(`O número "${instance?.label || instance?.phone_number || instance?.instance_name}" já está em uso em outra conversa`);
+      return;
+    }
+    if (numbersInUse.has(chipBId) && numbersInUse.get(chipBId) !== currentConvId) {
+      const instance = instances.find(i => i.id === chipBId);
+      toast.error(`O número "${instance?.label || instance?.phone_number || instance?.instance_name}" já está em uso em outra conversa`);
+      return;
+    }
+
     setSaving(true);
     try {
       const topicsArray = topics.split('\n').map(t => t.trim()).filter(t => t);
@@ -389,6 +404,22 @@ export default function MaturadorConversations() {
     return instance?.label || instance?.phone_number || instance?.instance_name || 'N/A';
   };
 
+  const getInstancePhone = (id: string | null) => {
+    if (!id) return null;
+    const instance = instances.find(i => i.id === id);
+    return instance?.phone_number || null;
+  };
+
+  // Get all numbers currently in use across conversations (returns Map of instanceId -> conversationId)
+  const getNumbersInUse = (): Map<string, string> => {
+    const inUse = new Map<string, string>();
+    conversations.forEach(conv => {
+      if (conv.chip_a_id) inUse.set(conv.chip_a_id, conv.id);
+      if (conv.chip_b_id) inUse.set(conv.chip_b_id, conv.id);
+    });
+    return inUse;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -405,7 +436,7 @@ export default function MaturadorConversations() {
             <Button variant="ghost" size="icon" onClick={() => navigate('/maturador')}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <h1 className="text-2xl font-bold">Conversas</h1>
+            <h1 className="text-2xl font-bold">Aquecedor</h1>
           </div>
           
           <Card className="max-w-md mx-auto">
@@ -435,13 +466,13 @@ export default function MaturadorConversations() {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>
-              <h1 className="text-2xl font-bold">Conversas</h1>
-              <p className="text-muted-foreground">Configure pareamentos entre seus números</p>
+              <h1 className="text-2xl font-bold">Aquecedor</h1>
+              <p className="text-muted-foreground">Configure pareamentos entre seus números para aquecê-los</p>
             </div>
           </div>
           <Button onClick={openCreateModal}>
             <Plus className="h-4 w-4 mr-2" />
-            Nova Conversa
+            Novo Aquecimento
           </Button>
         </div>
 
@@ -469,8 +500,20 @@ export default function MaturadorConversations() {
                       {conversation.is_active ? 'Ativa' : 'Pausada'}
                     </Badge>
                   </div>
-                  <CardDescription>
-                    {getInstanceName(conversation.chip_a_id)} ↔ {getInstanceName(conversation.chip_b_id)}
+                  <CardDescription className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{getInstanceName(conversation.chip_a_id)}</span>
+                      {getInstancePhone(conversation.chip_a_id) && (
+                        <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{getInstancePhone(conversation.chip_a_id)}</span>
+                      )}
+                    </div>
+                    <div className="text-muted-foreground">↕</div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{getInstanceName(conversation.chip_b_id)}</span>
+                      {getInstancePhone(conversation.chip_b_id) && (
+                        <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{getInstancePhone(conversation.chip_b_id)}</span>
+                      )}
+                    </div>
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">

@@ -230,9 +230,10 @@ export default function MaturadorDashboard() {
 
         {/* Main Content */}
         <Tabs defaultValue="instances" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
+          <TabsList className="grid w-full grid-cols-3 lg:w-[600px]">
             <TabsTrigger value="instances">Números</TabsTrigger>
-            <TabsTrigger value="conversations">Conversas</TabsTrigger>
+            <TabsTrigger value="conversations">Aquecedor</TabsTrigger>
+            <TabsTrigger value="verified">Contatos Verificados</TabsTrigger>
           </TabsList>
 
           <TabsContent value="instances" className="space-y-4">
@@ -339,6 +340,34 @@ export default function MaturadorDashboard() {
                 ))}
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="verified" className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-semibold">Contatos Verificados pela Meta</h2>
+              <Button onClick={() => navigate('/maturador/verified-contacts')}>
+                Ver Todos
+              </Button>
+            </div>
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-lg bg-green-500/10">
+                    <Users className="h-5 w-5 text-green-500" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium">Aqueça seu número com segurança</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Conversar com contatos verificados pela Meta (bancos, operadoras, empresas) 
+                      aumenta a credibilidade do seu número e reduz chances de banimento.
+                    </p>
+                    <Button className="mt-3" onClick={() => navigate('/maturador/verified-contacts')}>
+                      Acessar Contatos Verificados
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
