@@ -957,47 +957,87 @@ Regras IMPORTANTES:
         break;
       }
 
-      // Get contact info (name and profile picture) via Evolution API
-      case 'get-contact-info': {
-        const { instanceName, phone } = params;
+      // Fetch and update verified contacts info from Evolution API
+      case 'fetch-verified-contacts': {
+        const { instanceName } = params;
         
-        if (!instanceName || !phone) {
-          return new Response(JSON.stringify({ error: 'instanceName and phone are required' }), {
+        if (!instanceName) {
+          return new Response(JSON.stringify({ error: 'instanceName is required' }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
 
+        // Use service role client to update the table
+        const serviceClient = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        );
+
         try {
-          // Clean phone number
-          const cleanPhone = phone.replace(/\D/g, '');
+          // Get all verified contacts that haven't been fetched yet
+          const { data: contacts, error: fetchError } = await serviceClient
+            .from('maturador_verified_contacts')
+            .select('*')
+            .is('last_fetched_at', null);
+
+          if (fetchError) throw fetchError;
+
+          console.log(`Fetching info for ${contacts?.length || 0} verified contacts`);
+
+          const updatedContacts = [];
           
-          // Try to get profile picture
-          let profilePic = null;
-          try {
-            const picResult = await callEvolution(`/chat/fetchProfilePictureUrl/${instanceName}`, 'POST', {
-              number: cleanPhone,
-            });
-            profilePic = picResult?.profilePictureUrl || picResult?.picture || picResult?.url || null;
-          } catch (picError) {
-            console.log('Could not fetch profile picture:', picError);
+          for (const contact of (contacts || [])) {
+            let profilePic = null;
+            let name = null;
+
+            // Try to get profile picture
+            try {
+              const picResult = await callEvolution(`/chat/fetchProfilePictureUrl/${instanceName}`, 'POST', {
+                number: contact.phone,
+              });
+              profilePic = picResult?.profilePictureUrl || picResult?.picture || picResult?.url || null;
+            } catch (picError) {
+              console.log(`Could not fetch profile picture for ${contact.phone}:`, picError);
+            }
+
+            // Try to get contact name
+            try {
+              const profileResult = await callEvolution(`/chat/fetchProfile/${instanceName}`, 'POST', {
+                number: contact.phone,
+              });
+              name = profileResult?.name || profileResult?.pushname || profileResult?.notify || null;
+            } catch (profileError) {
+              console.log(`Could not fetch profile for ${contact.phone}:`, profileError);
+            }
+
+            // Update the contact in the database
+            const { error: updateError } = await serviceClient
+              .from('maturador_verified_contacts')
+              .update({
+                name,
+                profile_pic_url: profilePic,
+                last_fetched_at: new Date().toISOString(),
+              })
+              .eq('id', contact.id);
+
+            if (updateError) {
+              console.error(`Error updating contact ${contact.phone}:`, updateError);
+            } else {
+              updatedContacts.push({ phone: contact.phone, name, profilePic });
+            }
+
+            // Small delay between requests to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 300));
           }
 
-          // Try to get contact name via profile
-          let name = null;
-          try {
-            const profileResult = await callEvolution(`/chat/fetchProfile/${instanceName}`, 'POST', {
-              number: cleanPhone,
-            });
-            name = profileResult?.name || profileResult?.pushname || profileResult?.notify || null;
-          } catch (profileError) {
-            console.log('Could not fetch profile:', profileError);
-          }
-
-          result = { phone: cleanPhone, name, profilePic };
+          result = { success: true, updated: updatedContacts.length };
         } catch (error) {
-          console.error('Error getting contact info:', error);
-          result = { phone, name: null, profilePic: null };
+          console.error('Error fetching verified contacts:', error);
+          return new Response(JSON.stringify({ error: 'Erro ao buscar contatos verificados' }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
         }
         break;
       }
