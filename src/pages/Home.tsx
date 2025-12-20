@@ -182,6 +182,15 @@ const Home = () => {
       description: "Aqueça seus chips com conversas naturais entre instâncias",
       gradient: "from-green-400 to-emerald-500",
       restricted: true
+    },
+    { 
+      path: "/watermark-remover", 
+      emoji: "✨", 
+      title: "Removedor de Marca d'Água",
+      description: "Remova marcas d'água de vídeos gerados pela Sora 2",
+      subtext: "Processe vídeos com IA para remover watermarks",
+      gradient: "from-indigo-400 to-purple-500",
+      restricted: true
     }
   ];
 

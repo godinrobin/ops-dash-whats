@@ -32,6 +32,7 @@ import MaturadorInstances from "./pages/MaturadorInstances";
 import MaturadorConversations from "./pages/MaturadorConversations";
 import MaturadorChat from "./pages/MaturadorChat";
 import MaturadorVerifiedContacts from "./pages/MaturadorVerifiedContacts";
+import WatermarkRemover from "./pages/WatermarkRemover";
 import AdminPanelNew from "./pages/AdminPanelNew";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
@@ -76,6 +77,7 @@ const App = () => (
             <Route path="/maturador/conversations" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorConversations /></MemberRoute>} />
             <Route path="/maturador/chat" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorChat /></MemberRoute>} />
             <Route path="/maturador/verified-contacts" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorVerifiedContacts /></MemberRoute>} />
+            <Route path="/watermark-remover" element={<MemberRoute featureName="Removedor de Marca d'Água"><WatermarkRemover /></MemberRoute>} />
             
             {/* ADMIN ROUTES */}
             <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />
