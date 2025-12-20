@@ -203,85 +203,102 @@ async function downloadTwitter(url: string): Promise<any> {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
+  // Handle CORS preflight requests
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
-  
+
+  const json = (payload: unknown, status = 200) =>
+    new Response(JSON.stringify(payload), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" },
+    });
+
   try {
-    const { url } = await req.json();
-    
-    if (!url) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'URL é obrigatória' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {
+      // ignore – handled below
     }
-    
+
+    const url = typeof body?.url === "string" ? body.url : "";
+
+    if (!url) {
+      // IMPORTANT: always return 200 so the web client can read the error message
+      return json({ success: false, error: "URL é obrigatória" }, 200);
+    }
+
     const platform = detectPlatform(url);
     console.log(`Processing ${platform} URL: ${url}`);
-    
-    if (platform === 'unknown') {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Plataforma não suportada. Use YouTube, TikTok, Instagram ou Twitter.' 
-        }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+
+    if (platform === "unknown") {
+      return json(
+        {
+          success: false,
+          error: "Plataforma não suportada. Use YouTube, TikTok, Instagram ou Twitter.",
+        },
+        200
       );
     }
-    
-    let result;
-    let error;
-    
+
+    let result: any | null = null;
+    let errorMessage: string | undefined;
+
     try {
       switch (platform) {
-        case 'tiktok':
+        case "tiktok":
           result = await downloadTikTok(url);
           break;
-        case 'youtube':
+        case "youtube":
           result = await downloadYouTube(url);
           break;
-        case 'instagram':
+        case "instagram":
           result = await downloadInstagram(url);
           break;
-        case 'twitter':
+        case "twitter":
           result = await downloadTwitter(url);
           break;
         default:
-          throw new Error('Plataforma não suportada');
+          throw new Error("Plataforma não suportada");
       }
     } catch (e: any) {
-      error = e.message;
-      console.log(`${platform} download failed:`, error);
+      errorMessage = e?.message || String(e);
+      console.log(`${platform} download failed:`, errorMessage);
     }
-    
-    if (!result) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: `Não foi possível baixar o vídeo do ${platform}. ${error || 'Verifique se o link está correto e o vídeo está disponível publicamente.'}` 
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+
+    if (!result?.url) {
+      return json(
+        {
+          success: false,
+          error:
+            `Não foi possível baixar o vídeo do ${platform}. ` +
+            (errorMessage || "Verifique se o link está correto e o vídeo está disponível publicamente."),
+        },
+        200
       );
     }
-    
-    return new Response(
-      JSON.stringify({
+
+    return json(
+      {
         success: true,
         platform,
         url: result.url,
         filename: result.filename,
         thumbnail: result.thumbnail,
         title: result.title,
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      },
+      200
     );
-    
   } catch (error: any) {
-    console.error('Error in video-downloader:', error);
-    return new Response(
-      JSON.stringify({ success: false, error: error.message || 'Erro ao processar requisição' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    console.error("Unhandled error in video-downloader:", error);
+    // Still return 200 to avoid `Edge Function returned a non-2xx status code` in the client.
+    return json(
+      {
+        success: false,
+        error: error?.message || "Erro ao processar requisição",
+      },
+      200
     );
   }
 });
