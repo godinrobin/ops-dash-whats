@@ -977,8 +977,11 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          is_subtitled: boolean
+          original_video_url: string | null
           render_id: string
           status: string
+          subtitled_video_url: string | null
           updated_at: string
           user_id: string
           variation_name: string
@@ -987,8 +990,11 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          is_subtitled?: boolean
+          original_video_url?: string | null
           render_id: string
           status?: string
+          subtitled_video_url?: string | null
           updated_at?: string
           user_id: string
           variation_name: string
@@ -997,8 +1003,11 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          is_subtitled?: boolean
+          original_video_url?: string | null
           render_id?: string
           status?: string
+          subtitled_video_url?: string | null
           updated_at?: string
           user_id?: string
           variation_name?: string
