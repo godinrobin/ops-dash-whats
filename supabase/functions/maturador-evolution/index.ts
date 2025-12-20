@@ -195,7 +195,9 @@ Regras:
       }
 
       const audioBuffer = await response.arrayBuffer();
-      return base64Encode(audioBuffer);
+      const audioBase64 = base64Encode(audioBuffer);
+      console.log('ElevenLabs audio bytes:', audioBuffer.byteLength, 'base64 length:', audioBase64.length);
+      return audioBase64;
     };
 
     // Helper to generate image with OpenAI DALL-E
@@ -806,13 +808,10 @@ Regras:
             console.log('Audio generated, sending via Evolution API...');
 
             // Send audio via Evolution API
-            // IMPORTANT: Evolution expects raw base64 or URL; data-URI prefix breaks validation.
-            const sendResult = await callEvolution(`/message/sendMedia/${fromInstance.instance_name}`, 'POST', {
+            // Evolution expects raw base64 (no data: prefix) on the WhatsApp audio endpoint.
+            const sendResult = await callEvolution(`/message/sendWhatsAppAudio/${fromInstance.instance_name}`, 'POST', {
               number: toPhone,
-              mediatype: 'audio',
-              mimetype: 'audio/mpeg',
-              media: audioBase64,
-              fileName: 'audio.mp3',
+              audio: audioBase64,
             });
 
             console.log('Audio send result:', JSON.stringify(sendResult, null, 2));
