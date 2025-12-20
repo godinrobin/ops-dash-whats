@@ -1568,16 +1568,16 @@ export default function VideoVariationGenerator() {
                         <div className="space-y-2">
                           {/* Preview buttons */}
                           <div className="flex gap-2">
-                            {video.isSubtitled && video.subtitledUrl ? (
+                            {video.isSubtitled ? (
                               <>
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => setPreviewVideo(video.subtitledUrl!)}
+                                  onClick={() => setPreviewVideo(video.subtitledUrl || video.url!)}
                                   className="flex-1 border-orange-500 text-orange-500 hover:bg-orange-500/10"
                                 >
                                   <Eye className="mr-1 h-3 w-3" />
-                                  Preview Legendado
+                                  Legendado
                                 </Button>
                                 {video.originalUrl && (
                                   <Button
@@ -1606,16 +1606,16 @@ export default function VideoVariationGenerator() {
                           
                           {/* Download buttons */}
                           <div className="flex gap-2">
-                            {video.isSubtitled && video.subtitledUrl ? (
+                            {video.isSubtitled ? (
                               <>
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => downloadVideo(video.subtitledUrl!, video.name + '-legendado')}
+                                  onClick={() => downloadVideo(video.subtitledUrl || video.url!, video.name + '-legendado')}
                                   className="flex-1 border-orange-500 text-orange-500 hover:bg-orange-500/10"
                                 >
                                   <Download className="mr-1 h-3 w-3" />
-                                  Baixar Legendado
+                                  Legendado
                                 </Button>
                                 {video.originalUrl && (
                                   <Button
