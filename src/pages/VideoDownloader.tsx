@@ -85,13 +85,24 @@ const VideoDownloader = () => {
         throw new Error(data.error || "Erro ao processar download");
       }
 
-      // Open download URL in new tab
-      window.open(data.url, "_blank");
+       // Try to trigger a real download (especially for audio)
+       const a = document.createElement("a");
+       a.href = data.url;
+       a.download = data.filename || "download";
+       a.rel = "noopener noreferrer";
+       document.body.appendChild(a);
+       a.click();
+       a.remove();
 
-      toast({
-        title: "Download iniciado!",
-        description: data.title || "O download será iniciado em uma nova aba",
-      });
+       // Fallback: some providers ignore download attribute
+       if (downloadMode !== "audio") {
+         window.open(data.url, "_blank");
+       }
+
+       toast({
+         title: "Download iniciado!",
+         description: data.title || "O download será iniciado em instantes",
+       });
     } catch (error: any) {
       console.error("Download error:", error);
       toast({
