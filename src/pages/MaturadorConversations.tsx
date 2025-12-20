@@ -5,12 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Plus, Loader2, MessageSquare, Trash2, Pencil, Play, Pause } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, MessageSquare, Trash2, Pencil, Play, Pause, Send } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -37,6 +36,7 @@ interface Conversation {
   quiet_hours_end: string | null;
   topics: string[];
   created_at: string;
+  messageCount?: number;
 }
 
 export default function MaturadorConversations() {
@@ -68,6 +68,9 @@ export default function MaturadorConversations() {
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Run conversation
+  const [runningConversation, setRunningConversation] = useState<string | null>(null);
+
   const fetchData = async () => {
     if (!user) return;
 
@@ -91,10 +94,18 @@ export default function MaturadorConversations() {
 
       if (conversationsError) throw conversationsError;
       
-      // Parse topics from JSON
-      const parsedConversations = (conversationsData || []).map(conv => ({
-        ...conv,
-        topics: Array.isArray(conv.topics) ? conv.topics.map(t => String(t)) : [],
+      // Parse topics from JSON and get message counts
+      const parsedConversations = await Promise.all((conversationsData || []).map(async (conv) => {
+        const { count } = await supabase
+          .from('maturador_messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('conversation_id', conv.id);
+
+        return {
+          ...conv,
+          topics: Array.isArray(conv.topics) ? conv.topics.map(t => String(t)) : [],
+          messageCount: count || 0,
+        };
       }));
       
       setConversations(parsedConversations as Conversation[]);
@@ -151,11 +162,11 @@ export default function MaturadorConversations() {
       return;
     }
     if (!chipAId || !chipBId) {
-      toast.error('Selecione os dois chips para a conversa');
+      toast.error('Selecione os dois números para a conversa');
       return;
     }
     if (chipAId === chipBId) {
-      toast.error('Os chips devem ser diferentes');
+      toast.error('Os números devem ser diferentes');
       return;
     }
 
@@ -223,6 +234,39 @@ export default function MaturadorConversations() {
     }
   };
 
+  const handleRunConversation = async (conversation: Conversation) => {
+    if (!conversation.is_active) {
+      toast.error('Ative a conversa antes de executar');
+      return;
+    }
+
+    setRunningConversation(conversation.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('maturador-evolution', {
+        body: { action: 'run-conversation', conversationId: conversation.id },
+      });
+
+      if (error) throw error;
+      if (data.error) {
+        if (data.dailyLimitReached) {
+          toast.warning('Limite diário de mensagens atingido');
+        } else {
+          throw new Error(data.error);
+        }
+        return;
+      }
+
+      toast.success(`${data.messagesSent} mensagens enviadas!`);
+      await fetchData();
+
+    } catch (error: any) {
+      console.error('Error running conversation:', error);
+      toast.error(error.message || 'Erro ao executar conversa');
+    } finally {
+      setRunningConversation(null);
+    }
+  };
+
   const handleDelete = async () => {
     if (!conversationToDelete) return;
 
@@ -250,7 +294,7 @@ export default function MaturadorConversations() {
   const getInstanceName = (id: string | null) => {
     if (!id) return 'N/A';
     const instance = instances.find(i => i.id === id);
-    return instance?.label || instance?.instance_name || 'N/A';
+    return instance?.label || instance?.phone_number || instance?.instance_name || 'N/A';
   };
 
   if (loading) {
@@ -275,12 +319,12 @@ export default function MaturadorConversations() {
           <Card className="max-w-md mx-auto">
             <CardContent className="p-8 text-center">
               <MessageSquare className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-              <h3 className="text-lg font-medium mb-2">Instâncias Insuficientes</h3>
+              <h3 className="text-lg font-medium mb-2">Números Insuficientes</h3>
               <p className="text-muted-foreground mb-4">
-                Você precisa de pelo menos 2 instâncias de WhatsApp para criar uma conversa.
+                Você precisa de pelo menos 2 números de WhatsApp para criar uma conversa.
               </p>
               <Button onClick={() => navigate('/maturador/instances')}>
-                Adicionar Instâncias
+                Adicionar Números
               </Button>
             </CardContent>
           </Card>
@@ -300,7 +344,7 @@ export default function MaturadorConversations() {
             </Button>
             <div>
               <h1 className="text-2xl font-bold">Conversas</h1>
-              <p className="text-muted-foreground">Configure pareamentos entre seus chips</p>
+              <p className="text-muted-foreground">Configure pareamentos entre seus números</p>
             </div>
           </div>
           <Button onClick={openCreateModal}>
@@ -315,7 +359,7 @@ export default function MaturadorConversations() {
             <CardContent className="p-8 text-center">
               <MessageSquare className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
               <h3 className="text-lg font-medium mb-2">Nenhuma conversa</h3>
-              <p className="text-muted-foreground mb-4">Crie uma conversa para aquecer seus chips</p>
+              <p className="text-muted-foreground mb-4">Crie uma conversa para aquecer seus números</p>
               <Button onClick={openCreateModal}>
                 <Plus className="h-4 w-4 mr-2" />
                 Criar Conversa
@@ -329,7 +373,7 @@ export default function MaturadorConversations() {
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base">{conversation.name}</CardTitle>
-                    <Badge variant={conversation.is_active ? 'default' : 'secondary'}>
+                    <Badge className={conversation.is_active ? 'bg-green-500 hover:bg-green-600 text-white' : ''} variant={conversation.is_active ? 'default' : 'secondary'}>
                       {conversation.is_active ? 'Ativa' : 'Pausada'}
                     </Badge>
                   </div>
@@ -338,6 +382,12 @@ export default function MaturadorConversations() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
+                      <MessageSquare className="h-3 w-3 mr-1" />
+                      {conversation.messageCount || 0} mensagens trocadas
+                    </Badge>
+                  </div>
                   <div className="text-xs text-muted-foreground space-y-1">
                     <p>Delay: {conversation.min_delay_seconds}s - {conversation.max_delay_seconds}s</p>
                     <p>Mensagens/round: {conversation.messages_per_round} | Limite diário: {conversation.daily_limit}</p>
@@ -350,7 +400,23 @@ export default function MaturadorConversations() {
                   <div className="flex gap-2 flex-wrap">
                     <Button 
                       size="sm" 
+                      className={conversation.is_active ? 'bg-green-500 hover:bg-green-600 text-white' : ''}
+                      variant={conversation.is_active ? 'default' : 'outline'}
+                      onClick={() => handleRunConversation(conversation)}
+                      disabled={runningConversation === conversation.id || !conversation.is_active}
+                    >
+                      {runningConversation === conversation.id ? (
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      ) : (
+                        <Send className="h-3 w-3 mr-1" />
+                      )}
+                      Executar
+                    </Button>
+
+                    <Button 
+                      size="sm" 
                       variant={conversation.is_active ? "outline" : "default"}
+                      className={!conversation.is_active ? 'bg-green-500 hover:bg-green-600 text-white' : ''}
                       onClick={() => handleToggleActive(conversation)}
                     >
                       {conversation.is_active ? (
@@ -401,7 +467,7 @@ export default function MaturadorConversations() {
                 {editingConversation ? 'Editar Conversa' : 'Nova Conversa'}
               </DialogTitle>
               <DialogDescription>
-                Configure o pareamento entre dois chips de WhatsApp
+                Configure o pareamento entre dois números de WhatsApp
               </DialogDescription>
             </DialogHeader>
             
@@ -410,7 +476,7 @@ export default function MaturadorConversations() {
                 <Label htmlFor="name">Nome da Conversa</Label>
                 <Input
                   id="name"
-                  placeholder="Ex: Aquecimento Chips 01 e 02"
+                  placeholder="Ex: Aquecimento Números 01 e 02"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />
@@ -418,7 +484,7 @@ export default function MaturadorConversations() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Chip A</Label>
+                  <Label>Número A</Label>
                   <Select value={chipAId} onValueChange={setChipAId}>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione" />
@@ -426,7 +492,7 @@ export default function MaturadorConversations() {
                     <SelectContent>
                       {instances.map((instance) => (
                         <SelectItem key={instance.id} value={instance.id}>
-                          {instance.label || instance.instance_name}
+                          {instance.label || instance.phone_number || instance.instance_name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -434,7 +500,7 @@ export default function MaturadorConversations() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Chip B</Label>
+                  <Label>Número B</Label>
                   <Select value={chipBId} onValueChange={setChipBId}>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione" />
@@ -442,7 +508,7 @@ export default function MaturadorConversations() {
                     <SelectContent>
                       {instances.map((instance) => (
                         <SelectItem key={instance.id} value={instance.id}>
-                          {instance.label || instance.instance_name}
+                          {instance.label || instance.phone_number || instance.instance_name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -491,6 +557,7 @@ export default function MaturadorConversations() {
                     id="dailyLimit"
                     type="number"
                     min={1}
+                    max={500}
                     value={dailyLimit}
                     onChange={(e) => setDailyLimit(Number(e.target.value))}
                   />
@@ -499,7 +566,7 @@ export default function MaturadorConversations() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="quietStart">Início do Silêncio</Label>
+                  <Label htmlFor="quietStart">Início Silêncio</Label>
                   <Input
                     id="quietStart"
                     type="time"
@@ -508,7 +575,7 @@ export default function MaturadorConversations() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="quietEnd">Fim do Silêncio</Label>
+                  <Label htmlFor="quietEnd">Fim Silêncio</Label>
                   <Input
                     id="quietEnd"
                     type="time"
@@ -519,16 +586,16 @@ export default function MaturadorConversations() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="topics">Tópicos de Conversa (um por linha)</Label>
+                <Label htmlFor="topics">Tópicos (um por linha)</Label>
                 <Textarea
                   id="topics"
-                  placeholder="Ex:&#10;Futebol e times favoritos&#10;Clima e previsão do tempo&#10;Filmes e séries&#10;Receitas de comida"
+                  placeholder="Futebol&#10;Música&#10;Filmes&#10;Viagens"
                   value={topics}
                   onChange={(e) => setTopics(e.target.value)}
                   rows={4}
                 />
                 <p className="text-xs text-muted-foreground">
-                  A IA gerará conversas naturais baseadas nesses tópicos
+                  Os tópicos serão usados para gerar mensagens mais naturais
                 </p>
               </div>
             </div>
@@ -541,7 +608,7 @@ export default function MaturadorConversations() {
                 {saving ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : null}
-                {editingConversation ? 'Salvar Alterações' : 'Criar Conversa'}
+                {editingConversation ? 'Salvar' : 'Criar'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -553,15 +620,14 @@ export default function MaturadorConversations() {
             <AlertDialogHeader>
               <AlertDialogTitle>Excluir Conversa</AlertDialogTitle>
               <AlertDialogDescription>
-                Tem certeza que deseja excluir a conversa "{conversationToDelete?.name}"? 
+                Tem certeza que deseja excluir "{conversationToDelete?.name}"? 
                 Esta ação não pode ser desfeita.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDelete} disabled={deleting} className="bg-destructive text-destructive-foreground">
-                {deleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                Excluir
+              <AlertDialogAction onClick={handleDelete} disabled={deleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Excluir'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
