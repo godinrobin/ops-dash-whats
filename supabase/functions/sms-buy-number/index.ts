@@ -51,15 +51,28 @@ serve(async (req) => {
 
     // Primeiro, busca o preço atual do serviço
     const priceUrl = `https://api.sms-activate.org/stubs/handler_api.php?api_key=${apiKey}&action=getPrices&country=${countryCode}&service=${serviceCode}`;
+    console.log('Fetching prices from:', priceUrl.replace(apiKey, '***'));
+    
     const priceResponse = await fetch(priceUrl);
-    const priceData = await priceResponse.json();
+    const priceText = await priceResponse.text();
+    console.log('Price API response:', priceText.substring(0, 500));
+    
+    let priceData;
+    try {
+      priceData = JSON.parse(priceText);
+    } catch (e) {
+      console.error('Failed to parse price response:', priceText);
+      throw new Error(`Erro na API de preços: ${priceText.substring(0, 100)}`);
+    }
     
     let priceUsd = 0;
     let available = 0;
     if (priceData[countryCode] && priceData[countryCode][serviceCode]) {
       priceUsd = priceData[countryCode][serviceCode].cost;
       available = priceData[countryCode][serviceCode].count;
+      console.log(`Price found: $${priceUsd}, Available: ${available}`);
     } else {
+      console.error('Service not found in response:', JSON.stringify(priceData).substring(0, 200));
       throw new Error('Serviço não disponível neste país');
     }
 
