@@ -99,10 +99,38 @@ serve(async (req) => {
         
         console.log('Result data:', JSON.stringify(resultData));
 
+        // Check if there's an error in the completed result
+        if (resultData.detail) {
+          console.error('Fal.ai error in result:', resultData.detail);
+          return new Response(
+            JSON.stringify({ 
+              status: 'failed', 
+              error: typeof resultData.detail === 'string' 
+                ? resultData.detail 
+                : JSON.stringify(resultData.detail) 
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const videoUrl = resultData.video?.url || resultData.output?.url;
+        
+        // If no video URL found, it's a failure
+        if (!videoUrl) {
+          console.error('No video URL in result:', JSON.stringify(resultData));
+          return new Response(
+            JSON.stringify({ 
+              status: 'failed', 
+              error: 'Video URL not found in result' 
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
         return new Response(
           JSON.stringify({
             status: 'done',
-            videoUrl: resultData.video?.url || resultData.output?.url
+            videoUrl: videoUrl
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );

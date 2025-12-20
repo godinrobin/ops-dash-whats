@@ -540,7 +540,7 @@ export default function VideoVariationGenerator() {
         font: 'Poppins/Poppins-Bold.ttf',
         fontSize: 70,
         primaryColor: 'white',
-        highlightColor: '#00ff00',
+        highlightColor: 'green',
         yPosition: 80,
         maxWordsPerSegment: 3
       },
@@ -1730,7 +1730,8 @@ export default function VideoVariationGenerator() {
                   <SelectContent>
                     <SelectItem value="white">Branco</SelectItem>
                     <SelectItem value="yellow">Amarelo</SelectItem>
-                    <SelectItem value="#00ff00">Verde</SelectItem>
+                    <SelectItem value="green">Verde</SelectItem>
+                    <SelectItem value="cyan">Ciano</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1745,9 +1746,11 @@ export default function VideoVariationGenerator() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="yellow">Amarelo</SelectItem>
-                    <SelectItem value="#00ff00">Verde</SelectItem>
+                    <SelectItem value="green">Verde</SelectItem>
                     <SelectItem value="orange">Laranja</SelectItem>
-                    <SelectItem value="#ff00ff">Rosa</SelectItem>
+                    <SelectItem value="magenta">Magenta</SelectItem>
+                    <SelectItem value="cyan">Ciano</SelectItem>
+                    <SelectItem value="red">Vermelho</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
