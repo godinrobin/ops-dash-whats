@@ -524,6 +524,39 @@ export default function VideoVariationGenerator() {
     setSelectedForSubtitle([]);
   };
 
+  const allowedSubtitleColors = new Set([
+    'white',
+    'black',
+    'red',
+    'green',
+    'blue',
+    'yellow',
+    'orange',
+    'purple',
+    'pink',
+    'brown',
+    'gray',
+    'cyan',
+    'magenta',
+  ]);
+
+  const normalizeSubtitleColor = (value: string | undefined, fallback: string) => {
+    const v = (value ?? '').trim().toLowerCase();
+    if (!v) return fallback;
+
+    // Backward-compat for old UI that sent hex
+    const hexMap: Record<string, string> = {
+      '#ff00ff': 'magenta',
+      '#00ff00': 'green',
+    };
+    if (hexMap[v]) return hexMap[v];
+
+    // Unknown hex => fallback
+    if (v.startsWith('#')) return fallback;
+
+    return allowedSubtitleColors.has(v) ? v : fallback;
+  };
+
   const applySubtitlePreset = (preset: 'tiktok' | 'youtube' | 'classic') => {
     const presets: Record<string, SubtitleConfig> = {
       tiktok: {
@@ -586,8 +619,8 @@ export default function VideoVariationGenerator() {
             subtitleConfig: {
               font: subtitleConfig.font,
               fontSize: subtitleConfig.fontSize,
-              primaryColor: subtitleConfig.primaryColor,
-              highlightColor: subtitleConfig.highlightColor,
+              primaryColor: normalizeSubtitleColor(subtitleConfig.primaryColor, 'white'),
+              highlightColor: normalizeSubtitleColor(subtitleConfig.highlightColor, 'yellow'),
               yPosition: subtitleConfig.yPosition,
               maxWordsPerSegment: subtitleConfig.maxWordsPerSegment,
               wordLevel: subtitleConfig.maxWordsPerSegment <= 3,
@@ -631,19 +664,22 @@ export default function VideoVariationGenerator() {
     toast.success(`${videosToSubtitle.length} vídeos enviados para legendagem!`);
   };
 
-  const checkSubtitleStatus = async (requestId: string): Promise<{ status: string; videoUrl?: string }> => {
+  const checkSubtitleStatus = async (
+    requestId: string
+  ): Promise<{ status: string; videoUrl?: string; error?: string }> => {
     const { data, error } = await supabase.functions.invoke('add-subtitles-to-video', {
       body: { action: 'status', requestId }
     });
 
     if (error) {
       console.error('Subtitle status check error:', error);
-      return { status: 'failed' };
+      return { status: 'failed', error: error.message };
     }
 
     return {
       status: data.status,
-      videoUrl: data.videoUrl
+      videoUrl: data.videoUrl,
+      error: data.error
     };
   };
 
@@ -697,6 +733,8 @@ export default function VideoVariationGenerator() {
                 ? { ...v, subtitleStatus: 'failed' as const }
                 : v
             ));
+
+            toast.error(`Legenda falhou (${video.name}): ${result.error || 'erro desconhecido'}`);
           }
         } catch (err) {
           console.error(`Error checking subtitle status for ${video.name}:`, err);
