@@ -24,6 +24,7 @@ import CreativeAnalyzer from "./pages/CreativeAnalyzer";
 import ZapSpy from "./pages/ZapSpy";
 import TagWhats from "./pages/TagWhats";
 import ExtensaoAdsWhatsApp from "./pages/ExtensaoAdsWhatsApp";
+import VideoDownloader from "./pages/VideoDownloader";
 import SMSBot from "./pages/SMSBot";
 import SMMPanel from "./pages/SMMPanel";
 import AdminPanelNew from "./pages/AdminPanelNew";
@@ -64,6 +65,7 @@ const App = () => (
             <Route path="/analisador-criativos" element={<MemberRoute featureName="Analisador de Criativos"><CreativeAnalyzer /></MemberRoute>} />
             <Route path="/tag-whats" element={<MemberRoute featureName="Tag Whats"><TagWhats /></MemberRoute>} />
             <Route path="/extensao-ads" element={<ProtectedRoute><ExtensaoAdsWhatsApp /></ProtectedRoute>} />
+            <Route path="/video-downloader" element={<ProtectedRoute><VideoDownloader /></ProtectedRoute>} />
             
             {/* ADMIN ROUTES */}
             <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />
