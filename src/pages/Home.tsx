@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAccessLevel } from "@/hooks/useAccessLevel";
 import { RestrictedFeatureModal } from "@/components/RestrictedFeatureModal";
 import { Lock } from "lucide-react";
+import tiktokLogo from "@/assets/tiktok-logo.png";
 
 const Home = () => {
   const navigate = useNavigate();
@@ -167,7 +168,7 @@ const Home = () => {
     },
     { 
       path: "/video-downloader", 
-      emoji: "🎵", 
+      image: tiktokLogo,
       title: "Download Vídeos TikTok",
       description: "Baixe vídeos do TikTok sem marca d'água",
       subtext: "Download grátis em MP4 ou MP3",
@@ -235,10 +236,14 @@ const Home = () => {
                       </div>
                     </div>
                   )}
-                  <CardHeader className="text-center p-3 md:p-6">
-                    <div className="flex justify-center mb-2 md:mb-4">
-                      <span className="text-3xl md:text-6xl">{system.emoji}</span>
-                    </div>
+                    <CardHeader className="text-center p-3 md:p-6">
+                      <div className="flex justify-center mb-2 md:mb-4">
+                        {'image' in system && system.image ? (
+                          <img src={system.image} alt={system.title} className="w-8 h-8 md:w-16 md:h-16 object-contain" />
+                        ) : (
+                          <span className="text-3xl md:text-6xl">{(system as any).emoji}</span>
+                        )}
+                      </div>
                     <CardTitle className={`text-sm md:text-2xl ${
                       system.gradient 
                         ? `bg-gradient-to-r ${system.gradient} bg-clip-text text-transparent` 

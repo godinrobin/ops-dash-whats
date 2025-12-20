@@ -213,12 +213,37 @@ serve(async (req) => {
 
         // Update status in database
         const newStatus = result.instance?.state === 'open' ? 'connected' : 'disconnected';
+        
+        // If connected, try to get the phone number
+        let phoneNumber = null;
+        if (newStatus === 'connected') {
+          try {
+            const instanceInfo = await callEvolution(`/instance/fetchInstances?instanceName=${instanceName}`, 'GET');
+            console.log('Instance info:', JSON.stringify(instanceInfo));
+            if (Array.isArray(instanceInfo) && instanceInfo.length > 0) {
+              const ownerJid = instanceInfo[0]?.instance?.owner;
+              if (ownerJid) {
+                phoneNumber = ownerJid.split('@')[0];
+                console.log('Phone number extracted:', phoneNumber);
+              }
+            }
+          } catch (e) {
+            console.log('Could not fetch phone number:', e);
+          }
+        }
+        
+        const updateData: any = { 
+          status: newStatus,
+          last_seen: newStatus === 'connected' ? new Date().toISOString() : null,
+        };
+        
+        if (phoneNumber) {
+          updateData.phone_number = phoneNumber;
+        }
+        
         await supabaseClient
           .from('maturador_instances')
-          .update({ 
-            status: newStatus,
-            last_seen: newStatus === 'connected' ? new Date().toISOString() : null,
-          })
+          .update(updateData)
           .eq('instance_name', instanceName)
           .eq('user_id', user.id);
 
