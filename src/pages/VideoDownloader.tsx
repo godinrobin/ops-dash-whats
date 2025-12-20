@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Download, Loader2, Video, Music, ArrowLeft } from "lucide-react";
+import tiktokLogo from "@/assets/tiktok-logo.png";
 import { useNavigate } from "react-router-dom";
 
 // Platform detection pattern - only TikTok
@@ -122,7 +123,7 @@ const VideoDownloader = () => {
           <Card className="border-2 border-accent">
             <CardHeader className="text-center">
               <div className="flex justify-center mb-4">
-                <span className="text-6xl">🎵</span>
+                <img src={tiktokLogo} alt="TikTok" className="w-20 h-20 object-contain" />
               </div>
               <CardTitle className="text-2xl md:text-3xl bg-gradient-to-r from-pink-500 to-cyan-400 bg-clip-text text-transparent">
                 Download Vídeos TikTok
