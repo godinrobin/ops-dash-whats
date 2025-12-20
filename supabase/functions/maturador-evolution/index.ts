@@ -84,11 +84,17 @@ serve(async (req) => {
       
       // Try multiple paths where phone might be stored
       const possiblePaths = [
+        // Most common fields
+        instanceData?.ownerJid,
+        instanceData?.instance?.ownerJid,
+        instanceData?.number,
+        instanceData?.instance?.number,
+
+        // Older/alternate shapes
         instanceData?.instance?.owner,
         instanceData?.owner,
         instanceData?.instance?.wuid,
         instanceData?.wuid,
-        instanceData?.instance?.profilePictureUrl?.split('@')[0],
         instanceData?.profileNumber,
         instanceData?.instance?.profileNumber,
       ];
@@ -327,9 +333,10 @@ serve(async (req) => {
           
           if (evoInst) {
             const phone = extractPhoneFromInstance(evoInst);
-            const state = evoInst?.instance?.state || evoInst?.state;
-            const newStatus = state === 'open' ? 'connected' : 'disconnected';
-            
+
+            const rawStatus = evoInst?.connectionStatus || evoInst?.instance?.state || evoInst?.state;
+            const newStatus = rawStatus === 'open' ? 'connected' : rawStatus === 'connecting' ? 'connecting' : 'disconnected';
+
             const updateData: any = { status: newStatus };
             if (phone) {
               updateData.phone_number = phone;
