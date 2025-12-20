@@ -9,9 +9,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowLeft, Smartphone, MessageSquare, Users, BarChart3, Plus, RefreshCw, Loader2, ShieldCheck, User, Send, AlertCircle } from "lucide-react";
+import { ArrowLeft, Smartphone, MessageSquare, Users, BarChart3, Plus, RefreshCw, Loader2, ShieldCheck, User, Send, AlertCircle, Pencil, Trash2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdminStatus } from "@/hooks/useAdminStatus";
 import { toast } from "sonner";
 
 interface Instance {
@@ -64,6 +67,7 @@ const formatPhoneDisplay = (phone: string) => {
 export default function MaturadorDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isAdmin } = useAdminStatus();
   const [instances, setInstances] = useState<Instance[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [verifiedContacts, setVerifiedContacts] = useState<VerifiedContact[]>([]);
@@ -85,6 +89,16 @@ export default function MaturadorDashboard() {
   const [selectedInstanceId, setSelectedInstanceId] = useState("");
   const [messageText, setMessageText] = useState("");
   const [sending, setSending] = useState(false);
+
+  // Admin modals
+  const [editContactModalOpen, setEditContactModalOpen] = useState(false);
+  const [editingContact, setEditingContact] = useState<VerifiedContact | null>(null);
+  const [editPhone, setEditPhone] = useState("");
+  const [editName, setEditName] = useState("");
+  const [savingContact, setSavingContact] = useState(false);
+  const [deleteContactDialogOpen, setDeleteContactDialogOpen] = useState(false);
+  const [contactToDelete, setContactToDelete] = useState<VerifiedContact | null>(null);
+  const [deletingContact, setDeletingContact] = useState(false);
 
   const fetchData = async () => {
     if (!user) return;
@@ -228,6 +242,93 @@ export default function MaturadorDashboard() {
       toast.error(error.message || 'Erro ao enviar mensagem');
     } finally {
       setSending(false);
+    }
+  };
+
+  // Admin functions for verified contacts
+  const openCreateContactModal = () => {
+    setEditingContact(null);
+    setEditPhone("");
+    setEditName("");
+    setEditContactModalOpen(true);
+  };
+
+  const openEditContactModal = (contact: VerifiedContact) => {
+    setEditingContact(contact);
+    setEditPhone(contact.phone);
+    setEditName(contact.name || "");
+    setEditContactModalOpen(true);
+  };
+
+  const handleSaveContact = async () => {
+    if (!editPhone.trim()) {
+      toast.error('Telefone é obrigatório');
+      return;
+    }
+
+    const cleanedPhone = editPhone.replace(/\D/g, '');
+    if (cleanedPhone.length < 10) {
+      toast.error('Telefone inválido');
+      return;
+    }
+
+    setSavingContact(true);
+    try {
+      if (editingContact) {
+        const { error } = await supabase
+          .from('maturador_verified_contacts')
+          .update({ 
+            phone: cleanedPhone, 
+            name: editName.trim() || null,
+            last_fetched_at: null
+          })
+          .eq('id', editingContact.id);
+
+        if (error) throw error;
+        toast.success('Contato atualizado!');
+      } else {
+        const { error } = await supabase
+          .from('maturador_verified_contacts')
+          .insert({ 
+            phone: cleanedPhone, 
+            name: editName.trim() || null 
+          });
+
+        if (error) throw error;
+        toast.success('Contato adicionado!');
+      }
+
+      setEditContactModalOpen(false);
+      await fetchData();
+    } catch (error: any) {
+      console.error('Error saving contact:', error);
+      toast.error(error.message || 'Erro ao salvar contato');
+    } finally {
+      setSavingContact(false);
+    }
+  };
+
+  const handleDeleteContact = async () => {
+    if (!contactToDelete) return;
+
+    setDeletingContact(true);
+    try {
+      const { error } = await supabase
+        .from('maturador_verified_contacts')
+        .delete()
+        .eq('id', contactToDelete.id);
+
+      if (error) throw error;
+      
+      toast.success('Contato removido');
+      setDeleteContactDialogOpen(false);
+      setContactToDelete(null);
+      await fetchData();
+    } catch (error: any) {
+      console.error('Error deleting contact:', error);
+      toast.error(error.message || 'Erro ao remover contato');
+    } finally {
+      setDeletingContact(false);
     }
   };
 
@@ -456,6 +557,17 @@ export default function MaturadorDashboard() {
           </TabsContent>
 
           <TabsContent value="verified" className="space-y-4">
+            {/* Header with Add Button for Admin */}
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-semibold">Contatos Verificados</h2>
+              {isAdmin && (
+                <Button onClick={openCreateContactModal}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Novo Contato
+                </Button>
+              )}
+            </div>
+
             {/* Info Banner */}
             <Card className="border-green-500/30 bg-green-500/5">
               <CardContent className="p-4">
@@ -520,15 +632,39 @@ export default function MaturadorDashboard() {
                         Verificado
                       </Badge>
                     </div>
-                    <Button 
-                      className="w-full mt-3" 
-                      size="sm"
-                      onClick={() => openSendModal(contact)}
-                      disabled={instances.filter(i => i.status === 'connected').length === 0}
-                    >
-                      <Send className="h-4 w-4 mr-2" />
-                      Enviar Mensagem
-                    </Button>
+                    <div className="flex gap-2 mt-3">
+                      <Button 
+                        className="flex-1" 
+                        size="sm"
+                        onClick={() => openSendModal(contact)}
+                        disabled={instances.filter(i => i.status === 'connected').length === 0}
+                      >
+                        <Send className="h-4 w-4 mr-2" />
+                        Enviar
+                      </Button>
+                      {isAdmin && (
+                        <>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => openEditContactModal(contact)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => {
+                              setContactToDelete(contact);
+                              setDeleteContactDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -592,6 +728,80 @@ export default function MaturadorDashboard() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Admin: Edit/Create Contact Modal */}
+        {isAdmin && (
+          <Dialog open={editContactModalOpen} onOpenChange={setEditContactModalOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{editingContact ? 'Editar Contato' : 'Novo Contato'}</DialogTitle>
+                <DialogDescription>
+                  {editingContact ? 'Edite as informações do contato verificado' : 'Adicione um novo contato verificado'}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Telefone *</Label>
+                  <Input
+                    placeholder="5511999999999"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Digite o número com código do país (ex: 5511999999999)
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Nome</Label>
+                  <Input
+                    placeholder="Nome do contato (opcional)"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setEditContactModalOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleSaveContact} disabled={savingContact || !editPhone.trim()}>
+                  {savingContact ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : null}
+                  Salvar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {/* Admin: Delete Contact Confirmation */}
+        {isAdmin && (
+          <AlertDialog open={deleteContactDialogOpen} onOpenChange={setDeleteContactDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Excluir contato?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Tem certeza que deseja excluir o contato "{contactToDelete?.name || formatPhoneDisplay(contactToDelete?.phone || '')}"?
+                  Esta ação não pode ser desfeita.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction 
+                  onClick={handleDeleteContact}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  disabled={deletingContact}
+                >
+                  {deletingContact ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Excluir'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
     </div>
   );
