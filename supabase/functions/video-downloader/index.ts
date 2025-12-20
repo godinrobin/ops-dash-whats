@@ -6,13 +6,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Platform detection patterns
+// Platform detection patterns - only TikTok and Instagram
 const PLATFORM_PATTERNS = {
-  youtube: /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
   tiktok: /(?:tiktok\.com\/@[\w.-]+\/video\/|vm\.tiktok\.com\/|tiktok\.com\/t\/|vt\.tiktok\.com\/)(\w+)/i,
   instagram: /(?:instagram\.com\/(?:p|reel|reels|tv)\/)([\w-]+)/i,
-  twitter: /(?:twitter\.com|x\.com)\/\w+\/status\/(\d+)/i,
-  facebook: /(?:facebook\.com|fb\.watch)\/(?:watch\/?\?v=|reel\/|[\w.]+\/videos\/)(\d+)?/i,
 };
 
 function detectPlatform(url: string): string {
@@ -77,404 +74,59 @@ async function downloadTikTok(url: string, opts: { downloadMode?: "auto" | "audi
 }
 
 // =============================================================================
-// YOUTUBE DOWNLOAD via Invidious & Piped public APIs (no auth)
+// SNAPSAVE DECRYPTION (based on https://github.com/ahmedrangel/snapsave-media-downloader)
 // =============================================================================
 
-const INVIDIOUS_INSTANCES_API = "https://api.invidious.io/instances.json?sort_by=type,users";
-const INVIDIOUS_FALLBACKS = [
-  "https://inv.tux.pizza",
-  "https://invidious.nerdvpn.de",
-  "https://yt.artemislena.eu",
-];
-const PIPED_INSTANCES_API = "https://piped-instances.kavin.rocks/";
-const PIPED_FALLBACKS = [
-  "https://pipedapi.kavin.rocks",
-  "https://pipedapi.in.projectsegfau.lt",
-];
-
-type DownloadOpts = {
-  downloadMode?: "auto" | "audio";
-  videoQuality?: string;
-};
-
-// Fetch working Invidious API URLs
-async function getInvidiousApiUrls(): Promise<string[]> {
-  try {
-    const res = await fetch(INVIDIOUS_INSTANCES_API, { headers: { Accept: "application/json" } });
-    if (!res.ok) return INVIDIOUS_FALLBACKS;
-
-    const list = (await res.json()) as Array<any>;
-    const apiUrls = (Array.isArray(list) ? list : [])
-      .map(([hostname, data]: any) => {
-        if (!data?.api || data?.type !== "https") return null;
-        return `https://${hostname}`;
-      })
-      .filter(Boolean) as string[];
-
-    return [...new Set([...apiUrls.slice(0, 6), ...INVIDIOUS_FALLBACKS])];
-  } catch {
-    return INVIDIOUS_FALLBACKS;
+function decryptSnapSave(data: string): string {
+  // Decode the SnapSave response using their algorithm
+  const decodedData = atob(data);
+  
+  // The algorithm decodes the base64 then applies character transformations
+  let result = "";
+  for (let i = 0; i < decodedData.length; i++) {
+    const charCode = decodedData.charCodeAt(i);
+    // Apply XOR with pattern key
+    result += String.fromCharCode(charCode ^ (i % 3 === 0 ? 0x53 : i % 3 === 1 ? 0x5A : 0x50));
   }
+  
+  return result;
 }
 
-// Fetch working Piped API URLs
-async function getPipedApiUrls(): Promise<string[]> {
-  try {
-    const res = await fetch(PIPED_INSTANCES_API, { headers: { Accept: "application/json" } });
-    if (!res.ok) return PIPED_FALLBACKS;
-
-    const list = (await res.json()) as Array<any>;
-    const scored = (Array.isArray(list) ? list : [])
-      .map((x) => ({
-        api_url: String(x?.api_url || "").trim(),
-        score: Number(x?.uptime_24h ?? 0) * 2 + Number(x?.uptime_7d ?? 0),
-      }))
-      .filter((x) => x.api_url)
-      .sort((a, b) => b.score - a.score)
-      .map((x) => x.api_url);
-
-    return [...new Set([...scored.slice(0, 6), ...PIPED_FALLBACKS])];
-  } catch {
-    return PIPED_FALLBACKS;
-  }
-}
-
-// =========================== INVIDIOUS DOWNLOADER ===========================
-async function tryInvidious(
-  videoId: string,
-  opts: DownloadOpts
-): Promise<any | null> {
-  const downloadMode = opts.downloadMode || "auto";
-  const requestedHeight = (() => {
-    const n = parseInt(String(opts.videoQuality || ""), 10);
-    return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY;
-  })();
-
-  const instances = await getInvidiousApiUrls();
-  console.log("Invidious instances to try:", instances.length);
-
-  for (const base of instances) {
-    try {
-      const endpoint = `${base}/api/v1/videos/${videoId}`;
-      console.log("Invidious endpoint:", endpoint);
-
-      // Add timeout to avoid hanging requests
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-      const res = await fetch(endpoint, { 
-        headers: { Accept: "application/json" },
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      if (!res.ok) {
-        console.log(`Invidious ${base} HTTP ${res.status}`);
-        continue;
-      }
-
-      const ct = (res.headers.get("content-type") || "").toLowerCase();
-      const raw = await res.text();
-
-      if (!ct.includes("application/json") || raw.includes("<!DOCTYPE")) {
-        console.log("Invidious invalid response:", raw.slice(0, 60));
-        continue;
-      }
-
-      let data: any;
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        continue;
-      }
-
-      const title = data?.title || "youtube-video";
-      const thumbnail =
-        data?.videoThumbnails?.[0]?.url || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
-
-      // adaptiveFormats + formatStreams available
-      const adaptiveFormats: any[] = Array.isArray(data?.adaptiveFormats) ? data.adaptiveFormats : [];
-      const formatStreams: any[] = Array.isArray(data?.formatStreams) ? data.formatStreams : [];
-
-      if (downloadMode === "audio") {
-        const audios = adaptiveFormats.filter((f) => String(f?.type || "").startsWith("audio/"));
-        if (!audios.length) {
-          console.log("Invidious no audio streams found");
-          continue;
-        }
-        const best = audios.sort(
-          (a, b) => Number(b?.bitrate || 0) - Number(a?.bitrate || 0)
-        )[0];
-        if (!best?.url) continue;
-
-        return {
-          success: true,
-          url: best.url,
-          filename: `${title}`.slice(0, 80) + ".m4a",
-          thumbnail,
-          title,
-        };
-      }
-
-      // Video
-      const allVideos = [
-        ...formatStreams,
-        ...adaptiveFormats.filter((f) => String(f?.type || "").startsWith("video/")),
-      ];
-      if (!allVideos.length) {
-        console.log("Invidious no video streams");
-        continue;
-      }
-
-      const getHeight = (f: any) => {
-        const m = String(f?.resolution || f?.qualityLabel || "").match(/(\d+)/);
-        return m ? parseInt(m[1], 10) : 0;
-      };
-
-      const sorted = allVideos.slice().sort((a, b) => getHeight(b) - getHeight(a));
-      const best = sorted.find((f) => getHeight(f) <= requestedHeight) || sorted[0];
-      if (!best?.url) continue;
-
-      return {
-        success: true,
-        url: best.url,
-        filename: `${title}`.slice(0, 80) + ".mp4",
-        thumbnail,
-        title,
-      };
-    } catch (e: any) {
-      console.log("Invidious instance failed:", base, e?.message || e);
+// Extract video URLs from HTML using regex
+function extractVideoUrls(html: string): string[] {
+  const urls: string[] = [];
+  
+  // Pattern 1: Direct MP4 links
+  const mp4Regex = /https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/gi;
+  const mp4Matches = html.match(mp4Regex) || [];
+  urls.push(...mp4Matches);
+  
+  // Pattern 2: href with download
+  const hrefRegex = /href=["']([^"']+)["'][^>]*download/gi;
+  let match;
+  while ((match = hrefRegex.exec(html)) !== null) {
+    if (match[1] && !match[1].includes("javascript:")) {
+      urls.push(match[1]);
     }
   }
-
-  return null;
-}
-
-// ============================= PIPED DOWNLOADER =============================
-async function tryPiped(
-  videoId: string,
-  opts: DownloadOpts
-): Promise<any | null> {
-  const downloadMode = opts.downloadMode || "auto";
-  const requestedHeight = (() => {
-    const n = parseInt(String(opts.videoQuality || ""), 10);
-    return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY;
-  })();
-
-  const instances = await getPipedApiUrls();
-  console.log("Piped instances to try:", instances.length);
-
-  for (const base of instances) {
-    try {
-      const endpoint = `${base}/streams/${videoId}`;
-      console.log("Piped endpoint:", endpoint);
-
-      // Add timeout to avoid hanging requests
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-      const res = await fetch(endpoint, { 
-        headers: { Accept: "application/json" },
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-
-      if (!res.ok) {
-        console.log(`Piped ${base} HTTP ${res.status}`);
-        continue;
-      }
-
-      const ct = (res.headers.get("content-type") || "").toLowerCase();
-      const raw = await res.text();
-
-      if (!ct.includes("application/json") || raw.includes("<!DOCTYPE") || raw.includes("Service has been")) {
-        console.log("Piped invalid response:", raw.slice(0, 60));
-        continue;
-      }
-
-      let data: any;
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        continue;
-      }
-
-      const title = data?.title || "youtube-video";
-      const thumbnail =
-        data?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
-
-      if (downloadMode === "audio") {
-        const audioStreams = Array.isArray(data?.audioStreams) ? data.audioStreams : [];
-        if (!audioStreams.length) continue;
-
-        const best = audioStreams
-          .slice()
-          .sort((a: any, b: any) => {
-            const qA = parseInt(String(a?.quality || "0"), 10) || 0;
-            const qB = parseInt(String(b?.quality || "0"), 10) || 0;
-            return qB - qA;
-          })[0];
-
-        if (!best?.url) continue;
-
-        return {
-          success: true,
-          url: best.url,
-          filename: `${title}`.slice(0, 80) + ".m4a",
-          thumbnail,
-          title,
-        };
-      }
-
-      const videoStreams = Array.isArray(data?.videoStreams) ? data.videoStreams : [];
-      const mp4Streams = videoStreams.filter((s: any) =>
-        String(s?.mimeType || "").includes("video/") && String(s?.mimeType || "").includes("mp4")
-      );
-      const candidates = mp4Streams.length ? mp4Streams : videoStreams;
-
-      if (!candidates.length) continue;
-
-      const sorted = candidates
-        .slice()
-        .sort((a: any, b: any) => Number(b?.height || 0) - Number(a?.height || 0));
-
-      const best = sorted.find((s: any) => Number(s?.height || 0) <= requestedHeight) || sorted[0];
-      if (!best?.url) continue;
-
-      return {
-        success: true,
-        url: best.url,
-        filename: `${title}`.slice(0, 80) + ".mp4",
-        thumbnail,
-        title,
-      };
-    } catch (e: any) {
-      console.log("Piped instance failed:", base, e?.message || e);
-    }
+  
+  // Pattern 3: data-url or data-src attributes
+  const dataUrlRegex = /data-(?:url|src)=["']([^"']+\.mp4[^"']*)["']/gi;
+  while ((match = dataUrlRegex.exec(html)) !== null) {
+    if (match[1]) urls.push(match[1]);
   }
-
-  return null;
-}
-
-// ============================== COBALT DOWNLOADER =============================
-async function tryCobalt(
-  url: string,
-  videoId: string,
-  opts: DownloadOpts
-): Promise<any | null> {
-  const downloadMode = opts.downloadMode || "auto";
-  const isAudioOnly = downloadMode === "audio";
-
-  const requestedHeight = (() => {
-    const n = parseInt(String(opts.videoQuality || ""), 10);
-    return Number.isFinite(n) ? n : 1080;
-  })();
-
-  const vQuality = String(Math.max(144, Math.min(2160, requestedHeight)));
-  const thumbnail = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
-
-  try {
-    console.log("Trying YouTube download via Cobalt...");
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
-
-    const res = await fetch("https://api.cobalt.tools/api/json", {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        url,
-        isAudioOnly,
-        aFormat: "best",
-        vCodec: "h264",
-        vQuality,
-        filenamePattern: "basic",
-      }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!res.ok) {
-      console.log("Cobalt non-OK:", res.status);
-      return null;
-    }
-
-    const data = (await res.json()) as any;
-
-    if (data?.status === "error") {
-      console.log("Cobalt error:", data?.error?.code || "unknown");
-      return null;
-    }
-
-    // tunnel / redirect
-    if (typeof data?.url === "string" && data.url) {
-      return {
-        success: true,
-        url: data.url,
-        filename: isAudioOnly ? `youtube-${videoId}.mp3` : `youtube-${videoId}.mp4`,
-        thumbnail,
-        title: "YouTube",
-      };
-    }
-
-    // picker
-    if (data?.status === "picker" && Array.isArray(data?.picker) && data.picker.length) {
-      const pickBest = data.picker
-        .slice()
-        .sort((a: any, b: any) => {
-          const qa = parseInt(String(a?.quality || a?.height || 0), 10) || 0;
-          const qb = parseInt(String(b?.quality || b?.height || 0), 10) || 0;
-          return qb - qa;
-        })[0];
-
-      if (pickBest?.url) {
-        return {
-          success: true,
-          url: pickBest.url,
-          filename: isAudioOnly ? `youtube-${videoId}.mp3` : `youtube-${videoId}.mp4`,
-          thumbnail,
-          title: "YouTube",
-        };
-      }
-    }
-
-    return null;
-  } catch (e: any) {
-    console.log("Cobalt failed:", e?.message || e);
-    return null;
+  
+  // Pattern 4: video source
+  const srcRegex = /<source[^>]+src=["']([^"']+)["']/gi;
+  while ((match = srcRegex.exec(html)) !== null) {
+    if (match[1]) urls.push(match[1]);
   }
+  
+  // Deduplicate and filter valid URLs
+  return [...new Set(urls)].filter(u => u.startsWith("http"));
 }
 
-// ============================== MAIN YOUTUBE ================================
-async function downloadYouTube(url: string, opts: DownloadOpts = {}): Promise<any> {
-  console.log("Trying YouTube download...");
-
-  const match = url.match(
-    /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
-  );
-  if (!match) throw new Error("Invalid YouTube URL");
-
-  const videoId = match[1];
-
-  // 1) Try Invidious first
-  const invResult = await tryInvidious(videoId, opts);
-  if (invResult) return invResult;
-
-  // 2) Fallback to Piped
-  const pipedResult = await tryPiped(videoId, opts);
-  if (pipedResult) return pipedResult;
-
-  // 3) Final fallback: Cobalt
-  const cobaltResult = await tryCobalt(url, videoId, opts);
-  if (cobaltResult) return cobaltResult;
-
-  throw new Error("YouTube indisponível no momento. Todas as instâncias falharam.");
-}
-
-// Instagram download via Apify (primary) + lightweight public fallbacks
+// Instagram download using multiple methods
 async function downloadInstagram(url: string): Promise<any> {
   console.log("Trying Instagram download...");
 
@@ -492,118 +144,117 @@ async function downloadInstagram(url: string): Promise<any> {
     }
   };
 
-  // Extract post/reel ID from URL for logging
+  // Extract post/reel ID from URL
   const idMatch = url.match(/(?:p|reel|reels|tv)\/([\w-]+)/i);
   const postId = idMatch?.[1] || "unknown";
   console.log("Instagram post ID:", postId);
 
   const errors: string[] = [];
 
-  // ===================== Method 0: Apify (reliable) =====================
+  // ===================== Method 1: SnapSave.app =====================
   try {
-    const apifyToken = Deno.env.get("APIFY_API_TOKEN");
-    if (apifyToken) {
-      console.log("Trying Apify Instagram downloader...");
-
-      const endpoint = `https://api.apify.com/v2/acts/epctex~instagram-video-downloader/run-sync-get-dataset-items?token=${encodeURIComponent(
-        apifyToken
-      )}&timeout=60`;
-
-      const res = await withTimeout(
-        endpoint,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            "User-Agent": defaultUA,
-          },
-          body: JSON.stringify({
-            startUrls: [url],
-            quality: "highest",
-            compression: "none",
-            proxy: { useApifyProxy: true },
-          }),
-        },
-        20000
-      );
-
-      if (!res.ok) {
-        errors.push(`Apify HTTP ${res.status}`);
-      } else {
-        const items = (await res.json()) as any[];
-        const item = Array.isArray(items) ? items[0] : null;
-        const downloadUrl = item?.downloadUrl || item?.download_link || item?.url;
-
-        if (downloadUrl) {
-          console.log("Apify success");
-          return {
-            success: true,
-            url: downloadUrl,
-            filename: `instagram-${postId}.mp4`,
-            title: "Instagram Video",
-          };
-        }
-
-        errors.push("Apify: sem URL de download");
-      }
-    } else {
-      errors.push("Apify: token ausente");
-    }
-  } catch (e: any) {
-    errors.push(`Apify: ${e?.message || e}`);
-  }
-
-  // ===================== Method 1: SnapInsta =====================
-  try {
-    console.log("Trying SnapInsta...");
+    console.log("Trying SnapSave.app...");
+    
     const snapRes = await withTimeout(
-      "https://snapinsta.app/api/ajaxSearch",
+      "https://snapsave.app/action.php",
       {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
+          Accept: "*/*",
           "User-Agent": defaultUA,
-          Origin: "https://snapinsta.app",
-          Referer: "https://snapinsta.app/",
+          Origin: "https://snapsave.app",
+          Referer: "https://snapsave.app/",
         },
-        body: `q=${encodeURIComponent(url)}&t=media&lang=en`,
+        body: `url=${encodeURIComponent(url)}`,
       },
-      12000
+      15000
     );
 
     if (!snapRes.ok) {
-      errors.push(`SnapInsta HTTP ${snapRes.status}`);
+      errors.push(`SnapSave HTTP ${snapRes.status}`);
     } else {
-      const ct = (snapRes.headers.get("content-type") || "").toLowerCase();
-      if (!ct.includes("application/json")) {
-        errors.push(`SnapInsta: content-type inválido (${ct || "n/a"})`);
-      } else {
-        const snapData = await snapRes.json();
-        if (snapData.status === "ok" && snapData.data) {
-          const html = String(snapData.data);
-          const videoMatch =
-            html.match(/href="([^"]+\.mp4[^"]*)"/i) ||
-            html.match(/href="([^"]+)"[^>]*download/i);
-          if (videoMatch?.[1]) {
-            console.log("SnapInsta success");
+      const responseText = await snapRes.text();
+      console.log("SnapSave response length:", responseText.length);
+      
+      // Try to parse as JSON first
+      try {
+        const jsonData = JSON.parse(responseText);
+        
+        if (jsonData.status === "ok" || jsonData.success) {
+          const html = jsonData.data || jsonData.html || "";
+          const videoUrls = extractVideoUrls(html);
+          
+          if (videoUrls.length > 0) {
+            console.log("SnapSave success via JSON:", videoUrls[0]);
             return {
               success: true,
-              url: videoMatch[1],
+              url: videoUrls[0],
               filename: `instagram-${postId}.mp4`,
               title: "Instagram Video",
             };
           }
         }
-        errors.push("SnapInsta: sem link mp4");
+      } catch {
+        // Not JSON, try to extract from raw HTML
+        const videoUrls = extractVideoUrls(responseText);
+        if (videoUrls.length > 0) {
+          console.log("SnapSave success via HTML:", videoUrls[0]);
+          return {
+            success: true,
+            url: videoUrls[0],
+            filename: `instagram-${postId}.mp4`,
+            title: "Instagram Video",
+          };
+        }
       }
+      
+      errors.push("SnapSave: sem link de vídeo");
     }
   } catch (e: any) {
-    errors.push(`SnapInsta: ${e?.message || e}`);
+    errors.push(`SnapSave: ${e?.message || e}`);
   }
 
-  // ===================== Method 2: igram.world =====================
+  // ===================== Method 2: SaveFrom.net style =====================
+  try {
+    console.log("Trying SaveFrom style...");
+    
+    const sfRes = await withTimeout(
+      "https://api.savefrom.biz/api/convert",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "User-Agent": defaultUA,
+        },
+        body: JSON.stringify({ url }),
+      },
+      12000
+    );
+
+    if (sfRes.ok) {
+      const sfData = await sfRes.json();
+      const videoUrl = sfData?.url || sfData?.video?.url || sfData?.result?.[0]?.url;
+      
+      if (videoUrl) {
+        console.log("SaveFrom success");
+        return {
+          success: true,
+          url: videoUrl,
+          filename: `instagram-${postId}.mp4`,
+          title: "Instagram Video",
+        };
+      }
+      errors.push("SaveFrom: sem link mp4");
+    } else {
+      errors.push(`SaveFrom HTTP ${sfRes.status}`);
+    }
+  } catch (e: any) {
+    errors.push(`SaveFrom: ${e?.message || e}`);
+  }
+
+  // ===================== Method 3: igram.world =====================
   try {
     console.log("Trying igram.world...");
     const igramRes = await withTimeout(
@@ -651,7 +302,7 @@ async function downloadInstagram(url: string): Promise<any> {
     errors.push(`igram.world: ${e?.message || e}`);
   }
 
-  // ===================== Method 3: FastDL =====================
+  // ===================== Method 4: FastDL =====================
   try {
     console.log("Trying FastDL...");
     const fastRes = await withTimeout(
@@ -695,7 +346,7 @@ async function downloadInstagram(url: string): Promise<any> {
     errors.push(`FastDL: ${e?.message || e}`);
   }
 
-  // ===================== Method 4: Cobalt (final fallback) =====================
+  // ===================== Method 5: Cobalt (fallback) =====================
   try {
     console.log("Trying Cobalt for Instagram...");
     const controller = new AbortController();
@@ -758,36 +409,6 @@ async function downloadInstagram(url: string): Promise<any> {
   throw new Error(`Instagram: nenhum provedor disponível no momento (${errors.slice(0, 3).join("; ")})`);
 }
 
-// Twitter/X download
-async function downloadTwitter(url: string): Promise<any> {
-  console.log('Trying Twitter download...');
-  
-  const response = await fetch('https://twitsave.com/info?url=' + encodeURIComponent(url), {
-    headers: {
-      'Accept': 'text/html,application/xhtml+xml',
-    },
-  });
-  
-  if (!response.ok) {
-    throw new Error(`TwitSave error: ${response.status}`);
-  }
-  
-  const html = await response.text();
-  
-  // Extract video URL from HTML
-  const videoMatch = html.match(/https:\/\/[^"]+\.mp4[^"]*/);
-  if (videoMatch) {
-    return {
-      success: true,
-      url: videoMatch[0],
-      filename: 'twitter-video.mp4',
-      title: 'Twitter Video',
-    };
-  }
-  
-  throw new Error('Twitter download failed');
-}
-
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -810,10 +431,8 @@ serve(async (req) => {
 
     const url = typeof body?.url === "string" ? body.url : "";
     const downloadMode = typeof body?.downloadMode === "string" ? body.downloadMode : "auto";
-    const videoQuality = typeof body?.videoQuality === "string" ? body.videoQuality : "1080";
 
     if (!url) {
-      // IMPORTANT: always return 200 so the web client can read the error message
       return json({ success: false, error: "URL é obrigatória" }, 200);
     }
 
@@ -824,7 +443,7 @@ serve(async (req) => {
       return json(
         {
           success: false,
-          error: "Plataforma não suportada. Use YouTube, TikTok, Instagram ou Twitter.",
+          error: "Plataforma não suportada. Use TikTok ou Instagram.",
         },
         200
       );
@@ -838,14 +457,8 @@ serve(async (req) => {
         case "tiktok":
           result = await downloadTikTok(url, { downloadMode });
           break;
-        case "youtube":
-          result = await downloadYouTube(url, { downloadMode, videoQuality });
-          break;
         case "instagram":
           result = await downloadInstagram(url);
-          break;
-        case "twitter":
-          result = await downloadTwitter(url);
           break;
         default:
           throw new Error("Plataforma não suportada");
@@ -880,7 +493,6 @@ serve(async (req) => {
     );
   } catch (error: any) {
     console.error("Unhandled error in video-downloader:", error);
-    // Still return 200 to avoid `Edge Function returned a non-2xx status code` in the client.
     return json(
       {
         success: false,
