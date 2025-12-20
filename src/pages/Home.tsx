@@ -188,6 +188,7 @@ const Home = () => {
       emoji: "💾", 
       title: "Save WhatsApp",
       description: "Extensão para salvar contatos do WhatsApp",
+      subtext: "Salve seus contatos em poucos cliques",
       gradient: "from-green-400 to-green-600",
       restricted: false
     }
