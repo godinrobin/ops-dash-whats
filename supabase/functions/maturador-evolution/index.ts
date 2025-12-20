@@ -805,10 +805,12 @@ Regras:
             const audioBase64 = await generateAudioWithElevenLabs(audioCopy);
             console.log('Audio generated, sending via Evolution API...');
 
-            // Send audio via Evolution API
-            const sendResult = await callEvolution(`/message/sendWhatsAppAudio/${fromInstance.instance_name}`, 'POST', {
+            // Send audio via Evolution API - using sendMedia endpoint with ptt (push-to-talk) type
+            const sendResult = await callEvolution(`/message/sendMedia/${fromInstance.instance_name}`, 'POST', {
               number: toPhone,
-              audio: `data:audio/mpeg;base64,${audioBase64}`,
+              mediatype: 'audio',
+              mimetype: 'audio/mpeg',
+              media: `data:audio/mpeg;base64,${audioBase64}`,
             });
 
             console.log('Audio send result:', JSON.stringify(sendResult, null, 2));
