@@ -213,34 +213,38 @@ serve(async (req) => {
 
         // Update status in database
         const newStatus = result.instance?.state === 'open' ? 'connected' : 'disconnected';
-        
-        // If connected, try to get the phone number
-        let phoneNumber = null;
+
+        // If connected, try to get the phone number from Evolution
+        let phoneNumber: string | null = null;
         if (newStatus === 'connected') {
           try {
-            const instanceInfo = await callEvolution(`/instance/fetchInstances?instanceName=${instanceName}`, 'GET');
-            console.log('Instance info:', JSON.stringify(instanceInfo));
-            if (Array.isArray(instanceInfo) && instanceInfo.length > 0) {
-              const ownerJid = instanceInfo[0]?.instance?.owner;
-              if (ownerJid) {
-                phoneNumber = ownerJid.split('@')[0];
-                console.log('Phone number extracted:', phoneNumber);
-              }
+            const allInstances = await callEvolution('/instance/fetchInstances', 'GET');
+            const target = Array.isArray(allInstances)
+              ? allInstances.find((i: any) =>
+                  i?.instance?.instanceName === instanceName ||
+                  i?.instanceName === instanceName ||
+                  i?.name === instanceName
+                )
+              : null;
+
+            const rawOwner = target?.instance?.owner ?? target?.owner ?? null;
+            if (typeof rawOwner === 'string' && rawOwner) {
+              phoneNumber = rawOwner.split('@')[0].replace(/\D/g, '') || null;
             }
           } catch (e) {
             console.log('Could not fetch phone number:', e);
           }
         }
-        
-        const updateData: any = { 
+
+        const updateData: any = {
           status: newStatus,
           last_seen: newStatus === 'connected' ? new Date().toISOString() : null,
         };
-        
+
         if (phoneNumber) {
           updateData.phone_number = phoneNumber;
         }
-        
+
         await supabaseClient
           .from('maturador_instances')
           .update(updateData)
@@ -438,6 +442,49 @@ serve(async (req) => {
         });
 
         // Send messages
+        const extractPhone = (value: unknown): string | null => {
+          if (typeof value !== 'string' || !value) return null;
+          const withoutDomain = value.includes('@') ? value.split('@')[0] : value;
+          const digits = withoutDomain.replace(/\D/g, '');
+          return digits.length >= 8 ? digits : null;
+        };
+
+        const phoneByInstanceName = new Map<string, string>();
+        try {
+          const allInstances = await callEvolution('/instance/fetchInstances', 'GET');
+          if (Array.isArray(allInstances)) {
+            for (const i of allInstances) {
+              const name = i?.instance?.instanceName ?? i?.instanceName ?? i?.name;
+              const owner = i?.instance?.owner ?? i?.owner;
+              const phone = extractPhone(owner);
+              if (typeof name === 'string' && name && phone) {
+                phoneByInstanceName.set(name, phone);
+              }
+            }
+          }
+        } catch (e) {
+          console.log('Could not preload phone numbers from Evolution:', e);
+        }
+
+        const resolvePhone = async (inst: any) => {
+          const fromDb = extractPhone(inst?.phone_number);
+          if (fromDb) return fromDb;
+          const fromEvo = phoneByInstanceName.get(inst?.instance_name);
+          if (fromEvo) {
+            try {
+              await supabaseClient
+                .from('maturador_instances')
+                .update({ phone_number: fromEvo })
+                .eq('id', inst.id)
+                .eq('user_id', user.id);
+            } catch (_) {
+              // ignore
+            }
+            return fromEvo;
+          }
+          return null;
+        };
+
         const messagesSent = [];
         const messagesPerRound = Math.min(conversation.messages_per_round, conversation.daily_limit - (todayCount || 0));
 
@@ -448,8 +495,9 @@ serve(async (req) => {
           const message = topicMessages[Math.floor(Math.random() * topicMessages.length)];
 
           try {
-            // Format phone number
-            const toNumber = toInstance.phone_number?.replace(/\D/g, '') || '';
+            // Resolve phone number (DB or Evolution)
+            const toPhone = await resolvePhone(toInstance);
+            const toNumber = (toPhone || '').replace(/\D/g, '');
             if (!toNumber) {
               console.log(`Skipping message: ${toInstance.instance_name} has no phone number`);
               continue;
