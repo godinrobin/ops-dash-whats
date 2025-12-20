@@ -46,7 +46,7 @@ serve(async (req) => {
       console.log(`Checking subtitle status for request: ${requestId}`);
 
       const statusResponse = await fetch(
-        `https://queue.fal.run/fal-ai/workflow-utilities/auto-subtitle/requests/${requestId}/status`,
+        `https://queue.fal.run/fal-ai/workflow-utilities/requests/${requestId}/status`,
         {
           method: 'GET',
           headers: {
@@ -77,7 +77,7 @@ serve(async (req) => {
       if (statusData.status === 'COMPLETED') {
         // Fetch the result
         const resultResponse = await fetch(
-          `https://queue.fal.run/fal-ai/workflow-utilities/auto-subtitle/requests/${requestId}`,
+          `https://queue.fal.run/fal-ai/workflow-utilities/requests/${requestId}`,
           {
             method: 'GET',
             headers: {
