@@ -74,66 +74,74 @@ async function downloadTikTok(url: string, opts: { downloadMode?: "auto" | "audi
 }
 
 // =============================================================================
-// SNAPSAVE DECRYPTION (based on https://github.com/ahmedrangel/snapsave-media-downloader)
+// INSTAGRAM DOWNLOAD - Multiple providers
 // =============================================================================
 
-function decryptSnapSave(data: string): string {
-  // Decode the SnapSave response using their algorithm
-  const decodedData = atob(data);
-  
-  // The algorithm decodes the base64 then applies character transformations
-  let result = "";
-  for (let i = 0; i < decodedData.length; i++) {
-    const charCode = decodedData.charCodeAt(i);
-    // Apply XOR with pattern key
-    result += String.fromCharCode(charCode ^ (i % 3 === 0 ? 0x53 : i % 3 === 1 ? 0x5A : 0x50));
+// Clean Instagram URL - remove tracking params
+function cleanInstagramUrl(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    // Keep only the path, remove query params like igsh
+    return `https://www.instagram.com${urlObj.pathname}`;
+  } catch {
+    return url;
   }
-  
-  return result;
 }
 
-// Extract video URLs from HTML using regex
+// Extract video URLs from HTML using multiple patterns
 function extractVideoUrls(html: string): string[] {
   const urls: string[] = [];
   
-  // Pattern 1: Direct MP4 links
-  const mp4Regex = /https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/gi;
+  // Pattern 1: Direct MP4 links (cdninstagram, fbcdn, etc.)
+  const cdnRegex = /https?:\/\/[^\s"'<>]*(?:cdninstagram|fbcdn|instagram)[^\s"'<>]*\.mp4[^\s"'<>]*/gi;
+  const cdnMatches = html.match(cdnRegex) || [];
+  urls.push(...cdnMatches);
+  
+  // Pattern 2: Any MP4 links
+  const mp4Regex = /https?:\/\/[^\s"'<>]+\.mp4(?:\?[^\s"'<>]*)?/gi;
   const mp4Matches = html.match(mp4Regex) || [];
   urls.push(...mp4Matches);
   
-  // Pattern 2: href with download
-  const hrefRegex = /href=["']([^"']+)["'][^>]*download/gi;
+  // Pattern 3: href with download attribute
+  const hrefDownloadRegex = /href=["']([^"']+)["'][^>]*download/gi;
   let match;
-  while ((match = hrefRegex.exec(html)) !== null) {
-    if (match[1] && !match[1].includes("javascript:")) {
+  while ((match = hrefDownloadRegex.exec(html)) !== null) {
+    if (match[1] && !match[1].includes("javascript:") && match[1].startsWith("http")) {
       urls.push(match[1]);
     }
   }
   
-  // Pattern 3: data-url or data-src attributes
-  const dataUrlRegex = /data-(?:url|src)=["']([^"']+\.mp4[^"']*)["']/gi;
+  // Pattern 4: data-url attributes
+  const dataUrlRegex = /data-(?:url|video|src)=["']([^"']+)["']/gi;
   while ((match = dataUrlRegex.exec(html)) !== null) {
-    if (match[1]) urls.push(match[1]);
+    if (match[1] && match[1].startsWith("http")) urls.push(match[1]);
   }
-  
-  // Pattern 4: video source
-  const srcRegex = /<source[^>]+src=["']([^"']+)["']/gi;
-  while ((match = srcRegex.exec(html)) !== null) {
-    if (match[1]) urls.push(match[1]);
+
+  // Pattern 5: JSON embedded video_url
+  const jsonVideoRegex = /"video_url"\s*:\s*"([^"]+)"/gi;
+  while ((match = jsonVideoRegex.exec(html)) !== null) {
+    if (match[1]) {
+      // Decode unicode escapes
+      const decoded = match[1].replace(/\\u0026/g, '&').replace(/\\/g, '');
+      urls.push(decoded);
+    }
   }
   
   // Deduplicate and filter valid URLs
-  return [...new Set(urls)].filter(u => u.startsWith("http"));
+  return [...new Set(urls)].filter(u => u.startsWith("http") && (u.includes(".mp4") || u.includes("video")));
 }
 
 // Instagram download using multiple methods
 async function downloadInstagram(url: string): Promise<any> {
   console.log("Trying Instagram download...");
 
-  const defaultUA =
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+  const cleanUrl = cleanInstagramUrl(url);
+  console.log("Clean URL:", cleanUrl);
 
-  const withTimeout = async (input: RequestInfo | URL, init: RequestInit = {}, ms = 12000) => {
+  const defaultUA =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+  const withTimeout = async (input: RequestInfo | URL, init: RequestInit = {}, ms = 15000) => {
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), ms);
     try {
@@ -151,42 +159,92 @@ async function downloadInstagram(url: string): Promise<any> {
 
   const errors: string[] = [];
 
-  // ===================== Method 1: SnapSave.app =====================
+  // ===================== Method 1: SaveVid/SaveIG API =====================
   try {
-    console.log("Trying SnapSave.app...");
+    console.log("Trying SaveVid API...");
     
-    const snapRes = await withTimeout(
-      "https://snapsave.app/action.php",
+    const saveVidRes = await withTimeout(
+      "https://v3.savevid.net/api/ajaxSearch",
       {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "*/*",
+          Accept: "application/json",
           "User-Agent": defaultUA,
-          Origin: "https://snapsave.app",
-          Referer: "https://snapsave.app/",
+          Origin: "https://savevid.net",
+          Referer: "https://savevid.net/",
         },
-        body: `url=${encodeURIComponent(url)}`,
+        body: `q=${encodeURIComponent(cleanUrl)}&t=media&lang=en`,
       },
       15000
     );
 
-    if (!snapRes.ok) {
-      errors.push(`SnapSave HTTP ${snapRes.status}`);
-    } else {
-      const responseText = await snapRes.text();
-      console.log("SnapSave response length:", responseText.length);
+    if (saveVidRes.ok) {
+      const data = await saveVidRes.json();
+      console.log("SaveVid response status:", data.status);
       
-      // Try to parse as JSON first
+      if (data.status === "ok" && data.data) {
+        const videoUrls = extractVideoUrls(data.data);
+        if (videoUrls.length > 0) {
+          console.log("SaveVid success:", videoUrls[0].substring(0, 100));
+          return {
+            success: true,
+            url: videoUrls[0],
+            filename: `instagram-${postId}.mp4`,
+            title: "Instagram Video",
+          };
+        }
+        errors.push("SaveVid: sem link de vídeo no HTML");
+      } else {
+        errors.push(`SaveVid: status=${data.status || 'unknown'}`);
+      }
+    } else {
+      errors.push(`SaveVid HTTP ${saveVidRes.status}`);
+    }
+  } catch (e: any) {
+    errors.push(`SaveVid: ${e?.message || e}`);
+  }
+
+  // ===================== Method 2: SSSSInstagram =====================
+  try {
+    console.log("Trying SSSInstagram...");
+    
+    const sssRes = await withTimeout(
+      "https://sssinstagram.com/request",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+          "User-Agent": defaultUA,
+          Origin: "https://sssinstagram.com",
+          Referer: "https://sssinstagram.com/",
+        },
+        body: `link=${encodeURIComponent(cleanUrl)}&token=`,
+      },
+      15000
+    );
+
+    if (sssRes.ok) {
+      const responseText = await sssRes.text();
+      
+      // Try to parse as JSON
       try {
-        const jsonData = JSON.parse(responseText);
+        const data = JSON.parse(responseText);
+        if (data.url || data.video) {
+          console.log("SSSInstagram success (JSON)");
+          return {
+            success: true,
+            url: data.url || data.video,
+            filename: `instagram-${postId}.mp4`,
+            title: "Instagram Video",
+          };
+        }
         
-        if (jsonData.status === "ok" || jsonData.success) {
-          const html = jsonData.data || jsonData.html || "";
-          const videoUrls = extractVideoUrls(html);
-          
+        if (data.html) {
+          const videoUrls = extractVideoUrls(data.html);
           if (videoUrls.length > 0) {
-            console.log("SnapSave success via JSON:", videoUrls[0]);
+            console.log("SSSInstagram success (HTML):", videoUrls[0].substring(0, 100));
             return {
               success: true,
               url: videoUrls[0],
@@ -196,10 +254,10 @@ async function downloadInstagram(url: string): Promise<any> {
           }
         }
       } catch {
-        // Not JSON, try to extract from raw HTML
+        // Try raw HTML
         const videoUrls = extractVideoUrls(responseText);
         if (videoUrls.length > 0) {
-          console.log("SnapSave success via HTML:", videoUrls[0]);
+          console.log("SSSInstagram success (raw):", videoUrls[0].substring(0, 100));
           return {
             success: true,
             url: videoUrls[0],
@@ -208,86 +266,58 @@ async function downloadInstagram(url: string): Promise<any> {
           };
         }
       }
-      
-      errors.push("SnapSave: sem link de vídeo");
+      errors.push("SSSInstagram: sem link de vídeo");
+    } else {
+      errors.push(`SSSInstagram HTTP ${sssRes.status}`);
     }
   } catch (e: any) {
-    errors.push(`SnapSave: ${e?.message || e}`);
+    errors.push(`SSSInstagram: ${e?.message || e}`);
   }
 
-  // ===================== Method 2: SaveFrom.net style =====================
+  // ===================== Method 3: iGram.io =====================
   try {
-    console.log("Trying SaveFrom style...");
+    console.log("Trying iGram.io...");
     
-    const sfRes = await withTimeout(
-      "https://api.savefrom.biz/api/convert",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          "User-Agent": defaultUA,
-        },
-        body: JSON.stringify({ url }),
-      },
-      12000
-    );
-
-    if (sfRes.ok) {
-      const sfData = await sfRes.json();
-      const videoUrl = sfData?.url || sfData?.video?.url || sfData?.result?.[0]?.url;
-      
-      if (videoUrl) {
-        console.log("SaveFrom success");
-        return {
-          success: true,
-          url: videoUrl,
-          filename: `instagram-${postId}.mp4`,
-          title: "Instagram Video",
-        };
-      }
-      errors.push("SaveFrom: sem link mp4");
-    } else {
-      errors.push(`SaveFrom HTTP ${sfRes.status}`);
-    }
-  } catch (e: any) {
-    errors.push(`SaveFrom: ${e?.message || e}`);
-  }
-
-  // ===================== Method 3: igram.world =====================
-  try {
-    console.log("Trying igram.world...");
     const igramRes = await withTimeout(
-      "https://igram.world/api/convert",
+      "https://api.igram.io/api/convert",
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
           "User-Agent": defaultUA,
-          Origin: "https://igram.world",
-          Referer: "https://igram.world/",
+          Origin: "https://igram.io",
+          Referer: "https://igram.io/",
         },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url: cleanUrl }),
       },
-      12000
+      15000
     );
 
-    if (!igramRes.ok) {
-      errors.push(`igram.world HTTP ${igramRes.status}`);
-    } else {
+    if (igramRes.ok) {
       const ct = (igramRes.headers.get("content-type") || "").toLowerCase();
-      if (!ct.includes("application/json")) {
-        errors.push(`igram.world: content-type inválido (${ct || "n/a"})`);
-      } else {
-        const igramData = await igramRes.json();
-        const items = igramData?.items || igramData?.result || [];
+      if (ct.includes("application/json")) {
+        const data = await igramRes.json();
+        
+        // Check for direct URL
+        if (data.url) {
+          console.log("iGram.io success (direct URL)");
+          return {
+            success: true,
+            url: data.url,
+            filename: `instagram-${postId}.mp4`,
+            title: "Instagram Video",
+          };
+        }
+        
+        // Check for items array
+        const items = data.items || data.result || data.media || [];
         const list = Array.isArray(items) ? items : [items];
         const video = list.find(
           (i: any) => i?.url && (String(i?.type || "").includes("video") || String(i?.url || "").includes(".mp4"))
         );
         if (video?.url) {
-          console.log("igram.world success");
+          console.log("iGram.io success (items)");
           return {
             success: true,
             url: video.url,
@@ -295,14 +325,65 @@ async function downloadInstagram(url: string): Promise<any> {
             title: "Instagram Video",
           };
         }
-        errors.push("igram.world: sem link mp4");
+        errors.push("iGram.io: sem link de vídeo");
+      } else {
+        errors.push(`iGram.io: content-type inválido`);
       }
+    } else {
+      errors.push(`iGram.io HTTP ${igramRes.status}`);
     }
   } catch (e: any) {
-    errors.push(`igram.world: ${e?.message || e}`);
+    errors.push(`iGram.io: ${e?.message || e}`);
   }
 
-  // ===================== Method 4: FastDL =====================
+  // ===================== Method 4: SnapInsta =====================
+  try {
+    console.log("Trying SnapInsta...");
+    
+    const snapRes = await withTimeout(
+      "https://snapinsta.app/api/ajaxSearch",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+          "User-Agent": defaultUA,
+          Origin: "https://snapinsta.app",
+          Referer: "https://snapinsta.app/",
+        },
+        body: `q=${encodeURIComponent(cleanUrl)}&t=media&lang=en`,
+      },
+      15000
+    );
+
+    if (snapRes.ok) {
+      const ct = (snapRes.headers.get("content-type") || "").toLowerCase();
+      if (ct.includes("application/json")) {
+        const data = await snapRes.json();
+        if (data.status === "ok" && data.data) {
+          const videoUrls = extractVideoUrls(data.data);
+          if (videoUrls.length > 0) {
+            console.log("SnapInsta success");
+            return {
+              success: true,
+              url: videoUrls[0],
+              filename: `instagram-${postId}.mp4`,
+              title: "Instagram Video",
+            };
+          }
+        }
+        errors.push("SnapInsta: sem link de vídeo");
+      } else {
+        errors.push("SnapInsta: resposta não-JSON");
+      }
+    } else {
+      errors.push(`SnapInsta HTTP ${snapRes.status}`);
+    }
+  } catch (e: any) {
+    errors.push(`SnapInsta: ${e?.message || e}`);
+  }
+
+  // ===================== Method 5: FastDL =====================
   try {
     console.log("Trying FastDL...");
     const fastRes = await withTimeout(
@@ -316,20 +397,16 @@ async function downloadInstagram(url: string): Promise<any> {
           Origin: "https://fastdl.app",
           Referer: "https://fastdl.app/",
         },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url: cleanUrl }),
       },
-      12000
+      15000
     );
 
-    if (!fastRes.ok) {
-      errors.push(`FastDL HTTP ${fastRes.status}`);
-    } else {
+    if (fastRes.ok) {
       const ct = (fastRes.headers.get("content-type") || "").toLowerCase();
-      if (!ct.includes("application/json")) {
-        errors.push(`FastDL: content-type inválido (${ct || "n/a"})`);
-      } else {
-        const fastData = await fastRes.json();
-        const videoUrl = fastData?.url || fastData?.video?.url || fastData?.result?.[0]?.url;
+      if (ct.includes("application/json")) {
+        const data = await fastRes.json();
+        const videoUrl = data?.url || data?.video?.url || data?.result?.[0]?.url;
         if (videoUrl) {
           console.log("FastDL success");
           return {
@@ -339,18 +416,22 @@ async function downloadInstagram(url: string): Promise<any> {
             title: "Instagram Video",
           };
         }
-        errors.push("FastDL: sem link mp4");
+        errors.push("FastDL: sem link de vídeo");
+      } else {
+        errors.push("FastDL: resposta não-JSON");
       }
+    } else {
+      errors.push(`FastDL HTTP ${fastRes.status}`);
     }
   } catch (e: any) {
     errors.push(`FastDL: ${e?.message || e}`);
   }
 
-  // ===================== Method 5: Cobalt (fallback) =====================
+  // ===================== Method 6: Cobalt (final fallback) =====================
   try {
     console.log("Trying Cobalt for Instagram...");
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     const cobaltRes = await fetch("https://api.cobalt.tools/api/json", {
       method: "POST",
@@ -359,7 +440,7 @@ async function downloadInstagram(url: string): Promise<any> {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        url,
+        url: cleanUrl,
         isAudioOnly: false,
         aFormat: "best",
         vCodec: "h264",
@@ -371,9 +452,7 @@ async function downloadInstagram(url: string): Promise<any> {
 
     clearTimeout(timeoutId);
 
-    if (!cobaltRes.ok) {
-      errors.push(`Cobalt HTTP ${cobaltRes.status}`);
-    } else {
+    if (cobaltRes.ok) {
       const cobaltData = (await cobaltRes.json()) as any;
 
       if (cobaltData?.status === "error") {
@@ -401,10 +480,15 @@ async function downloadInstagram(url: string): Promise<any> {
       } else {
         errors.push("Cobalt: sem URL");
       }
+    } else {
+      errors.push(`Cobalt HTTP ${cobaltRes.status}`);
     }
   } catch (e: any) {
     errors.push(`Cobalt: ${e?.message || e}`);
   }
+
+  // Log all errors for debugging
+  console.log("All Instagram download attempts failed:", errors);
 
   throw new Error(`Instagram: nenhum provedor disponível no momento (${errors.slice(0, 3).join("; ")})`);
 }
