@@ -627,51 +627,59 @@ serve(async (req) => {
           topicMessages.push(`Você gosta de ${topic.toLowerCase()}?`);
         });
 
-        // Send messages
-        const messagesSent = [];
-        const messagesPerRound = Math.min(conversation.messages_per_round, conversation.daily_limit - (todayCount || 0));
+        // Determine who sends next by checking the last message
+        const { data: lastMessage } = await supabaseClient
+          .from('maturador_messages')
+          .select('from_instance_id')
+          .eq('conversation_id', conversationId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-        for (let i = 0; i < messagesPerRound; i++) {
-          const isAToB = i % 2 === 0;
-          const fromInstance = isAToB ? instanceA : instanceB;
-          const toInstance = isAToB ? instanceB : instanceA;
-          const toPhone = isAToB ? phoneB : phoneA;
-          const message = topicMessages[Math.floor(Math.random() * topicMessages.length)];
+        // Alternate: if last sender was A, now B sends (and vice versa). If no messages yet, A starts.
+        const lastSenderId = lastMessage?.from_instance_id;
+        const isAToB = lastSenderId !== instanceA.id; // A sends if last wasn't A (or no messages yet)
 
-          try {
-            console.log(`Sending message from ${fromInstance.instance_name} to ${toPhone}: ${message}`);
-            
-            const sendResult = await callEvolution(`/message/sendText/${fromInstance.instance_name}`, 'POST', {
-              number: toPhone,
-              text: message,
+        const fromInstance = isAToB ? instanceA : instanceB;
+        const toInstance = isAToB ? instanceB : instanceA;
+        const toPhone = isAToB ? phoneB : phoneA;
+        const message = topicMessages[Math.floor(Math.random() * topicMessages.length)];
+
+        let messageSent = null;
+
+        try {
+          console.log(`Sending message from ${fromInstance.instance_name} to ${toPhone}: ${message}`);
+          
+          const sendResult = await callEvolution(`/message/sendText/${fromInstance.instance_name}`, 'POST', {
+            number: toPhone,
+            text: message,
+          });
+
+          console.log('Send result:', JSON.stringify(sendResult, null, 2));
+
+          // Save to database
+          await supabaseClient
+            .from('maturador_messages')
+            .insert({
+              user_id: user.id,
+              conversation_id: conversationId,
+              from_instance_id: fromInstance.id,
+              to_instance_id: toInstance.id,
+              body: message,
+              status: 'sent',
             });
 
-            console.log('Send result:', JSON.stringify(sendResult, null, 2));
+          messageSent = { from: fromInstance.instance_name, to: toInstance.instance_name, message };
 
-            // Save to database
-            await supabaseClient
-              .from('maturador_messages')
-              .insert({
-                user_id: user.id,
-                conversation_id: conversationId,
-                from_instance_id: fromInstance.id,
-                to_instance_id: toInstance.id,
-                body: message,
-                status: 'sent',
-              });
-
-            messagesSent.push({ from: fromInstance.instance_name, to: toInstance.instance_name, message });
-
-            // Random delay between messages
-            const delay = Math.floor(Math.random() * (conversation.max_delay_seconds - conversation.min_delay_seconds + 1)) + conversation.min_delay_seconds;
-            await new Promise(resolve => setTimeout(resolve, delay * 1000));
-
-          } catch (error) {
-            console.error(`Error sending message:`, error);
-          }
+        } catch (error) {
+          console.error(`Error sending message:`, error);
+          return new Response(JSON.stringify({ error: 'Erro ao enviar mensagem' }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
         }
 
-        result = { success: true, messagesSent: messagesSent.length, messages: messagesSent };
+        result = { success: true, messagesSent: 1, messages: [messageSent] };
         break;
       }
 
