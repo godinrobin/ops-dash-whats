@@ -27,6 +27,10 @@ import ExtensaoAdsWhatsApp from "./pages/ExtensaoAdsWhatsApp";
 import VideoDownloader from "./pages/VideoDownloader";
 import SMSBot from "./pages/SMSBot";
 import SMMPanel from "./pages/SMMPanel";
+import MaturadorDashboard from "./pages/MaturadorDashboard";
+import MaturadorConfig from "./pages/MaturadorConfig";
+import MaturadorInstances from "./pages/MaturadorInstances";
+import MaturadorConversations from "./pages/MaturadorConversations";
 import AdminPanelNew from "./pages/AdminPanelNew";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
@@ -66,6 +70,10 @@ const App = () => (
             <Route path="/tag-whats" element={<MemberRoute featureName="Tag Whats"><TagWhats /></MemberRoute>} />
             <Route path="/extensao-ads" element={<ProtectedRoute><ExtensaoAdsWhatsApp /></ProtectedRoute>} />
             <Route path="/video-downloader" element={<ProtectedRoute><VideoDownloader /></ProtectedRoute>} />
+            <Route path="/maturador" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorDashboard /></MemberRoute>} />
+            <Route path="/maturador/config" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorConfig /></MemberRoute>} />
+            <Route path="/maturador/instances" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorInstances /></MemberRoute>} />
+            <Route path="/maturador/conversations" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorConversations /></MemberRoute>} />
             
             {/* ADMIN ROUTES */}
             <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />
