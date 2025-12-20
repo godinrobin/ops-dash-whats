@@ -256,7 +256,11 @@ export default function MaturadorConversations() {
         return;
       }
 
-      toast.success(`${data.messagesSent} mensagens enviadas!`);
+      if ((data?.messagesSent || 0) === 0) {
+        toast.error('Nenhuma mensagem enviada. Confirme se ambos os números estão conectados e tente novamente.');
+      } else {
+        toast.success(`${data.messagesSent} mensagens enviadas!`);
+      }
       await fetchData();
 
     } catch (error: any) {
