@@ -444,10 +444,10 @@ export default function MaturadorDashboard() {
                         </Badge>
                       </div>
                     </CardHeader>
-                    <CardContent>
-                      <p className="text-xs text-muted-foreground">
-                        Pareamento entre 2 números
-                      </p>
+                    <CardContent className="space-y-1">
+                      <p className="text-sm font-medium">{instances.find(i => i.id === conv.chip_a_id)?.phone_number || instances.find(i => i.id === conv.chip_a_id)?.label || 'N/A'}</p>
+                      <p className="text-xs text-muted-foreground">↕</p>
+                      <p className="text-sm font-medium">{instances.find(i => i.id === conv.chip_b_id)?.phone_number || instances.find(i => i.id === conv.chip_b_id)?.label || 'N/A'}</p>
                     </CardContent>
                   </Card>
                 ))}
