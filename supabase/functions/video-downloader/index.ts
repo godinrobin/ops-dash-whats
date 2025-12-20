@@ -158,7 +158,15 @@ async function tryInvidious(
       const endpoint = `${base}/api/v1/videos/${videoId}`;
       console.log("Invidious endpoint:", endpoint);
 
-      const res = await fetch(endpoint, { headers: { Accept: "application/json" } });
+      // Add timeout to avoid hanging requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      const res = await fetch(endpoint, { 
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
       if (!res.ok) {
         console.log(`Invidious ${base} HTTP ${res.status}`);
         continue;
@@ -260,7 +268,16 @@ async function tryPiped(
       const endpoint = `${base}/streams/${videoId}`;
       console.log("Piped endpoint:", endpoint);
 
-      const res = await fetch(endpoint, { headers: { Accept: "application/json" } });
+      // Add timeout to avoid hanging requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      const res = await fetch(endpoint, { 
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
       if (!res.ok) {
         console.log(`Piped ${base} HTTP ${res.status}`);
         continue;
