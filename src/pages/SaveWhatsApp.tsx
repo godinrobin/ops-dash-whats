@@ -61,7 +61,7 @@ const SaveWhatsApp = () => {
 
           {/* Download Button */}
           <div className="flex justify-center mb-12">
-            <a href="/save-whatsapp.zip" download>
+            <a href="https://joaolucassps.co/save-whatsapp.zip" download>
               <Button size="lg" className="bg-gradient-to-r from-green-400 to-green-600 hover:from-green-500 hover:to-green-700 text-white gap-2 text-lg px-8 py-6">
                 <Download className="w-6 h-6" />
                 Baixar Extensão
