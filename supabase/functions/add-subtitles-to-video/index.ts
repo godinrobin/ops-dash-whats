@@ -156,19 +156,57 @@ serve(async (req) => {
       console.log(`Adding subtitles to video: ${videoUrl}`);
       console.log('Subtitle config:', JSON.stringify(subtitleConfig));
 
-      // Default config values
+      // Allowed colors by Fal.ai API
+      const allowedColors = ['white', 'black', 'red', 'green', 'blue', 'yellow', 
+                             'orange', 'purple', 'pink', 'brown', 'gray', 'cyan', 'magenta'];
+
+      // Normalize color values - convert hex to named colors
+      const normalizeColor = (value: string | undefined, fallback: string): string => {
+        if (!value) return fallback;
+        const v = value.trim().toLowerCase();
+        
+        // Map old hex values to named colors
+        const hexMap: Record<string, string> = {
+          '#ff00ff': 'magenta',
+          '#00ff00': 'green',
+          '#ff0000': 'red',
+          '#0000ff': 'blue',
+          '#ffff00': 'yellow',
+          '#ffffff': 'white',
+          '#000000': 'black',
+          '#ffa500': 'orange',
+          '#800080': 'purple',
+          '#ffc0cb': 'pink',
+          '#a52a2a': 'brown',
+          '#808080': 'gray',
+          '#00ffff': 'cyan',
+        };
+        if (hexMap[v]) return hexMap[v];
+        
+        // Unknown hex => fallback  
+        if (v.startsWith('#')) {
+          console.warn(`Unknown hex color "${v}", using fallback "${fallback}"`);
+          return fallback;
+        }
+        
+        return allowedColors.includes(v) ? v : fallback;
+      };
+
+      // Default config values with normalized colors
       const config = {
         font: subtitleConfig?.font || 'Montserrat/Montserrat-ExtraBold.ttf',
         font_size: subtitleConfig?.fontSize || 80,
-        primary_color: subtitleConfig?.primaryColor || 'white',
-        outline_color: subtitleConfig?.outlineColor || 'black',
+        primary_color: normalizeColor(subtitleConfig?.primaryColor, 'white'),
+        outline_color: normalizeColor(subtitleConfig?.outlineColor, 'black'),
         outline_width: subtitleConfig?.outlineWidth || 3,
-        highlight_color: subtitleConfig?.highlightColor || 'yellow',
+        highlight_color: normalizeColor(subtitleConfig?.highlightColor, 'yellow'),
         word_level: subtitleConfig?.wordLevel !== false, // default true
         max_words_per_segment: subtitleConfig?.maxWordsPerSegment || 3,
         y_position: subtitleConfig?.yPosition || 70, // percentage from top
         language: subtitleConfig?.language || 'pt',
       };
+
+      console.log('Normalized config:', JSON.stringify(config));
 
       // Build the auto-subtitle request using Fal.ai's auto-subtitle API
       const falPayload = {
