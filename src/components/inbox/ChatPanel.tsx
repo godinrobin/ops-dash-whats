@@ -278,7 +278,7 @@ export const ChatPanel = ({
                 </div>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuContent align="end" className="w-48 bg-popover text-popover-foreground border border-border shadow-md z-50">
               {predefinedLabels.map((label) => (
                 <DropdownMenuItem 
                   key={label.name}
