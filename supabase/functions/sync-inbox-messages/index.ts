@@ -209,30 +209,51 @@ serve(async (req) => {
     }
 
     const msgsData = await msgsRes.json();
-    console.log("findMessages response type:", typeof msgsData, "isArray:", Array.isArray(msgsData));
-    
-    // Handle different API response formats
-    let messages: EvolutionMessage[] = [];
-    if (Array.isArray(msgsData)) {
-      messages = msgsData;
-    } else if (msgsData?.messages && Array.isArray(msgsData.messages)) {
-      messages = msgsData.messages;
-    } else if (msgsData?.records && Array.isArray(msgsData.records)) {
-      messages = msgsData.records;
-    } else if (typeof msgsData === "object" && msgsData !== null) {
-      // Maybe it's a single message or an object with numeric keys
-      const keys = Object.keys(msgsData);
-      if (keys.length > 0 && keys.every(k => !isNaN(Number(k)))) {
-        messages = Object.values(msgsData) as EvolutionMessage[];
-      } else {
-        console.log("Unexpected findMessages format, keys:", keys.slice(0, 5));
-      }
-    }
+    console.log(
+      "findMessages response type:",
+      typeof msgsData,
+      "isArray:",
+      Array.isArray(msgsData)
+    );
 
-    console.log("Parsed messages count:", messages.length);
+    const coerceMessagesArray = (val: any): EvolutionMessage[] => {
+      if (Array.isArray(val)) return val as EvolutionMessage[];
+
+      if (val && typeof val === "object") {
+        // common wrappers
+        if (Array.isArray(val.messages)) return val.messages as EvolutionMessage[];
+        if (Array.isArray(val.records)) return val.records as EvolutionMessage[];
+
+        // sometimes messages can be an object keyed by numbers
+        if (val.messages && typeof val.messages === "object" && !Array.isArray(val.messages)) {
+          const keys = Object.keys(val.messages);
+          if (keys.length > 0 && keys.every((k) => !isNaN(Number(k)))) {
+            return Object.values(val.messages) as EvolutionMessage[];
+          }
+        }
+
+        // object with numeric keys at root
+        const keys = Object.keys(val);
+        if (keys.length > 0 && keys.every((k) => !isNaN(Number(k)))) {
+          return Object.values(val) as EvolutionMessage[];
+        }
+
+        console.log("Unexpected findMessages format, keys:", keys.slice(0, 8));
+      }
+
+      return [];
+    };
+
+    const messagesArr = coerceMessagesArray(msgsData);
+    console.log(
+      "Parsed messages count:",
+      messagesArr.length,
+      "messagesArr isArray:",
+      Array.isArray(messagesArr)
+    );
 
     // Only inbound messages
-    const inbound = messages.filter((m) => m && !m?.key?.fromMe);
+    const inbound = (Array.isArray(messagesArr) ? messagesArr : []).filter((m) => m && !m?.key?.fromMe);
     const remoteIds = inbound.map((m) => m?.key?.id).filter(Boolean) as string[];
 
     console.log("Inbound messages:", inbound.length, "Remote IDs:", remoteIds.length);
