@@ -126,6 +126,7 @@ const FlowEditorPage = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
+      <div className="h-14 md:h-16" /> {/* Spacer for fixed header */}
       
       <div className="border-b border-border px-4 py-2 flex items-center justify-between bg-card">
         <div className="flex items-center gap-4">
@@ -235,7 +236,7 @@ const FlowEditorPage = () => {
         </div>
       </div>
 
-      <div className="flex-1" style={{ height: 'calc(100vh - 120px)', minHeight: '600px' }}>
+      <div className="flex-1 overflow-hidden">
         {flow && (
           <FlowCanvas
             initialNodes={flow.nodes}

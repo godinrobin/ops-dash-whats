@@ -187,11 +187,11 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
   };
 
   return (
-    <div className="flex h-full w-full">
+    <div className="flex h-full w-full overflow-hidden">
       <NodeSidebar />
       
       <div 
-        className="flex-1 relative" 
+        className="flex-1 relative h-full" 
         ref={reactFlowWrapper}
       >
         <ReactFlow

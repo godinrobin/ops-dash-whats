@@ -64,6 +64,7 @@ const FlowListPage = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
+      <div className="h-14 md:h-16" /> {/* Spacer for fixed header */}
       
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center gap-4 mb-6">
