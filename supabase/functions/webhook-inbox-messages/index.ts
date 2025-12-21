@@ -40,8 +40,18 @@ serve(async (req) => {
       }
 
       const remoteJid = key.remoteJid || '';
-      const phone = remoteJid.split('@')[0];
+      const rawPhone = remoteJid.split('@')[0];
+      // Clean and validate phone number
+      const phone = rawPhone.replace(/\D/g, '');
       const messageId = key.id;
+      
+      // Validate phone is 10-15 digits
+      if (!/^\d{10,15}$/.test(phone)) {
+        console.log(`Skipping message with invalid phone: ${rawPhone}`);
+        return new Response(JSON.stringify({ success: true, skipped: true, reason: 'Invalid phone' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
       
       // Extract message content
       let content = '';
@@ -100,8 +110,9 @@ serve(async (req) => {
         .single();
 
       if (contactError || !contact) {
-        // Create new contact
-        const pushName = message.pushName || data.pushName || null;
+        // Create new contact - only use pushName from inbound messages
+        // message.pushName is correct since this is an inbound message (!key.fromMe)
+        const pushName = message.pushName || null;
         
         const { data: newContact, error: insertError } = await supabaseClient
           .from('inbox_contacts')
@@ -127,15 +138,23 @@ serve(async (req) => {
 
         contact = newContact;
       } else {
-        // Update existing contact with new pushName and increment unread
-        const pushName = message.pushName || data.pushName;
+        // Update existing contact: increment unread and update pushName if available
+        // Only use pushName from the message (inbound), not from data root
+        const pushName = message.pushName || null;
+        const updates: Record<string, any> = {
+          unread_count: (contact.unread_count || 0) + 1,
+          last_message_at: new Date().toISOString(),
+        };
+        
+        // Only update name if we have a valid pushName and contact doesn't have a name yet
+        // or if the new pushName is different and valid
+        if (pushName && pushName.trim() && (!contact.name || contact.name !== pushName)) {
+          updates.name = pushName;
+        }
+        
         await supabaseClient
           .from('inbox_contacts')
-          .update({
-            unread_count: (contact.unread_count || 0) + 1,
-            last_message_at: new Date().toISOString(),
-            ...(pushName && { name: pushName }),
-          })
+          .update(updates)
           .eq('id', contact.id);
       }
 

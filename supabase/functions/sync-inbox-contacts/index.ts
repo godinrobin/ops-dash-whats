@@ -137,45 +137,56 @@ serve(async (req) => {
         continue;
       }
 
-      // Get contact name from chat's pushName/notify - these are the real names
-      let contactName = chat.pushName || chat.notify || null;
+      // Get profile pic from chat data
       let profilePicUrl = chat.profilePictureUrl || chat.imgUrl || null;
+      
+      // IMPORTANT: Do NOT use chat.pushName or chat.notify at root level
+      // They often contain the instance owner's name, not the contact's name
+      // We should ONLY get pushName from inbound messages
+      let contactName: string | null = null;
 
-      // If no name in chat, try to get from recent messages
-      if (!contactName) {
-        try {
-          const messagesResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/findMessages/${instanceName}`, {
-            method: 'POST',
-            headers: {
-              'apikey': EVOLUTION_API_KEY,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              where: {
-                key: {
-                  remoteJid,
-                },
+      // Try to get pushName from recent INBOUND messages
+      try {
+        const messagesResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/findMessages/${instanceName}`, {
+          method: 'POST',
+          headers: {
+            'apikey': EVOLUTION_API_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            where: {
+              key: {
+                remoteJid,
               },
-              limit: 10,
-            }),
-          });
+            },
+            limit: 20,
+          }),
+        });
 
-          if (messagesResponse.ok) {
-            const messagesData = await messagesResponse.json();
-            const messages = messagesData.messages || messagesData || [];
-            
-            // Find pushName from incoming messages (not fromMe)
-            for (const msg of messages) {
-              if (!msg.key?.fromMe && msg.pushName) {
-                contactName = msg.pushName;
-                console.log(`Found pushName from message for ${phone}: ${contactName}`);
-                break;
-              }
+        if (messagesResponse.ok) {
+          const messagesData = await messagesResponse.json();
+          let messagesArr: any[] = [];
+          
+          // Handle different response formats
+          if (Array.isArray(messagesData)) {
+            messagesArr = messagesData;
+          } else if (Array.isArray(messagesData?.messages)) {
+            messagesArr = messagesData.messages;
+          } else if (messagesData?.messages && typeof messagesData.messages === 'object') {
+            messagesArr = Object.values(messagesData.messages);
+          }
+          
+          // Find pushName from incoming messages ONLY (not fromMe)
+          for (const msg of messagesArr) {
+            if (msg?.key && !msg.key.fromMe && msg.pushName) {
+              contactName = msg.pushName;
+              console.log(`Found pushName from inbound message for ${phone}: ${contactName}`);
+              break;
             }
           }
-        } catch (e) {
-          console.log(`Could not fetch messages to get pushName for ${phone}:`, e);
         }
+      } catch (e) {
+        console.log(`Could not fetch messages to get pushName for ${phone}:`, e);
       }
 
       console.log(`Processing contact: ${phone}, name: ${contactName || 'unknown'}, pic: ${profilePicUrl ? 'yes' : 'no'}`);
@@ -285,13 +296,25 @@ serve(async (req) => {
 
           if (messagesResponse.ok) {
             const messagesData = await messagesResponse.json();
-            const messages = messagesData.messages || messagesData || [];
-            console.log(`Fetched ${messages.length} messages for ${phone}`);
+            
+            // Handle different response formats
+            let messagesArr: any[] = [];
+            if (Array.isArray(messagesData)) {
+              messagesArr = messagesData;
+            } else if (Array.isArray(messagesData?.messages)) {
+              messagesArr = messagesData.messages;
+            } else if (messagesData?.messages && typeof messagesData.messages === 'object') {
+              messagesArr = Object.values(messagesData.messages);
+            } else if (Array.isArray(messagesData?.records)) {
+              messagesArr = messagesData.records;
+            }
+            
+            console.log(`Fetched ${messagesArr.length} messages for ${phone}`);
 
             let messagesImported = 0;
             let foundPushName = null;
             
-            for (const msg of messages.slice(0, 100)) {
+            for (const msg of messagesArr.slice(0, 100)) {
               const key = msg.key || {};
               const direction = key.fromMe ? 'outbound' : 'inbound';
               
