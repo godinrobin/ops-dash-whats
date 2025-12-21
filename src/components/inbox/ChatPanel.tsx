@@ -17,6 +17,7 @@ interface ChatPanelProps {
   onSendMessage: (content: string, messageType?: string, mediaUrl?: string) => Promise<{ error?: string; data?: any }>;
   onToggleDetails: () => void;
   flows?: { id: string; name: string; is_active: boolean }[];
+  onTriggerFlow?: (flowId: string) => void;
 }
 
 export const ChatPanel = ({
@@ -26,6 +27,7 @@ export const ChatPanel = ({
   onSendMessage,
   onToggleDetails,
   flows = [],
+  onTriggerFlow,
 }: ChatPanelProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [instanceName, setInstanceName] = useState<string | null>(null);
@@ -144,7 +146,7 @@ export const ChatPanel = ({
       </ScrollArea>
 
       {/* Input Area */}
-      <ChatInput onSendMessage={onSendMessage} flows={flows} />
+      <ChatInput onSendMessage={onSendMessage} flows={flows} onTriggerFlow={onTriggerFlow} />
     </div>
   );
 };

@@ -234,7 +234,7 @@ serve(async (req) => {
 
             if (!existingSession) {
               // Create new flow session
-              await supabaseClient
+              const { data: newSession, error: sessionError } = await supabaseClient
                 .from('inbox_flow_sessions')
                 .insert({
                   flow_id: flow.id,
@@ -244,7 +244,34 @@ serve(async (req) => {
                   current_node_id: 'start-1',
                   variables: { lastMessage: content, contactName: contact.name || phone },
                   status: 'active',
-                });
+                })
+                .select()
+                .single();
+
+              // Execute the flow immediately after creating session
+              if (newSession && !sessionError) {
+                console.log(`Executing flow for session ${newSession.id}`);
+                try {
+                  const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+                  const processResponse = await fetch(processUrl, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                    },
+                    body: JSON.stringify({ sessionId: newSession.id }),
+                  });
+                  
+                  if (!processResponse.ok) {
+                    const errorText = await processResponse.text();
+                    console.error('Error executing flow:', errorText);
+                  } else {
+                    console.log('Flow executed successfully');
+                  }
+                } catch (flowError) {
+                  console.error('Error calling process-inbox-flow:', flowError);
+                }
+              }
             }
 
             break; // Only trigger one flow

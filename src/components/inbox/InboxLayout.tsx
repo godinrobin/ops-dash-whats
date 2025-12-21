@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { InboxSidebar } from './InboxSidebar';
 import { ConversationList } from './ConversationList';
@@ -8,6 +8,8 @@ import { useInboxConversations } from '@/hooks/useInboxConversations';
 import { useInboxMessages } from '@/hooks/useInboxMessages';
 import { useInboxFlows } from '@/hooks/useInboxFlows';
 import { InboxContact } from '@/types/inbox';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 export const InboxLayout = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -46,6 +48,63 @@ export const InboxLayout = () => {
     setSearchParams({ contact: contact.id });
   };
 
+  // Manual flow triggering
+  const handleTriggerFlow = useCallback(async (flowId: string) => {
+    if (!selectedContact) {
+      toast.error('Nenhum contato selecionado');
+      return;
+    }
+
+    try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error('Usuário não autenticado');
+        return;
+      }
+
+      // Create a new flow session
+      const { data: newSession, error: sessionError } = await supabase
+        .from('inbox_flow_sessions')
+        .insert({
+          flow_id: flowId,
+          contact_id: selectedContact.id,
+          instance_id: selectedContact.instance_id,
+          user_id: user.id,
+          current_node_id: 'start-1',
+          variables: { 
+            lastMessage: '', 
+            contactName: selectedContact.name || selectedContact.phone 
+          },
+          status: 'active',
+        })
+        .select()
+        .single();
+
+      if (sessionError) {
+        console.error('Error creating flow session:', sessionError);
+        toast.error('Erro ao criar sessão do fluxo');
+        return;
+      }
+
+      // Call the process-inbox-flow edge function
+      const { error: invokeError } = await supabase.functions.invoke('process-inbox-flow', {
+        body: { sessionId: newSession.id },
+      });
+
+      if (invokeError) {
+        console.error('Error invoking flow:', invokeError);
+        toast.error('Erro ao executar fluxo');
+        return;
+      }
+
+      toast.success('Fluxo disparado com sucesso!');
+    } catch (error) {
+      console.error('Error triggering flow:', error);
+      toast.error('Erro ao disparar fluxo');
+    }
+  }, [selectedContact]);
+
   const filteredContacts = contacts.filter(contact => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
@@ -81,6 +140,7 @@ export const InboxLayout = () => {
         onSendMessage={sendMessage}
         onToggleDetails={() => setShowContactDetails(!showContactDetails)}
         flows={flows.map(f => ({ id: f.id, name: f.name, is_active: f.is_active }))}
+        onTriggerFlow={handleTriggerFlow}
       />
 
       {/* Detalhes do Contato */}
