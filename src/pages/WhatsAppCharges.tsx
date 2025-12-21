@@ -152,7 +152,7 @@ const WhatsAppCharges = () => {
       const { data, error } = await supabase.functions.invoke("whatsapp-charge", {
         body: {
           action: "create-charge",
-          instance_id: selectedInstance || null,
+          instance_id: selectedInstance === "none" ? null : selectedInstance || null,
           recipient_phone: recipientPhone,
           recipient_name: recipientName || null,
           items: validItems,
@@ -386,12 +386,12 @@ const WhatsAppCharges = () => {
               {/* Instance Selection */}
               <div>
                 <Label>Instância WhatsApp (opcional)</Label>
-                <Select value={selectedInstance} onValueChange={setSelectedInstance}>
+              <Select value={selectedInstance} onValueChange={setSelectedInstance}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione para enviar automaticamente" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhuma (apenas criar)</SelectItem>
+                    <SelectItem value="none">Nenhuma (apenas criar)</SelectItem>
                     {instances.map((inst) => (
                       <SelectItem key={inst.id} value={inst.id}>
                         {inst.instance_name} {inst.phone_number && `(${inst.phone_number})`}
