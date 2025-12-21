@@ -96,7 +96,7 @@ export const useInboxMessages = (contactId: string | null) => {
     if (!user || !contactId) return { error: 'Not authenticated or no contact selected' };
 
     try {
-      // Get contact info for instance_id
+      // Get contact info for instance_id and phone
       const { data: contact } = await supabase
         .from('inbox_contacts')
         .select('instance_id, phone')
@@ -104,6 +104,17 @@ export const useInboxMessages = (contactId: string | null) => {
         .single();
 
       if (!contact) throw new Error('Contact not found');
+
+      // Get instance name
+      let instanceName = '';
+      if (contact.instance_id) {
+        const { data: instance } = await supabase
+          .from('maturador_instances')
+          .select('instance_name')
+          .eq('id', contact.instance_id)
+          .single();
+        instanceName = instance?.instance_name || '';
+      }
 
       // Insert message
       const { data: message, error: insertError } = await supabase
@@ -126,8 +137,8 @@ export const useInboxMessages = (contactId: string | null) => {
       // Call edge function to send via Evolution API
       const { error: sendError } = await supabase.functions.invoke('send-inbox-message', {
         body: {
-          messageId: message.id,
-          instanceId: contact.instance_id,
+          contactId,
+          instanceName,
           phone: contact.phone,
           content,
           messageType,

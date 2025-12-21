@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { MessageSquare, Filter, Settings, Zap, Tag } from 'lucide-react';
+import { MessageSquare, Filter, Settings, Zap, Tag, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 interface Instance {
   id: string;
@@ -23,6 +23,7 @@ export const InboxSidebar = ({ selectedInstanceId, onInstanceChange }: InboxSide
   const { user } = useAuth();
   const navigate = useNavigate();
   const [instances, setInstances] = useState<Instance[]>([]);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -31,7 +32,8 @@ export const InboxSidebar = ({ selectedInstanceId, onInstanceChange }: InboxSide
       const { data } = await supabase
         .from('maturador_instances')
         .select('id, instance_name, phone_number, status')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .eq('status', 'connected');
       
       if (data) {
         setInstances(data);
@@ -40,6 +42,44 @@ export const InboxSidebar = ({ selectedInstanceId, onInstanceChange }: InboxSide
 
     fetchInstances();
   }, [user]);
+
+  const syncContacts = async () => {
+    if (syncing) return;
+    
+    if (instances.length === 0) {
+      toast.error('Nenhuma instância conectada. Conecte um número no Maturador primeiro.');
+      return;
+    }
+
+    setSyncing(true);
+    let totalImported = 0;
+
+    try {
+      for (const instance of instances) {
+        const { data, error } = await supabase.functions.invoke('sync-inbox-contacts', {
+          body: { instanceId: instance.id }
+        });
+
+        if (error) {
+          console.error('Sync error for instance:', instance.instance_name, error);
+          continue;
+        }
+
+        totalImported += data?.imported || 0;
+      }
+
+      if (totalImported > 0) {
+        toast.success(`${totalImported} contatos importados com sucesso!`);
+      } else {
+        toast.info('Nenhum novo contato encontrado');
+      }
+    } catch (error) {
+      console.error('Sync error:', error);
+      toast.error('Erro ao sincronizar contatos');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   return (
     <div className="w-16 border-r border-border flex flex-col items-center py-4 bg-card">
@@ -70,6 +110,17 @@ export const InboxSidebar = ({ selectedInstanceId, onInstanceChange }: InboxSide
           title="Tags"
         >
           <Tag className="h-5 w-5" />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="w-10 h-10"
+          onClick={syncContacts}
+          disabled={syncing}
+          title="Sincronizar Contatos"
+        >
+          <RefreshCw className={`h-5 w-5 ${syncing ? 'animate-spin' : ''}`} />
         </Button>
       </div>
 
