@@ -169,10 +169,14 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave }: FlowCanvasProps
   };
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full w-full" style={{ height: '100%', minHeight: '500px' }}>
       <NodeSidebar />
       
-      <div className="flex-1 h-full" ref={reactFlowWrapper}>
+      <div 
+        className="flex-1" 
+        ref={reactFlowWrapper} 
+        style={{ height: '100%', width: '100%', minHeight: '500px' }}
+      >
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -186,6 +190,7 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave }: FlowCanvasProps
           nodeTypes={nodeTypes}
           fitView
           className="bg-muted/30"
+          style={{ width: '100%', height: '100%' }}
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
           <Controls />
