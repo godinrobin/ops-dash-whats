@@ -8,6 +8,55 @@ export const useInboxConversations = (instanceId?: string) => {
   const [contacts, setContacts] = useState<InboxContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [connectedInstanceIds, setConnectedInstanceIds] = useState<Set<string>>(new Set());
+
+  // Fetch connected instances
+  const fetchConnectedInstances = useCallback(async () => {
+    if (!user) return;
+    
+    try {
+      const { data } = await supabase
+        .from('maturador_instances')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('status', 'open');
+      
+      if (data) {
+        setConnectedInstanceIds(new Set(data.map(i => i.id)));
+      }
+    } catch (err) {
+      console.error('Error fetching connected instances:', err);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchConnectedInstances();
+  }, [fetchConnectedInstances]);
+
+  // Subscribe to instance status changes
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('instance-status-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'maturador_instances',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          fetchConnectedInstances();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, fetchConnectedInstances]);
 
   const fetchContacts = useCallback(async () => {
     if (!user) return;
@@ -27,7 +76,13 @@ export const useInboxConversations = (instanceId?: string) => {
 
       if (fetchError) throw fetchError;
       
-      setContacts((data || []).map(contact => ({
+      // Filter out contacts from disconnected instances
+      const filteredData = (data || []).filter(contact => {
+        if (!contact.instance_id) return true; // Keep contacts without instance
+        return connectedInstanceIds.has(contact.instance_id);
+      });
+      
+      setContacts(filteredData.map(contact => ({
         ...contact,
         tags: Array.isArray(contact.tags) ? (contact.tags as any[]).map(t => String(t)) : [],
         status: contact.status as 'active' | 'archived'
@@ -37,7 +92,7 @@ export const useInboxConversations = (instanceId?: string) => {
     } finally {
       setLoading(false);
     }
-  }, [user, instanceId]);
+  }, [user, instanceId, connectedInstanceIds]);
 
   useEffect(() => {
     fetchContacts();

@@ -187,12 +187,13 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
   };
 
   return (
-    <div className="flex h-full w-full overflow-hidden">
+    <div className="flex h-full w-full overflow-hidden" style={{ minHeight: 'calc(100vh - 140px)' }}>
       <NodeSidebar />
       
       <div 
-        className="flex-1 relative h-full" 
+        className="flex-1 relative" 
         ref={reactFlowWrapper}
+        style={{ height: '100%', minHeight: '500px' }}
       >
         <ReactFlow
           nodes={nodes}

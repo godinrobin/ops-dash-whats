@@ -13,6 +13,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ChatInputProps {
   onSendMessage: (content: string, messageType?: string, mediaUrl?: string) => Promise<{ error?: string; data?: any }>;
@@ -22,6 +23,7 @@ interface ChatInputProps {
 }
 
 export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactInstanceId }: ChatInputProps) => {
+  const { user } = useAuth();
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
@@ -83,10 +85,16 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactIns
   };
 
   const uploadMedia = async (file: File): Promise<string | null> => {
+    if (!user) {
+      console.error('User not authenticated');
+      return null;
+    }
+    
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const filePath = `inbox-media/${fileName}`;
+      // Include user ID in path to comply with RLS policies
+      const filePath = `${user.id}/inbox-media/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from('video-clips')
