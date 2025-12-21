@@ -299,6 +299,288 @@ export type Database = {
         }
         Relationships: []
       }
+      inbox_contacts: {
+        Row: {
+          assigned_to: string | null
+          created_at: string
+          id: string
+          instance_id: string | null
+          last_message_at: string | null
+          name: string | null
+          notes: string | null
+          phone: string
+          profile_pic_url: string | null
+          status: string
+          tags: Json | null
+          unread_count: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string
+          id?: string
+          instance_id?: string | null
+          last_message_at?: string | null
+          name?: string | null
+          notes?: string | null
+          phone: string
+          profile_pic_url?: string | null
+          status?: string
+          tags?: Json | null
+          unread_count?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string
+          id?: string
+          instance_id?: string | null
+          last_message_at?: string | null
+          name?: string | null
+          notes?: string | null
+          phone?: string
+          profile_pic_url?: string | null
+          status?: string
+          tags?: Json | null
+          unread_count?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbox_contacts_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inbox_flow_sessions: {
+        Row: {
+          contact_id: string
+          current_node_id: string | null
+          flow_id: string
+          id: string
+          instance_id: string | null
+          last_interaction: string
+          started_at: string
+          status: string
+          user_id: string
+          variables: Json | null
+        }
+        Insert: {
+          contact_id: string
+          current_node_id?: string | null
+          flow_id: string
+          id?: string
+          instance_id?: string | null
+          last_interaction?: string
+          started_at?: string
+          status?: string
+          user_id: string
+          variables?: Json | null
+        }
+        Update: {
+          contact_id?: string
+          current_node_id?: string | null
+          flow_id?: string
+          id?: string
+          instance_id?: string | null
+          last_interaction?: string
+          started_at?: string
+          status?: string
+          user_id?: string
+          variables?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbox_flow_sessions_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_flow_sessions_flow_id_fkey"
+            columns: ["flow_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_flows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_flow_sessions_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inbox_flows: {
+        Row: {
+          assigned_instances: string[] | null
+          created_at: string
+          description: string | null
+          edges: Json
+          id: string
+          is_active: boolean
+          name: string
+          nodes: Json
+          priority: number
+          trigger_keywords: string[] | null
+          trigger_type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assigned_instances?: string[] | null
+          created_at?: string
+          description?: string | null
+          edges?: Json
+          id?: string
+          is_active?: boolean
+          name: string
+          nodes?: Json
+          priority?: number
+          trigger_keywords?: string[] | null
+          trigger_type?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assigned_instances?: string[] | null
+          created_at?: string
+          description?: string | null
+          edges?: Json
+          id?: string
+          is_active?: boolean
+          name?: string
+          nodes?: Json
+          priority?: number
+          trigger_keywords?: string[] | null
+          trigger_type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      inbox_messages: {
+        Row: {
+          contact_id: string
+          content: string | null
+          created_at: string
+          direction: string
+          flow_id: string | null
+          id: string
+          instance_id: string | null
+          is_from_flow: boolean
+          media_url: string | null
+          message_type: string
+          remote_message_id: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          contact_id: string
+          content?: string | null
+          created_at?: string
+          direction: string
+          flow_id?: string | null
+          id?: string
+          instance_id?: string | null
+          is_from_flow?: boolean
+          media_url?: string | null
+          message_type?: string
+          remote_message_id?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          contact_id?: string
+          content?: string | null
+          created_at?: string
+          direction?: string
+          flow_id?: string | null
+          id?: string
+          instance_id?: string | null
+          is_from_flow?: boolean
+          media_url?: string | null
+          message_type?: string
+          remote_message_id?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbox_messages_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_messages_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inbox_quick_replies: {
+        Row: {
+          attachments: Json | null
+          content: string
+          created_at: string
+          id: string
+          shortcut: string
+          user_id: string
+        }
+        Insert: {
+          attachments?: Json | null
+          content: string
+          created_at?: string
+          id?: string
+          shortcut: string
+          user_id: string
+        }
+        Update: {
+          attachments?: Json | null
+          content?: string
+          created_at?: string
+          id?: string
+          shortcut?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      inbox_tags: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          name: string
+          user_id: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       marketplace_orders: {
         Row: {
           created_at: string
