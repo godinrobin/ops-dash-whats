@@ -36,6 +36,8 @@ import SaveWhatsApp from "./pages/SaveWhatsApp";
 import AdminPanelNew from "./pages/AdminPanelNew";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
+import InboxPage from "./pages/InboxPage";
+import FlowListPage from "./pages/FlowListPage";
 
 const queryClient = new QueryClient();
 
@@ -78,6 +80,9 @@ const App = () => (
             <Route path="/maturador/chat" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorChat /></MemberRoute>} />
             <Route path="/maturador/verified-contacts" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorVerifiedContacts /></MemberRoute>} />
             <Route path="/save-whatsapp" element={<ProtectedRoute><SaveWhatsApp /></ProtectedRoute>} />
+            <Route path="/inbox" element={<MemberRoute featureName="Inbox WhatsApp"><InboxPage /></MemberRoute>} />
+            <Route path="/inbox/flows" element={<MemberRoute featureName="Inbox WhatsApp"><FlowListPage /></MemberRoute>} />
+            <Route path="/inbox/flows/:id" element={<MemberRoute featureName="Inbox WhatsApp"><FlowListPage /></MemberRoute>} />
             
             {/* ADMIN ROUTES */}
             <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />
