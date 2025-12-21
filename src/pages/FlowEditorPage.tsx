@@ -227,7 +227,7 @@ const FlowEditorPage = () => {
         </div>
       </div>
 
-      <div className="flex-1">
+      <div className="flex-1 h-[calc(100vh-8rem)]">
         {flow && (
           <FlowCanvas
             initialNodes={flow.nodes}

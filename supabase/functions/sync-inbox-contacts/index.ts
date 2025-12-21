@@ -6,6 +6,30 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Validate if string is a valid phone number (10-15 digits)
+const isValidPhoneNumber = (phone: string): boolean => {
+  const cleaned = phone.replace(/\D/g, '');
+  return /^\d{10,15}$/.test(cleaned);
+};
+
+// Extract clean phone number from remoteJid
+const extractPhoneFromJid = (jid: string): string | null => {
+  if (!jid) return null;
+  
+  // Remove @s.whatsapp.net or @c.us suffix
+  const phone = jid.split('@')[0];
+  
+  // Clean non-digit characters
+  const cleaned = phone.replace(/\D/g, '');
+  
+  // Validate it's a real phone number
+  if (!isValidPhoneNumber(cleaned)) {
+    return null;
+  }
+  
+  return cleaned;
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -43,6 +67,7 @@ serve(async (req) => {
       .single();
 
     if (instanceError || !instance) {
+      console.error('Instance not found:', instanceError);
       return new Response(JSON.stringify({ error: 'Instance not found' }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -63,11 +88,14 @@ serve(async (req) => {
       });
     }
 
-    const EVOLUTION_BASE_URL = config.evolution_base_url;
+    const EVOLUTION_BASE_URL = config.evolution_base_url.replace(/\/$/, '');
     const EVOLUTION_API_KEY = config.evolution_api_key;
+    const instanceName = instance.instance_name;
+
+    console.log(`Fetching chats from ${EVOLUTION_BASE_URL} for instance ${instanceName}`);
 
     // Fetch chats from Evolution API
-    const chatsResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/findChats/${instance.instance_name}`, {
+    const chatsResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/findChats/${instanceName}`, {
       method: 'POST',
       headers: {
         'apikey': EVOLUTION_API_KEY,
@@ -79,34 +107,46 @@ serve(async (req) => {
     if (!chatsResponse.ok) {
       const errorText = await chatsResponse.text();
       console.error('Evolution API error:', errorText);
-      return new Response(JSON.stringify({ error: 'Failed to fetch chats from Evolution API' }), {
+      return new Response(JSON.stringify({ error: 'Failed to fetch chats from Evolution API', details: errorText }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     const chats = await chatsResponse.json();
-    console.log(`Found ${chats?.length || 0} chats`);
+    console.log(`Found ${chats?.length || 0} chats from Evolution API`);
 
     let imported = 0;
     let updated = 0;
+    let skipped = 0;
 
     for (const chat of chats || []) {
-      // Only process individual chats (not groups)
       const remoteJid = chat.id || chat.remoteJid;
-      if (!remoteJid || remoteJid.includes('@g.us')) continue;
+      
+      // Skip group chats
+      if (!remoteJid || remoteJid.includes('@g.us') || remoteJid.includes('@broadcast')) {
+        skipped++;
+        continue;
+      }
 
-      const phone = remoteJid.split('@')[0];
-      if (!phone) continue;
+      // Extract and validate phone number
+      const phone = extractPhoneFromJid(remoteJid);
+      if (!phone) {
+        console.log(`Skipping invalid phone from jid: ${remoteJid}`);
+        skipped++;
+        continue;
+      }
 
-      // Get contact name and profile picture from Evolution API
-      let contactName = chat.name || chat.pushName || null;
-      let profilePicUrl = chat.profilePictureUrl || null;
+      // Get contact name from chat data
+      let contactName = chat.pushName || chat.name || chat.notify || null;
+      let profilePicUrl = chat.profilePictureUrl || chat.imgUrl || null;
+
+      console.log(`Processing contact: ${phone}, name: ${contactName}, pic: ${profilePicUrl ? 'yes' : 'no'}`);
 
       // Try to fetch profile picture if not available
       if (!profilePicUrl) {
         try {
-          const profileResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/fetchProfilePictureUrl/${instance.instance_name}`, {
+          const profileResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/fetchProfilePictureUrl/${instanceName}`, {
             method: 'POST',
             headers: {
               'apikey': EVOLUTION_API_KEY,
@@ -117,17 +157,18 @@ serve(async (req) => {
 
           if (profileResponse.ok) {
             const profileData = await profileResponse.json();
-            profilePicUrl = profileData.profilePictureUrl || profileData.picture || profileData.url || null;
+            profilePicUrl = profileData.profilePictureUrl || profileData.picture || profileData.url || profileData.imgUrl || null;
+            console.log(`Fetched profile pic for ${phone}: ${profilePicUrl ? 'success' : 'not found'}`);
           }
         } catch (e) {
-          console.log('Could not fetch profile picture for', phone);
+          console.log(`Could not fetch profile picture for ${phone}:`, e);
         }
       }
 
-      // Try to fetch contact name if not available
+      // Try to fetch contact info if name not available
       if (!contactName) {
         try {
-          const contactResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/findContacts/${instance.instance_name}`, {
+          const contactResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/findContacts/${instanceName}`, {
             method: 'POST',
             headers: {
               'apikey': EVOLUTION_API_KEY,
@@ -140,37 +181,51 @@ serve(async (req) => {
 
           if (contactResponse.ok) {
             const contactData = await contactResponse.json();
-            if (contactData && contactData.length > 0) {
-              contactName = contactData[0].pushName || contactData[0].name || contactData[0].notify || null;
+            if (Array.isArray(contactData) && contactData.length > 0) {
+              const contact = contactData[0];
+              contactName = contact.pushName || contact.name || contact.notify || contact.verifiedName || null;
               if (!profilePicUrl) {
-                profilePicUrl = contactData[0].profilePictureUrl || null;
+                profilePicUrl = contact.profilePictureUrl || contact.imgUrl || null;
               }
+              console.log(`Fetched contact info for ${phone}: name=${contactName}`);
             }
           }
         } catch (e) {
-          console.log('Could not fetch contact info for', phone);
+          console.log(`Could not fetch contact info for ${phone}:`, e);
         }
       }
 
-      // Check if contact already exists
+      // Check if contact already exists for this user and instance
       const { data: existingContact } = await supabaseClient
         .from('inbox_contacts')
-        .select('id')
+        .select('id, name, profile_pic_url')
         .eq('user_id', user.id)
         .eq('phone', phone)
+        .eq('instance_id', instanceId)
         .single();
 
       if (existingContact) {
-        // Update existing contact with name and profile pic if we have new data
-        if (contactName || profilePicUrl) {
+        // Update existing contact with new name and profile pic if available
+        const updates: Record<string, any> = {
+          updated_at: new Date().toISOString(),
+        };
+
+        // Only update name if we have a new one and current is empty
+        if (contactName && !existingContact.name) {
+          updates.name = contactName;
+        }
+        
+        // Only update profile pic if we have a new one and current is empty
+        if (profilePicUrl && !existingContact.profile_pic_url) {
+          updates.profile_pic_url = profilePicUrl;
+        }
+
+        if (Object.keys(updates).length > 1) {
           await supabaseClient
             .from('inbox_contacts')
-            .update({
-              ...(contactName && { name: contactName }),
-              ...(profilePicUrl && { profile_pic_url: profilePicUrl }),
-              updated_at: new Date().toISOString(),
-            })
+            .update(updates)
             .eq('id', existingContact.id);
+          console.log(`Updated contact ${phone} with new data`);
         }
         updated++;
         continue;
@@ -195,16 +250,17 @@ serve(async (req) => {
         .single();
 
       if (insertError) {
-        console.error('Error inserting contact:', insertError);
+        console.error(`Error inserting contact ${phone}:`, insertError);
         continue;
       }
 
+      console.log(`Created new contact: ${phone} (${contactName || 'no name'})`);
       imported++;
 
       // Fetch messages for this chat
       if (newContact) {
         try {
-          const messagesResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/findMessages/${instance.instance_name}`, {
+          const messagesResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/findMessages/${instanceName}`, {
             method: 'POST',
             headers: {
               'apikey': EVOLUTION_API_KEY,
@@ -223,71 +279,80 @@ serve(async (req) => {
           if (messagesResponse.ok) {
             const messagesData = await messagesResponse.json();
             const messages = messagesData.messages || messagesData || [];
+            console.log(`Fetched ${messages.length} messages for ${phone}`);
 
-            if (messages.length > 0) {
-              for (const msg of messages.slice(0, 100)) {
-                const key = msg.key || {};
-                const direction = key.fromMe ? 'outbound' : 'inbound';
-                
-                let content = '';
-                let messageType = 'text';
-                let mediaUrl = null;
+            let messagesImported = 0;
+            for (const msg of messages.slice(0, 100)) {
+              const key = msg.key || {};
+              const direction = key.fromMe ? 'outbound' : 'inbound';
+              
+              let content = '';
+              let messageType = 'text';
+              let mediaUrl = null;
 
-                if (msg.message?.conversation) {
-                  content = msg.message.conversation;
-                } else if (msg.message?.extendedTextMessage?.text) {
-                  content = msg.message.extendedTextMessage.text;
-                } else if (msg.message?.imageMessage) {
-                  messageType = 'image';
-                  content = msg.message.imageMessage.caption || '';
-                  mediaUrl = msg.message.imageMessage.url || null;
-                } else if (msg.message?.audioMessage) {
-                  messageType = 'audio';
-                  mediaUrl = msg.message.audioMessage.url || null;
-                } else if (msg.message?.videoMessage) {
-                  messageType = 'video';
-                  content = msg.message.videoMessage.caption || '';
-                  mediaUrl = msg.message.videoMessage.url || null;
-                } else if (msg.message?.documentMessage) {
-                  messageType = 'document';
-                  content = msg.message.documentMessage.fileName || '';
-                  mediaUrl = msg.message.documentMessage.url || null;
-                }
+              if (msg.message?.conversation) {
+                content = msg.message.conversation;
+              } else if (msg.message?.extendedTextMessage?.text) {
+                content = msg.message.extendedTextMessage.text;
+              } else if (msg.message?.imageMessage) {
+                messageType = 'image';
+                content = msg.message.imageMessage.caption || '';
+                mediaUrl = msg.message.imageMessage.url || null;
+              } else if (msg.message?.audioMessage) {
+                messageType = 'audio';
+                mediaUrl = msg.message.audioMessage.url || null;
+              } else if (msg.message?.videoMessage) {
+                messageType = 'video';
+                content = msg.message.videoMessage.caption || '';
+                mediaUrl = msg.message.videoMessage.url || null;
+              } else if (msg.message?.documentMessage) {
+                messageType = 'document';
+                content = msg.message.documentMessage.fileName || '';
+                mediaUrl = msg.message.documentMessage.url || null;
+              }
 
-                // Skip empty messages
-                if (!content && !mediaUrl) continue;
+              // Skip empty messages
+              if (!content && !mediaUrl) continue;
 
-                await supabaseClient
-                  .from('inbox_messages')
-                  .insert({
-                    contact_id: newContact.id,
-                    instance_id: instanceId,
-                    user_id: user.id,
-                    direction,
-                    message_type: messageType,
-                    content,
-                    media_url: mediaUrl,
-                    remote_message_id: key.id,
-                    status: 'delivered',
-                    is_from_flow: false,
-                    created_at: msg.messageTimestamp 
-                      ? new Date(msg.messageTimestamp * 1000).toISOString()
-                      : new Date().toISOString(),
-                  });
+              const { error: msgError } = await supabaseClient
+                .from('inbox_messages')
+                .insert({
+                  contact_id: newContact.id,
+                  instance_id: instanceId,
+                  user_id: user.id,
+                  direction,
+                  message_type: messageType,
+                  content,
+                  media_url: mediaUrl,
+                  remote_message_id: key.id,
+                  status: 'delivered',
+                  is_from_flow: false,
+                  created_at: msg.messageTimestamp 
+                    ? new Date(msg.messageTimestamp * 1000).toISOString()
+                    : new Date().toISOString(),
+                });
+
+              if (!msgError) {
+                messagesImported++;
               }
             }
+            console.log(`Imported ${messagesImported} messages for ${phone}`);
           }
         } catch (msgError) {
-          console.error('Error fetching messages:', msgError);
+          console.error(`Error fetching messages for ${phone}:`, msgError);
         }
       }
     }
+
+    console.log(`Sync complete: ${imported} imported, ${updated} updated, ${skipped} skipped`);
 
     return new Response(JSON.stringify({ 
       success: true, 
       imported,
       updated,
-      total: chats?.length || 0
+      skipped,
+      total: chats?.length || 0,
+      instanceName
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
