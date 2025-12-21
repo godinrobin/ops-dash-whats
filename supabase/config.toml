@@ -116,6 +116,3 @@ verify_jwt = true
 
 [functions.remove-watermark]
 verify_jwt = true
-
-[functions.whatsapp-charge]
-verify_jwt = true

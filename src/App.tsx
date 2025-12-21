@@ -33,7 +33,6 @@ import MaturadorConversations from "./pages/MaturadorConversations";
 import MaturadorChat from "./pages/MaturadorChat";
 import MaturadorVerifiedContacts from "./pages/MaturadorVerifiedContacts";
 import SaveWhatsApp from "./pages/SaveWhatsApp";
-import WhatsAppCharges from "./pages/WhatsAppCharges";
 import AdminPanelNew from "./pages/AdminPanelNew";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
@@ -79,7 +78,6 @@ const App = () => (
             <Route path="/maturador/chat" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorChat /></MemberRoute>} />
             <Route path="/maturador/verified-contacts" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorVerifiedContacts /></MemberRoute>} />
             <Route path="/save-whatsapp" element={<ProtectedRoute><SaveWhatsApp /></ProtectedRoute>} />
-            <Route path="/whatsapp-charges" element={<MemberRoute featureName="Cobranças via WhatsApp"><WhatsAppCharges /></MemberRoute>} />
             
             {/* ADMIN ROUTES */}
             <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />

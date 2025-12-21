@@ -191,15 +191,6 @@ const Home = () => {
       subtext: "Salve seus contatos em poucos cliques",
       gradient: "from-green-400 to-green-600",
       restricted: false
-    },
-    { 
-      path: "/whatsapp-charges", 
-      emoji: "💳", 
-      title: "Cobranças WhatsApp",
-      description: "Crie e envie cobranças profissionais pelo WhatsApp",
-      subtext: "Gere cobranças com PIX automático",
-      gradient: "from-emerald-400 to-teal-500",
-      restricted: true
     }
   ];
 
