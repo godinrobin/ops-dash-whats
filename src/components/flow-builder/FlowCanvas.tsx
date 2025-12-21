@@ -59,7 +59,7 @@ interface FlowCanvasProps {
 
 const FlowCanvasInner = ({ initialNodes, initialEdges, onSave }: FlowCanvasProps) => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, getViewport } = useReactFlow();
   
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes.length > 0 ? initialNodes : [
     {
@@ -71,6 +71,7 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave }: FlowCanvasProps
   ]);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
 
   useEffect(() => {
     if (initialNodes.length > 0) {
@@ -104,12 +105,22 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave }: FlowCanvasProps
       event.preventDefault();
 
       const type = event.dataTransfer.getData('application/reactflow');
-      if (!type) return;
+      if (!type || !reactFlowWrapper.current) return;
 
-      // Use screenToFlowPosition to correctly calculate the position
+      // Get the bounds of the ReactFlow wrapper
+      const bounds = reactFlowWrapper.current.getBoundingClientRect();
+      
+      // Calculate position relative to the flow viewport
       const position = screenToFlowPosition({
         x: event.clientX,
         y: event.clientY,
+      });
+
+      console.log('Drop event:', { 
+        clientX: event.clientX, 
+        clientY: event.clientY, 
+        bounds: { left: bounds.left, top: bounds.top },
+        position 
       });
 
       const newNode: Node = {
@@ -123,6 +134,10 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave }: FlowCanvasProps
     },
     [setNodes, screenToFlowPosition]
   );
+  
+  const onInit = useCallback((instance: any) => {
+    setReactFlowInstance(instance);
+  }, []);
 
   const getNodeLabel = (type: string): string => {
     const labels: Record<string, string> = {
@@ -169,13 +184,12 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave }: FlowCanvasProps
   };
 
   return (
-    <div className="flex h-full w-full" style={{ height: '100%', minHeight: '500px' }}>
+    <div className="flex h-full w-full">
       <NodeSidebar />
       
       <div 
-        className="flex-1" 
-        ref={reactFlowWrapper} 
-        style={{ height: '100%', width: '100%', minHeight: '500px' }}
+        className="flex-1 relative" 
+        ref={reactFlowWrapper}
       >
         <ReactFlow
           nodes={nodes}
@@ -187,10 +201,11 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave }: FlowCanvasProps
           onPaneClick={onPaneClick}
           onDragOver={onDragOver}
           onDrop={onDrop}
+          onInit={onInit}
           nodeTypes={nodeTypes}
           fitView
           className="bg-muted/30"
-          style={{ width: '100%', height: '100%' }}
+          proOptions={{ hideAttribution: true }}
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
           <Controls />

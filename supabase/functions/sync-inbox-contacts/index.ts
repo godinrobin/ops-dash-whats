@@ -137,11 +137,12 @@ serve(async (req) => {
         continue;
       }
 
-      // Get contact name from chat data
-      let contactName = chat.pushName || chat.name || chat.notify || null;
+      // Get contact name from chat data - DO NOT use findContacts as it returns the instance owner's name
+      // The correct name is in pushName, notify, or name fields of the chat object
+      const contactName = chat.pushName || chat.notify || chat.name || null;
       let profilePicUrl = chat.profilePictureUrl || chat.imgUrl || null;
 
-      console.log(`Processing contact: ${phone}, name: ${contactName}, pic: ${profilePicUrl ? 'yes' : 'no'}`);
+      console.log(`Processing contact: ${phone}, name from chat: ${contactName}, pic: ${profilePicUrl ? 'yes' : 'no'}`);
 
       // Try to fetch profile picture if not available
       if (!profilePicUrl) {
@@ -164,36 +165,8 @@ serve(async (req) => {
           console.log(`Could not fetch profile picture for ${phone}:`, e);
         }
       }
-
-      // Try to fetch contact info if name not available
-      if (!contactName) {
-        try {
-          const contactResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/findContacts/${instanceName}`, {
-            method: 'POST',
-            headers: {
-              'apikey': EVOLUTION_API_KEY,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              where: { id: remoteJid }
-            }),
-          });
-
-          if (contactResponse.ok) {
-            const contactData = await contactResponse.json();
-            if (Array.isArray(contactData) && contactData.length > 0) {
-              const contact = contactData[0];
-              contactName = contact.pushName || contact.name || contact.notify || contact.verifiedName || null;
-              if (!profilePicUrl) {
-                profilePicUrl = contact.profilePictureUrl || contact.imgUrl || null;
-              }
-              console.log(`Fetched contact info for ${phone}: name=${contactName}`);
-            }
-          }
-        } catch (e) {
-          console.log(`Could not fetch contact info for ${phone}:`, e);
-        }
-      }
+      
+      // NOTE: We do NOT call findContacts here because it returns the instance owner's name, not the contact's name
 
       // Check if contact already exists for this user and instance
       const { data: existingContact } = await supabaseClient
@@ -210,13 +183,14 @@ serve(async (req) => {
           updated_at: new Date().toISOString(),
         };
 
-        // Only update name if we have a new one and current is empty
-        if (contactName && !existingContact.name) {
+        // Update name if we have a new one from pushName and it's different from stored
+        // Also update if stored name looks like it came from findContacts (instance owner name)
+        if (contactName && contactName !== existingContact.name) {
           updates.name = contactName;
         }
         
-        // Only update profile pic if we have a new one and current is empty
-        if (profilePicUrl && !existingContact.profile_pic_url) {
+        // Update profile pic if we have a new one
+        if (profilePicUrl && profilePicUrl !== existingContact.profile_pic_url) {
           updates.profile_pic_url = profilePicUrl;
         }
 
@@ -225,7 +199,7 @@ serve(async (req) => {
             .from('inbox_contacts')
             .update(updates)
             .eq('id', existingContact.id);
-          console.log(`Updated contact ${phone} with new data`);
+          console.log(`Updated contact ${phone} with new data: name=${updates.name || 'unchanged'}, pic=${updates.profile_pic_url ? 'updated' : 'unchanged'}`);
         }
         updated++;
         continue;
