@@ -146,7 +146,11 @@ export const useInboxMessages = (contactId: string | null) => {
         });
 
         if (syncError) {
-          console.warn('sync-inbox-messages error:', syncError);
+          // Only log if it's not a "contact not found" error (which means deleted contact)
+          const errorBody = (syncError as any)?.context?.body;
+          if (!errorBody?.includes?.('Contact not found')) {
+            console.warn('sync-inbox-messages error:', syncError);
+          }
           return;
         }
 
