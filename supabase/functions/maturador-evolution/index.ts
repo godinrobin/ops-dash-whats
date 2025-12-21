@@ -45,11 +45,12 @@ serve(async (req) => {
     const callEvolution = async (endpoint: string, method: string = 'GET', body?: any) => {
       const url = `${EVOLUTION_BASE_URL}${endpoint}`;
       console.log(`Calling Evolution API: ${method} ${url}`);
-      
+      if (body) console.log('Evolution API request body:', JSON.stringify(body));
+
       const options: RequestInit = {
         method,
         headers: {
-          'apikey': EVOLUTION_API_KEY,
+          apikey: EVOLUTION_API_KEY,
           'Content-Type': 'application/json',
         },
       };
@@ -60,10 +61,10 @@ serve(async (req) => {
 
       const response = await fetch(url, options);
       const responseText = await response.text();
-      
+
       console.log(`Evolution API response status: ${response.status}`);
-      
-      let data;
+
+      let data: any;
       try {
         data = JSON.parse(responseText);
       } catch {
@@ -71,8 +72,22 @@ serve(async (req) => {
       }
 
       if (!response.ok) {
-        console.error('Evolution API error:', { status: response.status, error: response.statusText, response: data });
-        throw new Error(data.message || data.error || `Evolution API error: ${response.status}`);
+        console.error('Evolution API error:', {
+          status: response.status,
+          error: response.statusText,
+          endpoint,
+          response: data,
+        });
+
+        const err = new Error(
+          (data?.message && Array.isArray(data.message) ? data.message.join(' | ') : data?.message) ||
+            data?.error ||
+            `Evolution API error: ${response.status}`
+        ) as Error & { status?: number; details?: any; endpoint?: string };
+        err.status = response.status;
+        err.details = data;
+        err.endpoint = endpoint;
+        throw err;
       }
 
       return data;
@@ -1222,9 +1237,18 @@ Regras IMPORTANTES:
             });
           }
           
-          // Use the correct Evolution API endpoint: POST /label/handleLabel/{instanceName}
+          const cleanNumber = String(remoteJid).split('@')[0].replace(/\D/g, '');
+          if (!cleanNumber) {
+            return new Response(JSON.stringify({ error: 'remoteJid inválido (não foi possível extrair o número)' }), {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          // Endpoint correto da Evolution: POST /label/handleLabel/{instanceName}
+          // Obs: a Evolution geralmente espera o número “limpo” (sem @s.whatsapp.net)
           const handleResult = await callEvolution(`/label/handleLabel/${instanceName}`, 'POST', {
-            number: remoteJid,
+            number: cleanNumber,
             labelId: labelId,
             action: labelAction || 'add', // 'add' or 'remove'
           });
@@ -1233,10 +1257,20 @@ Regras IMPORTANTES:
           result = { success: true, labelId, labelName, action: labelAction, ...handleResult };
         } catch (error) {
           console.error('Error handling label:', error);
-          return new Response(JSON.stringify({ error: 'Erro ao gerenciar etiqueta' }), {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
+          const err = error as any;
+          return new Response(
+            JSON.stringify({
+              error: 'Erro ao gerenciar etiqueta',
+              evolution_status: err?.status,
+              evolution_details: err?.details,
+              evolution_endpoint: err?.endpoint,
+              message: err?.message,
+            }),
+            {
+              status: typeof err?.status === 'number' ? err.status : 500,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
         }
         break;
       }
