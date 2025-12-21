@@ -1258,16 +1258,30 @@ Regras IMPORTANTES:
         } catch (error) {
           console.error('Error handling label:', error);
           const err = error as any;
+
+          const rawMsg = String(err?.message || '');
+          const msgArr = err?.details?.response?.message;
+          const combinedMsg = Array.isArray(msgArr) ? msgArr.join(' | ') : rawMsg;
+
+          // Known Evolution bug: missing unique constraint in their DB (Postgres 42P10)
+          // This cannot be fixed from our side; user/provider must update their Evolution deployment.
+          const isEvolution42P10 = combinedMsg.includes('42P10') || combinedMsg.includes('ON CONFLICT') || combinedMsg.includes('unique or exclusion constraint');
+          const friendly = isEvolution42P10
+            ? 'Seu servidor Evolution está com um bug de banco (42P10) e não consegue aplicar etiquetas via API. Atualize a Evolution para uma versão que corrija isso (ou peça ao provedor para ajustar o banco/atualizar).'
+            : 'Falha ao aplicar etiqueta na Evolution.';
+
+          // Return 200 so the client can read the payload (supabase-js discards body on non-2xx)
           return new Response(
             JSON.stringify({
-              error: 'Erro ao gerenciar etiqueta',
+              success: false,
+              error: friendly,
               evolution_status: err?.status,
               evolution_details: err?.details,
               evolution_endpoint: err?.endpoint,
               message: err?.message,
             }),
             {
-              status: typeof err?.status === 'number' ? err.status : 500,
+              status: 200,
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             }
           );

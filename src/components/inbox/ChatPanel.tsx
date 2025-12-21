@@ -142,8 +142,14 @@ export const ChatPanel = ({
       });
 
       if (error) {
-        console.error('Error adding label:', error);
-        toast.error('Erro ao adicionar etiqueta');
+        console.error('Error adding label (invoke):', error);
+        toast.error('Falha ao adicionar etiqueta');
+        return;
+      }
+
+      if (!data?.success) {
+        console.error('Error adding label (api):', data);
+        toast.error(data?.error || 'Falha ao adicionar etiqueta');
         return;
       }
 
@@ -175,7 +181,7 @@ export const ChatPanel = ({
       }
 
       // Call Evolution API to remove label
-      await supabase.functions.invoke('maturador-evolution', {
+      const { data, error } = await supabase.functions.invoke('maturador-evolution', {
         body: {
           action: 'handle-label',
           instanceName: instance.instance_name,
@@ -184,6 +190,18 @@ export const ChatPanel = ({
           labelAction: 'remove',
         },
       });
+
+      if (error) {
+        console.error('Error removing label (invoke):', error);
+        toast.error('Falha ao remover etiqueta');
+        return;
+      }
+
+      if (!data?.success) {
+        console.error('Error removing label (api):', data);
+        toast.error(data?.error || 'Falha ao remover etiqueta');
+        return;
+      }
 
       // Update local storage
       const newTags = contactLabels.filter(t => t !== labelName);
