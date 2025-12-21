@@ -21,13 +21,23 @@ export const InboxLayout = () => {
   // Handle URL params for contact selection
   useEffect(() => {
     const contactId = searchParams.get('contact');
-    if (contactId && contacts.length > 0) {
-      const contact = contacts.find(c => c.id === contactId);
-      if (contact) {
-        setSelectedContact(contact);
-      }
+    if (!contactId) return;
+    if (contactsLoading) return;
+
+    const contact = contacts.find((c) => c.id === contactId);
+    if (contact) {
+      setSelectedContact(contact);
+      return;
     }
-  }, [searchParams, contacts]);
+
+    // URL points to a contact that no longer exists (e.g., cleaned up/deleted)
+    setSelectedContact(null);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('contact');
+      return next;
+    });
+  }, [searchParams, contacts, contactsLoading, setSearchParams]);
 
   const handleSelectContact = (contact: InboxContact) => {
     setSelectedContact(contact);
