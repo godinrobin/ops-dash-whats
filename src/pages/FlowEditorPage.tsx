@@ -227,7 +227,7 @@ const FlowEditorPage = () => {
         </div>
       </div>
 
-      <div className="flex-1 h-[calc(100vh-8rem)]">
+      <div className="flex-1" style={{ height: 'calc(100vh - 120px)', minHeight: '600px' }}>
         {flow && (
           <FlowCanvas
             initialNodes={flow.nodes}
