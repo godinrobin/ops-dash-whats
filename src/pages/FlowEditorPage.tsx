@@ -236,7 +236,7 @@ const FlowEditorPage = () => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden" style={{ height: 'calc(100vh - 140px)' }}>
         {flow && (
           <FlowCanvas
             initialNodes={flow.nodes}

@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useMemo } from 'react';
-import { Phone, Video, MoreVertical, User, MessageSquare, Smartphone, ChevronDown, Tag } from 'lucide-react';
+import { User, MessageSquare, Smartphone, ChevronDown, Tag, X, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -61,6 +61,22 @@ export const ChatPanel = ({
   const [instanceName, setInstanceName] = useState<string | null>(null);
   const [addingLabel, setAddingLabel] = useState(false);
   const [contactLabels, setContactLabels] = useState<string[]>([]);
+  const [newLabelInput, setNewLabelInput] = useState('');
+  const [showNewLabelInput, setShowNewLabelInput] = useState(false);
+
+  // Predefined labels with colors
+  const predefinedLabels = [
+    { name: 'Pago', color: 'bg-green-500' },
+    { name: 'Pendente', color: 'bg-yellow-500' },
+    { name: 'Lead', color: 'bg-blue-500' },
+    { name: 'VIP', color: 'bg-purple-500' },
+    { name: 'Suporte', color: 'bg-orange-500' },
+  ];
+
+  const getLabelColor = (labelName: string) => {
+    const predefined = predefinedLabels.find(l => l.name.toLowerCase() === labelName.toLowerCase());
+    return predefined?.color || 'bg-gray-500';
+  };
 
   // Fetch all instances once
   useEffect(() => {
@@ -118,55 +134,33 @@ export const ChatPanel = ({
     }
   }, [messages]);
 
-  const handleAddPagoLabel = async () => {
-    if (!contact || addingLabel) return;
+  const handleAddLabel = async (labelName: string) => {
+    if (!contact || addingLabel || contactLabels.includes(labelName)) return;
 
     setAddingLabel(true);
     try {
-      // Get instance name
-      const instance = instances.find(i => i.id === contact.instance_id);
-      if (!instance) {
-        toast.error('Instância não encontrada');
-        return;
-      }
-
-      // Call Evolution API to add "Pago" label
-      const { data, error } = await supabase.functions.invoke('maturador-evolution', {
-        body: {
-          action: 'handle-label',
-          instanceName: instance.instance_name,
-          remoteJid: `${contact.phone}@s.whatsapp.net`,
-          labelName: 'Pago',
-          labelAction: 'add',
-        },
-      });
-
-      if (error) {
-        console.error('Error adding label (invoke):', error);
-        toast.error('Falha ao adicionar etiqueta');
-        return;
-      }
-
-      if (!data?.success) {
-        console.error('Error adding label (api):', data);
-        toast.error(data?.error || 'Falha ao adicionar etiqueta');
-        return;
-      }
-
-      // Save label locally
-      const newTags = [...contactLabels, 'Pago'];
-      await supabase
+      // Save label locally only (no Evolution API call)
+      const newTags = [...contactLabels, labelName];
+      const { error } = await supabase
         .from('inbox_contacts')
         .update({ tags: newTags })
         .eq('id', contact.id);
 
+      if (error) {
+        console.error('Error adding label:', error);
+        toast.error('Erro ao adicionar etiqueta');
+        return;
+      }
+
       setContactLabels(newTags);
-      toast.success('Etiqueta "Pago" adicionada!');
+      toast.success(`Etiqueta "${labelName}" adicionada!`);
     } catch (err) {
       console.error('Error:', err);
       toast.error('Erro ao adicionar etiqueta');
     } finally {
       setAddingLabel(false);
+      setShowNewLabelInput(false);
+      setNewLabelInput('');
     }
   };
 
@@ -174,47 +168,30 @@ export const ChatPanel = ({
     if (!contact) return;
 
     try {
-      const instance = instances.find(i => i.id === contact.instance_id);
-      if (!instance) {
-        toast.error('Instância não encontrada');
-        return;
-      }
-
-      // Call Evolution API to remove label
-      const { data, error } = await supabase.functions.invoke('maturador-evolution', {
-        body: {
-          action: 'handle-label',
-          instanceName: instance.instance_name,
-          remoteJid: `${contact.phone}@s.whatsapp.net`,
-          labelName,
-          labelAction: 'remove',
-        },
-      });
-
-      if (error) {
-        console.error('Error removing label (invoke):', error);
-        toast.error('Falha ao remover etiqueta');
-        return;
-      }
-
-      if (!data?.success) {
-        console.error('Error removing label (api):', data);
-        toast.error(data?.error || 'Falha ao remover etiqueta');
-        return;
-      }
-
-      // Update local storage
+      // Update local storage only (no Evolution API call)
       const newTags = contactLabels.filter(t => t !== labelName);
-      await supabase
+      const { error } = await supabase
         .from('inbox_contacts')
         .update({ tags: newTags })
         .eq('id', contact.id);
+
+      if (error) {
+        console.error('Error removing label:', error);
+        toast.error('Erro ao remover etiqueta');
+        return;
+      }
 
       setContactLabels(newTags);
       toast.success(`Etiqueta "${labelName}" removida!`);
     } catch (err) {
       console.error('Error:', err);
       toast.error('Erro ao remover etiqueta');
+    }
+  };
+
+  const handleAddCustomLabel = () => {
+    if (newLabelInput.trim()) {
+      handleAddLabel(newLabelInput.trim());
     }
   };
 
@@ -255,16 +232,20 @@ export const ChatPanel = ({
             </AvatarFallback>
           </Avatar>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-medium">{contact.name || contact.phone}</h3>
               {contactLabels.map((label) => (
                 <Badge 
                   key={label} 
-                  className="bg-green-500 text-white text-[10px] px-1.5 py-0 h-4 cursor-pointer hover:bg-green-600"
+                  className={cn(
+                    "text-white text-[10px] px-1.5 py-0 h-4 cursor-pointer flex items-center gap-1",
+                    getLabelColor(label)
+                  )}
                   onClick={() => handleRemoveLabel(label)}
                   title="Clique para remover"
                 >
                   {label}
+                  <X className="h-2.5 w-2.5" />
                 </Badge>
               ))}
             </div>
@@ -297,25 +278,54 @@ export const ChatPanel = ({
                 </div>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleAddPagoLabel}>
-                <Tag className="h-4 w-4 mr-2 text-green-500" />
-                Marcar como Pago
-              </DropdownMenuItem>
+            <DropdownMenuContent align="end" className="w-48">
+              {predefinedLabels.map((label) => (
+                <DropdownMenuItem 
+                  key={label.name}
+                  onClick={() => handleAddLabel(label.name)}
+                  disabled={contactLabels.includes(label.name)}
+                  className="flex items-center gap-2"
+                >
+                  <div className={cn("w-3 h-3 rounded-full", label.color)} />
+                  {label.name}
+                  {contactLabels.includes(label.name) && (
+                    <span className="text-xs text-muted-foreground ml-auto">✓</span>
+                  )}
+                </DropdownMenuItem>
+              ))}
+              <div className="border-t my-1" />
+              {showNewLabelInput ? (
+                <div className="px-2 py-1.5 flex gap-1">
+                  <input
+                    type="text"
+                    placeholder="Nova etiqueta..."
+                    value={newLabelInput}
+                    onChange={(e) => setNewLabelInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleAddCustomLabel();
+                      if (e.key === 'Escape') {
+                        setShowNewLabelInput(false);
+                        setNewLabelInput('');
+                      }
+                    }}
+                    className="flex-1 text-sm bg-transparent border-b border-border focus:outline-none px-1"
+                    autoFocus
+                  />
+                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={handleAddCustomLabel}>
+                    <Plus className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <DropdownMenuItem onClick={() => setShowNewLabelInput(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nova etiqueta...
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button variant="ghost" size="icon" className="h-9 w-9">
-            <Phone className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-9 w-9">
-            <Video className="h-4 w-4" />
-          </Button>
           <Button variant="ghost" size="icon" className="h-9 w-9" onClick={onToggleDetails}>
             <User className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-9 w-9">
-            <MoreVertical className="h-4 w-4" />
           </Button>
         </div>
       </div>

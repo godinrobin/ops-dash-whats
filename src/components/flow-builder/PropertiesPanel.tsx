@@ -144,11 +144,17 @@ export const PropertiesPanel = ({
                     const file = e.target.files?.[0];
                     if (!file) return;
                     
-                    // Upload to Supabase storage
-                    const fileName = `flow-media/${Date.now()}-${file.name}`;
-                    const { data, error } = await import('@/integrations/supabase/client').then(m => 
-                      m.supabase.storage.from('video-clips').upload(fileName, file)
-                    );
+                    // Get current user for path
+                    const { supabase } = await import('@/integrations/supabase/client');
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (!user) {
+                      console.error('User not authenticated');
+                      return;
+                    }
+                    
+                    // Upload to Supabase storage with user ID in path
+                    const fileName = `${user.id}/flow-media/${Date.now()}-${file.name}`;
+                    const { data, error } = await supabase.storage.from('video-clips').upload(fileName, file);
                     
                     if (error) {
                       console.error('Upload error:', error);
@@ -156,9 +162,7 @@ export const PropertiesPanel = ({
                     }
                     
                     // Get public URL
-                    const { data: urlData } = await import('@/integrations/supabase/client').then(m =>
-                      m.supabase.storage.from('video-clips').getPublicUrl(fileName)
-                    );
+                    const { data: urlData } = supabase.storage.from('video-clips').getPublicUrl(fileName);
                     
                     onUpdateNode(selectedNode.id, { mediaUrl: urlData.publicUrl });
                   }}
