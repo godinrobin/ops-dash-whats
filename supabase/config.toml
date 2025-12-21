@@ -116,3 +116,15 @@ verify_jwt = true
 
 [functions.remove-watermark]
 verify_jwt = true
+
+[functions.webhook-inbox-messages]
+verify_jwt = false
+
+[functions.send-inbox-message]
+verify_jwt = true
+
+[functions.process-inbox-flow]
+verify_jwt = false
+
+[functions.sync-inbox-contacts]
+verify_jwt = true
