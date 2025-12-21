@@ -5,12 +5,16 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Trash2, Save, Settings } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 interface PropertiesPanelProps {
   selectedNode: Node | null;
   onUpdateNode: (nodeId: string, data: Record<string, unknown>) => void;
   onDeleteNode: (nodeId: string) => void;
   onSave: () => void;
+  triggerType?: 'keyword' | 'all' | 'schedule';
+  triggerKeywords?: string[];
+  onUpdateFlowSettings?: (settings: { triggerType?: string; triggerKeywords?: string[] }) => void;
 }
 
 export const PropertiesPanel = ({
@@ -18,6 +22,9 @@ export const PropertiesPanel = ({
   onUpdateNode,
   onDeleteNode,
   onSave,
+  triggerType = 'keyword',
+  triggerKeywords = [],
+  onUpdateFlowSettings,
 }: PropertiesPanelProps) => {
   if (!selectedNode) {
     return (
@@ -49,8 +56,52 @@ export const PropertiesPanel = ({
         return (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Este é o ponto de início do fluxo. Conecte-o ao próximo nó.
+              Configure como este fluxo será acionado.
             </p>
+            
+            <div className="space-y-2">
+              <Label>Tipo de Gatilho</Label>
+              <Select
+                value={triggerType}
+                onValueChange={(value) => onUpdateFlowSettings?.({ triggerType: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="keyword">Palavra-chave</SelectItem>
+                  <SelectItem value="all">Todas as mensagens</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {triggerType === 'keyword' && (
+              <div className="space-y-2">
+                <Label>Palavras-chave</Label>
+                <Textarea
+                  placeholder="oi, olá, comprar..."
+                  value={triggerKeywords.join(', ')}
+                  onChange={(e) => {
+                    const keywords = e.target.value.split(',').map(k => k.trim()).filter(Boolean);
+                    onUpdateFlowSettings?.({ triggerKeywords: keywords });
+                  }}
+                  rows={3}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Separe por vírgula. O fluxo inicia quando a mensagem contiver uma dessas palavras.
+                </p>
+              </div>
+            )}
+
+            {triggerKeywords.length > 0 && triggerType === 'keyword' && (
+              <div className="flex flex-wrap gap-1">
+                {triggerKeywords.map((kw, i) => (
+                  <Badge key={i} variant="secondary" className="text-xs">
+                    {kw}
+                  </Badge>
+                ))}
+              </div>
+            )}
           </div>
         );
 

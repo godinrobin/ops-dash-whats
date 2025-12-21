@@ -6,6 +6,7 @@ import { ChatPanel } from './ChatPanel';
 import { ContactDetails } from './ContactDetails';
 import { useInboxConversations } from '@/hooks/useInboxConversations';
 import { useInboxMessages } from '@/hooks/useInboxMessages';
+import { useInboxFlows } from '@/hooks/useInboxFlows';
 import { InboxContact } from '@/types/inbox';
 
 export const InboxLayout = () => {
@@ -17,6 +18,7 @@ export const InboxLayout = () => {
 
   const { contacts, loading: contactsLoading } = useInboxConversations(selectedInstanceId);
   const { messages, loading: messagesLoading, sendMessage } = useInboxMessages(selectedContact?.id || null);
+  const { flows } = useInboxFlows();
 
   // Handle URL params for contact selection
   useEffect(() => {
@@ -78,6 +80,7 @@ export const InboxLayout = () => {
         loading={messagesLoading}
         onSendMessage={sendMessage}
         onToggleDetails={() => setShowContactDetails(!showContactDetails)}
+        flows={flows.map(f => ({ id: f.id, name: f.name, is_active: f.is_active }))}
       />
 
       {/* Detalhes do Contato */}

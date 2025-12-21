@@ -55,9 +55,12 @@ interface FlowCanvasProps {
   initialNodes: Node[];
   initialEdges: { id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string }[];
   onSave: (nodes: Node[], edges: { id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string }[]) => void;
+  triggerType?: 'keyword' | 'all' | 'schedule';
+  triggerKeywords?: string[];
+  onUpdateFlowSettings?: (settings: { triggerType?: string; triggerKeywords?: string[] }) => void;
 }
 
-const FlowCanvasInner = ({ initialNodes, initialEdges, onSave }: FlowCanvasProps) => {
+const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, triggerKeywords, onUpdateFlowSettings }: FlowCanvasProps) => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, getViewport } = useReactFlow();
   
@@ -221,6 +224,9 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave }: FlowCanvasProps
         onUpdateNode={handleUpdateNode}
         onDeleteNode={handleDeleteNode}
         onSave={handleSave}
+        triggerType={triggerType}
+        triggerKeywords={triggerKeywords}
+        onUpdateFlowSettings={onUpdateFlowSettings}
       />
     </div>
   );
