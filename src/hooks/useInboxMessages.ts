@@ -125,6 +125,46 @@ export const useInboxMessages = (contactId: string | null) => {
     };
   }, [user, contactId]);
 
+  // Fallback polling: pulls latest inbound messages from Evolution when webhook can't be configured
+  useEffect(() => {
+    if (!user || !contactId) return;
+
+    let cancelled = false;
+    let inFlight = false;
+
+    const tick = async () => {
+      if (cancelled || inFlight) return;
+      inFlight = true;
+      try {
+        const { data, error: syncError } = await supabase.functions.invoke('sync-inbox-messages', {
+          body: { contactId },
+        });
+
+        if (syncError) {
+          console.warn('sync-inbox-messages error:', syncError);
+          return;
+        }
+
+        const inserted = (data as any)?.inserted ?? 0;
+        if (inserted > 0) {
+          await fetchMessages();
+        }
+      } catch (e) {
+        console.warn('sync-inbox-messages exception:', e);
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    tick();
+    const id = setInterval(tick, 12000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [user, contactId, fetchMessages]);
+
   const sendMessage = useCallback(async (content: string, messageType: string = 'text', mediaUrl?: string) => {
     if (!user || !contactId) return { error: 'Not authenticated or no contact selected' };
 
