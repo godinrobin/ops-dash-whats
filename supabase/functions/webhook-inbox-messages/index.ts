@@ -28,8 +28,9 @@ serve(async (req) => {
 
     // Handle messages.upsert event (new incoming message)
     if (event === 'messages.upsert' || event === 'message' || event === 'MESSAGES_UPSERT') {
-      const message = data.message || data;
-      const key = message.key || {};
+      // Evolution API v2 structure: data.key contains remoteJid/remoteJidAlt, data.message contains content
+      // Fallback to old structure (data.message.key) for backwards compatibility
+      const key = data.key || data.message?.key || {};
       
       // Only process incoming messages (not sent by us)
       if (key.fromMe) {
@@ -69,34 +70,39 @@ serve(async (req) => {
         });
       }
       
-      // Extract message content
+      // Extract message content - Evolution API v2 structure
+      // data.message contains the actual message object with conversation/extendedTextMessage/etc
+      const msgContent = data.message || {};
       let content = '';
       let messageType = 'text';
       let mediaUrl = null;
 
-      if (message.message?.conversation) {
-        content = message.message.conversation;
-      } else if (message.message?.extendedTextMessage?.text) {
-        content = message.message.extendedTextMessage.text;
-      } else if (message.message?.imageMessage) {
+      if (msgContent.conversation) {
+        content = msgContent.conversation;
+      } else if (msgContent.extendedTextMessage?.text) {
+        content = msgContent.extendedTextMessage.text;
+      } else if (msgContent.imageMessage) {
         messageType = 'image';
-        content = message.message.imageMessage.caption || '';
-        mediaUrl = message.message.imageMessage.url || null;
-      } else if (message.message?.audioMessage) {
+        content = msgContent.imageMessage.caption || '';
+        mediaUrl = msgContent.imageMessage.url || null;
+      } else if (msgContent.audioMessage) {
         messageType = 'audio';
-        mediaUrl = message.message.audioMessage.url || null;
-      } else if (message.message?.videoMessage) {
+        mediaUrl = msgContent.audioMessage.url || null;
+      } else if (msgContent.videoMessage) {
         messageType = 'video';
-        content = message.message.videoMessage.caption || '';
-        mediaUrl = message.message.videoMessage.url || null;
-      } else if (message.message?.documentMessage) {
+        content = msgContent.videoMessage.caption || '';
+        mediaUrl = msgContent.videoMessage.url || null;
+      } else if (msgContent.documentMessage) {
         messageType = 'document';
-        content = message.message.documentMessage.fileName || '';
-        mediaUrl = message.message.documentMessage.url || null;
-      } else if (message.message?.stickerMessage) {
+        content = msgContent.documentMessage.fileName || '';
+        mediaUrl = msgContent.documentMessage.url || null;
+      } else if (msgContent.stickerMessage) {
         messageType = 'sticker';
-        mediaUrl = message.message.stickerMessage.url || null;
+        mediaUrl = msgContent.stickerMessage.url || null;
       }
+      
+      // pushName is at data root level in Evolution API v2
+      const pushName = data.pushName || null;
 
       console.log(`Processing message from ${phone}: ${messageType} - ${content?.substring(0, 50)}`);
 
@@ -126,9 +132,7 @@ serve(async (req) => {
         .single();
 
       if (contactError || !contact) {
-        // Create new contact - only use pushName from inbound messages
-        // message.pushName is correct since this is an inbound message (!key.fromMe)
-        const pushName = message.pushName || null;
+        // Create new contact - pushName was extracted earlier from data.pushName
         
         const { data: newContact, error: insertError } = await supabaseClient
           .from('inbox_contacts')
@@ -155,8 +159,6 @@ serve(async (req) => {
         contact = newContact;
       } else {
         // Update existing contact: increment unread and update pushName if available
-        // Only use pushName from the message (inbound), not from data root
-        const pushName = message.pushName || null;
         const updates: Record<string, any> = {
           unread_count: (contact.unread_count || 0) + 1,
           last_message_at: new Date().toISOString(),
