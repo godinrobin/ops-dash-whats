@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { InboxMessage } from '@/types/inbox';
 import { useAuth } from '@/contexts/AuthContext';
@@ -6,8 +6,9 @@ import { useAuth } from '@/contexts/AuthContext';
 export const useInboxMessages = (contactId: string | null) => {
   const { user } = useAuth();
   const [messages, setMessages] = useState<InboxMessage[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const fetchMessages = useCallback(async () => {
     if (!user || !contactId) {
@@ -16,6 +17,7 @@ export const useInboxMessages = (contactId: string | null) => {
       return;
     }
 
+    setLoading(true);
     try {
       const { data, error: fetchError } = await supabase
         .from('inbox_messages')
@@ -38,11 +40,19 @@ export const useInboxMessages = (contactId: string | null) => {
     }
   }, [user, contactId]);
 
+  // Fetch messages when contactId changes
   useEffect(() => {
     fetchMessages();
   }, [fetchMessages]);
 
+  // Subscribe to realtime updates
   useEffect(() => {
+    // Cleanup previous channel if exists
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
     if (!user || !contactId) return;
 
     const channel = supabase
@@ -87,12 +97,17 @@ export const useInboxMessages = (contactId: string | null) => {
       )
       .subscribe();
 
+    channelRef.current = channel;
+
     return () => {
-      supabase.removeChannel(channel);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
   }, [user, contactId]);
 
-  const sendMessage = async (content: string, messageType: string = 'text', mediaUrl?: string) => {
+  const sendMessage = useCallback(async (content: string, messageType: string = 'text', mediaUrl?: string) => {
     if (!user || !contactId) return { error: 'Not authenticated or no contact selected' };
 
     try {
@@ -165,7 +180,7 @@ export const useInboxMessages = (contactId: string | null) => {
     } catch (err: any) {
       return { error: err.message };
     }
-  };
+  }, [user, contactId]);
 
   return { messages, loading, error, refetch: fetchMessages, sendMessage };
 };
