@@ -209,11 +209,33 @@ serve(async (req) => {
     }
 
     const msgsData = await msgsRes.json();
-    const messages: EvolutionMessage[] = (msgsData?.messages || msgsData || []) as EvolutionMessage[];
+    console.log("findMessages response type:", typeof msgsData, "isArray:", Array.isArray(msgsData));
+    
+    // Handle different API response formats
+    let messages: EvolutionMessage[] = [];
+    if (Array.isArray(msgsData)) {
+      messages = msgsData;
+    } else if (msgsData?.messages && Array.isArray(msgsData.messages)) {
+      messages = msgsData.messages;
+    } else if (msgsData?.records && Array.isArray(msgsData.records)) {
+      messages = msgsData.records;
+    } else if (typeof msgsData === "object" && msgsData !== null) {
+      // Maybe it's a single message or an object with numeric keys
+      const keys = Object.keys(msgsData);
+      if (keys.length > 0 && keys.every(k => !isNaN(Number(k)))) {
+        messages = Object.values(msgsData) as EvolutionMessage[];
+      } else {
+        console.log("Unexpected findMessages format, keys:", keys.slice(0, 5));
+      }
+    }
+
+    console.log("Parsed messages count:", messages.length);
 
     // Only inbound messages
-    const inbound = messages.filter((m) => !m?.key?.fromMe);
+    const inbound = messages.filter((m) => m && !m?.key?.fromMe);
     const remoteIds = inbound.map((m) => m?.key?.id).filter(Boolean) as string[];
+
+    console.log("Inbound messages:", inbound.length, "Remote IDs:", remoteIds.length);
 
     if (remoteIds.length === 0) {
       return new Response(JSON.stringify({ inserted: 0 }), {
