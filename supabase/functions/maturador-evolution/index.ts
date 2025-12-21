@@ -1186,6 +1186,8 @@ Regras IMPORTANTES:
       case 'handle-label': {
         const { instanceName, remoteJid, labelName, labelAction } = params;
         
+        console.log('Maturador action: handle-label', { instanceName, remoteJid, labelName, labelAction });
+        
         if (!instanceName || !remoteJid) {
           return new Response(JSON.stringify({ error: 'instanceName and remoteJid are required' }), {
             status: 400,
@@ -1210,16 +1212,21 @@ Regras IMPORTANTES:
             }
           }
           
-          if (!labelId && labelAction === 'add') {
-            // If label doesn't exist and we're adding, we might need to create it first
-            // For now, we'll just log and continue - the API may create it
-            console.log(`Label "${labelName}" not found, attempting to add anyway`);
+          if (!labelId) {
+            console.log(`Label "${labelName}" not found in available labels`);
+            return new Response(JSON.stringify({ 
+              error: `Etiqueta "${labelName}" não encontrada. Etiquetas disponíveis: ${labels.map((l: any) => l.name).join(', ')}` 
+            }), {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
           }
           
-          // Call handle label endpoint
-          const handleResult = await callEvolution(`/label/handleLabel/${instanceName}`, 'PUT', {
-            number: remoteJid,
-            labelId: labelId || labelName, // Use labelId if found, otherwise use name
+          // Use the correct Evolution API v2 endpoint: POST /label/{instanceName}
+          // The correct format for Evolution API v2 is to use the label endpoint with POST
+          const handleResult = await callEvolution(`/label/${instanceName}`, 'POST', {
+            chatId: remoteJid,
+            labelId: labelId,
             action: labelAction || 'add', // 'add' or 'remove'
           });
           
