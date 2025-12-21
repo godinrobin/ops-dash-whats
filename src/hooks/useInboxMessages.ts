@@ -136,6 +136,12 @@ export const useInboxMessages = (contactId: string | null) => {
 
     let cancelled = false;
     let inFlight = false;
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+
+    const stopPolling = () => {
+      cancelled = true;
+      if (intervalId) clearInterval(intervalId);
+    };
 
     const tick = async () => {
       if (cancelled || inFlight) return;
@@ -146,11 +152,16 @@ export const useInboxMessages = (contactId: string | null) => {
         });
 
         if (syncError) {
-          // Only log if it's not a "contact not found" error (which means deleted contact)
           const errorBody = (syncError as any)?.context?.body;
-          if (!errorBody?.includes?.('Contact not found')) {
-            console.warn('sync-inbox-messages error:', syncError);
+
+          // Contact was deleted/cleaned up; stop polling and show a stable UI state.
+          if (errorBody?.includes?.('Contact not found')) {
+            setError('Contact not found');
+            stopPolling();
+            return;
           }
+
+          console.warn('sync-inbox-messages error:', syncError);
           return;
         }
 
@@ -165,14 +176,18 @@ export const useInboxMessages = (contactId: string | null) => {
       }
     };
 
-    tick();
-    const id = setInterval(tick, 12000);
+    (async () => {
+      await tick();
+      if (!cancelled) {
+        intervalId = setInterval(tick, 12000);
+      }
+    })();
 
     return () => {
-      cancelled = true;
-      clearInterval(id);
+      stopPolling();
     };
   }, [user, contactId, fetchMessages]);
+
 
   const sendMessage = useCallback(async (content: string, messageType: string = 'text', mediaUrl?: string) => {
     if (!user || !contactId) return { error: 'Not authenticated or no contact selected' };
