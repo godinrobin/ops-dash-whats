@@ -11,9 +11,10 @@ type EvolutionMessage = {
     id?: string;
     fromMe?: boolean;
     remoteJid?: string;
+    remoteJidAlt?: string;
   };
   pushName?: string;
-  messageTimestamp?: number;
+  messageTimestamp?: number | string;
   message?: any;
 };
 
@@ -217,30 +218,61 @@ serve(async (req) => {
     );
 
     const coerceMessagesArray = (val: any): EvolutionMessage[] => {
-      if (Array.isArray(val)) return val as EvolutionMessage[];
+      console.log("coerceMessagesArray input type:", typeof val, "isArray:", Array.isArray(val));
+      
+      if (Array.isArray(val)) {
+        console.log("Input is direct array, length:", val.length);
+        return val as EvolutionMessage[];
+      }
 
       if (val && typeof val === "object") {
-        // common wrappers
-        if (Array.isArray(val.messages)) return val.messages as EvolutionMessage[];
-        if (Array.isArray(val.records)) return val.records as EvolutionMessage[];
+        const topKeys = Object.keys(val).slice(0, 10);
+        console.log("Input is object with keys:", topKeys);
+        
+        // common wrappers: { messages: [...] }
+        if (Array.isArray(val.messages)) {
+          console.log("Found val.messages array, length:", val.messages.length);
+          if (val.messages.length > 0) {
+            console.log("First message sample:", JSON.stringify(val.messages[0]).slice(0, 300));
+          }
+          return val.messages as EvolutionMessage[];
+        }
+        
+        // { records: [...] }
+        if (Array.isArray(val.records)) {
+          console.log("Found val.records array, length:", val.records.length);
+          return val.records as EvolutionMessage[];
+        }
+        
+        // { data: [...] }
+        if (Array.isArray(val.data)) {
+          console.log("Found val.data array, length:", val.data.length);
+          return val.data as EvolutionMessage[];
+        }
 
-        // sometimes messages can be an object keyed by numbers
+        // sometimes messages can be { messages: { "0": {...}, "1": {...} } }
         if (val.messages && typeof val.messages === "object" && !Array.isArray(val.messages)) {
-          const keys = Object.keys(val.messages);
-          if (keys.length > 0 && keys.every((k) => !isNaN(Number(k)))) {
-            return Object.values(val.messages) as EvolutionMessage[];
+          const msgKeys = Object.keys(val.messages);
+          console.log("val.messages is object with keys:", msgKeys.slice(0, 5));
+          if (msgKeys.length > 0 && msgKeys.every((k) => !isNaN(Number(k)))) {
+            const arr = Object.values(val.messages) as EvolutionMessage[];
+            console.log("Converted val.messages object to array, length:", arr.length);
+            return arr;
           }
         }
 
-        // object with numeric keys at root
+        // object with numeric keys at root { "0": {...}, "1": {...} }
         const keys = Object.keys(val);
         if (keys.length > 0 && keys.every((k) => !isNaN(Number(k)))) {
-          return Object.values(val) as EvolutionMessage[];
+          const arr = Object.values(val) as EvolutionMessage[];
+          console.log("Converted root numeric-keyed object to array, length:", arr.length);
+          return arr;
         }
 
-        console.log("Unexpected findMessages format, keys:", keys.slice(0, 8));
+        console.log("Could not parse messages, returning empty. Full response preview:", JSON.stringify(val).slice(0, 500));
       }
 
+      console.log("Fallback: returning empty array");
       return [];
     };
 
@@ -279,7 +311,8 @@ serve(async (req) => {
       })
       .map((m) => {
         const { content, messageType, mediaUrl } = parseEvolutionContent(m);
-        const createdAt = m.messageTimestamp ? new Date(m.messageTimestamp * 1000).toISOString() : new Date().toISOString();
+        const ts = m.messageTimestamp ? Number(m.messageTimestamp) : 0;
+        const createdAt = ts > 0 ? new Date(ts * 1000).toISOString() : new Date().toISOString();
 
         return {
           contact_id: contact.id,

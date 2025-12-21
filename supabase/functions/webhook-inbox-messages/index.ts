@@ -40,10 +40,26 @@ serve(async (req) => {
       }
 
       const remoteJid = key.remoteJid || '';
-      const rawPhone = remoteJid.split('@')[0];
+      const remoteJidAlt = key.remoteJidAlt || '';
+      
+      // Evolution API v2+ uses remoteJidAlt with @s.whatsapp.net format for actual phone
+      // remoteJid may contain @lid format (internal ID) which is not a valid phone
+      let jidForPhone = remoteJid;
+      if (remoteJidAlt && remoteJidAlt.includes('@s.whatsapp.net')) {
+        jidForPhone = remoteJidAlt;
+        console.log(`Using remoteJidAlt for phone extraction: ${remoteJidAlt}`);
+      } else if (remoteJidAlt && !remoteJid.includes('@s.whatsapp.net')) {
+        // If remoteJid doesn't have @s.whatsapp.net, try remoteJidAlt
+        jidForPhone = remoteJidAlt || remoteJid;
+        console.log(`remoteJid format unusual (${remoteJid}), trying remoteJidAlt: ${remoteJidAlt}`);
+      }
+      
+      const rawPhone = jidForPhone.split('@')[0];
       // Clean and validate phone number
       const phone = rawPhone.replace(/\D/g, '');
       const messageId = key.id;
+      
+      console.log(`Phone extraction: remoteJid=${remoteJid}, remoteJidAlt=${remoteJidAlt}, extracted=${phone}`);
       
       // Validate phone is 10-15 digits
       if (!/^\d{10,15}$/.test(phone)) {
