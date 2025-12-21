@@ -5,6 +5,7 @@ const InboxPage = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
+      <div className="h-14 md:h-16" /> {/* Spacer for fixed header */}
       <InboxLayout />
     </div>
   );

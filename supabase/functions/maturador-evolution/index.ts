@@ -1158,6 +1158,83 @@ Regras IMPORTANTES:
         break;
       }
 
+      // Find all labels for an instance
+      case 'find-labels': {
+        const { instanceName } = params;
+        
+        if (!instanceName) {
+          return new Response(JSON.stringify({ error: 'instanceName is required' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        try {
+          result = await callEvolution(`/label/findLabels/${instanceName}`, 'GET');
+          console.log('Find labels result:', JSON.stringify(result, null, 2));
+        } catch (error) {
+          console.error('Error finding labels:', error);
+          return new Response(JSON.stringify({ error: 'Erro ao buscar etiquetas' }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        break;
+      }
+
+      // Add or remove label from a contact
+      case 'handle-label': {
+        const { instanceName, remoteJid, labelName, labelAction } = params;
+        
+        if (!instanceName || !remoteJid) {
+          return new Response(JSON.stringify({ error: 'instanceName and remoteJid are required' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        try {
+          // First, find all labels for this instance
+          const labelsResult = await callEvolution(`/label/findLabels/${instanceName}`, 'GET');
+          console.log('Labels for instance:', JSON.stringify(labelsResult, null, 2));
+          
+          // Find the label by name
+          let labelId: string | null = null;
+          const labels = Array.isArray(labelsResult) ? labelsResult : labelsResult?.labels || [];
+          
+          for (const label of labels) {
+            const name = label?.name || label?.displayName || '';
+            if (name.toLowerCase() === labelName?.toLowerCase()) {
+              labelId = label?.id || label?.labelId;
+              break;
+            }
+          }
+          
+          if (!labelId && labelAction === 'add') {
+            // If label doesn't exist and we're adding, we might need to create it first
+            // For now, we'll just log and continue - the API may create it
+            console.log(`Label "${labelName}" not found, attempting to add anyway`);
+          }
+          
+          // Call handle label endpoint
+          const handleResult = await callEvolution(`/label/handleLabel/${instanceName}`, 'PUT', {
+            number: remoteJid,
+            labelId: labelId || labelName, // Use labelId if found, otherwise use name
+            action: labelAction || 'add', // 'add' or 'remove'
+          });
+          
+          console.log('Handle label result:', JSON.stringify(handleResult, null, 2));
+          result = { success: true, labelId, labelName, action: labelAction, ...handleResult };
+        } catch (error) {
+          console.error('Error handling label:', error);
+          return new Response(JSON.stringify({ error: 'Erro ao gerenciar etiqueta' }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        break;
+      }
+
       // Send message to verified contact
       case 'send-verified-message': {
         const { instanceName, phone, message } = params;

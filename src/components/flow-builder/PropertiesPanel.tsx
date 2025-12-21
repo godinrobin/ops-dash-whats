@@ -129,7 +129,50 @@ export const PropertiesPanel = ({
         return (
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>URL do Arquivo</Label>
+              <Label>
+                {selectedNode.type === 'image' ? 'Imagem' : selectedNode.type === 'audio' ? 'Áudio' : 'Vídeo'}
+              </Label>
+              <div className="space-y-2">
+                <Input
+                  type="file"
+                  accept={
+                    selectedNode.type === 'image' ? 'image/*' : 
+                    selectedNode.type === 'audio' ? 'audio/*' : 
+                    'video/*'
+                  }
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    
+                    // Upload to Supabase storage
+                    const fileName = `flow-media/${Date.now()}-${file.name}`;
+                    const { data, error } = await import('@/integrations/supabase/client').then(m => 
+                      m.supabase.storage.from('video-clips').upload(fileName, file)
+                    );
+                    
+                    if (error) {
+                      console.error('Upload error:', error);
+                      return;
+                    }
+                    
+                    // Get public URL
+                    const { data: urlData } = await import('@/integrations/supabase/client').then(m =>
+                      m.supabase.storage.from('video-clips').getPublicUrl(fileName)
+                    );
+                    
+                    onUpdateNode(selectedNode.id, { mediaUrl: urlData.publicUrl });
+                  }}
+                  className="cursor-pointer"
+                />
+                {(nodeData.mediaUrl as string) && (
+                  <p className="text-xs text-green-500 truncate">
+                    ✓ Arquivo carregado
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Ou cole uma URL</Label>
               <Input
                 placeholder="https://..."
                 value={(nodeData.mediaUrl as string) || ''}
