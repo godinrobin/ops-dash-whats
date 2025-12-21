@@ -8,7 +8,6 @@ import {
   GitBranch,
   List,
   Bot,
-  Variable,
   Tag,
   Play
 } from 'lucide-react';
@@ -42,7 +41,6 @@ const nodeCategories = [
     title: 'Ações',
     nodes: [
       { type: 'ai', label: 'IA', icon: Bot, color: 'bg-violet-500' },
-      { type: 'setVariable', label: 'Variável', icon: Variable, color: 'bg-emerald-500' },
       { type: 'tag', label: 'Tag', icon: Tag, color: 'bg-amber-500' },
     ],
   },

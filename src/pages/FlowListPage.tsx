@@ -166,12 +166,21 @@ const FlowListPage = () => {
                     <Switch
                       checked={flow.is_active}
                       onCheckedChange={(checked) => handleToggleActive(flow.id, checked)}
+                      className={flow.is_active 
+                        ? "data-[state=checked]:bg-green-500" 
+                        : "data-[state=unchecked]:bg-red-500"
+                      }
                     />
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center gap-2 mb-4">
-                    <Badge variant={flow.is_active ? 'default' : 'secondary'}>
+                  <div className="flex flex-wrap items-center gap-2 mb-4">
+                    <Badge 
+                      className={flow.is_active 
+                        ? 'bg-green-500 hover:bg-green-600 text-white' 
+                        : 'bg-red-500 hover:bg-red-600 text-white'
+                      }
+                    >
                       {flow.is_active ? 'Ativo' : 'Inativo'}
                     </Badge>
                     <Badge variant="outline">
@@ -179,6 +188,22 @@ const FlowListPage = () => {
                        flow.trigger_type === 'all' ? 'Todas mensagens' : 'Agendado'}
                     </Badge>
                   </div>
+
+                  {/* Show keywords */}
+                  {flow.trigger_type === 'keyword' && flow.trigger_keywords && flow.trigger_keywords.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-4">
+                      {flow.trigger_keywords.slice(0, 5).map((keyword, idx) => (
+                        <Badge key={idx} variant="secondary" className="text-xs">
+                          {keyword}
+                        </Badge>
+                      ))}
+                      {flow.trigger_keywords.length > 5 && (
+                        <Badge variant="secondary" className="text-xs">
+                          +{flow.trigger_keywords.length - 5}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
                   
                   <div className="flex items-center gap-2">
                     <Button 

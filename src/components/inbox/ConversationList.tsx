@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Search, Plus, Smartphone } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,18 @@ interface ConversationListProps {
   onSearchChange: (query: string) => void;
 }
 
+// Generate consistent colors for instances
+const instanceColors = [
+  'bg-orange-500',
+  'bg-blue-500',
+  'bg-green-500',
+  'bg-purple-500',
+  'bg-pink-500',
+  'bg-cyan-500',
+  'bg-yellow-500',
+  'bg-red-500',
+];
+
 export const ConversationList = ({
   contacts,
   loading,
@@ -52,6 +64,15 @@ export const ConversationList = ({
     fetchInstances();
   }, []);
 
+  // Create a color map for instances
+  const instanceColorMap = useMemo(() => {
+    const map = new Map<string, string>();
+    instances.forEach((instance, index) => {
+      map.set(instance.id, instanceColors[index % instanceColors.length]);
+    });
+    return map;
+  }, [instances]);
+
   const getInstanceName = (instanceId: string | null): string | null => {
     if (!instanceId) return null;
     const instance = instances.find(i => i.id === instanceId);
@@ -62,6 +83,11 @@ export const ConversationList = ({
     if (!instanceId) return null;
     const instance = instances.find(i => i.id === instanceId);
     return instance?.phone_number || null;
+  };
+
+  const getInstanceColor = (instanceId: string | null): string => {
+    if (!instanceId) return 'bg-muted';
+    return instanceColorMap.get(instanceId) || 'bg-muted';
   };
 
   const formatTime = (date: string | null) => {
@@ -132,6 +158,7 @@ export const ConversationList = ({
             {contacts.map((contact) => {
               const instanceName = getInstanceName(contact.instance_id);
               const instancePhone = getInstancePhone(contact.instance_id);
+              const instanceColor = getInstanceColor(contact.instance_id);
               
               return (
                 <div
@@ -181,7 +208,13 @@ export const ConversationList = ({
                     {instanceName && (
                       <div className="flex items-center gap-1 mt-1">
                         <Smartphone className="h-3 w-3 text-muted-foreground" />
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-normal">
+                        <Badge 
+                          variant="outline" 
+                          className={cn(
+                            "text-[10px] px-1.5 py-0 h-4 font-normal text-white border-0",
+                            instanceColor
+                          )}
+                        >
                           {instanceName}
                           {instancePhone && ` • ${instancePhone.slice(-4)}`}
                         </Badge>

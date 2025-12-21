@@ -127,7 +127,7 @@ const FlowEditorPage = () => {
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
       
-      <div className="border-b border-border px-4 py-2 flex items-center justify-between">
+      <div className="border-b border-border px-4 py-2 flex items-center justify-between bg-card">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => navigate('/inbox/flows')}>
             <ArrowLeft className="h-5 w-5" />
@@ -145,6 +145,10 @@ const FlowEditorPage = () => {
               checked={isActive}
               onCheckedChange={setIsActive}
               id="flow-active"
+              className={isActive 
+                ? "data-[state=checked]:bg-green-500" 
+                : "data-[state=unchecked]:bg-red-500"
+              }
             />
             <Label htmlFor="flow-active" className="text-sm">
               {isActive ? 'Ativo' : 'Inativo'}
@@ -214,6 +218,10 @@ const FlowEditorPage = () => {
                   <Switch
                     checked={isActive}
                     onCheckedChange={setIsActive}
+                    className={isActive 
+                      ? "data-[state=checked]:bg-green-500" 
+                      : "data-[state=unchecked]:bg-red-500"
+                    }
                   />
                 </div>
               </div>

@@ -1,5 +1,5 @@
-import { useRef, useEffect, useState } from 'react';
-import { Phone, Video, MoreVertical, User, MessageSquare, Smartphone } from 'lucide-react';
+import { useRef, useEffect, useState, useMemo } from 'react';
+import { Phone, Video, MoreVertical, User, MessageSquare, Smartphone, ChevronDown, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -9,6 +9,26 @@ import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { InboxContact, InboxMessage } from '@/types/inbox';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+
+// Instance colors for consistency
+const instanceColors = [
+  'bg-orange-500',
+  'bg-blue-500',
+  'bg-green-500',
+  'bg-purple-500',
+  'bg-pink-500',
+  'bg-cyan-500',
+  'bg-yellow-500',
+  'bg-red-500',
+];
 
 interface ChatPanelProps {
   contact: InboxContact | null;
@@ -18,6 +38,13 @@ interface ChatPanelProps {
   onToggleDetails: () => void;
   flows?: { id: string; name: string; is_active: boolean }[];
   onTriggerFlow?: (flowId: string) => void;
+}
+
+interface Instance {
+  id: string;
+  instance_name: string;
+  label: string | null;
+  phone_number: string | null;
 }
 
 export const ChatPanel = ({
@@ -30,33 +57,148 @@ export const ChatPanel = ({
   onTriggerFlow,
 }: ChatPanelProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [instances, setInstances] = useState<Instance[]>([]);
   const [instanceName, setInstanceName] = useState<string | null>(null);
+  const [addingLabel, setAddingLabel] = useState(false);
+  const [contactLabels, setContactLabels] = useState<string[]>([]);
 
-  // Fetch instance name
+  // Fetch all instances once
   useEffect(() => {
-    const fetchInstance = async () => {
-      if (!contact?.instance_id) {
-        setInstanceName(null);
-        return;
-      }
+    const fetchInstances = async () => {
       const { data } = await supabase
         .from('maturador_instances')
-        .select('instance_name, label, phone_number')
-        .eq('id', contact.instance_id)
-        .single();
-      
+        .select('id, instance_name, label, phone_number');
       if (data) {
-        setInstanceName(data.label || data.instance_name);
+        setInstances(data);
       }
     };
-    fetchInstance();
-  }, [contact?.instance_id]);
+    fetchInstances();
+  }, []);
+
+  // Get instance color map
+  const instanceColorMap = useMemo(() => {
+    const map = new Map<string, string>();
+    instances.forEach((instance, index) => {
+      map.set(instance.id, instanceColors[index % instanceColors.length]);
+    });
+    return map;
+  }, [instances]);
+
+  // Fetch instance name for current contact
+  useEffect(() => {
+    if (!contact?.instance_id) {
+      setInstanceName(null);
+      return;
+    }
+    const instance = instances.find(i => i.id === contact.instance_id);
+    if (instance) {
+      setInstanceName(instance.label || instance.instance_name);
+    }
+  }, [contact?.instance_id, instances]);
+
+  // Fetch contact labels from tags field
+  useEffect(() => {
+    if (!contact) {
+      setContactLabels([]);
+      return;
+    }
+    const tags = (contact as any).tags;
+    if (Array.isArray(tags)) {
+      setContactLabels(tags);
+    } else if (tags && typeof tags === 'object') {
+      setContactLabels(Object.keys(tags));
+    } else {
+      setContactLabels([]);
+    }
+  }, [contact]);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  const handleAddPagoLabel = async () => {
+    if (!contact || addingLabel) return;
+
+    setAddingLabel(true);
+    try {
+      // Get instance name
+      const instance = instances.find(i => i.id === contact.instance_id);
+      if (!instance) {
+        toast.error('Instância não encontrada');
+        return;
+      }
+
+      // Call Evolution API to add "Pago" label
+      const { data, error } = await supabase.functions.invoke('maturador-evolution', {
+        body: {
+          action: 'handle-label',
+          instanceName: instance.instance_name,
+          remoteJid: `${contact.phone}@s.whatsapp.net`,
+          labelName: 'Pago',
+          labelAction: 'add',
+        },
+      });
+
+      if (error) {
+        console.error('Error adding label:', error);
+        toast.error('Erro ao adicionar etiqueta');
+        return;
+      }
+
+      // Save label locally
+      const newTags = [...contactLabels, 'Pago'];
+      await supabase
+        .from('inbox_contacts')
+        .update({ tags: newTags })
+        .eq('id', contact.id);
+
+      setContactLabels(newTags);
+      toast.success('Etiqueta "Pago" adicionada!');
+    } catch (err) {
+      console.error('Error:', err);
+      toast.error('Erro ao adicionar etiqueta');
+    } finally {
+      setAddingLabel(false);
+    }
+  };
+
+  const handleRemoveLabel = async (labelName: string) => {
+    if (!contact) return;
+
+    try {
+      const instance = instances.find(i => i.id === contact.instance_id);
+      if (!instance) {
+        toast.error('Instância não encontrada');
+        return;
+      }
+
+      // Call Evolution API to remove label
+      await supabase.functions.invoke('maturador-evolution', {
+        body: {
+          action: 'handle-label',
+          instanceName: instance.instance_name,
+          remoteJid: `${contact.phone}@s.whatsapp.net`,
+          labelName,
+          labelAction: 'remove',
+        },
+      });
+
+      // Update local storage
+      const newTags = contactLabels.filter(t => t !== labelName);
+      await supabase
+        .from('inbox_contacts')
+        .update({ tags: newTags })
+        .eq('id', contact.id);
+
+      setContactLabels(newTags);
+      toast.success(`Etiqueta "${labelName}" removida!`);
+    } catch (err) {
+      console.error('Error:', err);
+      toast.error('Erro ao remover etiqueta');
+    }
+  };
 
   if (!contact) {
     return (
@@ -79,6 +221,10 @@ export const ChatPanel = ({
     return phone.slice(-2);
   };
 
+  const instanceColor = contact.instance_id 
+    ? instanceColorMap.get(contact.instance_id) || 'bg-muted'
+    : 'bg-muted';
+
   return (
     <div className="flex-1 flex flex-col bg-background">
       {/* Header */}
@@ -91,11 +237,29 @@ export const ChatPanel = ({
             </AvatarFallback>
           </Avatar>
           <div>
-            <h3 className="font-medium">{contact.name || contact.phone}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-medium">{contact.name || contact.phone}</h3>
+              {contactLabels.map((label) => (
+                <Badge 
+                  key={label} 
+                  className="bg-green-500 text-white text-[10px] px-1.5 py-0 h-4 cursor-pointer hover:bg-green-600"
+                  onClick={() => handleRemoveLabel(label)}
+                  title="Clique para remover"
+                >
+                  {label}
+                </Badge>
+              ))}
+            </div>
             <div className="flex items-center gap-2">
               <p className="text-sm text-muted-foreground">{contact.phone}</p>
               {instanceName && (
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-normal gap-1">
+                <Badge 
+                  variant="outline" 
+                  className={cn(
+                    "text-[10px] px-1.5 py-0 h-4 font-normal gap-1 text-white border-0",
+                    instanceColor
+                  )}
+                >
                   <Smartphone className="h-2.5 w-2.5" />
                   {instanceName}
                 </Badge>
@@ -105,6 +269,24 @@ export const ChatPanel = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Label dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-9 w-9" disabled={addingLabel}>
+                <div className="flex items-center">
+                  <Tag className="h-4 w-4" />
+                  <ChevronDown className="h-3 w-3 ml-0.5" />
+                </div>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleAddPagoLabel}>
+                <Tag className="h-4 w-4 mr-2 text-green-500" />
+                Marcar como Pago
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Button variant="ghost" size="icon" className="h-9 w-9">
             <Phone className="h-4 w-4" />
           </Button>
@@ -146,7 +328,12 @@ export const ChatPanel = ({
       </ScrollArea>
 
       {/* Input Area */}
-      <ChatInput onSendMessage={onSendMessage} flows={flows} onTriggerFlow={onTriggerFlow} />
+      <ChatInput 
+        onSendMessage={onSendMessage} 
+        flows={flows} 
+        onTriggerFlow={onTriggerFlow} 
+        contactInstanceId={contact.instance_id}
+      />
     </div>
   );
 };
