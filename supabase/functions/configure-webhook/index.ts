@@ -74,84 +74,156 @@ serve(async (req) => {
     
     console.log(`Configuring webhook for ${instanceName} to ${webhookUrl}`);
 
-    // Configure webhook on Evolution API
+    // Evolution API v2 format - POST /webhook/set/{instanceName}
+    // The body needs the 'webhook' property with the configuration
+    const webhookBody = {
+      webhook: {
+        enabled: true,
+        url: webhookUrl,
+        webhookByEvents: false,
+        webhookBase64: false,
+        events: [
+          'MESSAGES_UPSERT',
+          'MESSAGES_UPDATE', 
+          'SEND_MESSAGE',
+          'CONNECTION_UPDATE'
+        ],
+      }
+    };
+
+    console.log('Webhook body:', JSON.stringify(webhookBody, null, 2));
+
     const webhookResponse = await fetch(`${EVOLUTION_BASE_URL}/webhook/set/${instanceName}`, {
       method: 'POST',
       headers: {
         'apikey': EVOLUTION_API_KEY,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
+      body: JSON.stringify(webhookBody),
+    });
+
+    const responseText = await webhookResponse.text();
+    console.log('Webhook response status:', webhookResponse.status);
+    console.log('Webhook response:', responseText);
+
+    if (!webhookResponse.ok) {
+      // Try alternative format without nested webhook property (older versions)
+      console.log('First format failed, trying alternative format...');
+      
+      const altBody = {
+        enabled: true,
         url: webhookUrl,
-        webhook_by_events: false,
-        webhook_base64: false,
+        webhookByEvents: false,
+        webhookBase64: false,
         events: [
           'MESSAGES_UPSERT',
           'MESSAGES_UPDATE',
-          'SEND_MESSAGE',
-          'CONNECTION_UPDATE',
-          'MESSAGES_SET'
+          'SEND_MESSAGE', 
+          'CONNECTION_UPDATE'
         ],
-      }),
-    });
+      };
 
-    if (!webhookResponse.ok) {
-      const errorText = await webhookResponse.text();
-      console.error('Evolution API webhook error:', errorText);
-      
-      // Try alternative endpoint format
-      const altResponse = await fetch(`${EVOLUTION_BASE_URL}/webhook/instance/${instanceName}`, {
-        method: 'PUT',
+      const altResponse = await fetch(`${EVOLUTION_BASE_URL}/webhook/set/${instanceName}`, {
+        method: 'POST',
         headers: {
           'apikey': EVOLUTION_API_KEY,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          enabled: true,
-          url: webhookUrl,
-          events: [
-            'messages.upsert',
-            'messages.update',
-            'send.message',
-            'connection.update'
-          ],
-        }),
+        body: JSON.stringify(altBody),
       });
 
+      const altText = await altResponse.text();
+      console.log('Alternative response status:', altResponse.status);
+      console.log('Alternative response:', altText);
+
       if (!altResponse.ok) {
-        const altError = await altResponse.text();
-        console.error('Alternative webhook endpoint also failed:', altError);
+        // Try third format - Evolution API v1 style
+        console.log('Second format failed, trying v1 format...');
+        
+        const v1Body = {
+          url: webhookUrl,
+          enabled: true,
+          events: ['all'],
+        };
+
+        const v1Response = await fetch(`${EVOLUTION_BASE_URL}/webhook/set/${instanceName}`, {
+          method: 'POST',
+          headers: {
+            'apikey': EVOLUTION_API_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(v1Body),
+        });
+
+        const v1Text = await v1Response.text();
+        console.log('V1 response status:', v1Response.status);
+        console.log('V1 response:', v1Text);
+
+        if (!v1Response.ok) {
+          return new Response(JSON.stringify({ 
+            error: 'Failed to configure webhook - check Evolution API version',
+            details: responseText,
+            altDetails: altText,
+            v1Details: v1Text,
+            webhookUrl,
+            tip: 'You may need to configure the webhook manually in your Evolution API dashboard'
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        let v1Result;
+        try {
+          v1Result = JSON.parse(v1Text);
+        } catch {
+          v1Result = { raw: v1Text };
+        }
+
         return new Response(JSON.stringify({ 
-          error: 'Failed to configure webhook',
-          details: errorText,
-          altDetails: altError
+          success: true, 
+          webhookUrl,
+          instanceName,
+          result: v1Result,
+          format: 'v1'
         }), {
-          status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      
-      const altResult = await altResponse.json();
-      console.log('Webhook configured via alternative endpoint:', altResult);
-      
+
+      let altResult;
+      try {
+        altResult = JSON.parse(altText);
+      } catch {
+        altResult = { raw: altText };
+      }
+
       return new Response(JSON.stringify({ 
         success: true, 
         webhookUrl,
         instanceName,
-        result: altResult
+        result: altResult,
+        format: 'alternative'
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const result = await webhookResponse.json();
-    console.log('Webhook configured successfully:', result);
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      result = { raw: responseText };
+    }
+
+    console.log('Webhook configured successfully');
 
     return new Response(JSON.stringify({ 
       success: true, 
       webhookUrl,
       instanceName,
-      result
+      result,
+      format: 'v2'
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
