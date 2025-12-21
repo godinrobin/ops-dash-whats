@@ -27,7 +27,7 @@ serve(async (req) => {
     const data = payload.data || payload;
 
     // Handle messages.upsert event (new incoming message)
-    if (event === 'messages.upsert' || event === 'message') {
+    if (event === 'messages.upsert' || event === 'message' || event === 'MESSAGES_UPSERT') {
       const message = data.message || data;
       const key = message.key || {};
       
@@ -127,13 +127,14 @@ serve(async (req) => {
 
         contact = newContact;
       } else {
-        // Update existing contact
+        // Update existing contact with new pushName and increment unread
+        const pushName = message.pushName || data.pushName;
         await supabaseClient
           .from('inbox_contacts')
           .update({
             unread_count: (contact.unread_count || 0) + 1,
             last_message_at: new Date().toISOString(),
-            name: message.pushName || data.pushName || contact.name,
+            ...(pushName && { name: pushName }),
           })
           .eq('id', contact.id);
       }
@@ -220,8 +221,56 @@ serve(async (req) => {
       });
     }
 
+    // Handle message status updates (sent, delivered, read)
+    if (event === 'messages.update' || event === 'MESSAGES_UPDATE') {
+      console.log('Processing message status update');
+      
+      const updates = Array.isArray(data) ? data : [data];
+      
+      for (const update of updates) {
+        const key = update.key || {};
+        const remoteMessageId = key.id;
+        const status = update.update?.status;
+        
+        if (!remoteMessageId || !status) {
+          console.log('Missing remoteMessageId or status in update:', update);
+          continue;
+        }
+        
+        // Map Evolution API status to our status
+        let newStatus = 'sent';
+        if (status === 'DELIVERY_ACK' || status === 2 || status === 'delivered') {
+          newStatus = 'delivered';
+        } else if (status === 'READ' || status === 3 || status === 'read') {
+          newStatus = 'read';
+        } else if (status === 'PLAYED' || status === 4) {
+          newStatus = 'read';
+        } else if (status === 'SERVER_ACK' || status === 1 || status === 'sent') {
+          newStatus = 'sent';
+        }
+        
+        console.log(`Updating message ${remoteMessageId} status to ${newStatus}`);
+        
+        // Update message status in database
+        const { error: updateError } = await supabaseClient
+          .from('inbox_messages')
+          .update({ status: newStatus })
+          .eq('remote_message_id', remoteMessageId);
+          
+        if (updateError) {
+          console.error('Error updating message status:', updateError);
+        } else {
+          console.log(`Message ${remoteMessageId} status updated to ${newStatus}`);
+        }
+      }
+      
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Handle connection status updates
-    if (event === 'connection.update') {
+    if (event === 'connection.update' || event === 'CONNECTION_UPDATE') {
       const state = data.state || data.status;
       console.log(`Connection update for ${instance}: ${state}`);
       
@@ -238,6 +287,32 @@ serve(async (req) => {
       });
     }
 
+    // Handle send message acknowledgment
+    if (event === 'send.message' || event === 'SEND_MESSAGE') {
+      console.log('Processing send message acknowledgment');
+      
+      const key = data.key || {};
+      const remoteMessageId = key.id;
+      
+      if (remoteMessageId) {
+        // Update message status to sent
+        await supabaseClient
+          .from('inbox_messages')
+          .update({ 
+            status: 'sent',
+            remote_message_id: remoteMessageId 
+          })
+          .eq('remote_message_id', remoteMessageId);
+          
+        console.log(`Send message acknowledged: ${remoteMessageId}`);
+      }
+      
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log(`Unhandled event type: ${event}`);
     return new Response(JSON.stringify({ success: true, event }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

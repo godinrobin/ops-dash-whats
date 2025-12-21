@@ -137,12 +137,48 @@ serve(async (req) => {
         continue;
       }
 
-      // Get contact name from chat data - DO NOT use findContacts as it returns the instance owner's name
-      // The correct name is in pushName, notify, or name fields of the chat object
-      const contactName = chat.pushName || chat.notify || chat.name || null;
+      // Get contact name from chat's pushName/notify - these are the real names
+      let contactName = chat.pushName || chat.notify || null;
       let profilePicUrl = chat.profilePictureUrl || chat.imgUrl || null;
 
-      console.log(`Processing contact: ${phone}, name from chat: ${contactName}, pic: ${profilePicUrl ? 'yes' : 'no'}`);
+      // If no name in chat, try to get from recent messages
+      if (!contactName) {
+        try {
+          const messagesResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/findMessages/${instanceName}`, {
+            method: 'POST',
+            headers: {
+              'apikey': EVOLUTION_API_KEY,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              where: {
+                key: {
+                  remoteJid,
+                },
+              },
+              limit: 10,
+            }),
+          });
+
+          if (messagesResponse.ok) {
+            const messagesData = await messagesResponse.json();
+            const messages = messagesData.messages || messagesData || [];
+            
+            // Find pushName from incoming messages (not fromMe)
+            for (const msg of messages) {
+              if (!msg.key?.fromMe && msg.pushName) {
+                contactName = msg.pushName;
+                console.log(`Found pushName from message for ${phone}: ${contactName}`);
+                break;
+              }
+            }
+          }
+        } catch (e) {
+          console.log(`Could not fetch messages to get pushName for ${phone}:`, e);
+        }
+      }
+
+      console.log(`Processing contact: ${phone}, name: ${contactName || 'unknown'}, pic: ${profilePicUrl ? 'yes' : 'no'}`);
 
       // Try to fetch profile picture if not available
       if (!profilePicUrl) {
@@ -165,8 +201,6 @@ serve(async (req) => {
           console.log(`Could not fetch profile picture for ${phone}:`, e);
         }
       }
-      
-      // NOTE: We do NOT call findContacts here because it returns the instance owner's name, not the contact's name
 
       // Check if contact already exists for this user and instance
       const { data: existingContact } = await supabaseClient
@@ -184,7 +218,6 @@ serve(async (req) => {
         };
 
         // Update name if we have a new one from pushName and it's different from stored
-        // Also update if stored name looks like it came from findContacts (instance owner name)
         if (contactName && contactName !== existingContact.name) {
           updates.name = contactName;
         }
@@ -231,7 +264,7 @@ serve(async (req) => {
       console.log(`Created new contact: ${phone} (${contactName || 'no name'})`);
       imported++;
 
-      // Fetch messages for this chat
+      // Fetch messages for this chat and extract pushName from them
       if (newContact) {
         try {
           const messagesResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/findMessages/${instanceName}`, {
@@ -256,9 +289,16 @@ serve(async (req) => {
             console.log(`Fetched ${messages.length} messages for ${phone}`);
 
             let messagesImported = 0;
+            let foundPushName = null;
+            
             for (const msg of messages.slice(0, 100)) {
               const key = msg.key || {};
               const direction = key.fromMe ? 'outbound' : 'inbound';
+              
+              // Extract pushName from incoming messages
+              if (!key.fromMe && msg.pushName && !foundPushName) {
+                foundPushName = msg.pushName;
+              }
               
               let content = '';
               let messageType = 'text';
@@ -310,6 +350,16 @@ serve(async (req) => {
                 messagesImported++;
               }
             }
+            
+            // Update contact with pushName found in messages
+            if (foundPushName && !contactName) {
+              await supabaseClient
+                .from('inbox_contacts')
+                .update({ name: foundPushName })
+                .eq('id', newContact.id);
+              console.log(`Updated contact ${phone} with pushName from messages: ${foundPushName}`);
+            }
+            
             console.log(`Imported ${messagesImported} messages for ${phone}`);
           }
         } catch (msgError) {
