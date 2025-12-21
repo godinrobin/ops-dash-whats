@@ -113,10 +113,10 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
       // Get the bounds of the ReactFlow wrapper
       const bounds = reactFlowWrapper.current.getBoundingClientRect();
       
-      // Calculate position relative to the flow viewport
+      // XYFlow expects coordinates relative to the wrapper
       const position = screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY,
+        x: event.clientX - bounds.left,
+        y: event.clientY - bounds.top,
       });
 
       console.log('Drop event:', { 

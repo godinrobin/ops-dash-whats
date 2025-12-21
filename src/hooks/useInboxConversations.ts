@@ -13,16 +13,17 @@ export const useInboxConversations = (instanceId?: string) => {
   // Fetch connected instances
   const fetchConnectedInstances = useCallback(async () => {
     if (!user) return;
-    
+
     try {
+      // Some deployments use status="connected" instead of "open"
       const { data } = await supabase
         .from('maturador_instances')
         .select('id')
         .eq('user_id', user.id)
-        .eq('status', 'open');
-      
+        .in('status', ['open', 'connected']);
+
       if (data) {
-        setConnectedInstanceIds(new Set(data.map(i => i.id)));
+        setConnectedInstanceIds(new Set(data.map((i) => i.id)));
       }
     } catch (err) {
       console.error('Error fetching connected instances:', err);
@@ -60,7 +61,7 @@ export const useInboxConversations = (instanceId?: string) => {
 
   const fetchContacts = useCallback(async () => {
     if (!user) return;
-    
+
     try {
       let query = supabase
         .from('inbox_contacts')
@@ -75,18 +76,20 @@ export const useInboxConversations = (instanceId?: string) => {
       const { data, error: fetchError } = await query;
 
       if (fetchError) throw fetchError;
-      
+
       // Filter out contacts from disconnected instances
-      const filteredData = (data || []).filter(contact => {
+      const filteredData = (data || []).filter((contact) => {
         if (!contact.instance_id) return true; // Keep contacts without instance
         return connectedInstanceIds.has(contact.instance_id);
       });
-      
-      setContacts(filteredData.map(contact => ({
-        ...contact,
-        tags: Array.isArray(contact.tags) ? (contact.tags as any[]).map(t => String(t)) : [],
-        status: contact.status as 'active' | 'archived'
-      })) as InboxContact[]);
+
+      setContacts(
+        filteredData.map((contact) => ({
+          ...contact,
+          tags: Array.isArray(contact.tags) ? (contact.tags as any[]).map((t) => String(t)) : [],
+          status: contact.status as 'active' | 'archived',
+        })) as InboxContact[]
+      );
     } catch (err: any) {
       setError(err.message);
     } finally {
