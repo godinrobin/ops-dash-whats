@@ -1,11 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Send, Paperclip, Mic, Smile, Image, FileText, Video, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toast } from 'sonner';
-import data from '@emoji-mart/data';
-import Picker from '@emoji-mart/react';
 import {
   Dialog,
   DialogContent,
@@ -30,7 +28,32 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow }: ChatInpu
   const [attachDialog, setAttachDialog] = useState<{ type: 'image' | 'video' | 'document'; open: boolean }>({ type: 'image', open: false });
   const [mediaUrl, setMediaUrl] = useState('');
   const [mediaCaption, setMediaCaption] = useState('');
+
+  // Lazy-load emoji-mart to avoid crashing the whole app on initial load.
+  const [EmojiPicker, setEmojiPicker] = useState<any>(null);
+  const [emojiData, setEmojiData] = useState<any>(null);
+  const [emojiLoading, setEmojiLoading] = useState(false);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    if (EmojiPicker && emojiData) return;
+    if (emojiLoading) return;
+
+    setEmojiLoading(true);
+    Promise.all([import('@emoji-mart/react'), import('@emoji-mart/data')])
+      .then(([pickerMod, dataMod]) => {
+        setEmojiData(dataMod.default ?? dataMod);
+        setEmojiPicker(() => (pickerMod as any).default ?? pickerMod);
+      })
+      .catch((err) => {
+        console.error('Erro ao carregar emoji picker:', err);
+        toast.error('Não foi possível carregar os emojis');
+        setShowEmojiPicker(false);
+      })
+      .finally(() => setEmojiLoading(false));
+  }, [showEmojiPicker, EmojiPicker, emojiData, emojiLoading]);
 
   const handleSend = async () => {
     if (!message.trim() || sending) return;
@@ -123,13 +146,19 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow }: ChatInpu
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0 border-0" side="top" align="start">
-              <Picker 
-                data={data} 
-                onEmojiSelect={handleEmojiSelect}
-                theme="dark"
-                locale="pt"
-                previewPosition="none"
-              />
+              {EmojiPicker && emojiData ? (
+                <EmojiPicker
+                  data={emojiData}
+                  onEmojiSelect={handleEmojiSelect}
+                  theme="dark"
+                  locale="pt"
+                  previewPosition="none"
+                />
+              ) : (
+                <div className="p-3 text-xs text-muted-foreground">
+                  {emojiLoading ? 'Carregando emojis…' : 'Abrindo emojis…'}
+                </div>
+              )}
             </PopoverContent>
           </Popover>
 
