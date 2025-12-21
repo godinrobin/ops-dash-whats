@@ -271,28 +271,15 @@ export const PropertiesPanel = ({
             <div className="space-y-2">
               <Label>Prompt do Sistema</Label>
               <Textarea
-                placeholder="Você é um assistente..."
+                placeholder="Você é um assistente de vendas amigável..."
                 value={(nodeData.systemPrompt as string) || ''}
                 onChange={(e) => onUpdateNode(selectedNode.id, { systemPrompt: e.target.value })}
-                rows={4}
+                rows={6}
               />
             </div>
-            <div className="space-y-2">
-              <Label>Modelo</Label>
-              <Select
-                value={(nodeData.model as string) || 'gpt-4o-mini'}
-                onValueChange={(value) => onUpdateNode(selectedNode.id, { model: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="gpt-4o-mini">GPT-4o Mini</SelectItem>
-                  <SelectItem value="gpt-4o">GPT-4o</SelectItem>
-                  <SelectItem value="gemini-flash">Gemini Flash</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              A IA usará GPT-4o-mini para responder às mensagens do cliente com base neste prompt.
+            </p>
           </div>
         );
 

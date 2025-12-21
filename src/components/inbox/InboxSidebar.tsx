@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MessageSquare, Filter, Settings, Zap, Tag, RefreshCw, Webhook } from 'lucide-react';
+import { MessageSquare, Filter, Settings, Zap, Tag, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
@@ -24,7 +24,6 @@ export const InboxSidebar = ({ selectedInstanceId, onInstanceChange }: InboxSide
   const navigate = useNavigate();
   const [instances, setInstances] = useState<Instance[]>([]);
   const [syncing, setSyncing] = useState(false);
-  const [configuringWebhook, setConfiguringWebhook] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -82,46 +81,6 @@ export const InboxSidebar = ({ selectedInstanceId, onInstanceChange }: InboxSide
     }
   };
 
-  const configureWebhooks = async () => {
-    if (configuringWebhook) return;
-    
-    if (instances.length === 0) {
-      toast.error('Nenhuma instância conectada. Conecte um número no Maturador primeiro.');
-      return;
-    }
-
-    setConfiguringWebhook(true);
-    let configured = 0;
-
-    try {
-      for (const instance of instances) {
-        const { data, error } = await supabase.functions.invoke('configure-webhook', {
-          body: { instanceId: instance.id }
-        });
-
-        if (error) {
-          console.error('Webhook config error for instance:', instance.instance_name, error);
-          continue;
-        }
-
-        if (data?.success) {
-          configured++;
-        }
-      }
-
-      if (configured > 0) {
-        toast.success(`Webhook configurado em ${configured} instância(s)! Mensagens em tempo real ativadas.`);
-      } else {
-        toast.error('Não foi possível configurar o webhook. Verifique sua Evolution API.');
-      }
-    } catch (error) {
-      console.error('Webhook config error:', error);
-      toast.error('Erro ao configurar webhook');
-    } finally {
-      setConfiguringWebhook(false);
-    }
-  };
-
   return (
     <div className="w-16 border-r border-border flex flex-col items-center py-4 bg-card">
       <div className="space-y-2 flex flex-col items-center">
@@ -162,17 +121,6 @@ export const InboxSidebar = ({ selectedInstanceId, onInstanceChange }: InboxSide
           title="Sincronizar Contatos"
         >
           <RefreshCw className={`h-5 w-5 ${syncing ? 'animate-spin' : ''}`} />
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="icon"
-          className="w-10 h-10"
-          onClick={configureWebhooks}
-          disabled={configuringWebhook}
-          title="Configurar Tempo Real (Webhook)"
-        >
-          <Webhook className={`h-5 w-5 ${configuringWebhook ? 'animate-pulse' : ''}`} />
         </Button>
       </div>
 
