@@ -1,12 +1,14 @@
-import { useRef, useEffect } from 'react';
-import { Phone, Video, MoreVertical, User, MessageSquare } from 'lucide-react';
+import { useRef, useEffect, useState } from 'react';
+import { Phone, Video, MoreVertical, User, MessageSquare, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { InboxContact, InboxMessage } from '@/types/inbox';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ChatPanelProps {
   contact: InboxContact | null;
@@ -14,6 +16,7 @@ interface ChatPanelProps {
   loading: boolean;
   onSendMessage: (content: string, messageType?: string, mediaUrl?: string) => Promise<{ error?: string; data?: any }>;
   onToggleDetails: () => void;
+  flows?: { id: string; name: string; is_active: boolean }[];
 }
 
 export const ChatPanel = ({
@@ -22,8 +25,30 @@ export const ChatPanel = ({
   loading,
   onSendMessage,
   onToggleDetails,
+  flows = [],
 }: ChatPanelProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [instanceName, setInstanceName] = useState<string | null>(null);
+
+  // Fetch instance name
+  useEffect(() => {
+    const fetchInstance = async () => {
+      if (!contact?.instance_id) {
+        setInstanceName(null);
+        return;
+      }
+      const { data } = await supabase
+        .from('maturador_instances')
+        .select('instance_name, label, phone_number')
+        .eq('id', contact.instance_id)
+        .single();
+      
+      if (data) {
+        setInstanceName(data.label || data.instance_name);
+      }
+    };
+    fetchInstance();
+  }, [contact?.instance_id]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -65,7 +90,15 @@ export const ChatPanel = ({
           </Avatar>
           <div>
             <h3 className="font-medium">{contact.name || contact.phone}</h3>
-            <p className="text-sm text-muted-foreground">{contact.phone}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-muted-foreground">{contact.phone}</p>
+              {instanceName && (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-normal gap-1">
+                  <Smartphone className="h-2.5 w-2.5" />
+                  {instanceName}
+                </Badge>
+              )}
+            </div>
           </div>
         </div>
 
@@ -111,7 +144,7 @@ export const ChatPanel = ({
       </ScrollArea>
 
       {/* Input Area */}
-      <ChatInput onSendMessage={onSendMessage} />
+      <ChatInput onSendMessage={onSendMessage} flows={flows} />
     </div>
   );
 };

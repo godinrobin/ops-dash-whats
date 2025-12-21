@@ -233,6 +233,12 @@ const FlowEditorPage = () => {
             initialNodes={flow.nodes}
             initialEdges={flow.edges}
             onSave={handleSave}
+            triggerType={triggerType}
+            triggerKeywords={triggerKeywords.split(',').map(k => k.trim()).filter(Boolean)}
+            onUpdateFlowSettings={(settings) => {
+              if (settings.triggerType) setTriggerType(settings.triggerType as 'keyword' | 'all' | 'schedule');
+              if (settings.triggerKeywords) setTriggerKeywords(settings.triggerKeywords.join(', '));
+            }}
           />
         )}
       </div>
