@@ -45,7 +45,7 @@ export const useInboxMessages = (contactId: string | null) => {
     fetchMessages();
   }, [fetchMessages]);
 
-  // Subscribe to realtime updates
+  // Subscribe to realtime updates for this contact's messages
   useEffect(() => {
     // Cleanup previous channel if exists
     if (channelRef.current) {
@@ -55,8 +55,11 @@ export const useInboxMessages = (contactId: string | null) => {
 
     if (!user || !contactId) return;
 
+    const channelName = `inbox-messages-${contactId}-${Date.now()}`;
+    console.log(`Subscribing to realtime channel: ${channelName}`);
+    
     const channel = supabase
-      .channel(`inbox-messages-${contactId}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -66,13 +69,24 @@ export const useInboxMessages = (contactId: string | null) => {
           filter: `contact_id=eq.${contactId}`,
         },
         (payload) => {
+          console.log('Realtime INSERT received:', payload);
           const newMessage = payload.new as any;
-          setMessages(prev => [...prev, {
-            ...newMessage,
-            direction: newMessage.direction as 'inbound' | 'outbound',
-            message_type: newMessage.message_type as InboxMessage['message_type'],
-            status: newMessage.status as InboxMessage['status']
-          }]);
+          
+          // Check if message already exists to avoid duplicates
+          setMessages(prev => {
+            const exists = prev.some(m => m.id === newMessage.id);
+            if (exists) {
+              console.log('Message already exists, skipping duplicate');
+              return prev;
+            }
+            
+            return [...prev, {
+              ...newMessage,
+              direction: newMessage.direction as 'inbound' | 'outbound',
+              message_type: newMessage.message_type as InboxMessage['message_type'],
+              status: newMessage.status as InboxMessage['status']
+            }];
+          });
         }
       )
       .on(
@@ -84,6 +98,7 @@ export const useInboxMessages = (contactId: string | null) => {
           filter: `contact_id=eq.${contactId}`,
         },
         (payload) => {
+          console.log('Realtime UPDATE received:', payload);
           const updated = payload.new as any;
           setMessages(prev => 
             prev.map(m => m.id === updated.id ? {
@@ -95,11 +110,14 @@ export const useInboxMessages = (contactId: string | null) => {
           );
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log(`Realtime subscription status for ${channelName}:`, status);
+      });
 
     channelRef.current = channel;
 
     return () => {
+      console.log(`Cleaning up realtime channel: ${channelName}`);
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
@@ -131,7 +149,7 @@ export const useInboxMessages = (contactId: string | null) => {
         instanceName = instance?.instance_name || '';
       }
 
-      // Insert message
+      // Insert message with pending status
       const { data: message, error: insertError } = await supabase
         .from('inbox_messages')
         .insert({
@@ -149,8 +167,8 @@ export const useInboxMessages = (contactId: string | null) => {
 
       if (insertError) throw insertError;
 
-      // Call edge function to send via Evolution API
-      const { error: sendError } = await supabase.functions.invoke('send-inbox-message', {
+      // Call edge function to send via Evolution API - pass the message ID
+      const { data: sendResult, error: sendError } = await supabase.functions.invoke('send-inbox-message', {
         body: {
           contactId,
           instanceName,
@@ -158,10 +176,12 @@ export const useInboxMessages = (contactId: string | null) => {
           content,
           messageType,
           mediaUrl,
+          messageId: message.id, // Pass the message ID so the edge function can update it
         }
       });
 
       if (sendError) {
+        console.error('Error sending message:', sendError);
         // Update message status to failed
         await supabase
           .from('inbox_messages')
@@ -178,6 +198,7 @@ export const useInboxMessages = (contactId: string | null) => {
 
       return { data: message };
     } catch (err: any) {
+      console.error('sendMessage error:', err);
       return { error: err.message };
     }
   }, [user, contactId]);

@@ -128,3 +128,6 @@ verify_jwt = false
 
 [functions.sync-inbox-contacts]
 verify_jwt = true
+
+[functions.configure-webhook]
+verify_jwt = true

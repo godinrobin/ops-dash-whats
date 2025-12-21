@@ -6,9 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const EVOLUTION_BASE_URL = 'https://api.chatwp.xyz';
-const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || '';
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -25,6 +22,12 @@ serve(async (req) => {
       }
     );
 
+    // Also create a service role client for updating messages
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
     // Verify user is authenticated
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
     if (authError || !user) {
@@ -34,9 +37,9 @@ serve(async (req) => {
       });
     }
 
-    const { contactId, instanceName, phone, content, messageType = 'text', mediaUrl } = await req.json();
+    const { contactId, instanceName, phone, content, messageType = 'text', mediaUrl, messageId } = await req.json();
     
-    console.log('Sending message:', { contactId, instanceName, phone, messageType, content: content?.substring(0, 50) });
+    console.log('Sending message:', { contactId, instanceName, phone, messageType, content: content?.substring(0, 50), messageId });
 
     if (!instanceName || !phone) {
       return new Response(JSON.stringify({ error: 'Missing required fields' }), {
@@ -45,9 +48,18 @@ serve(async (req) => {
       });
     }
 
+    // Get user's Evolution API config
+    const { data: config } = await supabaseClient
+      .from('maturador_config')
+      .select('*')
+      .eq('user_id', user.id)
+      .single();
+
+    const EVOLUTION_BASE_URL = config?.evolution_base_url?.replace(/\/$/, '') || 'https://api.chatwp.xyz';
+    const EVOLUTION_API_KEY = config?.evolution_api_key || Deno.env.get('EVOLUTION_API_KEY') || '';
+
     // Format phone number for Evolution API
     const formattedPhone = phone.replace(/\D/g, '');
-    const remoteJid = `${formattedPhone}@s.whatsapp.net`;
 
     let evolutionEndpoint = '';
     let evolutionBody: Record<string, unknown> = {};
@@ -107,7 +119,7 @@ serve(async (req) => {
         };
     }
 
-    console.log(`Calling Evolution API: POST ${evolutionEndpoint}`);
+    console.log(`Calling Evolution API: POST ${EVOLUTION_BASE_URL}${evolutionEndpoint}`);
 
     const evolutionResponse = await fetch(`${EVOLUTION_BASE_URL}${evolutionEndpoint}`, {
       method: 'POST',
@@ -123,6 +135,15 @@ serve(async (req) => {
 
     if (!evolutionResponse.ok) {
       console.error('Evolution API error:', evolutionResult);
+      
+      // Update message status to failed if we have messageId
+      if (messageId) {
+        await supabaseAdmin
+          .from('inbox_messages')
+          .update({ status: 'failed' })
+          .eq('id', messageId);
+      }
+      
       return new Response(JSON.stringify({ 
         error: evolutionResult.message || 'Failed to send message',
         details: evolutionResult 
@@ -133,7 +154,26 @@ serve(async (req) => {
     }
 
     // Extract message ID from response
-    const remoteMessageId = evolutionResult.key?.id || evolutionResult.messageId || null;
+    const remoteMessageId = evolutionResult.key?.id || evolutionResult.messageId || evolutionResult.id || null;
+
+    // Update message status to 'sent' and save remote_message_id
+    if (messageId) {
+      const updateData: Record<string, unknown> = { status: 'sent' };
+      if (remoteMessageId) {
+        updateData.remote_message_id = remoteMessageId;
+      }
+      
+      const { error: updateError } = await supabaseAdmin
+        .from('inbox_messages')
+        .update(updateData)
+        .eq('id', messageId);
+        
+      if (updateError) {
+        console.error('Error updating message status:', updateError);
+      } else {
+        console.log(`Message ${messageId} status updated to 'sent', remote_message_id: ${remoteMessageId}`);
+      }
+    }
 
     return new Response(JSON.stringify({ 
       success: true, 
