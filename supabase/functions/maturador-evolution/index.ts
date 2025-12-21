@@ -1222,10 +1222,9 @@ Regras IMPORTANTES:
             });
           }
           
-          // Use the correct Evolution API v2 endpoint: POST /label/{instanceName}
-          // The correct format for Evolution API v2 is to use the label endpoint with POST
-          const handleResult = await callEvolution(`/label/${instanceName}`, 'POST', {
-            chatId: remoteJid,
+          // Use the correct Evolution API endpoint: POST /label/handleLabel/{instanceName}
+          const handleResult = await callEvolution(`/label/handleLabel/${instanceName}`, 'POST', {
+            number: remoteJid,
             labelId: labelId,
             action: labelAction || 'add', // 'add' or 'remove'
           });
