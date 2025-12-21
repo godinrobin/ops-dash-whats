@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -10,6 +10,8 @@ import {
   Connection,
   Node,
   BackgroundVariant,
+  useReactFlow,
+  ReactFlowProvider,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -55,7 +57,10 @@ interface FlowCanvasProps {
   onSave: (nodes: Node[], edges: { id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string }[]) => void;
 }
 
-export const FlowCanvas = ({ initialNodes, initialEdges, onSave }: FlowCanvasProps) => {
+const FlowCanvasInner = ({ initialNodes, initialEdges, onSave }: FlowCanvasProps) => {
+  const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const { screenToFlowPosition } = useReactFlow();
+  
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes.length > 0 ? initialNodes : [
     {
       id: 'start-1',
@@ -101,10 +106,11 @@ export const FlowCanvas = ({ initialNodes, initialEdges, onSave }: FlowCanvasPro
       const type = event.dataTransfer.getData('application/reactflow');
       if (!type) return;
 
-      const position = {
-        x: event.clientX - 250,
-        y: event.clientY - 100,
-      };
+      // Use screenToFlowPosition to correctly calculate the position
+      const position = screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
 
       const newNode: Node = {
         id: `${type}-${Date.now()}`,
@@ -115,7 +121,7 @@ export const FlowCanvas = ({ initialNodes, initialEdges, onSave }: FlowCanvasPro
 
       setNodes((nds) => [...nds, newNode]);
     },
-    [setNodes]
+    [setNodes, screenToFlowPosition]
   );
 
   const getNodeLabel = (type: string): string => {
@@ -166,7 +172,7 @@ export const FlowCanvas = ({ initialNodes, initialEdges, onSave }: FlowCanvasPro
     <div className="flex h-full">
       <NodeSidebar />
       
-      <div className="flex-1 h-full">
+      <div className="flex-1 h-full" ref={reactFlowWrapper}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -197,5 +203,13 @@ export const FlowCanvas = ({ initialNodes, initialEdges, onSave }: FlowCanvasPro
         onSave={handleSave}
       />
     </div>
+  );
+};
+
+export const FlowCanvas = (props: FlowCanvasProps) => {
+  return (
+    <ReactFlowProvider>
+      <FlowCanvasInner {...props} />
+    </ReactFlowProvider>
   );
 };

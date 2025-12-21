@@ -6,9 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const EVOLUTION_BASE_URL = 'https://api.chatwp.xyz';
-const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || '';
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -37,7 +34,7 @@ serve(async (req) => {
     const { instanceId } = await req.json();
     console.log('Syncing contacts for instance:', instanceId);
 
-    // Get instance info
+    // Get instance info and user's Evolution API config
     const { data: instance, error: instanceError } = await supabaseClient
       .from('maturador_instances')
       .select('*')
@@ -51,6 +48,23 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    // Get user's Evolution API config
+    const { data: config } = await supabaseClient
+      .from('maturador_config')
+      .select('*')
+      .eq('user_id', user.id)
+      .single();
+
+    if (!config) {
+      return new Response(JSON.stringify({ error: 'Evolution API not configured' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const EVOLUTION_BASE_URL = config.evolution_base_url;
+    const EVOLUTION_API_KEY = config.evolution_api_key;
 
     // Fetch chats from Evolution API
     const chatsResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/findChats/${instance.instance_name}`, {
@@ -85,6 +99,59 @@ serve(async (req) => {
       const phone = remoteJid.split('@')[0];
       if (!phone) continue;
 
+      // Get contact name and profile picture from Evolution API
+      let contactName = chat.name || chat.pushName || null;
+      let profilePicUrl = chat.profilePictureUrl || null;
+
+      // Try to fetch profile picture if not available
+      if (!profilePicUrl) {
+        try {
+          const profileResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/fetchProfilePictureUrl/${instance.instance_name}`, {
+            method: 'POST',
+            headers: {
+              'apikey': EVOLUTION_API_KEY,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ number: phone }),
+          });
+
+          if (profileResponse.ok) {
+            const profileData = await profileResponse.json();
+            profilePicUrl = profileData.profilePictureUrl || profileData.picture || profileData.url || null;
+          }
+        } catch (e) {
+          console.log('Could not fetch profile picture for', phone);
+        }
+      }
+
+      // Try to fetch contact name if not available
+      if (!contactName) {
+        try {
+          const contactResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/findContacts/${instance.instance_name}`, {
+            method: 'POST',
+            headers: {
+              'apikey': EVOLUTION_API_KEY,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              where: { id: remoteJid }
+            }),
+          });
+
+          if (contactResponse.ok) {
+            const contactData = await contactResponse.json();
+            if (contactData && contactData.length > 0) {
+              contactName = contactData[0].pushName || contactData[0].name || contactData[0].notify || null;
+              if (!profilePicUrl) {
+                profilePicUrl = contactData[0].profilePictureUrl || null;
+              }
+            }
+          }
+        } catch (e) {
+          console.log('Could not fetch contact info for', phone);
+        }
+      }
+
       // Check if contact already exists
       const { data: existingContact } = await supabaseClient
         .from('inbox_contacts')
@@ -94,25 +161,38 @@ serve(async (req) => {
         .single();
 
       if (existingContact) {
+        // Update existing contact with name and profile pic if we have new data
+        if (contactName || profilePicUrl) {
+          await supabaseClient
+            .from('inbox_contacts')
+            .update({
+              ...(contactName && { name: contactName }),
+              ...(profilePicUrl && { profile_pic_url: profilePicUrl }),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', existingContact.id);
+        }
         updated++;
         continue;
       }
 
       // Create new contact
-      const { error: insertError } = await supabaseClient
+      const { data: newContact, error: insertError } = await supabaseClient
         .from('inbox_contacts')
         .insert({
           user_id: user.id,
           instance_id: instanceId,
           phone,
-          name: chat.name || chat.pushName || null,
-          profile_pic_url: chat.profilePictureUrl || null,
+          name: contactName,
+          profile_pic_url: profilePicUrl,
           status: 'active',
           unread_count: chat.unreadCount || 0,
           last_message_at: chat.lastMsgTimestamp 
             ? new Date(chat.lastMsgTimestamp * 1000).toISOString() 
             : new Date().toISOString(),
-        });
+        })
+        .select()
+        .single();
 
       if (insertError) {
         console.error('Error inserting contact:', insertError);
@@ -121,9 +201,8 @@ serve(async (req) => {
 
       imported++;
 
-      // Optionally fetch messages for this chat
-      // This can be slow for many contacts, so we limit it
-      if (imported <= 10) {
+      // Fetch messages for this chat
+      if (newContact) {
         try {
           const messagesResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/findMessages/${instance.instance_name}`, {
             method: 'POST',
@@ -137,7 +216,7 @@ serve(async (req) => {
                   remoteJid,
                 },
               },
-              limit: 50,
+              limit: 100,
             }),
           });
 
@@ -145,16 +224,8 @@ serve(async (req) => {
             const messagesData = await messagesResponse.json();
             const messages = messagesData.messages || messagesData || [];
 
-            // Get the newly created contact
-            const { data: newContact } = await supabaseClient
-              .from('inbox_contacts')
-              .select('id')
-              .eq('user_id', user.id)
-              .eq('phone', phone)
-              .single();
-
-            if (newContact && messages.length > 0) {
-              for (const msg of messages.slice(0, 50)) {
+            if (messages.length > 0) {
+              for (const msg of messages.slice(0, 100)) {
                 const key = msg.key || {};
                 const direction = key.fromMe ? 'outbound' : 'inbound';
                 
@@ -169,12 +240,22 @@ serve(async (req) => {
                 } else if (msg.message?.imageMessage) {
                   messageType = 'image';
                   content = msg.message.imageMessage.caption || '';
+                  mediaUrl = msg.message.imageMessage.url || null;
                 } else if (msg.message?.audioMessage) {
                   messageType = 'audio';
+                  mediaUrl = msg.message.audioMessage.url || null;
                 } else if (msg.message?.videoMessage) {
                   messageType = 'video';
                   content = msg.message.videoMessage.caption || '';
+                  mediaUrl = msg.message.videoMessage.url || null;
+                } else if (msg.message?.documentMessage) {
+                  messageType = 'document';
+                  content = msg.message.documentMessage.fileName || '';
+                  mediaUrl = msg.message.documentMessage.url || null;
                 }
+
+                // Skip empty messages
+                if (!content && !mediaUrl) continue;
 
                 await supabaseClient
                   .from('inbox_messages')
