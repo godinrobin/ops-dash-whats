@@ -8,11 +8,8 @@ import {
   GitBranch,
   List,
   Bot,
-  UserPlus,
-  Webhook,
   Variable,
   Tag,
-  CircleStop,
   Play
 } from 'lucide-react';
 
@@ -45,16 +42,8 @@ const nodeCategories = [
     title: 'Ações',
     nodes: [
       { type: 'ai', label: 'IA', icon: Bot, color: 'bg-violet-500' },
-      { type: 'transfer', label: 'Transferir', icon: UserPlus, color: 'bg-teal-500' },
-      { type: 'webhook', label: 'Webhook', icon: Webhook, color: 'bg-slate-500' },
       { type: 'setVariable', label: 'Variável', icon: Variable, color: 'bg-emerald-500' },
       { type: 'tag', label: 'Tag', icon: Tag, color: 'bg-amber-500' },
-    ],
-  },
-  {
-    title: 'Finalização',
-    nodes: [
-      { type: 'end', label: 'Fim', icon: CircleStop, color: 'bg-gray-500' },
     ],
   },
 ];
