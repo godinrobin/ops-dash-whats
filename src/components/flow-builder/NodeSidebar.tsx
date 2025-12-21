@@ -1,0 +1,96 @@
+import { 
+  MessageSquare, 
+  Image, 
+  Mic, 
+  Video, 
+  Clock, 
+  MessageCircle,
+  GitBranch,
+  List,
+  Bot,
+  UserPlus,
+  Webhook,
+  Variable,
+  Tag,
+  CircleStop,
+  Play
+} from 'lucide-react';
+
+const nodeCategories = [
+  {
+    title: 'Início',
+    nodes: [
+      { type: 'start', label: 'Início', icon: Play, color: 'bg-green-500' },
+    ],
+  },
+  {
+    title: 'Mensagens',
+    nodes: [
+      { type: 'text', label: 'Texto', icon: MessageSquare, color: 'bg-blue-500' },
+      { type: 'image', label: 'Imagem', icon: Image, color: 'bg-purple-500' },
+      { type: 'audio', label: 'Áudio', icon: Mic, color: 'bg-orange-500' },
+      { type: 'video', label: 'Vídeo', icon: Video, color: 'bg-pink-500' },
+    ],
+  },
+  {
+    title: 'Controle',
+    nodes: [
+      { type: 'delay', label: 'Delay', icon: Clock, color: 'bg-yellow-500' },
+      { type: 'waitInput', label: 'Aguardar Resposta', icon: MessageCircle, color: 'bg-cyan-500' },
+      { type: 'condition', label: 'Condição', icon: GitBranch, color: 'bg-red-500' },
+      { type: 'menu', label: 'Menu', icon: List, color: 'bg-indigo-500' },
+    ],
+  },
+  {
+    title: 'Ações',
+    nodes: [
+      { type: 'ai', label: 'IA', icon: Bot, color: 'bg-violet-500' },
+      { type: 'transfer', label: 'Transferir', icon: UserPlus, color: 'bg-teal-500' },
+      { type: 'webhook', label: 'Webhook', icon: Webhook, color: 'bg-slate-500' },
+      { type: 'setVariable', label: 'Variável', icon: Variable, color: 'bg-emerald-500' },
+      { type: 'tag', label: 'Tag', icon: Tag, color: 'bg-amber-500' },
+    ],
+  },
+  {
+    title: 'Finalização',
+    nodes: [
+      { type: 'end', label: 'Fim', icon: CircleStop, color: 'bg-gray-500' },
+    ],
+  },
+];
+
+export const NodeSidebar = () => {
+  const onDragStart = (event: React.DragEvent, nodeType: string) => {
+    event.dataTransfer.setData('application/reactflow', nodeType);
+    event.dataTransfer.effectAllowed = 'move';
+  };
+
+  return (
+    <div className="w-56 bg-background border-r border-border p-4 overflow-y-auto">
+      <h3 className="font-semibold mb-4 text-sm">Componentes</h3>
+      
+      {nodeCategories.map((category) => (
+        <div key={category.title} className="mb-4">
+          <h4 className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+            {category.title}
+          </h4>
+          <div className="space-y-1">
+            {category.nodes.map((node) => (
+              <div
+                key={node.type}
+                className="flex items-center gap-2 p-2 rounded-lg border border-border bg-card hover:bg-accent cursor-grab active:cursor-grabbing transition-colors"
+                draggable
+                onDragStart={(e) => onDragStart(e, node.type)}
+              >
+                <div className={`p-1.5 rounded ${node.color}`}>
+                  <node.icon className="h-3.5 w-3.5 text-white" />
+                </div>
+                <span className="text-sm">{node.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};

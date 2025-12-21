@@ -191,6 +191,15 @@ const Home = () => {
       subtext: "Salve seus contatos em poucos cliques",
       gradient: "from-green-400 to-green-600",
       restricted: false
+    },
+    { 
+      path: "/inbox", 
+      emoji: "📥", 
+      title: "Inbox WhatsApp",
+      description: "Gerencie todas suas conversas de WhatsApp em um só lugar",
+      subtext: "Chat em tempo real + FlowBuilder de automação",
+      gradient: "from-green-400 to-teal-500",
+      restricted: true
     }
   ];
 
