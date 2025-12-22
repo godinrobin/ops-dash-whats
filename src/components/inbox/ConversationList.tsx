@@ -113,7 +113,16 @@ export const ConversationList = ({
 
   const formatTime = (date: string | null) => {
     if (!date) return '';
-    return formatDistanceToNow(new Date(date), { addSuffix: true, locale: ptBR });
+    const distance = formatDistanceToNow(new Date(date), { addSuffix: false, locale: ptBR });
+    // Shorten common phrases
+    return distance
+      .replace('menos de um minuto', '< 1min')
+      .replace('minutos', 'min')
+      .replace('minuto', 'min')
+      .replace('horas', 'h')
+      .replace('hora', 'h')
+      .replace('dias', 'd')
+      .replace('dia', 'd');
   };
 
   const getInitials = (name: string | null, phone: string) => {

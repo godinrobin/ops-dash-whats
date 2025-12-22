@@ -14,7 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import automatizapIcon from "@/assets/automatizap-icon.png";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 interface Instance {
   id: string;
@@ -348,29 +348,42 @@ export default function InboxDashboard() {
     return messages.filter(m => new Date(m.created_at).toDateString() === today);
   }, [messages]);
 
-  const messagesByInstance = useMemo(() => {
-    const map = new Map<string, number>();
+  const CHART_COLORS = ['#f97316', '#3b82f6', '#22c55e', '#a855f7', '#ec4899', '#06b6d4', '#eab308', '#ef4444'];
+
+  // Calculate messages by day for each instance (last 7 days)
+  const messagesByDay = useMemo(() => {
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      return d.toISOString().split('T')[0];
+    });
+    
+    // Initialize data structure
+    const dayMap = new Map<string, Record<string, number>>();
+    last7Days.forEach(day => dayMap.set(day, {}));
+    
+    // Count messages by day and instance
     messages.forEach(m => {
-      if (m.instance_id) {
-        map.set(m.instance_id, (map.get(m.instance_id) || 0) + 1);
+      const day = m.created_at.split('T')[0];
+      if (dayMap.has(day) && m.instance_id) {
+        const instanceName = instances.find(i => i.id === m.instance_id)?.label || 
+                            instances.find(i => i.id === m.instance_id)?.instance_name || 
+                            'Desconhecido';
+        const dayData = dayMap.get(day)!;
+        dayData[instanceName] = (dayData[instanceName] || 0) + 1;
       }
     });
-    return instances.map(inst => ({
-      name: inst.label || inst.instance_name,
-      messages: map.get(inst.id) || 0,
+    
+    return last7Days.map(day => ({
+      date: new Date(day + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+      ...dayMap.get(day),
     }));
   }, [messages, instances]);
 
-  const messagesByDirection = useMemo(() => {
-    const incoming = messages.filter(m => m.direction === 'incoming').length;
-    const outgoing = messages.filter(m => m.direction === 'outgoing').length;
-    return [
-      { name: 'Recebidas', value: incoming, fill: '#22c55e' },
-      { name: 'Enviadas', value: outgoing, fill: '#3b82f6' },
-    ];
-  }, [messages]);
-
-  const CHART_COLORS = ['#f97316', '#3b82f6', '#22c55e', '#a855f7', '#ec4899', '#06b6d4', '#eab308', '#ef4444'];
+  // Get unique instance names for chart lines
+  const instanceNames = useMemo(() => {
+    return instances.map(i => i.label || i.instance_name);
+  }, [instances]);
 
   if (loading) {
     return (
@@ -505,72 +518,50 @@ export default function InboxDashboard() {
           </Card>
         </div>
 
-        {/* Charts */}
+        {/* Chart - Messages by Day per Instance */}
         {messages.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5" />
-                  Mensagens por Número
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={messagesByInstance}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="name" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                    <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '8px'
-                      }}
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <TrendingUp className="h-5 w-5" />
+                Mensagens por Número (Últimos 7 dias)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={messagesByDay}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis 
+                    dataKey="date" 
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} 
+                  />
+                  <YAxis 
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} 
+                    allowDecimals={false}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }}
+                  />
+                  <Legend />
+                  {instanceNames.map((name, idx) => (
+                    <Line 
+                      key={name}
+                      type="monotone"
+                      dataKey={name}
+                      stroke={CHART_COLORS[idx % CHART_COLORS.length]}
+                      strokeWidth={2}
+                      dot={{ r: 4, fill: CHART_COLORS[idx % CHART_COLORS.length] }}
+                      activeDot={{ r: 6 }}
                     />
-                    <Bar dataKey="messages" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5" />
-                  Direção das Mensagens
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={250}>
-                  <PieChart>
-                    <Pie
-                      data={messagesByDirection}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={90}
-                      paddingAngle={5}
-                      dataKey="value"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    >
-                      {messagesByDirection.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '8px'
-                      }}
-                    />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
         )}
 
         {/* Números Conectados Section */}
