@@ -124,13 +124,13 @@ const FlowEditorPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
       <Header />
-      <div className="h-14 md:h-16" /> {/* Spacer for fixed header */}
+      <div className="h-14 md:h-16 shrink-0" /> {/* Spacer for fixed header */}
       
-      <div className="border-b border-border px-4 py-2 flex items-center justify-between bg-card">
+      <div className="border-b border-border px-4 py-2 flex items-center justify-between bg-card shrink-0">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/inbox/flows')}>
+          <Button variant="ghost" size="icon" onClick={() => navigate('/inbox/flows')} title="Voltar para Fluxos">
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <Input
@@ -236,7 +236,7 @@ const FlowEditorPage = () => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden" style={{ height: 'calc(100vh - 140px)' }}>
+      <div className="flex-1 min-h-0">
         {flow && (
           <FlowCanvas
             initialNodes={flow.nodes}

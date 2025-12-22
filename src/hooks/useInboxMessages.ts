@@ -167,6 +167,7 @@ export const useInboxMessages = (contactId: string | null) => {
 
         const inserted = (data as any)?.inserted ?? 0;
         if (inserted > 0) {
+          console.log(`Synced ${inserted} new messages from phone`);
           await fetchMessages();
         }
       } catch (e) {
@@ -176,12 +177,11 @@ export const useInboxMessages = (contactId: string | null) => {
       }
     };
 
-    (async () => {
-      await tick();
-      if (!cancelled) {
-        intervalId = setInterval(tick, 12000);
-      }
-    })();
+    // Trigger initial sync immediately
+    tick();
+    
+    // Poll every 5 seconds for faster updates when messages are sent from phone
+    intervalId = setInterval(tick, 5000);
 
     return () => {
       stopPolling();

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Plus, Smartphone } from 'lucide-react';
+import { Search, Plus, Smartphone, Tag } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -11,6 +11,19 @@ import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+
+// Predefined label colors
+const labelColors: Record<string, string> = {
+  'pago': 'bg-green-500',
+  'pendente': 'bg-yellow-500',
+  'lead': 'bg-blue-500',
+  'vip': 'bg-purple-500',
+  'suporte': 'bg-orange-500',
+};
+
+const getLabelColor = (labelName: string): string => {
+  return labelColors[labelName.toLowerCase()] || 'bg-gray-500';
+};
 
 interface Instance {
   id: string;
@@ -159,6 +172,7 @@ export const ConversationList = ({
               const instanceName = getInstanceName(contact.instance_id);
               const instancePhone = getInstancePhone(contact.instance_id);
               const instanceColor = getInstanceColor(contact.instance_id);
+              const contactTags = Array.isArray((contact as any).tags) ? (contact as any).tags : [];
               
               return (
                 <div
@@ -205,21 +219,39 @@ export const ConversationList = ({
                         </p>
                       )}
                     </div>
-                    {instanceName && (
-                      <div className="flex items-center gap-1 mt-1">
-                        <Smartphone className="h-3 w-3 text-muted-foreground" />
-                        <Badge 
-                          variant="outline" 
+                    <div className="flex items-center gap-1 mt-1 flex-wrap">
+                      {instanceName && (
+                        <>
+                          <Smartphone className="h-3 w-3 text-muted-foreground" />
+                          <Badge 
+                            variant="outline" 
+                            className={cn(
+                              "text-[10px] px-1.5 py-0 h-4 font-normal text-white border-0",
+                              instanceColor
+                            )}
+                          >
+                            {instanceName}
+                            {instancePhone && ` • ${instancePhone.slice(-4)}`}
+                          </Badge>
+                        </>
+                      )}
+                      {contactTags.slice(0, 3).map((tag: string) => (
+                        <Badge
+                          key={tag}
                           className={cn(
                             "text-[10px] px-1.5 py-0 h-4 font-normal text-white border-0",
-                            instanceColor
+                            getLabelColor(tag)
                           )}
                         >
-                          {instanceName}
-                          {instancePhone && ` • ${instancePhone.slice(-4)}`}
+                          {tag}
                         </Badge>
-                      </div>
-                    )}
+                      ))}
+                      {contactTags.length > 3 && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-normal">
+                          +{contactTags.length - 3}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
