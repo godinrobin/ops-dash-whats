@@ -223,33 +223,65 @@ serve(async (req) => {
           break;
 
         case 'condition':
-          const variable = currentNode.data.variable as string || '';
-          const operator = currentNode.data.operator as string || 'equals';
-          const compareValue = currentNode.data.value as string || '';
+          const conditions = currentNode.data.conditions as Array<{
+            id: string;
+            type: 'variable' | 'tag';
+            variable?: string;
+            operator?: string;
+            value?: string;
+            tagName?: string;
+            tagCondition?: 'has' | 'not_has';
+          }> || [];
+          const logicOperator = (currentNode.data.logicOperator as string) || 'and';
           
-          const varValue = String(variables[variable.replace(/[{}]/g, '')] || '');
-          let conditionMet = false;
-          
-          switch (operator) {
-            case 'equals':
-              conditionMet = varValue === compareValue;
-              break;
-            case 'contains':
-              conditionMet = varValue.includes(compareValue);
-              break;
-            case 'startsWith':
-              conditionMet = varValue.startsWith(compareValue);
-              break;
-            case 'endsWith':
-              conditionMet = varValue.endsWith(compareValue);
-              break;
-            case 'greater':
-              conditionMet = parseFloat(varValue) > parseFloat(compareValue);
-              break;
-            case 'less':
-              conditionMet = parseFloat(varValue) < parseFloat(compareValue);
-              break;
+          // Legacy support
+          if (conditions.length === 0 && currentNode.data.variable) {
+            conditions.push({
+              id: 'legacy',
+              type: 'variable',
+              variable: currentNode.data.variable as string,
+              operator: (currentNode.data.operator as string) || 'equals',
+              value: (currentNode.data.value as string) || '',
+            });
           }
+
+          const contactTags = (contact.tags as string[]) || [];
+          
+          const evaluateCondition = (cond: typeof conditions[0]): boolean => {
+            if (cond.type === 'tag') {
+              const hasTag = contactTags.includes(cond.tagName || '');
+              return cond.tagCondition === 'has' ? hasTag : !hasTag;
+            }
+            
+            // Variable condition
+            const varValue = String(variables[(cond.variable || '').replace(/[{}]/g, '')] || '');
+            const compareValue = cond.value || '';
+            
+            switch (cond.operator) {
+              case 'equals': return varValue === compareValue;
+              case 'not_equals': return varValue !== compareValue;
+              case 'contains': return varValue.includes(compareValue);
+              case 'not_contains': return !varValue.includes(compareValue);
+              case 'startsWith': return varValue.startsWith(compareValue);
+              case 'endsWith': return varValue.endsWith(compareValue);
+              case 'greater': return parseFloat(varValue) > parseFloat(compareValue);
+              case 'less': return parseFloat(varValue) < parseFloat(compareValue);
+              case 'exists': return varValue !== '' && varValue !== 'undefined';
+              case 'not_exists': return varValue === '' || varValue === 'undefined';
+              default: return varValue === compareValue;
+            }
+          };
+
+          let conditionMet: boolean;
+          if (conditions.length === 0) {
+            conditionMet = false;
+          } else if (logicOperator === 'and') {
+            conditionMet = conditions.every(evaluateCondition);
+          } else {
+            conditionMet = conditions.some(evaluateCondition);
+          }
+          
+          console.log(`Condition evaluated: ${conditionMet} (${logicOperator}, ${conditions.length} conditions)`);
           
           const conditionEdge = edges.find(e => 
             e.source === currentNodeId && 

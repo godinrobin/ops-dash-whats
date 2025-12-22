@@ -267,7 +267,15 @@ const Home = () => {
                     <CardHeader className="text-center p-3 md:p-6">
                       <div className="flex justify-center mb-2 md:mb-4">
                       {'image' in system && system.image ? (
-                          <img src={system.image} alt={system.title} className="w-16 h-16 md:w-28 md:h-28 object-contain" />
+                          <img 
+                            src={system.image} 
+                            alt={system.title} 
+                            className={`object-contain ${
+                              system.title === 'DisparaZap' 
+                                ? 'w-10 h-10 md:w-20 md:h-20' 
+                                : 'w-16 h-16 md:w-28 md:h-28'
+                            }`} 
+                          />
                         ) : (
                           <span className="text-3xl md:text-6xl">{(system as any).emoji}</span>
                         )}

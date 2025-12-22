@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Trash2, Save, Settings } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { ConditionEditor } from './ConditionEditor';
 
 interface PropertiesPanelProps {
   selectedNode: Node | null;
@@ -390,88 +391,66 @@ export const PropertiesPanel = ({
         );
 
       case 'condition':
-        // Common system variables + user-created ones
-        const systemVariables = ['nome', 'telefone', 'resposta'];
-        const allConditionVariables = [...systemVariables, ...customVariables];
-        
-        const addNewVariable = () => {
-          if (newVariableName.trim() && !allConditionVariables.includes(newVariableName.trim())) {
-            const newVars = [...customVariables, newVariableName.trim()];
+        // Get current conditions from node data or migrate from legacy format
+        const getConditions = () => {
+          if (nodeData.conditions && Array.isArray(nodeData.conditions)) {
+            return nodeData.conditions as Array<{
+              id: string;
+              type: 'variable' | 'tag';
+              variable?: string;
+              operator?: string;
+              value?: string;
+              tagName?: string;
+              tagCondition?: 'has' | 'not_has';
+            }>;
+          }
+          // Migrate legacy format
+          if (nodeData.variable) {
+            return [{
+              id: 'legacy-1',
+              type: 'variable' as const,
+              variable: nodeData.variable as string,
+              operator: (nodeData.operator as string) || 'equals',
+              value: (nodeData.value as string) || '',
+            }];
+          }
+          return [];
+        };
+
+        const currentConditions = getConditions();
+        const currentLogicOperator = (nodeData.logicOperator as 'and' | 'or') || 'and';
+
+        const handleAddCustomVariable = (name: string) => {
+          if (name.trim() && !customVariables.includes(name.trim())) {
+            const newVars = [...customVariables, name.trim()];
             setCustomVariables(newVars);
             localStorage.setItem('flowBuilderCustomVariables', JSON.stringify(newVars));
-            onUpdateNode(selectedNode.id, { variable: newVariableName.trim() });
-            setNewVariableName('');
-            setShowNewVariableInput(false);
           }
         };
-        
+
         return (
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Variável</Label>
-              <Select
-                value={(nodeData.variable as string) || ''}
-                onValueChange={(value) => {
-                  if (value === '__new__') {
-                    setShowNewVariableInput(true);
-                  } else {
-                    onUpdateNode(selectedNode.id, { variable: value });
-                  }
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione uma variável" />
-                </SelectTrigger>
-                <SelectContent>
-                  {allConditionVariables.map((v) => (
-                    <SelectItem key={v} value={v}>{`{{${v}}}`}</SelectItem>
-                  ))}
-                  <SelectItem value="__new__" className="text-primary">+ Adicionar nova variável</SelectItem>
-                </SelectContent>
-              </Select>
-              {showNewVariableInput && (
-                <div className="flex gap-2 mt-2">
-                  <Input
-                    placeholder="Nome da variável"
-                    value={newVariableName}
-                    onChange={(e) => setNewVariableName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') addNewVariable();
-                      if (e.key === 'Escape') setShowNewVariableInput(false);
-                    }}
-                    autoFocus
-                  />
-                  <Button size="sm" onClick={addNewVariable}>Adicionar</Button>
-                </div>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label>Operador</Label>
-              <Select
-                value={(nodeData.operator as string) || 'equals'}
-                onValueChange={(value) => onUpdateNode(selectedNode.id, { operator: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="equals">Igual a</SelectItem>
-                  <SelectItem value="contains">Contém</SelectItem>
-                  <SelectItem value="startsWith">Começa com</SelectItem>
-                  <SelectItem value="endsWith">Termina com</SelectItem>
-                  <SelectItem value="greater">Maior que</SelectItem>
-                  <SelectItem value="less">Menor que</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Valor</Label>
-              <Input
-                placeholder="Valor para comparar"
-                value={(nodeData.value as string) || ''}
-                onChange={(e) => onUpdateNode(selectedNode.id, { value: e.target.value })}
-              />
-            </div>
+            <ConditionEditor
+              conditions={currentConditions}
+              logicOperator={currentLogicOperator}
+              customVariables={customVariables}
+              onUpdateConditions={(conditions) => {
+                onUpdateNode(selectedNode.id, { 
+                  conditions,
+                  // Clear legacy fields
+                  variable: undefined,
+                  operator: undefined,
+                  value: undefined,
+                });
+              }}
+              onUpdateLogicOperator={(operator) => {
+                onUpdateNode(selectedNode.id, { logicOperator: operator });
+              }}
+              onAddCustomVariable={handleAddCustomVariable}
+            />
+            <p className="text-xs text-muted-foreground">
+              O fluxo seguirá pela saída "Sim" se as condições forem verdadeiras, ou "Não" caso contrário.
+            </p>
           </div>
         );
 

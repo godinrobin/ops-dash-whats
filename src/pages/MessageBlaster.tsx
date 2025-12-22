@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { toast } from 'sonner';
 
 interface Campaign {
@@ -75,6 +76,7 @@ interface Instance {
 }
 
 const MessageBlaster = () => {
+  useActivityTracker("page_visit", "DisparaZap");
   const navigate = useNavigate();
   const { user } = useAuth();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);

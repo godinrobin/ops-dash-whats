@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 
 interface AnalysisResult {
   hookScore: number;
@@ -24,6 +25,7 @@ interface AnalysisResult {
 }
 
 const CreativeAnalyzer = () => {
+  useActivityTracker("page_visit", "Analisador de Criativos");
   const navigate = useNavigate();
   const { user } = useAuth();
   const [creativeType, setCreativeType] = useState<"video" | "image">("video");
