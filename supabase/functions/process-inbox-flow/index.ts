@@ -133,10 +133,27 @@ serve(async (req) => {
           const mediaUrl = currentNode.data.mediaUrl as string;
           const caption = currentNode.data.caption as string || '';
           const fileName = currentNode.data.fileName as string || '';
+          
+          console.log(`=== Processing ${currentNode.type} node ===`);
+          console.log('Node data:', JSON.stringify(currentNode.data, null, 2));
+          console.log('mediaUrl:', mediaUrl);
+          console.log('caption:', caption);
+          console.log('fileName:', fileName);
+          console.log('instanceName:', instanceName);
+          console.log('phone:', phone);
+          
           if (instanceName && phone && mediaUrl) {
+            console.log(`Sending ${currentNode.type} message...`);
             await sendMessage(instanceName, phone, caption || fileName, currentNode.type, mediaUrl, fileName);
             await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, fileName || caption, currentNode.type, flow.id, mediaUrl);
-            processedActions.push(`Sent ${currentNode.type}: ${fileName || 'document'}`);
+            processedActions.push(`Sent ${currentNode.type}: ${fileName || 'media'}`);
+            console.log(`${currentNode.type} sent successfully`);
+          } else {
+            console.log(`Skipping ${currentNode.type} - missing required data:`, {
+              hasInstanceName: !!instanceName,
+              hasPhone: !!phone,
+              hasMediaUrl: !!mediaUrl
+            });
           }
           
           const mediaEdge = edges.find(e => e.source === currentNodeId);
