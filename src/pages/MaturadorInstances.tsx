@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Plus, RefreshCw, Loader2, Smartphone, QrCode, Trash2, PowerOff, RotateCcw, Phone } from "lucide-react";
+import { ArrowLeft, Plus, RefreshCw, Loader2, Smartphone, QrCode, Trash2, PowerOff, RotateCcw, Phone, ChevronDown, ChevronRight } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -34,6 +35,14 @@ export default function MaturadorInstances() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [newInstanceName, setNewInstanceName] = useState("");
   const [creating, setCreating] = useState(false);
+  
+  // Proxy configuration (optional)
+  const [proxyEnabled, setProxyEnabled] = useState(false);
+  const [proxyHost, setProxyHost] = useState("");
+  const [proxyPort, setProxyPort] = useState("");
+  const [proxyProtocol, setProxyProtocol] = useState("http");
+  const [proxyUsername, setProxyUsername] = useState("");
+  const [proxyPassword, setProxyPassword] = useState("");
 
   // QR Code modal
   const [qrModalOpen, setQrModalOpen] = useState(false);
@@ -116,13 +125,22 @@ export default function MaturadorInstances() {
     }
   };
 
+  const resetCreateForm = () => {
+    setNewInstanceName("");
+    setProxyEnabled(false);
+    setProxyHost("");
+    setProxyPort("");
+    setProxyProtocol("http");
+    setProxyUsername("");
+    setProxyPassword("");
+  };
+
   const handleCreateInstance = async () => {
     if (!newInstanceName.trim()) {
       toast.error('Nome do número é obrigatório');
       return;
     }
 
-    // Validate instance name (only alphanumeric and underscores)
     if (!/^[a-zA-Z0-9_]+$/.test(newInstanceName)) {
       toast.error('O nome deve conter apenas letras, números e underscores');
       return;
@@ -130,21 +148,29 @@ export default function MaturadorInstances() {
 
     setCreating(true);
     try {
-      const { data, error } = await supabase.functions.invoke('maturador-evolution', {
-        body: { action: 'create-instance', instanceName: newInstanceName },
-      });
+      const body: any = { action: 'create-instance', instanceName: newInstanceName };
+      
+      if (proxyEnabled && proxyHost && proxyPort) {
+        body.proxy = {
+          host: proxyHost,
+          port: proxyPort,
+          protocol: proxyProtocol,
+          username: proxyUsername || undefined,
+          password: proxyPassword || undefined,
+        };
+      }
+
+      const { data, error } = await supabase.functions.invoke('maturador-evolution', { body });
 
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
       toast.success('Número criado com sucesso!');
       setCreateModalOpen(false);
-      setNewInstanceName("");
+      resetCreateForm();
       
-      // Refresh and open QR modal
       await fetchInstances();
       
-      // Get the new instance and show QR
       const newInstance = {
         ...data,
         instance_name: newInstanceName,
@@ -453,10 +479,48 @@ export default function MaturadorInstances() {
                   value={newInstanceName}
                   onChange={(e) => setNewInstanceName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Apenas letras minúsculas, números e underscores
-                </p>
+                <p className="text-xs text-muted-foreground">Apenas letras minúsculas, números e underscores</p>
               </div>
+
+              <Collapsible open={proxyEnabled} onOpenChange={setProxyEnabled}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="outline" size="sm" className="w-full justify-between">
+                    <span>Configurar Proxy (opcional)</span>
+                    {proxyEnabled ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label>Host</Label>
+                      <Input placeholder="proxy.example.com" value={proxyHost} onChange={(e) => setProxyHost(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Porta</Label>
+                      <Input placeholder="8080" value={proxyPort} onChange={(e) => setProxyPort(e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Protocolo</Label>
+                    <select className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm" value={proxyProtocol} onChange={(e) => setProxyProtocol(e.target.value)}>
+                      <option value="http">HTTP</option>
+                      <option value="https">HTTPS</option>
+                      <option value="socks4">SOCKS4</option>
+                      <option value="socks5">SOCKS5</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label>Usuário (opcional)</Label>
+                      <Input placeholder="username" value={proxyUsername} onChange={(e) => setProxyUsername(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Senha (opcional)</Label>
+                      <Input type="password" placeholder="password" value={proxyPassword} onChange={(e) => setProxyPassword(e.target.value)} />
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setCreateModalOpen(false)}>
