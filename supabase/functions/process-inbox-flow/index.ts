@@ -129,12 +129,14 @@ serve(async (req) => {
         case 'image':
         case 'audio':
         case 'video':
+        case 'document':
           const mediaUrl = currentNode.data.mediaUrl as string;
           const caption = currentNode.data.caption as string || '';
+          const fileName = currentNode.data.fileName as string || '';
           if (instanceName && phone && mediaUrl) {
-            await sendMessage(instanceName, phone, caption, currentNode.type, mediaUrl);
-            await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, caption, currentNode.type, flow.id, mediaUrl);
-            processedActions.push(`Sent ${currentNode.type}`);
+            await sendMessage(instanceName, phone, caption || fileName, currentNode.type, mediaUrl, fileName);
+            await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, fileName || caption, currentNode.type, flow.id, mediaUrl);
+            processedActions.push(`Sent ${currentNode.type}: ${fileName || 'document'}`);
           }
           
           const mediaEdge = edges.find(e => e.source === currentNodeId);
@@ -377,7 +379,8 @@ async function sendMessage(
   phone: string, 
   content: string, 
   messageType: string, 
-  mediaUrl?: string
+  mediaUrl?: string,
+  fileName?: string
 ) {
   const formattedPhone = phone.replace(/\D/g, '');
   
@@ -401,12 +404,24 @@ async function sendMessage(
       endpoint = `/message/sendMedia/${instanceName}`;
       body = { number: formattedPhone, mediatype: 'video', media: mediaUrl, caption: content };
       break;
+    case 'document':
+      endpoint = `/message/sendMedia/${instanceName}`;
+      body = { 
+        number: formattedPhone, 
+        mediatype: 'document', 
+        media: mediaUrl, 
+        fileName: fileName || 'document',
+        caption: content 
+      };
+      break;
     default:
       endpoint = `/message/sendText/${instanceName}`;
       body = { number: formattedPhone, text: content };
   }
 
-  await fetch(`${EVOLUTION_BASE_URL}${endpoint}`, {
+  console.log(`Sending ${messageType} to ${formattedPhone} via ${endpoint}`);
+
+  const response = await fetch(`${EVOLUTION_BASE_URL}${endpoint}`, {
     method: 'POST',
     headers: {
       'apikey': EVOLUTION_API_KEY,
@@ -414,6 +429,9 @@ async function sendMessage(
     },
     body: JSON.stringify(body),
   });
+
+  const result = await response.text();
+  console.log(`Message send result:`, result);
 }
 
 async function saveOutboundMessage(
