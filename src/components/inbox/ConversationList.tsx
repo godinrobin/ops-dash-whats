@@ -134,10 +134,26 @@ export const ConversationList = ({
 
   const formatPhoneDisplay = (phone: string): string => {
     // Format as +55 (11) 99999-9999 for Brazilian numbers
-    if (phone.length >= 12 && phone.startsWith('55')) {
+    // Always add digit 9 if the local number has 8 digits (old format)
+    if (phone.length >= 10 && phone.startsWith('55')) {
       const ddd = phone.slice(2, 4);
-      const part1 = phone.slice(4, 9);
-      const part2 = phone.slice(9);
+      let localNumber = phone.slice(4);
+      
+      // If local number has 8 digits, add 9 at the beginning
+      if (localNumber.length === 8) {
+        localNumber = '9' + localNumber;
+      }
+      
+      // Format as 99999-9999
+      if (localNumber.length === 9) {
+        const part1 = localNumber.slice(0, 5);
+        const part2 = localNumber.slice(5);
+        return `+55 (${ddd}) ${part1}-${part2}`;
+      }
+      
+      // Fallback for other formats
+      const part1 = localNumber.slice(0, localNumber.length - 4);
+      const part2 = localNumber.slice(-4);
       return `+55 (${ddd}) ${part1}-${part2}`;
     }
     return phone;
