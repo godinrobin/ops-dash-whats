@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { Trash2, Plus, Edit2, ArrowUpDown, Search, GripVertical, Eye, EyeOff } from "lucide-react";
 import { formatPhoneNumber } from "@/utils/phoneFormatter";
 import { EditNumberModal } from "@/components/EditNumberModal";
@@ -113,6 +114,7 @@ function SortableRow({ number, isSelected, onSelect, onEdit, onDelete, numbersBl
 }
 
 const NumberOrganizer = () => {
+  useActivityTracker("page_visit", "Organizador de Números");
   const { user } = useAuth();
   const [numbers, setNumbers] = useState<OrganizedNumber[]>([]);
   const [loading, setLoading] = useState(true);

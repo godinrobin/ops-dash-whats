@@ -12,8 +12,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
+import { useActivityTracker } from '@/hooks/useActivityTracker';
 
 export const InboxLayout = () => {
+  useActivityTracker("page_visit", "Automati-Zap Inbox");
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedContact, setSelectedContact] = useState<InboxContact | null>(null);

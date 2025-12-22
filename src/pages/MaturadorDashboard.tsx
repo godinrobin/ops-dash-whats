@@ -15,6 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { toast } from "sonner";
 
 interface Instance {
@@ -65,6 +66,7 @@ const formatPhoneDisplay = (phone: string) => {
 };
 
 export default function MaturadorDashboard() {
+  useActivityTracker("page_visit", "Maturador de WhatsApp");
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isAdmin } = useAdminStatus();

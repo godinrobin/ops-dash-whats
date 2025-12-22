@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { AudioSection } from "@/components/AudioSection";
 import {
   Upload, 
@@ -97,6 +98,7 @@ interface VideoAnalysis {
 }
 
 export default function VideoVariationGenerator() {
+  useActivityTracker("page_visit", "Gerador de Variações de Vídeo");
   const { user } = useAuth();
   const [hookVideos, setHookVideos] = useState<VideoClip[]>([]);
   const [bodyVideos, setBodyVideos] = useState<VideoClip[]>([]);

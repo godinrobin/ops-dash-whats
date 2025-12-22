@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Download, Loader2, Video, Music, ArrowLeft } from "lucide-react";
 import tiktokLogo from "@/assets/tiktok-logo.png";
 import { useNavigate } from "react-router-dom";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 
 // Platform detection pattern - only TikTok
 const TIKTOK_PATTERN = /(?:tiktok\.com\/@[\w.-]+\/video\/|vm\.tiktok\.com\/|tiktok\.com\/t\/|vt\.tiktok\.com\/)(\w+)/i;
@@ -19,6 +20,7 @@ function isTikTokUrl(url: string): boolean {
 }
 
 const VideoDownloader = () => {
+  useActivityTracker("page_visit", "Video Downloader TikTok");
   const navigate = useNavigate();
   const { toast } = useToast();
   const [url, setUrl] = useState("");

@@ -15,8 +15,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useActivityTracker } from '@/hooks/useActivityTracker';
 
 const FlowListPage = () => {
+  useActivityTracker("page_visit", "DisparaZap Fluxos");
   const navigate = useNavigate();
   const { user } = useAuth();
   const { flows, loading, createFlow, deleteFlow, toggleFlowActive, updateFlow } = useInboxFlows();

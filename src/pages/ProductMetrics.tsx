@@ -10,8 +10,10 @@ import { Header } from "@/components/Header";
 import { getProduct, getProducts } from "@/utils/storage";
 import { Product } from "@/types/product";
 import { ArrowLeft } from "lucide-react";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 
 const ProductMetrics = () => {
+  useActivityTracker("page_visit", "Sistema de Métricas");
   const { productId } = useParams<{ productId: string }>();
   const navigate = useNavigate();
   const [product, setProduct] = useState<Product | null>(null);

@@ -6,12 +6,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Upload, Copy, FileAudio, Check } from "lucide-react";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 
 const MAX_FILE_SIZE_MB = 25;
 const MAX_DURATION_MINUTES = 10;
 const ALLOWED_TYPES = ["audio/mpeg", "audio/mp3", "audio/ogg", "audio/opus", "audio/webm"];
 
 const AudioTranscriber = () => {
+  useActivityTracker("page_visit", "Transcrição de Áudio");
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
