@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Header } from '@/components/Header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,6 +41,7 @@ interface Instance {
 const FlowEditorPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const [flow, setFlow] = useState<InboxFlow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,7 +54,10 @@ const FlowEditorPage = () => {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [assignedInstances, setAssignedInstances] = useState<string[]>([]);
 
-  useActivityTracker('page_view', 'Automati-Zap Editor');
+  // Dynamic activity tracking based on route
+  const isAutomatiZap = location.pathname.startsWith('/inbox');
+  const systemName = isAutomatiZap ? "Automati-Zap Editor" : "DisparaZap Editor";
+  useActivityTracker('page_visit', systemName);
 
   // Fetch instances
   useEffect(() => {
