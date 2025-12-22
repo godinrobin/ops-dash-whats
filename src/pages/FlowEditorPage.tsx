@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Header } from '@/components/Header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Settings, Play } from 'lucide-react';
+import { ArrowLeft, Settings, Play, Smartphone } from 'lucide-react';
 import { FlowCanvas } from '@/components/flow-builder/FlowCanvas';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -26,6 +26,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
+
+interface Instance {
+  id: string;
+  instance_name: string;
+  label: string | null;
+  phone_number: string | null;
+  status: string;
+}
 
 const FlowEditorPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -39,6 +49,23 @@ const FlowEditorPage = () => {
   const [triggerType, setTriggerType] = useState<'keyword' | 'all' | 'schedule'>('keyword');
   const [triggerKeywords, setTriggerKeywords] = useState('');
   const [isActive, setIsActive] = useState(false);
+  const [instances, setInstances] = useState<Instance[]>([]);
+  const [assignedInstances, setAssignedInstances] = useState<string[]>([]);
+
+  // Fetch instances
+  useEffect(() => {
+    const fetchInstances = async () => {
+      if (!user) return;
+      const { data } = await supabase
+        .from('maturador_instances')
+        .select('id, instance_name, label, phone_number, status')
+        .eq('user_id', user.id);
+      if (data) {
+        setInstances(data);
+      }
+    };
+    fetchInstances();
+  }, [user]);
 
   useEffect(() => {
     const fetchFlow = async () => {
@@ -69,6 +96,7 @@ const FlowEditorPage = () => {
         setTriggerType(data.trigger_type as 'keyword' | 'all' | 'schedule');
         setTriggerKeywords(data.trigger_keywords?.join(', ') || '');
         setIsActive(data.is_active);
+        setAssignedInstances(data.assigned_instances || []);
       } catch (error: unknown) {
         console.error('Error fetching flow:', error);
         toast.error('Erro ao carregar fluxo');
@@ -95,6 +123,7 @@ const FlowEditorPage = () => {
           edges: JSON.parse(JSON.stringify(edges)),
           trigger_type: triggerType,
           trigger_keywords: triggerKeywords.split(',').map(k => k.trim()).filter(Boolean),
+          assigned_instances: assignedInstances,
           is_active: isActive,
           updated_at: new Date().toISOString(),
         })
@@ -110,6 +139,14 @@ const FlowEditorPage = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleInstanceToggle = (instanceId: string) => {
+    setAssignedInstances(prev => 
+      prev.includes(instanceId)
+        ? prev.filter(id => id !== instanceId)
+        : [...prev, instanceId]
+    );
   };
 
   if (loading) {
@@ -213,6 +250,62 @@ const FlowEditorPage = () => {
                     />
                   </div>
                 )}
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Smartphone className="h-4 w-4" />
+                    Instâncias (Números)
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Selecione quais números receberão este fluxo. Se nenhum for selecionado, o fluxo será aplicado a todos.
+                  </p>
+                  <div className="space-y-2 mt-2 max-h-48 overflow-y-auto">
+                    {instances.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Nenhuma instância encontrada</p>
+                    ) : (
+                      instances.map((instance) => (
+                        <div 
+                          key={instance.id} 
+                          className="flex items-center gap-2 p-2 rounded-md hover:bg-accent cursor-pointer"
+                          onClick={() => handleInstanceToggle(instance.id)}
+                        >
+                          <Checkbox 
+                            checked={assignedInstances.includes(instance.id)}
+                            onCheckedChange={() => handleInstanceToggle(instance.id)}
+                          />
+                          <div className="flex-1">
+                            <span className="text-sm font-medium">
+                              {instance.label || instance.instance_name}
+                            </span>
+                            {instance.phone_number && (
+                              <span className="text-xs text-muted-foreground ml-2">
+                                {instance.phone_number}
+                              </span>
+                            )}
+                          </div>
+                          <Badge 
+                            variant="outline" 
+                            className={instance.status === 'open' ? 'bg-green-500/20 text-green-500 border-green-500' : 'bg-red-500/20 text-red-500 border-red-500'}
+                          >
+                            {instance.status === 'open' ? 'Online' : 'Offline'}
+                          </Badge>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  {assignedInstances.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {assignedInstances.map(id => {
+                        const inst = instances.find(i => i.id === id);
+                        return inst ? (
+                          <Badge key={id} variant="secondary" className="text-xs">
+                            {inst.label || inst.instance_name}
+                          </Badge>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
+                </div>
 
                 <div className="flex items-center justify-between py-2">
                   <Label>Fluxo Ativo</Label>
