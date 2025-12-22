@@ -1,7 +1,10 @@
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { Image } from 'lucide-react';
+import { Image, CheckCircle } from 'lucide-react';
 
 export const ImageNode = ({ data }: NodeProps) => {
+  const mediaUrl = (data as { mediaUrl?: string })?.mediaUrl;
+  const hasMedia = !!mediaUrl;
+
   return (
     <div className="bg-card border-2 border-purple-500 rounded-lg p-3 shadow-md min-w-[180px]">
       <Handle
@@ -15,9 +18,20 @@ export const ImageNode = ({ data }: NodeProps) => {
         </div>
         <span className="font-medium text-sm">Imagem</span>
       </div>
-      <div className="text-xs text-muted-foreground truncate max-w-[160px]">
-        {(data as { mediaUrl?: string })?.mediaUrl || 'Configure a URL...'}
-      </div>
+      {hasMedia ? (
+        <div className="relative">
+          <img 
+            src={mediaUrl} 
+            alt="Preview" 
+            className="w-full h-20 object-cover rounded"
+          />
+          <CheckCircle className="absolute top-1 right-1 h-4 w-4 text-green-500 bg-card rounded-full" />
+        </div>
+      ) : (
+        <div className="text-xs text-muted-foreground truncate max-w-[160px]">
+          Clique para configurar...
+        </div>
+      )}
       <Handle
         type="source"
         position={Position.Bottom}

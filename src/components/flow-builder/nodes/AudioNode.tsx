@@ -1,7 +1,10 @@
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { Mic } from 'lucide-react';
+import { Mic, CheckCircle } from 'lucide-react';
 
 export const AudioNode = ({ data }: NodeProps) => {
+  const mediaUrl = (data as { mediaUrl?: string })?.mediaUrl;
+  const hasMedia = !!mediaUrl;
+
   return (
     <div className="bg-card border-2 border-orange-500 rounded-lg p-3 shadow-md min-w-[180px]">
       <Handle
@@ -15,9 +18,16 @@ export const AudioNode = ({ data }: NodeProps) => {
         </div>
         <span className="font-medium text-sm">Áudio</span>
       </div>
-      <div className="text-xs text-muted-foreground truncate max-w-[160px]">
-        {(data as { mediaUrl?: string })?.mediaUrl || 'Configure a URL...'}
-      </div>
+      {hasMedia ? (
+        <div className="flex items-center gap-2 text-xs text-green-500">
+          <CheckCircle className="h-4 w-4" />
+          <span>Áudio carregado</span>
+        </div>
+      ) : (
+        <div className="text-xs text-muted-foreground truncate max-w-[160px]">
+          Clique para configurar...
+        </div>
+      )}
       <Handle
         type="source"
         position={Position.Bottom}

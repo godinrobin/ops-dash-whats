@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Plus, Smartphone, Tag } from 'lucide-react';
+import { Search, Plus, Smartphone } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -11,6 +11,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { NewConversationDialog } from './NewConversationDialog';
 
 // Predefined label colors
 const labelColors: Record<string, string> = {
@@ -30,6 +31,7 @@ interface Instance {
   instance_name: string;
   label: string | null;
   phone_number: string | null;
+  status: string;
 }
 
 interface ConversationListProps {
@@ -62,13 +64,14 @@ export const ConversationList = ({
   onSearchChange,
 }: ConversationListProps) => {
   const [instances, setInstances] = useState<Instance[]>([]);
+  const [showNewConversation, setShowNewConversation] = useState(false);
 
   // Fetch instances to get names
   useEffect(() => {
     const fetchInstances = async () => {
       const { data } = await supabase
         .from('maturador_instances')
-        .select('id, instance_name, label, phone_number');
+        .select('id, instance_name, label, phone_number, status');
       
       if (data) {
         setInstances(data);
@@ -126,13 +129,22 @@ export const ConversationList = ({
     return phone;
   };
 
+  const handleContactCreated = (contact: InboxContact) => {
+    onSelectContact(contact);
+  };
+
   return (
-    <div className="w-80 border-r border-border flex flex-col bg-card">
+    <div className="w-80 border-r border-border flex flex-col bg-card flex-shrink-0">
       {/* Header */}
       <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">Conversas</h2>
-          <Button size="icon" variant="ghost" className="h-8 w-8">
+          <Button 
+            size="icon" 
+            variant="ghost" 
+            className="h-8 w-8"
+            onClick={() => setShowNewConversation(true)}
+          >
             <Plus className="h-4 w-4" />
           </Button>
         </div>
@@ -153,8 +165,8 @@ export const ConversationList = ({
           <div className="p-4 space-y-4">
             {[1, 2, 3, 4, 5].map(i => (
               <div key={i} className="flex items-center gap-3">
-                <Skeleton className="h-12 w-12 rounded-full" />
-                <div className="flex-1 space-y-2">
+                <Skeleton className="h-12 w-12 rounded-full flex-shrink-0" />
+                <div className="flex-1 space-y-2 min-w-0">
                   <Skeleton className="h-4 w-32" />
                   <Skeleton className="h-3 w-48" />
                 </div>
@@ -179,23 +191,23 @@ export const ConversationList = ({
                   key={contact.id}
                   onClick={() => onSelectContact(contact)}
                   className={cn(
-                    "flex items-center gap-3 p-4 cursor-pointer hover:bg-accent/50 transition-colors border-b border-border/50",
+                    "flex items-start gap-3 p-3 cursor-pointer hover:bg-accent/50 transition-colors border-b border-border/50",
                     selectedContact?.id === contact.id && "bg-accent"
                   )}
                 >
-                  <div className="relative">
-                    <Avatar className="h-12 w-12 border-2 border-background shadow-sm">
+                  <div className="relative flex-shrink-0">
+                    <Avatar className="h-10 w-10 border-2 border-background shadow-sm">
                       <AvatarImage 
                         src={contact.profile_pic_url || undefined} 
                         alt={contact.name || contact.phone}
                       />
-                      <AvatarFallback className="bg-primary/10 text-primary font-medium">
+                      <AvatarFallback className="bg-primary/10 text-primary font-medium text-sm">
                         {getInitials(contact.name, contact.phone)}
                       </AvatarFallback>
                     </Avatar>
                     {contact.unread_count > 0 && (
                       <Badge 
-                        className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs"
+                        className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px]"
                         variant="destructive"
                       >
                         {contact.unread_count > 9 ? '9+' : contact.unread_count}
@@ -203,52 +215,48 @@ export const ConversationList = ({
                     )}
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium truncate">
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-sm truncate">
                         {contact.name || formatPhoneDisplay(contact.phone)}
                       </span>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">
+                      <span className="text-[10px] text-muted-foreground whitespace-nowrap flex-shrink-0">
                         {formatTime(contact.last_message_at)}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      {contact.name && (
-                        <p className="text-sm text-muted-foreground truncate">
-                          {formatPhoneDisplay(contact.phone)}
-                        </p>
-                      )}
-                    </div>
+                    {contact.name && (
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">
+                        {formatPhoneDisplay(contact.phone)}
+                      </p>
+                    )}
                     <div className="flex items-center gap-1 mt-1 flex-wrap">
                       {instanceName && (
-                        <>
-                          <Smartphone className="h-3 w-3 text-muted-foreground" />
-                          <Badge 
-                            variant="outline" 
-                            className={cn(
-                              "text-[10px] px-1.5 py-0 h-4 font-normal text-white border-0",
-                              instanceColor
-                            )}
-                          >
-                            {instanceName}
-                            {instancePhone && ` • ${instancePhone.slice(-4)}`}
-                          </Badge>
-                        </>
+                        <Badge 
+                          variant="outline" 
+                          className={cn(
+                            "text-[9px] px-1 py-0 h-3.5 font-normal text-white border-0 flex items-center gap-0.5",
+                            instanceColor
+                          )}
+                        >
+                          <Smartphone className="h-2 w-2" />
+                          {instanceName}
+                          {instancePhone && ` • ${instancePhone.slice(-4)}`}
+                        </Badge>
                       )}
-                      {contactTags.slice(0, 3).map((tag: string) => (
+                      {contactTags.slice(0, 2).map((tag: string) => (
                         <Badge
                           key={tag}
                           className={cn(
-                            "text-[10px] px-1.5 py-0 h-4 font-normal text-white border-0",
+                            "text-[9px] px-1 py-0 h-3.5 font-normal text-white border-0",
                             getLabelColor(tag)
                           )}
                         >
                           {tag}
                         </Badge>
                       ))}
-                      {contactTags.length > 3 && (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-normal">
-                          +{contactTags.length - 3}
+                      {contactTags.length > 2 && (
+                        <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5 font-normal">
+                          +{contactTags.length - 2}
                         </Badge>
                       )}
                     </div>
@@ -259,6 +267,13 @@ export const ConversationList = ({
           </div>
         )}
       </ScrollArea>
+
+      <NewConversationDialog
+        open={showNewConversation}
+        onOpenChange={setShowNewConversation}
+        instances={instances}
+        onContactCreated={handleContactCreated}
+      />
     </div>
   );
 };

@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { MessageSquare, Filter, Settings, Zap, Tag, RefreshCw } from 'lucide-react';
+import { MessageSquare, Filter, Zap, Tag, RefreshCw, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { InboxMenu } from './InboxMenu';
 
 interface Instance {
   id: string;
@@ -24,6 +25,7 @@ export const InboxSidebar = ({ selectedInstanceId, onInstanceChange }: InboxSide
   const navigate = useNavigate();
   const [instances, setInstances] = useState<Instance[]>([]);
   const [syncing, setSyncing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -82,67 +84,81 @@ export const InboxSidebar = ({ selectedInstanceId, onInstanceChange }: InboxSide
   };
 
   return (
-    <div className="w-16 border-r border-border flex flex-col items-center py-4 bg-card">
-      <div className="space-y-2 flex flex-col items-center">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="w-10 h-10"
-          title="Conversas"
-        >
-          <MessageSquare className="h-5 w-5" />
-        </Button>
+    <>
+      <div className="w-16 border-r border-border flex flex-col items-center py-4 bg-card">
+        <div className="space-y-2 flex flex-col items-center">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="w-10 h-10"
+            onClick={() => setMenuOpen(true)}
+            title="Menu"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="w-10 h-10"
-          onClick={() => navigate('/inbox/flows')}
-          title="Fluxos"
-        >
-          <Zap className="h-5 w-5" />
-        </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="w-10 h-10"
+            title="Conversas"
+          >
+            <MessageSquare className="h-5 w-5" />
+          </Button>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="w-10 h-10"
-          title="Tags"
-        >
-          <Tag className="h-5 w-5" />
-        </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="w-10 h-10"
+            onClick={() => navigate('/inbox/flows')}
+            title="Fluxos"
+          >
+            <Zap className="h-5 w-5" />
+          </Button>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="w-10 h-10"
-          onClick={syncContacts}
-          disabled={syncing}
-          title="Sincronizar Contatos"
-        >
-          <RefreshCw className={`h-5 w-5 ${syncing ? 'animate-spin' : ''}`} />
-        </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="w-10 h-10"
+            onClick={() => setMenuOpen(true)}
+            title="Tags"
+          >
+            <Tag className="h-5 w-5" />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="w-10 h-10"
+            onClick={syncContacts}
+            disabled={syncing}
+            title="Sincronizar Contatos"
+          >
+            <RefreshCw className={`h-5 w-5 ${syncing ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
+
+        <div className="mt-auto space-y-2">
+          <Select 
+            value={selectedInstanceId || 'all'} 
+            onValueChange={(value) => onInstanceChange(value === 'all' ? undefined : value)}
+          >
+            <SelectTrigger className="w-10 h-10 p-0 border-0" title="Filtrar por número">
+              <Filter className="h-5 w-5" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os números</SelectItem>
+              {instances.map(instance => (
+                <SelectItem key={instance.id} value={instance.id}>
+                  {instance.phone_number || instance.instance_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      <div className="mt-auto space-y-2">
-        <Select 
-          value={selectedInstanceId || 'all'} 
-          onValueChange={(value) => onInstanceChange(value === 'all' ? undefined : value)}
-        >
-          <SelectTrigger className="w-10 h-10 p-0 border-0" title="Filtrar por número">
-            <Filter className="h-5 w-5" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os números</SelectItem>
-            {instances.map(instance => (
-              <SelectItem key={instance.id} value={instance.id}>
-                {instance.phone_number || instance.instance_name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-      </div>
-    </div>
+      <InboxMenu open={menuOpen} onOpenChange={setMenuOpen} />
+    </>
   );
 };
