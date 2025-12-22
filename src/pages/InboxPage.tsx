@@ -1,7 +1,10 @@
 import { Header } from '@/components/Header';
 import { InboxLayout } from '@/components/inbox/InboxLayout';
+import { useActivityTracker } from '@/hooks/useActivityTracker';
 
 const InboxPage = () => {
+  useActivityTracker('page_view', 'Automati-Zap Inbox');
+  
   return (
     <div className="min-h-screen bg-background">
       <Header />

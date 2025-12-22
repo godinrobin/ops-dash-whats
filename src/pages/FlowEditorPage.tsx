@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { FlowNode, FlowEdge, InboxFlow } from '@/types/inbox';
+import { useActivityTracker } from '@/hooks/useActivityTracker';
 import {
   Sheet,
   SheetContent,
@@ -51,6 +52,8 @@ const FlowEditorPage = () => {
   const [isActive, setIsActive] = useState(false);
   const [instances, setInstances] = useState<Instance[]>([]);
   const [assignedInstances, setAssignedInstances] = useState<string[]>([]);
+
+  useActivityTracker('page_view', 'Automati-Zap Editor');
 
   // Fetch instances
   useEffect(() => {
