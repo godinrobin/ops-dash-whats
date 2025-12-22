@@ -152,28 +152,27 @@ serve(async (req) => {
           if (unit === 'minutes') delayMs = delay * 60 * 1000;
           if (unit === 'hours') delayMs = delay * 60 * 60 * 1000;
           
-          // For delays longer than 10 seconds, we should pause and reschedule
-          if (delayMs > 10000) {
-            // Update session and exit - we'll need a scheduler to resume
-            await supabaseClient
-              .from('inbox_flow_sessions')
-              .update({
-                current_node_id: currentNodeId,
-                variables,
-                last_interaction: new Date().toISOString(),
-              })
-              .eq('id', sessionId);
-            
-            processedActions.push(`Waiting ${delay} ${unit}`);
-            continueProcessing = false;
+          // Cap delay at 25 seconds (Edge function timeout is ~30s)
+          const maxDelayMs = 25000;
+          const actualDelayMs = Math.min(delayMs, maxDelayMs);
+          
+          console.log(`Delay node: waiting ${actualDelayMs}ms (requested: ${delayMs}ms)`);
+          await new Promise(resolve => setTimeout(resolve, actualDelayMs));
+          
+          // If the delay was longer than what we actually waited, we need to continue after
+          // For now, we proceed to next node (for very long delays, a scheduler would be needed)
+          if (delayMs > maxDelayMs) {
+            console.log(`Note: Delay was capped. Original: ${delay} ${unit}, executed: ${actualDelayMs}ms`);
+            processedActions.push(`Delay ${delay}${unit === 'seconds' ? 's' : unit === 'minutes' ? 'min' : 'h'} (capped to 25s)`);
           } else {
-            await new Promise(resolve => setTimeout(resolve, delayMs));
-            const delayEdge = edges.find(e => e.source === currentNodeId);
-            if (delayEdge) {
-              currentNodeId = delayEdge.target;
-            } else {
-              continueProcessing = false;
-            }
+            processedActions.push(`Waited ${delay}${unit === 'seconds' ? 's' : unit === 'minutes' ? 'min' : 'h'}`);
+          }
+          
+          const delayEdge = edges.find(e => e.source === currentNodeId);
+          if (delayEdge) {
+            currentNodeId = delayEdge.target;
+          } else {
+            continueProcessing = false;
           }
           break;
 

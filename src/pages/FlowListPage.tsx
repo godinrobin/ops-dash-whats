@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Header } from '@/components/Header';
 import { Button } from '@/components/ui/button';
@@ -7,19 +7,45 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Search, Zap, Edit2, Trash2, Copy, ArrowLeft } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Plus, Search, Zap, Edit2, Trash2, Copy, ArrowLeft, Smartphone } from 'lucide-react';
 import { useInboxFlows } from '@/hooks/useInboxFlows';
 import { toast } from 'sonner';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 const FlowListPage = () => {
   const navigate = useNavigate();
-  const { flows, loading, createFlow, deleteFlow, toggleFlowActive } = useInboxFlows();
+  const { user } = useAuth();
+  const { flows, loading, createFlow, deleteFlow, toggleFlowActive, updateFlow } = useInboxFlows();
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newFlowName, setNewFlowName] = useState('');
   const [newFlowDescription, setNewFlowDescription] = useState('');
+  const [instances, setInstances] = useState<Array<{ id: string; instance_name: string; phone_number: string | null; label: string | null }>>([]);
+  const [showInstancesDialog, setShowInstancesDialog] = useState(false);
+  const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
+  const [selectedInstances, setSelectedInstances] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (user) {
+      fetchInstances();
+    }
+  }, [user]);
+
+  const fetchInstances = async () => {
+    const { data } = await supabase
+      .from('maturador_instances')
+      .select('id, instance_name, phone_number, label')
+      .eq('user_id', user?.id)
+      .in('status', ['connected', 'open']);
+    
+    if (data) {
+      setInstances(data);
+    }
+  };
 
   const filteredFlows = flows.filter(flow => 
     flow.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -61,8 +87,78 @@ const FlowListPage = () => {
     }
   };
 
+  const openInstancesDialog = (flowId: string) => {
+    const flow = flows.find(f => f.id === flowId);
+    setSelectedFlowId(flowId);
+    setSelectedInstances(flow?.assigned_instances || []);
+    setShowInstancesDialog(true);
+  };
+
+  const handleSaveInstances = async () => {
+    if (!selectedFlowId) return;
+    
+    const result = await updateFlow(selectedFlowId, { assigned_instances: selectedInstances });
+    if (result.error) {
+      toast.error('Erro ao atualizar números: ' + result.error);
+    } else {
+      toast.success('Números atualizados com sucesso');
+      setShowInstancesDialog(false);
+    }
+  };
+
+  const toggleInstance = (instanceId: string) => {
+    setSelectedInstances(prev => 
+      prev.includes(instanceId) 
+        ? prev.filter(id => id !== instanceId)
+        : [...prev, instanceId]
+    );
+  };
+
   return (
     <div className="min-h-screen bg-background">
+      {/* Instances Selection Dialog */}
+      <Dialog open={showInstancesDialog} onOpenChange={setShowInstancesDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Selecionar Números</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <p className="text-sm text-muted-foreground">
+              Selecione em quais números este fluxo deve funcionar. Se nenhum for selecionado, funcionará em todos.
+            </p>
+            {instances.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Nenhum número conectado encontrado.
+              </p>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {instances.map(instance => (
+                  <div key={instance.id} className="flex items-center space-x-3 p-2 rounded hover:bg-muted">
+                    <Checkbox
+                      id={instance.id}
+                      checked={selectedInstances.includes(instance.id)}
+                      onCheckedChange={() => toggleInstance(instance.id)}
+                    />
+                    <label htmlFor={instance.id} className="flex-1 cursor-pointer">
+                      <p className="font-medium text-sm">{instance.label || instance.instance_name}</p>
+                      <p className="text-xs text-muted-foreground">{instance.phone_number || 'Sem número'}</p>
+                    </label>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowInstancesDialog(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleSaveInstances}>
+                Salvar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Header />
       <div className="h-14 md:h-16" /> {/* Spacer for fixed header */}
       
@@ -205,6 +301,20 @@ const FlowListPage = () => {
                       )}
                     </div>
                   )}
+
+                  {/* Show assigned instances */}
+                  <div className="flex flex-wrap items-center gap-1 mb-4">
+                    {flow.assigned_instances && flow.assigned_instances.length > 0 ? (
+                      <>
+                        <Smartphone className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">
+                          {flow.assigned_instances.length} número(s)
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Todos os números</span>
+                    )}
+                  </div>
                   
                   <div className="flex items-center gap-2">
                     <Button 
@@ -215,6 +325,15 @@ const FlowListPage = () => {
                     >
                       <Edit2 className="h-3 w-3 mr-1" />
                       Editar
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8"
+                      onClick={() => openInstancesDialog(flow.id)}
+                      title="Selecionar números"
+                    >
+                      <Smartphone className="h-3 w-3" />
                     </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8">
                       <Copy className="h-3 w-3" />

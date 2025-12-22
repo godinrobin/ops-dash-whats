@@ -200,7 +200,55 @@ serve(async (req) => {
         });
       }
 
-      // Check for active flows to trigger
+      // First, check for active flow sessions waiting for input (waitInput or menu)
+      const { data: activeSession } = await supabaseClient
+        .from('inbox_flow_sessions')
+        .select('*, flow:inbox_flows(*)')
+        .eq('contact_id', contact.id)
+        .eq('status', 'active')
+        .order('last_interaction', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (activeSession) {
+        const flowNodes = (activeSession.flow?.nodes || []) as Array<{ id: string; type: string; data: Record<string, unknown> }>;
+        const currentNode = flowNodes.find((n: { id: string }) => n.id === activeSession.current_node_id);
+        
+        // Check if the current node is waiting for input
+        if (currentNode && (currentNode.type === 'waitInput' || currentNode.type === 'menu')) {
+          console.log(`Found active session ${activeSession.id} waiting for input at node ${currentNode.id}`);
+          
+          // Process the user's input and continue the flow
+          try {
+            const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+            const processResponse = await fetch(processUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+              },
+              body: JSON.stringify({ sessionId: activeSession.id, userInput: content }),
+            });
+            
+            if (!processResponse.ok) {
+              const errorText = await processResponse.text();
+              console.error('Error processing user input:', errorText);
+            } else {
+              console.log('User input processed, flow continued');
+            }
+          } catch (flowError) {
+            console.error('Error calling process-inbox-flow for input:', flowError);
+          }
+          
+          // Don't trigger new flows since we're continuing an existing one
+          console.log('Message processed successfully (continuing flow)');
+          return new Response(JSON.stringify({ success: true, flowContinued: true }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+
+      // Check for active flows to trigger (only if no active session is waiting for input)
       const { data: flows } = await supabaseClient
         .from('inbox_flows')
         .select('*')
@@ -211,6 +259,13 @@ serve(async (req) => {
       if (flows && flows.length > 0 && content) {
         for (const flow of flows) {
           let shouldTrigger = false;
+
+          // Check if this flow is assigned to specific instances
+          const assignedInstances = flow.assigned_instances as string[] || [];
+          if (assignedInstances.length > 0 && !assignedInstances.includes(instanceId)) {
+            console.log(`Flow ${flow.name} not assigned to instance ${instanceId}, skipping`);
+            continue;
+          }
 
           if (flow.trigger_type === 'all') {
             shouldTrigger = true;
@@ -230,7 +285,7 @@ serve(async (req) => {
               .eq('flow_id', flow.id)
               .eq('contact_id', contact.id)
               .eq('status', 'active')
-              .single();
+              .maybeSingle();
 
             if (!existingSession) {
               // Create new flow session
