@@ -467,212 +467,175 @@ function generatePrompt(data: {
 }): string {
   const colorsList = data.colors.length > 0 
     ? data.colors.slice(0, 10).map(c => `- ${c}`).join('\n')
-    : '- Não foram detectadas cores específicas, use cores modernas e harmoniosas';
+    : '- Não foram detectadas cores específicas';
 
   const fontsList = data.fonts.length > 0
     ? data.fonts.map(f => `- "${f}"`).join('\n')
-    : '- Use fontes modernas como Inter, Poppins, Montserrat ou Roboto';
+    : '- Fontes padrão do sistema';
 
   const sectionsList = data.sections.length > 0
     ? data.sections.map(s => `- ${s}`).join('\n')
     : '- Header\n- Hero Section\n- Content\n- Footer';
 
   const headingsList = data.headings.length > 0
-    ? data.headings.slice(0, 10).map((h, i) => `${i + 1}. "${h}"`).join('\n')
-    : '- Nenhum título específico detectado';
+    ? data.headings.slice(0, 15).map((h, i) => `${i + 1}. "${h}"`).join('\n')
+    : '- Nenhum título detectado';
 
   const buttonsList = data.buttons.length > 0
-    ? data.buttons.slice(0, 8).map(b => `- "${b}"`).join('\n')
-    : '- Crie CTAs apropriados para o contexto do site';
+    ? data.buttons.slice(0, 10).map(b => `- "${b}"`).join('\n')
+    : '- Sem botões detectados';
 
-  const imagesList = data.images.length > 0
-    ? `${data.images.length} imagens detectadas:\n${data.images.slice(0, 5).map(img => `  - ${img.alt || 'Imagem'}: ${img.src.substring(0, 80)}...`).join('\n')}`
-    : 'Nenhuma imagem específica detectada';
-
-  const videosList = data.videos.length > 0
-    ? `${data.videos.length} vídeos detectados:\n${data.videos.map(v => `  - ${v.type}: ${v.src.substring(0, 80)}...`).join('\n')}`
-    : 'Nenhum vídeo detectado';
-
-  const techList = data.technologies.length > 0
-    ? data.technologies.map(t => `- ${t}`).join('\n')
-    : '- Tecnologias padrão de web moderno';
+  const imageDescriptions = data.images.length > 0
+    ? data.images.slice(0, 10).map((img, i) => `  ${i + 1}. ${img.alt || 'Imagem decorativa'} - URL: ${img.src}`).join('\n')
+    : '  Nenhuma imagem detectada';
 
   const paragraphsList = data.paragraphs.length > 0
-    ? data.paragraphs.slice(0, 3).map(p => `"${p.substring(0, 200)}${p.length > 200 ? '...' : ''}"`).join('\n\n')
-    : 'Use textos persuasivos e relevantes para o contexto do site.';
+    ? data.paragraphs.slice(0, 5).map((p, i) => `${i + 1}. "${p}"`).join('\n\n')
+    : 'Nenhum parágrafo detectado.';
 
-  return `# 🎯 PROMPT COMPLETO PARA RECRIAR SITE
+  return `# 🎯 PROMPT PARA RECRIAR SITE IDÊNTICO
 
-## 📌 INFORMAÇÕES DO SITE ORIGINAL
-
-**URL:** ${data.url}
-**Título:** ${data.title || 'Não detectado'}
-**Descrição:** ${data.description || 'Não detectada'}
-**Total de Links:** ${data.links}
+## ⚠️ OBJETIVO PRINCIPAL
+Criar um site **EXTREMAMENTE IGUAL** ao original. Não é para criar algo "inspirado" ou "similar" - é para **CLONAR** o site visualmente, mantendo a mesma aparência, estrutura, cores, fontes, espaçamentos e conteúdos.
 
 ---
 
-## 🎨 INSTRUÇÕES DETALHADAS DE DESIGN
+## 📌 SITE ORIGINAL
+- **URL:** ${data.url}
+- **Título:** ${data.title || 'Não detectado'}
+- **Descrição:** ${data.description || 'Não detectada'}
 
-### 1. ESTRUTURA E LAYOUT
+---
 
-**Tipo de Layout Detectado:** ${data.layout}
+## 🎨 INSTRUÇÕES VISUAIS DETALHADAS
 
-**Seções Identificadas:**
-${sectionsList}
+### 1. CORES (OBRIGATÓRIO - USE EXATAMENTE ESTAS)
+Você DEVE usar estas cores no seu código. Não invente cores novas.
 
-**Hierarquia de Títulos (H1-H6):**
-${headingsList}
-
-### 2. PALETA DE CORES
-
-Utilize EXATAMENTE estas cores para manter a identidade visual:
 ${colorsList}
 
-### 3. TIPOGRAFIA
+**Instruções:** 
+- A primeira cor da lista provavelmente é a cor primária/destaque
+- Identifique qual cor é do fundo, qual é do texto, qual é de botões
+- Aplique gradientes se detectados nas cores
 
-Fontes utilizadas no site original:
+### 2. TIPOGRAFIA (OBRIGATÓRIO)
+Use estas fontes exatas - importe do Google Fonts se necessário:
+
 ${fontsList}
 
-**Framework CSS:** ${data.cssFramework}
-${data.cssFramework === 'Tailwind CSS' ? '✅ Utilize classes Tailwind nativas para estilização' : '⚠️ Converta os estilos para Tailwind CSS ou CSS modular'}
+**Se a fonte não estiver disponível:** Use a mais parecida do Google Fonts.
 
-### 4. MÍDIA E RECURSOS VISUAIS
+### 3. LAYOUT E ESTRUTURA
+**Tipo de layout detectado:** ${data.layout}
 
-**Imagens:**
-${imagesList}
-${data.images.length > 0 ? '\n💡 Para recriar: Use imagens similares do Unsplash, Pexels ou Freepik, ou use placeholders de https://placehold.co' : ''}
+**Seções identificadas no site:**
+${sectionsList}
 
-**Vídeos:**
-${videosList}
-${data.videos.length > 0 ? '\n💡 Para recriar: Use iframes de embed ou componentes de vídeo similares' : ''}
+**Você DEVE criar cada uma dessas seções na mesma ordem.**
 
-### 5. ELEMENTOS INTERATIVOS
+---
 
-**Botões e CTAs detectados:**
-${buttonsList}
+## 📝 CONTEÚDO TEXTUAL (COPIE EXATAMENTE)
 
-### 6. CONTEÚDO DE TEXTO PRINCIPAL
+### Títulos (H1, H2, H3...) - Use estes textos EXATOS:
+${headingsList}
 
+### Parágrafos principais - Use estes textos:
 ${paragraphsList}
 
-### 7. TECNOLOGIAS DETECTADAS
-
-${techList}
-
----
-
-## 🛠️ ESPECIFICAÇÕES TÉCNICAS PARA DESENVOLVIMENTO
-
-### Stack Recomendado:
-- **Framework:** React 18+ com TypeScript
-- **Estilização:** Tailwind CSS
-- **Build:** Vite
-- **Animações:** Framer Motion ou CSS animations
-- **Ícones:** Lucide React ou React Icons
-
-### Estrutura de Componentes Sugerida:
-
-\`\`\`
-src/
-├── components/
-│   ├── layout/
-│   │   ├── Header.tsx
-│   │   ├── Footer.tsx
-│   │   └── Container.tsx
-│   ├── sections/
-│   │   ├── Hero.tsx
-│   │   ├── Features.tsx
-│   │   ├── Testimonials.tsx
-│   │   ├── Pricing.tsx
-│   │   ├── FAQ.tsx
-│   │   └── CTA.tsx
-│   └── ui/
-│       ├── Button.tsx
-│       ├── Card.tsx
-│       └── Input.tsx
-├── pages/
-│   └── LandingPage.tsx
-└── styles/
-    └── globals.css
-\`\`\`
-
-### Exemplo de Componente Hero:
-
-\`\`\`tsx
-import { motion } from 'framer-motion';
-
-const Hero = () => {
-  return (
-    <section className="relative min-h-screen flex items-center justify-center" 
-             style={{ background: 'linear-gradient(135deg, ${data.colors[0] || '#1a1a1a'}, ${data.colors[1] || '#2d2d2d'})' }}>
-      <div className="container mx-auto px-4 text-center">
-        <motion.h1 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-4xl md:text-6xl font-bold text-white mb-6"
-          style={{ fontFamily: '${data.fonts[0] || 'Inter'}, sans-serif' }}
-        >
-          ${data.headings[0] || data.title || 'Título Principal'}
-        </motion.h1>
-        <motion.p 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="text-xl text-white/80 mb-8 max-w-2xl mx-auto"
-        >
-          ${data.description || 'Descrição do produto ou serviço'}
-        </motion.p>
-        <motion.button 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          className="px-8 py-4 rounded-lg font-semibold text-lg transition-all shadow-lg hover:shadow-xl"
-          style={{ backgroundColor: '${data.colors[0] || '#ffffff'}', color: '${data.colors[1] || '#000000'}' }}
-        >
-          ${data.buttons[0] || 'Começar Agora'}
-        </motion.button>
-      </div>
-    </section>
-  );
-};
-
-export default Hero;
-\`\`\`
+### Textos dos botões/CTAs:
+${buttonsList}
 
 ---
 
-## ✅ CHECKLIST DE IMPLEMENTAÇÃO
+## 🖼️ IMAGENS E MÍDIA
 
-- [ ] Estrutura HTML semântica (header, main, section, footer)
-- [ ] Design 100% responsivo (mobile-first)
-- [ ] Cores e fontes exatamente como especificado
-- [ ] Animações de entrada suaves (fade-in, slide-up)
-- [ ] Hover effects em botões e links interativos
-- [ ] Scroll suave entre seções
-- [ ] Header sticky/fixo (se aplicável ao original)
-- [ ] Imagens otimizadas com lazy loading
-- [ ] Meta tags para SEO
-- [ ] Acessibilidade (alt texts, contraste, navegação por teclado)
-- [ ] Performance otimizada (Core Web Vitals)
+### Imagens encontradas no site:
+${imageDescriptions}
 
----
+**Instruções para imagens:**
+1. Se possível, baixe as imagens originais das URLs acima
+2. Se não for possível, use imagens MUITO similares do Unsplash/Pexels
+3. Mantenha as mesmas proporções (ex: se a imagem é larga, use uma larga)
+4. Use placeholders com texto descritivo: https://placehold.co/800x400/HEXCOR/TEXTCOR?text=Descrição
 
-## 🎯 OBSERVAÇÕES IMPORTANTES
+${data.videos.length > 0 ? `
+### Vídeos encontrados:
+${data.videos.map((v, i) => `${i + 1}. ${v.type}: ${v.src}`).join('\n')}
 
-1. **Fidelidade Visual:** Mantenha proporções, espaçamentos e alinhamentos do original
-2. **Responsividade:** Teste em mobile (375px), tablet (768px) e desktop (1440px)
-3. **Performance:** Otimize imagens e use lazy loading
-4. **Acessibilidade:** Inclua alt texts e garanta contraste adequado
-5. **SEO:** Adicione meta tags relevantes
+**Para vídeos:** Use iframes de embed ou placeholder de vídeo.
+` : ''}
 
 ---
 
-**⚡ PROMPT GERADO AUTOMATICAMENTE**
-Analisando: ${data.url}
-${data.images.length} imagens | ${data.videos.length} vídeos | ${data.headings.length} títulos | ${data.technologies.length} tecnologias
+## 🔘 ELEMENTOS INTERATIVOS
 
-Revise e ajuste conforme necessário para atender às suas necessidades específicas.`;
+### Botões - Replique com estas características:
+- Textos: ${data.buttons.slice(0, 5).join(', ') || 'Textos padrão de CTA'}
+- Estilo: Observe o site original para cores e formato (arredondado, quadrado, etc)
+- Efeitos hover: Adicione transições suaves
+
+### Links:
+- Total de ${data.links} links no site
+- Garanta navegação funcional entre seções
+
+---
+
+## 📐 ESPECIFICAÇÕES TÉCNICAS
+
+### Framework CSS detectado: ${data.cssFramework}
+${data.cssFramework === 'Tailwind CSS' ? '✅ Use classes Tailwind - o site original usa!' : '⚠️ Converta para Tailwind CSS para melhor manutenção'}
+
+### Stack recomendado:
+- React 18+ com TypeScript
+- Tailwind CSS (para estilização)
+- Vite (para build)
+- Lucide React (ícones)
+- Framer Motion (animações opcionais)
+
+---
+
+## ✅ CHECKLIST DE FIDELIDADE VISUAL
+
+Antes de finalizar, verifique cada item:
+
+- [ ] **Cores idênticas** - Comparar com site original
+- [ ] **Fontes corretas** - Mesma tipografia
+- [ ] **Espaçamentos** - Paddings e margins similares
+- [ ] **Tamanho dos textos** - Hierarquia visual igual
+- [ ] **Ordem das seções** - Mesma sequência do original
+- [ ] **Imagens** - Similares em tamanho e posição
+- [ ] **Botões** - Mesmo texto e estilo
+- [ ] **Responsivo** - Funciona em mobile como o original
+- [ ] **Efeitos hover** - Transições similares
+- [ ] **Header/Footer** - Layouts idênticos
+
+---
+
+## 🚨 REGRAS IMPORTANTES
+
+1. **NÃO INVENTE CONTEÚDO** - Use apenas os textos detectados acima
+2. **NÃO MUDE AS CORES** - Use exatamente as cores listadas
+3. **NÃO SIMPLIFIQUE** - Se o site tem uma seção, você DEVE criar essa seção
+4. **SEJA PIXEL PERFECT** - O objetivo é que pareça o mesmo site
+5. **MANTENHA A HIERARQUIA** - Se algo é grande no original, seja grande no clone
+
+---
+
+## 🎯 RESUMO EXECUTIVO
+
+Crie um site que seja uma **cópia visual** de ${data.url}
+
+- **${data.headings.length}** títulos para usar
+- **${data.colors.length}** cores para aplicar
+- **${data.images.length}** imagens para replicar
+- **${data.sections.length}** seções para criar
+- **${data.buttons.length}** botões/CTAs para incluir
+
+**Comece pelo Header, depois Hero, depois as seções na ordem, e finalize com o Footer.**
+
+---
+
+⚡ Prompt gerado automaticamente para clonagem fiel do site.`;
 }

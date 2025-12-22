@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { 
   Plus, 
-  Send, 
+  SendHorizonal, 
   Trash2, 
   Play, 
   Pause, 
@@ -30,7 +30,8 @@ import {
   Video,
   FileText,
   Music,
-  GitBranch
+  GitBranch,
+  Eye
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -405,7 +406,10 @@ const MessageBlaster = () => {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold">Disparador de Mensagens</h1>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <SendHorizonal className="h-6 w-6 text-primary" />
+              DisparaZap
+            </h1>
             <p className="text-muted-foreground">Envie mensagens em massa com variações e delays</p>
           </div>
           <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
@@ -452,6 +456,7 @@ const MessageBlaster = () => {
                         setMediaUrl('');
                       }
                     }}
+                    className={useFlow ? 'data-[state=checked]:bg-green-500' : 'data-[state=unchecked]:bg-red-500'}
                   />
                 </div>
 
@@ -462,7 +467,7 @@ const MessageBlaster = () => {
                     {availableFlows.length === 0 ? (
                       <div className="p-4 border rounded-lg text-center">
                         <p className="text-sm text-muted-foreground mb-2">Nenhum fluxo encontrado</p>
-                        <Button variant="outline" size="sm" onClick={() => navigate('/automatico-zap')}>
+                        <Button variant="outline" size="sm" onClick={() => navigate('/disparazap/fluxos/novo')}>
                           <Plus className="h-4 w-4 mr-1" />
                           Criar Fluxo
                         </Button>
@@ -487,10 +492,6 @@ const MessageBlaster = () => {
                         <p className="text-xs text-muted-foreground">
                           O fluxo será executado para cada contato da lista
                         </p>
-                        <Button variant="outline" size="sm" onClick={() => navigate('/automatico-zap')}>
-                          <Plus className="h-4 w-4 mr-1" />
-                          Gerenciar Fluxos
-                        </Button>
                       </>
                     )}
                   </div>
@@ -855,6 +856,69 @@ const MessageBlaster = () => {
           </Card>
         </div>
 
+        {/* Flows Section */}
+        <Card className="mb-6">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <GitBranch className="h-5 w-5 text-primary" />
+                  Fluxos de Mensagem
+                </CardTitle>
+                <CardDescription>
+                  Crie e gerencie fluxos para envio automático
+                </CardDescription>
+              </div>
+              <Button onClick={() => navigate('/disparazap/fluxos/novo')} className="bg-primary hover:bg-primary/90">
+                <Plus className="h-4 w-4 mr-2" />
+                Criar Fluxo
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {availableFlows.length === 0 ? (
+              <div className="text-center py-8 border border-dashed rounded-lg">
+                <GitBranch className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+                <p className="text-sm text-muted-foreground mb-3">Nenhum fluxo criado ainda</p>
+                <Button variant="outline" onClick={() => navigate('/disparazap/fluxos/novo')}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Criar Primeiro Fluxo
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {availableFlows.slice(0, 6).map(flow => (
+                  <div 
+                    key={flow.id} 
+                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                    onClick={() => navigate(`/disparazap/fluxos/${flow.id}`)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg ${flow.is_active ? 'bg-green-500/10' : 'bg-muted'}`}>
+                        <GitBranch className={`h-4 w-4 ${flow.is_active ? 'text-green-500' : 'text-muted-foreground'}`} />
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm">{flow.name}</p>
+                        <p className="text-xs text-muted-foreground">{flow.description || 'Sem descrição'}</p>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {availableFlows.length > 6 && (
+              <div className="text-center mt-4">
+                <Button variant="outline" onClick={() => navigate('/disparazap/fluxos')}>
+                  Ver todos os {availableFlows.length} fluxos
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Campaigns List */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -870,7 +934,7 @@ const MessageBlaster = () => {
         ) : campaigns.length === 0 ? (
           <Card className="text-center py-12">
             <CardContent>
-              <Send className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <SendHorizonal className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <h3 className="text-lg font-medium mb-2">Nenhuma campanha encontrada</h3>
               <p className="text-muted-foreground mb-4">Crie sua primeira campanha de disparo</p>
               <Button onClick={() => setShowCreateDialog(true)} className="bg-green-600 hover:bg-green-700">

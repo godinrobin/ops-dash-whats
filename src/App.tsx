@@ -88,7 +88,10 @@ const App = () => (
             <Route path="/inbox/chat" element={<MemberRoute featureName="Automati-Zap"><InboxPage /></MemberRoute>} />
             <Route path="/inbox/flows" element={<MemberRoute featureName="Automati-Zap"><FlowListPage /></MemberRoute>} />
             <Route path="/inbox/flows/:id" element={<MemberRoute featureName="Automati-Zap"><FlowEditorPage /></MemberRoute>} />
-            <Route path="/disparador" element={<MemberRoute featureName="Disparador de Mensagens"><MessageBlaster /></MemberRoute>} />
+            <Route path="/disparador" element={<MemberRoute featureName="DisparaZap"><MessageBlaster /></MemberRoute>} />
+            <Route path="/disparazap/fluxos" element={<MemberRoute featureName="DisparaZap"><FlowListPage /></MemberRoute>} />
+            <Route path="/disparazap/fluxos/novo" element={<MemberRoute featureName="DisparaZap"><FlowEditorPage /></MemberRoute>} />
+            <Route path="/disparazap/fluxos/:id" element={<MemberRoute featureName="DisparaZap"><FlowEditorPage /></MemberRoute>} />
             <Route path="/clonador" element={<MemberRoute featureName="Clonador de Entregável"><SiteCloner /></MemberRoute>} />
             
             {/* ADMIN ROUTES */}
