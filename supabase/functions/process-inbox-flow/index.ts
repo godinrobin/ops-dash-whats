@@ -165,8 +165,19 @@ serve(async (req) => {
           break;
 
         case 'delay':
-          const delay = (currentNode.data.delay as number) || 5;
+          const delayType = (currentNode.data.delayType as string) || 'fixed';
           const unit = (currentNode.data.unit as string) || 'seconds';
+          
+          let delay: number;
+          if (delayType === 'variable') {
+            const minDelay = (currentNode.data.minDelay as number) || 5;
+            const maxDelay = (currentNode.data.maxDelay as number) || 15;
+            delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
+            console.log(`Variable delay: random value ${delay} between ${minDelay} and ${maxDelay}`);
+          } else {
+            delay = (currentNode.data.delay as number) || 5;
+          }
+          
           let delayMs = delay * 1000;
           if (unit === 'minutes') delayMs = delay * 60 * 1000;
           if (unit === 'hours') delayMs = delay * 60 * 60 * 1000;
@@ -175,16 +186,17 @@ serve(async (req) => {
           const maxDelayMs = 25000;
           const actualDelayMs = Math.min(delayMs, maxDelayMs);
           
-          console.log(`Delay node: waiting ${actualDelayMs}ms (requested: ${delayMs}ms)`);
+          console.log(`Delay node: waiting ${actualDelayMs}ms (requested: ${delayMs}ms, type: ${delayType})`);
           await new Promise(resolve => setTimeout(resolve, actualDelayMs));
           
           // If the delay was longer than what we actually waited, we need to continue after
           // For now, we proceed to next node (for very long delays, a scheduler would be needed)
+          const unitLabel = unit === 'seconds' ? 's' : unit === 'minutes' ? 'min' : 'h';
           if (delayMs > maxDelayMs) {
             console.log(`Note: Delay was capped. Original: ${delay} ${unit}, executed: ${actualDelayMs}ms`);
-            processedActions.push(`Delay ${delay}${unit === 'seconds' ? 's' : unit === 'minutes' ? 'min' : 'h'} (capped to 25s)`);
+            processedActions.push(`Delay ${delay}${unitLabel} (capped to 25s)`);
           } else {
-            processedActions.push(`Waited ${delay}${unit === 'seconds' ? 's' : unit === 'minutes' ? 'min' : 'h'}`);
+            processedActions.push(`Waited ${delay}${unitLabel}${delayType === 'variable' ? ' (variable)' : ''}`);
           }
           
           const delayEdge = edges.find(e => e.source === currentNodeId);

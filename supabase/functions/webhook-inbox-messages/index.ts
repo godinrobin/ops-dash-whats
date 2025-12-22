@@ -56,13 +56,25 @@ serve(async (req) => {
       // Evolution API v2 structure: data.key contains remoteJid/remoteJidAlt, data.message contains content
       // Fallback to old structure (data.message.key) for backwards compatibility
       const key = data.key || data.message?.key || {};
+      const messageId = key.id;
+      const isFromMe = key.fromMe === true;
       
-      // Only process incoming messages (not sent by us)
-      if (key.fromMe) {
-        console.log('Skipping outgoing message');
-        return new Response(JSON.stringify({ success: true, skipped: true }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+      // Check if this outgoing message was sent by our platform
+      if (isFromMe && messageId) {
+        const { data: existingMessage } = await supabaseClient
+          .from('inbox_messages')
+          .select('id')
+          .eq('remote_message_id', messageId)
+          .maybeSingle();
+        
+        if (existingMessage) {
+          console.log('Skipping outgoing message sent by platform:', messageId);
+          return new Response(JSON.stringify({ success: true, skipped: true, reason: 'sent_by_platform' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
+        console.log('Processing outgoing message from external source (WhatsApp Web/Mobile):', messageId);
       }
 
       const remoteJid = key.remoteJid || '';
@@ -83,7 +95,6 @@ serve(async (req) => {
       const rawPhone = jidForPhone.split('@')[0];
       // Clean and validate phone number
       const phone = rawPhone.replace(/\D/g, '');
-      const messageId = key.id;
       
       console.log(`Phone extraction: remoteJid=${remoteJid}, remoteJidAlt=${remoteJidAlt}, extracted=${phone}`);
       
@@ -196,15 +207,19 @@ serve(async (req) => {
             });
           }
         } else {
-          contact = newContact;
+        contact = newContact;
         }
       } else {
-        // Update existing contact: increment unread, update pushName, and update instance_id
+        // Update existing contact based on message direction
         const updates: Record<string, any> = {
-          unread_count: (contact.unread_count || 0) + 1,
           last_message_at: new Date().toISOString(),
-          instance_id: instanceId, // Always update to the latest instance that received the message
+          instance_id: instanceId, // Always update to the latest instance
         };
+        
+        // Only increment unread for inbound messages (not fromMe)
+        if (!isFromMe) {
+          updates.unread_count = (contact.unread_count || 0) + 1;
+        }
         
         // Only update name if we have a valid pushName and contact doesn't have a name yet
         // or if the new pushName is different and valid
@@ -218,6 +233,9 @@ serve(async (req) => {
           .eq('id', contact.id);
       }
 
+      // Determine message direction based on fromMe flag
+      const direction = isFromMe ? 'outbound' : 'inbound';
+      
       // Save the message
       const { error: messageError } = await supabaseClient
         .from('inbox_messages')
@@ -225,12 +243,12 @@ serve(async (req) => {
           contact_id: contact.id,
           instance_id: instanceId,
           user_id: userId,
-          direction: 'inbound',
+          direction,
           message_type: messageType,
           content,
           media_url: mediaUrl,
           remote_message_id: messageId,
-          status: 'delivered',
+          status: isFromMe ? 'sent' : 'delivered',
           is_from_flow: false,
         });
 
@@ -238,6 +256,14 @@ serve(async (req) => {
         console.error('Error saving message:', messageError);
         return new Response(JSON.stringify({ success: false, error: 'Failed to save message' }), {
           status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Skip flow processing for outbound messages (sent from WhatsApp Web/Mobile)
+      if (isFromMe) {
+        console.log('Outbound message saved successfully (from WhatsApp Web/Mobile)');
+        return new Response(JSON.stringify({ success: true, outbound: true }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }

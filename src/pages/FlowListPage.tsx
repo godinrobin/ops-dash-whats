@@ -47,6 +47,31 @@ const FlowListPage = () => {
     }
   };
 
+  // Cleanup disconnected instances from flows automatically
+  useEffect(() => {
+    const cleanupDisconnectedInstances = async () => {
+      if (!flows.length || loading) return;
+      
+      const connectedInstanceIds = new Set(instances.map(i => i.id));
+      
+      for (const flow of flows) {
+        if (flow.assigned_instances && flow.assigned_instances.length > 0) {
+          const validInstances = flow.assigned_instances.filter(
+            (id) => connectedInstanceIds.has(id)
+          );
+          
+          // If some instances were removed, update the flow
+          if (validInstances.length !== flow.assigned_instances.length) {
+            console.log(`Cleaning up disconnected instances from flow ${flow.name}`);
+            await updateFlow(flow.id, { assigned_instances: validInstances });
+          }
+        }
+      }
+    };
+    
+    cleanupDisconnectedInstances();
+  }, [flows, instances, loading, updateFlow]);
+
   const filteredFlows = flows.filter(flow => 
     flow.name.toLowerCase().includes(searchQuery.toLowerCase())
   );

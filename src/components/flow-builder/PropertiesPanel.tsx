@@ -270,32 +270,96 @@ export const PropertiesPanel = ({
         );
 
       case 'delay':
+        const delayType = (nodeData.delayType as string) || 'fixed';
         return (
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Tempo de Espera</Label>
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  min={1}
-                  value={(nodeData.delay as number) || 5}
-                  onChange={(e) => onUpdateNode(selectedNode.id, { delay: parseInt(e.target.value) })}
-                />
-                <Select
-                  value={(nodeData.unit as string) || 'seconds'}
-                  onValueChange={(value) => onUpdateNode(selectedNode.id, { unit: value })}
-                >
-                  <SelectTrigger className="w-28">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="seconds">Segundos</SelectItem>
-                    <SelectItem value="minutes">Minutos</SelectItem>
-                    <SelectItem value="hours">Horas</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <Label>Tipo de Delay</Label>
+              <Select
+                value={delayType}
+                onValueChange={(value) => onUpdateNode(selectedNode.id, { delayType: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fixed">Tempo Fixo</SelectItem>
+                  <SelectItem value="variable">Tempo Variável</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
+            {delayType === 'fixed' ? (
+              <div className="space-y-2">
+                <Label>Tempo de Espera</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    min={1}
+                    value={(nodeData.delay as number) || 5}
+                    onChange={(e) => onUpdateNode(selectedNode.id, { delay: parseInt(e.target.value) })}
+                  />
+                  <Select
+                    value={(nodeData.unit as string) || 'seconds'}
+                    onValueChange={(value) => onUpdateNode(selectedNode.id, { unit: value })}
+                  >
+                    <SelectTrigger className="w-28">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="seconds">Segundos</SelectItem>
+                      <SelectItem value="minutes">Minutos</SelectItem>
+                      <SelectItem value="hours">Horas</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Tempo Mínimo</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      min={1}
+                      value={(nodeData.minDelay as number) || 5}
+                      onChange={(e) => onUpdateNode(selectedNode.id, { minDelay: parseInt(e.target.value) })}
+                    />
+                    <Select
+                      value={(nodeData.unit as string) || 'seconds'}
+                      onValueChange={(value) => onUpdateNode(selectedNode.id, { unit: value })}
+                    >
+                      <SelectTrigger className="w-28">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="seconds">Segundos</SelectItem>
+                        <SelectItem value="minutes">Minutos</SelectItem>
+                        <SelectItem value="hours">Horas</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Tempo Máximo</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      min={1}
+                      value={(nodeData.maxDelay as number) || 15}
+                      onChange={(e) => onUpdateNode(selectedNode.id, { maxDelay: parseInt(e.target.value) })}
+                    />
+                    <span className="flex items-center text-sm text-muted-foreground w-28 pl-3">
+                      {(nodeData.unit as string) === 'minutes' ? 'Minutos' : 
+                       (nodeData.unit as string) === 'hours' ? 'Horas' : 'Segundos'}
+                    </span>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  O delay será aleatório entre o tempo mínimo e máximo
+                </p>
+              </div>
+            )}
           </div>
         );
 
