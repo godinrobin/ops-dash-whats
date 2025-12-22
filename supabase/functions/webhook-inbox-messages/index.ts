@@ -13,13 +13,38 @@ serve(async (req) => {
   }
 
   try {
+    // Log request metadata for debugging
+    const requestUrl = req.url;
+    const requestMethod = req.method;
+    const forwardedFor = req.headers.get('x-forwarded-for') || 'unknown';
+    const userAgent = req.headers.get('user-agent') || 'unknown';
+    
+    console.log('=== WEBHOOK REQUEST RECEIVED ===');
+    console.log(`URL: ${requestUrl}`);
+    console.log(`Method: ${requestMethod}`);
+    console.log(`IP: ${forwardedFor}`);
+    console.log(`User-Agent: ${userAgent}`);
+    
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const payload = await req.json();
-    console.log('Webhook payload received:', JSON.stringify(payload, null, 2));
+    const rawBody = await req.text();
+    console.log('Raw request body:', rawBody);
+    
+    let payload;
+    try {
+      payload = JSON.parse(rawBody);
+    } catch (parseError) {
+      console.error('Failed to parse JSON payload:', parseError);
+      return new Response(JSON.stringify({ success: false, error: 'Invalid JSON' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
+    console.log('Webhook payload parsed:', JSON.stringify(payload, null, 2));
 
     // Evolution API sends different event types
     const event = payload.event || payload.type;

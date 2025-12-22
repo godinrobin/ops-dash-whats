@@ -459,8 +459,11 @@ Regras:
             
             console.log(`Configuring webhook for ${instanceName} to ${webhookUrl}`);
             
-            // Try Evolution API v2 format
-            const webhookBody = {
+            // Try multiple webhook configuration formats
+            let webhookConfigured = false;
+            
+            // Format 1: Evolution API v2 nested format
+            const webhookBodyV2 = {
               webhook: {
                 enabled: true,
                 url: webhookUrl,
@@ -470,18 +473,27 @@ Regras:
               }
             };
             
-            const webhookResponse = await fetch(`${EVOLUTION_BASE_URL}/webhook/set/${instanceName}`, {
+            console.log('Trying webhook format v2:', JSON.stringify(webhookBodyV2));
+            const webhookResponseV2 = await fetch(`${EVOLUTION_BASE_URL}/webhook/set/${instanceName}`, {
               method: 'POST',
               headers: {
                 'apikey': EVOLUTION_API_KEY,
                 'Content-Type': 'application/json',
               },
-              body: JSON.stringify(webhookBody),
+              body: JSON.stringify(webhookBodyV2),
             });
             
-            if (!webhookResponse.ok) {
-              // Try alternative format
-              const altBody = {
+            const webhookResultV2 = await webhookResponseV2.text();
+            console.log(`Webhook v2 response (${webhookResponseV2.status}):`, webhookResultV2);
+            
+            if (webhookResponseV2.ok) {
+              webhookConfigured = true;
+              console.log('Webhook configured with v2 format');
+            }
+            
+            // Format 2: Flat format (if v2 didn't work)
+            if (!webhookConfigured) {
+              const webhookBodyFlat = {
                 enabled: true,
                 url: webhookUrl,
                 webhookByEvents: false,
@@ -489,22 +501,66 @@ Regras:
                 events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'SEND_MESSAGE', 'CONNECTION_UPDATE'],
               };
               
-              const altResponse = await fetch(`${EVOLUTION_BASE_URL}/webhook/set/${instanceName}`, {
+              console.log('Trying webhook flat format:', JSON.stringify(webhookBodyFlat));
+              const webhookResponseFlat = await fetch(`${EVOLUTION_BASE_URL}/webhook/set/${instanceName}`, {
                 method: 'POST',
                 headers: {
                   'apikey': EVOLUTION_API_KEY,
                   'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(altBody),
+                body: JSON.stringify(webhookBodyFlat),
               });
               
-              if (altResponse.ok) {
-                console.log('Webhook configured successfully (alternative format)');
-              } else {
-                console.error('Failed to configure webhook:', await altResponse.text());
+              const webhookResultFlat = await webhookResponseFlat.text();
+              console.log(`Webhook flat response (${webhookResponseFlat.status}):`, webhookResultFlat);
+              
+              if (webhookResponseFlat.ok) {
+                webhookConfigured = true;
+                console.log('Webhook configured with flat format');
               }
-            } else {
-              console.log('Webhook configured successfully');
+            }
+            
+            // Format 3: PUT method (some Evolution API versions use PUT)
+            if (!webhookConfigured) {
+              const webhookBodyPut = {
+                url: webhookUrl,
+                enabled: true,
+                events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'SEND_MESSAGE', 'CONNECTION_UPDATE'],
+              };
+              
+              console.log('Trying webhook PUT format:', JSON.stringify(webhookBodyPut));
+              const webhookResponsePut = await fetch(`${EVOLUTION_BASE_URL}/webhook/set/${instanceName}`, {
+                method: 'PUT',
+                headers: {
+                  'apikey': EVOLUTION_API_KEY,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(webhookBodyPut),
+              });
+              
+              const webhookResultPut = await webhookResponsePut.text();
+              console.log(`Webhook PUT response (${webhookResponsePut.status}):`, webhookResultPut);
+              
+              if (webhookResponsePut.ok) {
+                webhookConfigured = true;
+                console.log('Webhook configured with PUT format');
+              }
+            }
+            
+            // Verify webhook was actually configured
+            console.log(`Verifying webhook configuration for ${instanceName}...`);
+            const verifyResponse = await fetch(`${EVOLUTION_BASE_URL}/webhook/find/${instanceName}`, {
+              method: 'GET',
+              headers: {
+                'apikey': EVOLUTION_API_KEY,
+              },
+            });
+            
+            const webhookConfig = await verifyResponse.text();
+            console.log(`Webhook verification for ${instanceName} (${verifyResponse.status}):`, webhookConfig);
+            
+            if (!webhookConfigured) {
+              console.error(`Failed to configure webhook for ${instanceName} with any format`);
             }
           } catch (webhookError) {
             console.error('Error configuring webhook:', webhookError);
@@ -607,6 +663,147 @@ Regras:
       case 'fetch-instances': {
         result = await callEvolution('/instance/fetchInstances', 'GET');
         console.log('Fetch instances result:', JSON.stringify(result, null, 2));
+        break;
+      }
+
+      case 'verify-webhook': {
+        const { instanceName } = params;
+        
+        // If instanceName provided, check single instance; otherwise check all user instances
+        const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
+        const webhookUrl = `${SUPABASE_URL}/functions/v1/webhook-inbox-messages`;
+        
+        if (instanceName) {
+          // Verify single instance
+          console.log(`Verifying webhook for instance: ${instanceName}`);
+          
+          const verifyResponse = await fetch(`${EVOLUTION_BASE_URL}/webhook/find/${instanceName}`, {
+            method: 'GET',
+            headers: {
+              'apikey': EVOLUTION_API_KEY,
+            },
+          });
+          
+          const webhookConfig = await verifyResponse.text();
+          console.log(`Webhook config for ${instanceName}:`, webhookConfig);
+          
+          let parsedConfig;
+          try {
+            parsedConfig = JSON.parse(webhookConfig);
+          } catch {
+            parsedConfig = { raw: webhookConfig };
+          }
+          
+          const isConfigured = webhookConfig.includes(webhookUrl) || 
+                               (parsedConfig?.url === webhookUrl) ||
+                               (parsedConfig?.webhook?.url === webhookUrl);
+          
+          const instanceResult: Record<string, any> = {
+            instanceName,
+            webhookConfigured: isConfigured,
+            expectedUrl: webhookUrl,
+            currentConfig: parsedConfig,
+          };
+          
+          // If not configured, try to configure it
+          if (!isConfigured) {
+            console.log(`Webhook not configured for ${instanceName}, attempting to configure...`);
+            
+            const webhookBody = {
+              enabled: true,
+              url: webhookUrl,
+              webhookByEvents: false,
+              webhookBase64: false,
+              events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'SEND_MESSAGE', 'CONNECTION_UPDATE'],
+            };
+            
+            const configResponse = await fetch(`${EVOLUTION_BASE_URL}/webhook/set/${instanceName}`, {
+              method: 'POST',
+              headers: {
+                'apikey': EVOLUTION_API_KEY,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(webhookBody),
+            });
+            
+            const configResult = await configResponse.text();
+            console.log(`Webhook configure attempt result:`, configResult);
+            
+            instanceResult.reconfigured = configResponse.ok;
+            instanceResult.reconfigureResult = configResult;
+          }
+          
+          result = instanceResult;
+        } else {
+          // Verify all user instances
+          const { data: userInstances } = await supabaseClient
+            .from('maturador_instances')
+            .select('instance_name, status')
+            .eq('user_id', user.id);
+          
+          const results = [];
+          
+          for (const inst of userInstances || []) {
+            console.log(`Verifying webhook for ${inst.instance_name}...`);
+            
+            const verifyResponse = await fetch(`${EVOLUTION_BASE_URL}/webhook/find/${inst.instance_name}`, {
+              method: 'GET',
+              headers: {
+                'apikey': EVOLUTION_API_KEY,
+              },
+            });
+            
+            const webhookConfig = await verifyResponse.text();
+            
+            let parsedConfig;
+            try {
+              parsedConfig = JSON.parse(webhookConfig);
+            } catch {
+              parsedConfig = { raw: webhookConfig };
+            }
+            
+            const isConfigured = webhookConfig.includes(webhookUrl) || 
+                                 (parsedConfig?.url === webhookUrl) ||
+                                 (parsedConfig?.webhook?.url === webhookUrl);
+            
+            const instResult: any = {
+              instanceName: inst.instance_name,
+              status: inst.status,
+              webhookConfigured: isConfigured,
+              currentConfig: parsedConfig,
+            };
+            
+            // If not configured and connected, try to configure
+            if (!isConfigured && inst.status === 'connected') {
+              const webhookBody = {
+                enabled: true,
+                url: webhookUrl,
+                webhookByEvents: false,
+                webhookBase64: false,
+                events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'SEND_MESSAGE', 'CONNECTION_UPDATE'],
+              };
+              
+              const configResponse = await fetch(`${EVOLUTION_BASE_URL}/webhook/set/${inst.instance_name}`, {
+                method: 'POST',
+                headers: {
+                  'apikey': EVOLUTION_API_KEY,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(webhookBody),
+              });
+              
+              instResult.reconfigured = configResponse.ok;
+            }
+            
+            results.push(instResult);
+          }
+          
+          result = {
+            expectedUrl: webhookUrl,
+            instances: results,
+          };
+        }
+        
         break;
       }
 
