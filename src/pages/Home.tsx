@@ -210,6 +210,15 @@ const Home = () => {
       subtext: "Variações de texto, delays e múltiplos números",
       gradient: "from-blue-500 to-indigo-600",
       restricted: true
+    },
+    { 
+      path: "/clonador", 
+      emoji: "🧬", 
+      title: "Clonador de Entregável",
+      description: "Clone sites e gere prompts detalhados para IA",
+      subtext: "Analise estrutura, cores, fontes e conteúdo",
+      gradient: "from-violet-500 to-purple-600",
+      restricted: true
     }
   ];
 
