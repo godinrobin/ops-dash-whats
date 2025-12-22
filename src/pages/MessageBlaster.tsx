@@ -363,6 +363,22 @@ const MessageBlaster = () => {
     }
   };
 
+  const deleteFlow = async (flowId: string) => {
+    if (!confirm('Tem certeza que deseja excluir este fluxo?')) return;
+
+    const { error } = await supabase
+      .from('inbox_flows')
+      .delete()
+      .eq('id', flowId);
+
+    if (error) {
+      toast.error('Erro ao excluir fluxo');
+    } else {
+      toast.success('Fluxo excluído');
+      fetchFlows();
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<string, { label: string; className: string }> = {
       draft: { label: 'Rascunho', className: 'bg-gray-500' },
@@ -890,10 +906,12 @@ const MessageBlaster = () => {
                 {availableFlows.slice(0, 6).map(flow => (
                   <div 
                     key={flow.id} 
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
-                    onClick={() => navigate(`/disparazap/fluxos/${flow.id}`)}
+                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
                   >
-                    <div className="flex items-center gap-3">
+                    <div 
+                      className="flex items-center gap-3 flex-1 cursor-pointer"
+                      onClick={() => navigate(`/disparazap/fluxos/${flow.id}`)}
+                    >
                       <div className={`p-2 rounded-lg ${flow.is_active ? 'bg-green-500/10' : 'bg-muted'}`}>
                         <GitBranch className={`h-4 w-4 ${flow.is_active ? 'text-green-500' : 'text-muted-foreground'}`} />
                       </div>
@@ -902,9 +920,27 @@ const MessageBlaster = () => {
                         <p className="text-xs text-muted-foreground">{flow.description || 'Sem descrição'}</p>
                       </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <Eye className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8"
+                        onClick={() => navigate(`/disparazap/fluxos/${flow.id}`)}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteFlow(flow.id);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
