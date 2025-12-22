@@ -1,4 +1,4 @@
-import { Check, CheckCheck, Clock, XCircle, Play, Pause, Download, Loader2 } from 'lucide-react';
+import { Check, CheckCheck, Clock, XCircle, Play, Pause, Download, Loader2, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { InboxMessage } from '@/types/inbox';
 import { format } from 'date-fns';
@@ -142,15 +142,40 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
         );
 
       case 'document':
+        // Extrair nome do arquivo da URL se content estiver vazio
+        let fileName = message.content;
+        if (!fileName && message.media_url) {
+          try {
+            const urlParts = message.media_url.split('/');
+            const lastPart = urlParts[urlParts.length - 1];
+            fileName = decodeURIComponent(lastPart.split('?')[0]);
+          } catch {
+            fileName = 'Documento';
+          }
+        }
+        
+        // Determinar ícone e cor baseado na extensão
+        const extension = fileName?.split('.').pop()?.toLowerCase() || '';
+        const isPdf = extension === 'pdf';
+        
         return (
           <a 
             href={message.media_url || ''} 
             target="_blank" 
             rel="noopener noreferrer"
-            className="flex items-center gap-2 text-primary hover:underline"
+            className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors min-w-[200px]"
           >
-            <Download className="h-4 w-4" />
-            <span>{message.content || 'Documento'}</span>
+            <div className={cn(
+              "flex-shrink-0 h-10 w-10 rounded flex items-center justify-center",
+              isPdf ? "bg-red-500" : "bg-blue-500"
+            )}>
+              <FileText className="h-5 w-5 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="block text-sm font-medium truncate">{fileName || 'Documento'}</span>
+              <span className="text-xs text-muted-foreground">Clique para baixar</span>
+            </div>
+            <Download className="h-4 w-4 text-muted-foreground flex-shrink-0" />
           </a>
         );
 

@@ -131,7 +131,13 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactIns
         return;
       }
 
-      const result = await onSendMessage(mediaCaption || '', attachDialog.type, mediaUrl);
+      // Para documentos, usar o nome do arquivo como content se não houver legenda
+      let contentToSend = mediaCaption;
+      if (attachDialog.type === 'document' && !mediaCaption.trim()) {
+        contentToSend = mediaFile.name;
+      }
+
+      const result = await onSendMessage(contentToSend || '', attachDialog.type, mediaUrl);
       
       if (result.error) {
         toast.error('Erro ao enviar: ' + result.error);

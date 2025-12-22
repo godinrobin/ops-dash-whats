@@ -164,7 +164,20 @@ export const InboxLayout = () => {
         loading={messagesLoading}
         onSendMessage={sendMessage}
         onToggleDetails={() => setShowContactDetails(!showContactDetails)}
-        flows={flows.map(f => ({ id: f.id, name: f.name, is_active: f.is_active }))}
+        flows={flows
+          .filter(f => {
+            // Se o fluxo não tem instâncias atribuídas, mostrar para todos
+            if (!f.assigned_instances || f.assigned_instances.length === 0) {
+              return true;
+            }
+            // Se o contato não tem instância, não mostrar fluxos com instâncias específicas
+            if (!selectedContact?.instance_id) {
+              return false;
+            }
+            // Mostrar apenas fluxos atribuídos à instância do contato
+            return f.assigned_instances.includes(selectedContact.instance_id);
+          })
+          .map(f => ({ id: f.id, name: f.name, is_active: f.is_active }))}
         onTriggerFlow={handleTriggerFlow}
       />
 
