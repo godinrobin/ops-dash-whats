@@ -556,7 +556,11 @@ export default function MaturadorInstances() {
               ) : qrCode ? (
                 <div className="space-y-4">
                   <div className="border rounded-lg p-4 bg-white">
-                    <img src={qrCode} alt="QR Code WhatsApp" className="w-64 h-64" />
+                    <img 
+                      src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`} 
+                      alt="QR Code" 
+                      className="w-64 h-64" 
+                    />
                   </div>
                   <p className="text-sm text-center text-muted-foreground">
                     Abra o WhatsApp &gt; Menu &gt; Dispositivos conectados &gt; Conectar dispositivo

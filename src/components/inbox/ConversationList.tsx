@@ -149,7 +149,7 @@ export const ConversationList = ({
   }, [contacts]);
 
   return (
-    <div className="w-80 border-r border-border flex flex-col bg-card flex-shrink-0">
+    <div className="w-80 border-r border-border flex flex-col bg-card flex-shrink-0 overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between mb-4">
@@ -230,7 +230,7 @@ export const ConversationList = ({
                   key={contact.id}
                   onClick={() => onSelectContact(contact)}
                   className={cn(
-                    "flex items-start gap-3 p-3 cursor-pointer hover:bg-accent/50 transition-colors border-b border-border/50",
+                    "flex items-start gap-3 p-3 cursor-pointer hover:bg-accent/50 transition-colors border-b border-border/50 min-h-0",
                     selectedContact?.id === contact.id && "bg-accent"
                   )}
                 >

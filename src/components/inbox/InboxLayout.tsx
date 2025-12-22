@@ -1,7 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useSearchParams } from 'react-router-dom';
 import { InboxSidebar } from './InboxSidebar';
 import { ConversationList } from './ConversationList';
 import { ChatPanel } from './ChatPanel';
@@ -14,7 +12,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 export const InboxLayout = () => {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedContact, setSelectedContact] = useState<InboxContact | null>(null);
   const [showContactDetails, setShowContactDetails] = useState(false);
@@ -129,19 +126,6 @@ export const InboxLayout = () => {
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] md:h-[calc(100vh-4rem)] bg-background">
-      {/* Back button */}
-      <div className="absolute top-16 left-4 z-10 md:top-20">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => navigate('/inbox')}
-          className="gap-1"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span className="hidden md:inline">Voltar</span>
-        </Button>
-      </div>
-
       {/* Sidebar - Filtros */}
       <InboxSidebar 
         selectedInstanceId={selectedInstanceId}

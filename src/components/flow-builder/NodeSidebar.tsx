@@ -39,7 +39,6 @@ const nodeCategories = [
   {
     title: 'Ações',
     nodes: [
-      { type: 'ai', label: 'IA', icon: Bot, color: 'bg-violet-500' },
       { type: 'tag', label: 'Tag', icon: Tag, color: 'bg-amber-500' },
     ],
   },
