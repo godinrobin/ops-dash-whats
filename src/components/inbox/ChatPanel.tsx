@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useMemo } from 'react';
-import { User, MessageSquare, Smartphone, ChevronDown, Tag, X, Plus } from 'lucide-react';
+import { User, MessageSquare, Smartphone, ChevronDown, Tag, X, Plus, Pause, Play, Mail, MailOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -16,7 +16,14 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 // Instance colors for consistency
 const instanceColors = [
@@ -38,6 +45,7 @@ interface ChatPanelProps {
   onToggleDetails: () => void;
   flows?: { id: string; name: string; is_active: boolean }[];
   onTriggerFlow?: (flowId: string) => void;
+  onRefreshContact?: () => void;
 }
 
 interface Instance {
@@ -55,6 +63,7 @@ export const ChatPanel = ({
   onToggleDetails,
   flows = [],
   onTriggerFlow,
+  onRefreshContact,
 }: ChatPanelProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [instances, setInstances] = useState<Instance[]>([]);
@@ -63,6 +72,7 @@ export const ChatPanel = ({
   const [contactLabels, setContactLabels] = useState<string[]>([]);
   const [newLabelInput, setNewLabelInput] = useState('');
   const [showNewLabelInput, setShowNewLabelInput] = useState(false);
+  const [flowPaused, setFlowPaused] = useState(false);
 
   // Predefined labels with colors
   const predefinedLabels = [
@@ -112,10 +122,11 @@ export const ChatPanel = ({
     }
   }, [contact?.instance_id, instances]);
 
-  // Fetch contact labels from tags field
+  // Fetch contact labels and flow_paused from tags field
   useEffect(() => {
     if (!contact) {
       setContactLabels([]);
+      setFlowPaused(false);
       return;
     }
     const tags = (contact as any).tags;
@@ -126,6 +137,8 @@ export const ChatPanel = ({
     } else {
       setContactLabels([]);
     }
+    // Get flow_paused status
+    setFlowPaused((contact as any).flow_paused || false);
   }, [contact]);
 
   useEffect(() => {
@@ -192,6 +205,76 @@ export const ChatPanel = ({
   const handleAddCustomLabel = () => {
     if (newLabelInput.trim()) {
       handleAddLabel(newLabelInput.trim());
+    }
+  };
+
+  // Handle pause/resume flow
+  const handlePauseFlow = async () => {
+    if (!contact) return;
+    try {
+      const { error } = await supabase
+        .from('inbox_contacts')
+        .update({ flow_paused: true })
+        .eq('id', contact.id);
+      
+      if (error) throw error;
+      setFlowPaused(true);
+      toast.success('Funil pausado');
+    } catch (err) {
+      console.error('Error pausing flow:', err);
+      toast.error('Erro ao pausar funil');
+    }
+  };
+
+  const handleResumeFlow = async () => {
+    if (!contact) return;
+    try {
+      const { error } = await supabase
+        .from('inbox_contacts')
+        .update({ flow_paused: false })
+        .eq('id', contact.id);
+      
+      if (error) throw error;
+      setFlowPaused(false);
+      toast.success('Funil retomado');
+    } catch (err) {
+      console.error('Error resuming flow:', err);
+      toast.error('Erro ao retomar funil');
+    }
+  };
+
+  // Handle mark as read/unread
+  const handleMarkAsRead = async () => {
+    if (!contact) return;
+    try {
+      const { error } = await supabase
+        .from('inbox_contacts')
+        .update({ unread_count: 0 })
+        .eq('id', contact.id);
+      
+      if (error) throw error;
+      toast.success('Marcado como lido');
+      onRefreshContact?.();
+    } catch (err) {
+      console.error('Error marking as read:', err);
+      toast.error('Erro ao marcar como lido');
+    }
+  };
+
+  const handleMarkAsUnread = async () => {
+    if (!contact) return;
+    try {
+      const { error } = await supabase
+        .from('inbox_contacts')
+        .update({ unread_count: 1 })
+        .eq('id', contact.id);
+      
+      if (error) throw error;
+      toast.success('Marcado como não lido');
+      onRefreshContact?.();
+    } catch (err) {
+      console.error('Error marking as unread:', err);
+      toast.error('Erro ao marcar como não lido');
     }
   };
 

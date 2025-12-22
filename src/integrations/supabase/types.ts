@@ -303,6 +303,7 @@ export type Database = {
         Row: {
           assigned_to: string | null
           created_at: string
+          flow_paused: boolean | null
           id: string
           instance_id: string | null
           last_message_at: string | null
@@ -319,6 +320,7 @@ export type Database = {
         Insert: {
           assigned_to?: string | null
           created_at?: string
+          flow_paused?: boolean | null
           id?: string
           instance_id?: string | null
           last_message_at?: string | null
@@ -335,6 +337,7 @@ export type Database = {
         Update: {
           assigned_to?: string | null
           created_at?: string
+          flow_paused?: boolean | null
           id?: string
           instance_id?: string | null
           last_message_at?: string | null

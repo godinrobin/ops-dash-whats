@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Plus, Smartphone } from 'lucide-react';
+import { Search, Plus, Smartphone, Filter } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { InboxContact } from '@/types/inbox';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -41,6 +42,8 @@ interface ConversationListProps {
   onSelectContact: (contact: InboxContact) => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  selectedLabel?: string;
+  onLabelChange?: (label: string) => void;
 }
 
 // Generate consistent colors for instances
@@ -62,6 +65,8 @@ export const ConversationList = ({
   onSelectContact,
   searchQuery,
   onSearchChange,
+  selectedLabel = '',
+  onLabelChange,
 }: ConversationListProps) => {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [showNewConversation, setShowNewConversation] = useState(false);
@@ -133,6 +138,16 @@ export const ConversationList = ({
     onSelectContact(contact);
   };
 
+  // Get all unique labels from contacts
+  const allLabels = useMemo(() => {
+    const labelsSet = new Set<string>();
+    contacts.forEach(contact => {
+      const tags = Array.isArray((contact as any).tags) ? (contact as any).tags : [];
+      tags.forEach((tag: string) => labelsSet.add(tag));
+    });
+    return Array.from(labelsSet);
+  }, [contacts]);
+
   return (
     <div className="w-80 border-r border-border flex flex-col bg-card flex-shrink-0">
       {/* Header */}
@@ -157,6 +172,30 @@ export const ConversationList = ({
             onChange={(e) => onSearchChange(e.target.value)}
           />
         </div>
+        {/* Label filter */}
+        {allLabels.length > 0 && (
+          <div className="mt-3">
+            <Select value={selectedLabel} onValueChange={(value) => onLabelChange?.(value)}>
+              <SelectTrigger className="h-8 text-xs">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-3 w-3" />
+                  <SelectValue placeholder="Filtrar por etiqueta" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as etiquetas</SelectItem>
+                {allLabels.map((label) => (
+                  <SelectItem key={label} value={label}>
+                    <div className="flex items-center gap-2">
+                      <div className={cn("w-2 h-2 rounded-full", getLabelColor(label))} />
+                      {label}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       {/* Lista de Conversas */}

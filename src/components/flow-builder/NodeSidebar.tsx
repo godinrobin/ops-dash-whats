@@ -34,7 +34,6 @@ const nodeCategories = [
       { type: 'delay', label: 'Delay', icon: Clock, color: 'bg-yellow-500' },
       { type: 'waitInput', label: 'Aguardar Resposta', icon: MessageCircle, color: 'bg-cyan-500' },
       { type: 'condition', label: 'Condição', icon: GitBranch, color: 'bg-red-500' },
-      { type: 'menu', label: 'Menu', icon: List, color: 'bg-indigo-500' },
     ],
   },
   {
