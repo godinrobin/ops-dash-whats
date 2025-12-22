@@ -274,8 +274,11 @@ export type Database = {
           current_index: number
           delay_max: number
           delay_min: number
+          dispatches_per_instance: number | null
           failed_count: number
           id: string
+          media_type: string | null
+          media_url: string | null
           message_variations: Json
           name: string
           phone_numbers: Json
@@ -293,8 +296,11 @@ export type Database = {
           current_index?: number
           delay_max?: number
           delay_min?: number
+          dispatches_per_instance?: number | null
           failed_count?: number
           id?: string
+          media_type?: string | null
+          media_url?: string | null
           message_variations?: Json
           name: string
           phone_numbers?: Json
@@ -312,8 +318,11 @@ export type Database = {
           current_index?: number
           delay_max?: number
           delay_min?: number
+          dispatches_per_instance?: number | null
           failed_count?: number
           id?: string
+          media_type?: string | null
+          media_url?: string | null
           message_variations?: Json
           name?: string
           phone_numbers?: Json
@@ -372,6 +381,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      cloned_sites: {
+        Row: {
+          analysis_result: Json
+          created_at: string
+          description: string | null
+          generated_prompt: string
+          id: string
+          title: string | null
+          url: string
+          user_id: string
+        }
+        Insert: {
+          analysis_result: Json
+          created_at?: string
+          description?: string | null
+          generated_prompt: string
+          id?: string
+          title?: string | null
+          url: string
+          user_id: string
+        }
+        Update: {
+          analysis_result?: Json
+          created_at?: string
+          description?: string | null
+          generated_prompt?: string
+          id?: string
+          title?: string | null
+          url?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       daily_update_status: {
         Row: {

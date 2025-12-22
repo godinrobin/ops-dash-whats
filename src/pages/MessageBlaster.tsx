@@ -11,25 +11,25 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { 
   Plus, 
   Send, 
   Trash2, 
   Play, 
   Pause, 
-  RotateCcw, 
   Upload, 
-  FileText, 
   Smartphone,
   Clock,
   MessageSquare,
-  Users,
   CheckCircle,
   XCircle,
   ArrowLeft,
-  Copy,
-  Download
+  Image as ImageIcon,
+  Video,
+  FileText,
+  Music
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -51,6 +51,9 @@ interface Campaign {
   created_at: string;
   started_at?: string;
   completed_at?: string;
+  media_type?: string;
+  media_url?: string;
+  dispatches_per_instance?: number;
 }
 
 interface Instance {
@@ -75,8 +78,12 @@ const MessageBlaster = () => {
   const [phoneNumbers, setPhoneNumbers] = useState('');
   const [delayMin, setDelayMin] = useState(5);
   const [delayMax, setDelayMax] = useState(15);
+  const [useFixedDelay, setUseFixedDelay] = useState(false);
   const [selectedInstances, setSelectedInstances] = useState<string[]>([]);
   const [importMethod, setImportMethod] = useState<'manual' | 'file'>('manual');
+  const [mediaType, setMediaType] = useState<'text' | 'image' | 'video' | 'audio' | 'document'>('text');
+  const [mediaUrl, setMediaUrl] = useState('');
+  const [dispatchesPerInstance, setDispatchesPerInstance] = useState(1);
 
   const fetchCampaigns = useCallback(async () => {
     if (!user) return;
@@ -164,13 +171,11 @@ const MessageBlaster = () => {
   };
 
   const parsePhoneNumbers = (text: string): string[] => {
-    // Split by newlines, commas, or semicolons
     const numbers = text
       .split(/[\n,;]+/)
       .map(n => n.trim().replace(/\D/g, ''))
       .filter(n => n.length >= 10 && n.length <= 15);
     
-    // Remove duplicates
     return [...new Set(numbers)];
   };
 
@@ -196,8 +201,13 @@ const MessageBlaster = () => {
     }
 
     const validMessages = messageVariations.filter(m => m.trim());
-    if (validMessages.length === 0) {
+    if (validMessages.length === 0 && mediaType === 'text') {
       toast.error('Adicione pelo menos uma variação de mensagem');
+      return;
+    }
+
+    if (mediaType !== 'text' && !mediaUrl.trim()) {
+      toast.error('Adicione a URL da mídia');
       return;
     }
 
@@ -212,21 +222,25 @@ const MessageBlaster = () => {
       return;
     }
 
-    const { data, error } = await supabase
+    const finalDelayMin = useFixedDelay ? delayMin : delayMin;
+    const finalDelayMax = useFixedDelay ? delayMin : delayMax;
+
+    const { error } = await supabase
       .from('blaster_campaigns')
       .insert({
         user_id: user.id,
         name: campaignName,
         message_variations: validMessages,
         phone_numbers: numbers,
-        delay_min: delayMin,
-        delay_max: delayMax,
+        delay_min: finalDelayMin,
+        delay_max: finalDelayMax,
         total_count: numbers.length,
         assigned_instances: selectedInstances,
         status: 'draft',
-      })
-      .select()
-      .single();
+        media_type: mediaType,
+        media_url: mediaType !== 'text' ? mediaUrl : null,
+        dispatches_per_instance: dispatchesPerInstance,
+      });
 
     if (error) {
       toast.error('Erro ao criar campanha: ' + error.message);
@@ -244,7 +258,11 @@ const MessageBlaster = () => {
     setPhoneNumbers('');
     setDelayMin(5);
     setDelayMax(15);
+    setUseFixedDelay(false);
     setSelectedInstances([]);
+    setMediaType('text');
+    setMediaUrl('');
+    setDispatchesPerInstance(1);
   };
 
   const startCampaign = async (campaignId: string) => {
@@ -320,6 +338,16 @@ const MessageBlaster = () => {
     return <Badge className={`${config.className} text-white`}>{config.label}</Badge>;
   };
 
+  const getMediaIcon = (type: string) => {
+    switch (type) {
+      case 'image': return <ImageIcon className="h-3 w-3" />;
+      case 'video': return <Video className="h-3 w-3" />;
+      case 'audio': return <Music className="h-3 w-3" />;
+      case 'document': return <FileText className="h-3 w-3" />;
+      default: return <MessageSquare className="h-3 w-3" />;
+    }
+  };
+
   const toggleInstance = (instanceId: string) => {
     setSelectedInstances(prev =>
       prev.includes(instanceId)
@@ -344,7 +372,7 @@ const MessageBlaster = () => {
           </div>
           <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
             <DialogTrigger asChild>
-              <Button>
+              <Button className="bg-green-600 hover:bg-green-700">
                 <Plus className="h-4 w-4 mr-2" />
                 Nova Campanha
               </Button>
@@ -365,10 +393,69 @@ const MessageBlaster = () => {
                   />
                 </div>
 
+                {/* Media Type */}
+                <div className="space-y-2">
+                  <Label>Tipo de Conteúdo</Label>
+                  <Select value={mediaType} onValueChange={(v) => setMediaType(v as any)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="text">
+                        <div className="flex items-center gap-2">
+                          <MessageSquare className="h-4 w-4" />
+                          Texto
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="image">
+                        <div className="flex items-center gap-2">
+                          <ImageIcon className="h-4 w-4" />
+                          Imagem
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="video">
+                        <div className="flex items-center gap-2">
+                          <Video className="h-4 w-4" />
+                          Vídeo
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="audio">
+                        <div className="flex items-center gap-2">
+                          <Music className="h-4 w-4" />
+                          Áudio
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="document">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4" />
+                          Documento
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Media URL */}
+                {mediaType !== 'text' && (
+                  <div className="space-y-2">
+                    <Label>URL da Mídia</Label>
+                    <Input
+                      placeholder="https://exemplo.com/arquivo.jpg"
+                      value={mediaUrl}
+                      onChange={(e) => setMediaUrl(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Cole a URL direta do arquivo ({mediaType})
+                    </p>
+                  </div>
+                )}
+
                 {/* Message Variations */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label>Variações de Mensagem ({messageVariations.length}/5)</Label>
+                    <Label>
+                      {mediaType !== 'text' ? 'Legenda (opcional)' : 'Variações de Mensagem'} ({messageVariations.length}/5)
+                    </Label>
                     {messageVariations.length < 5 && (
                       <Button variant="outline" size="sm" onClick={addMessageVariation}>
                         <Plus className="h-3 w-3 mr-1" />
@@ -382,7 +469,7 @@ const MessageBlaster = () => {
                   {messageVariations.map((msg, index) => (
                     <div key={index} className="flex gap-2">
                       <Textarea
-                        placeholder={`Mensagem ${index + 1}...`}
+                        placeholder={mediaType !== 'text' ? `Legenda ${index + 1}...` : `Mensagem ${index + 1}...`}
                         value={msg}
                         onChange={(e) => updateMessageVariation(index, e.target.value)}
                         rows={2}
@@ -444,25 +531,71 @@ const MessageBlaster = () => {
                 </div>
 
                 {/* Delay Settings */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Delay Mínimo (segundos)</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={delayMin}
-                      onChange={(e) => setDelayMin(parseInt(e.target.value) || 5)}
-                    />
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label>Delay entre mensagens</Label>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="fixed-delay" className="text-sm font-normal">Delay fixo</Label>
+                      <Switch
+                        id="fixed-delay"
+                        checked={useFixedDelay}
+                        onCheckedChange={setUseFixedDelay}
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Delay Máximo (segundos)</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={delayMax}
-                      onChange={(e) => setDelayMax(parseInt(e.target.value) || 15)}
-                    />
-                  </div>
+                  
+                  {useFixedDelay ? (
+                    <div className="space-y-2">
+                      <Label>Delay Fixo (segundos)</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={delayMin}
+                        onChange={(e) => setDelayMin(parseInt(e.target.value) || 5)}
+                      />
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Delay Mínimo (segundos)</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={delayMin}
+                          onChange={(e) => setDelayMin(parseInt(e.target.value) || 5)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Delay Máximo (segundos)</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={delayMax}
+                          onChange={(e) => setDelayMax(parseInt(e.target.value) || 15)}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Dispatches per Instance */}
+                <div className="space-y-2">
+                  <Label>Disparos por Número antes de Alternar</Label>
+                  <Select value={dispatchesPerInstance.toString()} onValueChange={(v) => setDispatchesPerInstance(parseInt(v))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1 disparo por número</SelectItem>
+                      <SelectItem value="2">2 disparos por número</SelectItem>
+                      <SelectItem value="3">3 disparos por número</SelectItem>
+                      <SelectItem value="5">5 disparos por número</SelectItem>
+                      <SelectItem value="10">10 disparos por número</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Quantidade de mensagens enviadas por cada número antes de alternar para o próximo
+                  </p>
                 </div>
 
                 {/* Instance Selection */}
@@ -502,7 +635,7 @@ const MessageBlaster = () => {
                   <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
                     Cancelar
                   </Button>
-                  <Button onClick={handleCreateCampaign}>
+                  <Button onClick={handleCreateCampaign} className="bg-green-600 hover:bg-green-700">
                     Criar Campanha
                   </Button>
                 </div>
@@ -589,7 +722,7 @@ const MessageBlaster = () => {
               <Send className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <h3 className="text-lg font-medium mb-2">Nenhuma campanha encontrada</h3>
               <p className="text-muted-foreground mb-4">Crie sua primeira campanha de disparo</p>
-              <Button onClick={() => setShowCreateDialog(true)}>
+              <Button onClick={() => setShowCreateDialog(true)} className="bg-green-600 hover:bg-green-700">
                 <Plus className="h-4 w-4 mr-2" />
                 Nova Campanha
               </Button>
@@ -646,12 +779,19 @@ const MessageBlaster = () => {
                   {/* Info */}
                   <div className="flex flex-wrap gap-2 mb-4">
                     <Badge variant="outline">
+                      {getMediaIcon(campaign.media_type || 'text')}
+                      <span className="ml-1">{campaign.media_type || 'texto'}</span>
+                    </Badge>
+                    <Badge variant="outline">
                       <MessageSquare className="h-3 w-3 mr-1" />
                       {campaign.message_variations.length} variação(ões)
                     </Badge>
                     <Badge variant="outline">
                       <Clock className="h-3 w-3 mr-1" />
-                      {campaign.delay_min}-{campaign.delay_max}s
+                      {campaign.delay_min === campaign.delay_max 
+                        ? `${campaign.delay_min}s` 
+                        : `${campaign.delay_min}-${campaign.delay_max}s`
+                      }
                     </Badge>
                   </div>
 
