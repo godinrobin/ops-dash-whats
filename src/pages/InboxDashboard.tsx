@@ -17,6 +17,7 @@ import automatizapIcon from "@/assets/automatizap-icon.png";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { InboxMenu } from '@/components/inbox/InboxMenu';
 import { cn } from '@/lib/utils';
+import { useActivityTracker } from '@/hooks/useActivityTracker';
 
 interface Instance {
   id: string;
@@ -45,6 +46,9 @@ interface InboxTag {
 export default function InboxDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  
+  // Track activity for Automati-Zap main page
+  useActivityTracker('page_visit', 'Automati-Zap');
   const [instances, setInstances] = useState<Instance[]>([]);
   const [flows, setFlows] = useState<Flow[]>([]);
   const [tags, setTags] = useState<InboxTag[]>([]);

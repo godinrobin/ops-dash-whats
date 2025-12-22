@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Header } from '@/components/Header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,7 +18,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
 
 const FlowListPage = () => {
-  useActivityTracker("page_visit", "DisparaZap Fluxos");
+  const location = useLocation();
+  const isAutomatiZap = location.pathname.startsWith('/inbox');
+  const systemName = isAutomatiZap ? "Automati-Zap Fluxos" : "DisparaZap Fluxos";
+  useActivityTracker("page_visit", systemName);
   const navigate = useNavigate();
   const { user } = useAuth();
   const { flows, loading, createFlow, deleteFlow, toggleFlowActive, updateFlow } = useInboxFlows();
