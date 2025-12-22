@@ -428,7 +428,7 @@ Regras:
         // Update status in database
         const newStatus = result.instance?.state === 'open' ? 'connected' : 'disconnected';
 
-        // If connected, try to get the phone number from Evolution
+        // If connected, try to get the phone number from Evolution AND configure webhook
         let phoneNumber: string | null = null;
         if (newStatus === 'connected') {
           try {
@@ -450,6 +450,64 @@ Regras:
             }
           } catch (e) {
             console.error('Could not fetch phone number:', e);
+          }
+          
+          // Automatically configure webhook for inbox messages
+          try {
+            const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
+            const webhookUrl = `${SUPABASE_URL}/functions/v1/webhook-inbox-messages`;
+            
+            console.log(`Configuring webhook for ${instanceName} to ${webhookUrl}`);
+            
+            // Try Evolution API v2 format
+            const webhookBody = {
+              webhook: {
+                enabled: true,
+                url: webhookUrl,
+                webhookByEvents: false,
+                webhookBase64: false,
+                events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'SEND_MESSAGE', 'CONNECTION_UPDATE'],
+              }
+            };
+            
+            const webhookResponse = await fetch(`${EVOLUTION_BASE_URL}/webhook/set/${instanceName}`, {
+              method: 'POST',
+              headers: {
+                'apikey': EVOLUTION_API_KEY,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(webhookBody),
+            });
+            
+            if (!webhookResponse.ok) {
+              // Try alternative format
+              const altBody = {
+                enabled: true,
+                url: webhookUrl,
+                webhookByEvents: false,
+                webhookBase64: false,
+                events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'SEND_MESSAGE', 'CONNECTION_UPDATE'],
+              };
+              
+              const altResponse = await fetch(`${EVOLUTION_BASE_URL}/webhook/set/${instanceName}`, {
+                method: 'POST',
+                headers: {
+                  'apikey': EVOLUTION_API_KEY,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(altBody),
+              });
+              
+              if (altResponse.ok) {
+                console.log('Webhook configured successfully (alternative format)');
+              } else {
+                console.error('Failed to configure webhook:', await altResponse.text());
+              }
+            } else {
+              console.log('Webhook configured successfully');
+            }
+          } catch (webhookError) {
+            console.error('Error configuring webhook:', webhookError);
           }
         }
 

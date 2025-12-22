@@ -125,19 +125,19 @@ serve(async (req) => {
 
       // Find or create contact - search by user_id + phone only (not instance_id)
       // This prevents duplicate contacts when messages come from different instances
+      // Use upsert with ON CONFLICT to handle race conditions
       let { data: contact, error: contactError } = await supabaseClient
         .from('inbox_contacts')
         .select('*')
         .eq('user_id', userId)
         .eq('phone', phone)
-        .single();
+        .maybeSingle();
 
-      if (contactError || !contact) {
-        // Create new contact - pushName was extracted earlier from data.pushName
-        
+      if (!contact) {
+        // Create new contact using upsert to handle race conditions
         const { data: newContact, error: insertError } = await supabaseClient
           .from('inbox_contacts')
-          .insert({
+          .upsert({
             user_id: userId,
             instance_id: instanceId,
             phone,
@@ -145,19 +145,34 @@ serve(async (req) => {
             status: 'active',
             unread_count: 1,
             last_message_at: new Date().toISOString(),
+          }, {
+            onConflict: 'user_id,phone',
+            ignoreDuplicates: false,
           })
           .select()
           .single();
 
         if (insertError) {
           console.error('Error creating contact:', insertError);
-          return new Response(JSON.stringify({ success: false, error: 'Failed to create contact' }), {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
+          // Try to fetch existing contact in case of race condition
+          const { data: existingContact } = await supabaseClient
+            .from('inbox_contacts')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('phone', phone)
+            .single();
+          
+          if (existingContact) {
+            contact = existingContact;
+          } else {
+            return new Response(JSON.stringify({ success: false, error: 'Failed to create contact' }), {
+              status: 500,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        } else {
+          contact = newContact;
         }
-
-        contact = newContact;
       } else {
         // Update existing contact: increment unread, update pushName, and update instance_id
         const updates: Record<string, any> = {
