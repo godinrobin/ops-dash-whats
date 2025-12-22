@@ -352,8 +352,8 @@ export default function InboxDashboard() {
 
   const CHART_COLORS = ['#f97316', '#3b82f6', '#22c55e', '#a855f7', '#ec4899', '#06b6d4', '#eab308', '#ef4444'];
 
-  // Calculate messages by day for each instance (last 7 days)
-  const messagesByDay = useMemo(() => {
+  // Calculate conversations (contacts) by day for each instance (last 7 days)
+  const conversationsByDay = useMemo(() => {
     const last7Days = Array.from({ length: 7 }, (_, i) => {
       const d = new Date();
       d.setDate(d.getDate() - (6 - i));
@@ -361,25 +361,34 @@ export default function InboxDashboard() {
     });
     
     // Initialize data structure
-    const dayMap = new Map<string, Record<string, number>>();
+    const dayMap = new Map<string, Record<string, Set<string>>>();
     last7Days.forEach(day => dayMap.set(day, {}));
     
-    // Count messages by day and instance
+    // Count unique contacts (conversations) by day and instance
     messages.forEach(m => {
       const day = m.created_at.split('T')[0];
-      if (dayMap.has(day) && m.instance_id) {
+      if (dayMap.has(day) && m.instance_id && m.contact_id) {
         const instanceName = instances.find(i => i.id === m.instance_id)?.label || 
                             instances.find(i => i.id === m.instance_id)?.instance_name || 
                             'Desconhecido';
         const dayData = dayMap.get(day)!;
-        dayData[instanceName] = (dayData[instanceName] || 0) + 1;
+        if (!dayData[instanceName]) {
+          dayData[instanceName] = new Set<string>();
+        }
+        dayData[instanceName].add(m.contact_id);
       }
     });
     
-    return last7Days.map(day => ({
-      date: new Date(day + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-      ...dayMap.get(day),
-    }));
+    return last7Days.map(day => {
+      const dayData = dayMap.get(day)!;
+      const result: Record<string, any> = {
+        date: new Date(day + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+      };
+      Object.entries(dayData).forEach(([name, contactSet]) => {
+        result[name] = contactSet.size;
+      });
+      return result;
+    });
   }, [messages, instances]);
 
   // Get unique instance names for chart lines
@@ -529,18 +538,18 @@ export default function InboxDashboard() {
           </Card>
         </div>
 
-        {/* Chart - Messages by Day per Instance */}
-        {messages.length > 0 && (
+        {/* Chart - Conversations by Day per Instance */}
+        {contacts.length > 0 && (
           <Card className="mb-8">
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <TrendingUp className="h-5 w-5" />
-                Mensagens por Número (Últimos 7 dias)
+                Conversas por Número (Últimos 7 dias)
               </CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={messagesByDay}>
+                <LineChart data={conversationsByDay}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis 
                     dataKey="date" 
