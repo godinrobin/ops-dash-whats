@@ -93,12 +93,15 @@ serve(async (req) => {
     const messageVariations = campaign.message_variations as string[];
     const delayMin = campaign.delay_min || 5;
     const delayMax = campaign.delay_max || 15;
+    const mediaType = campaign.media_type || 'text';
+    const mediaUrl = campaign.media_url || '';
+    const dispatchesPerInstance = campaign.dispatches_per_instance || 1;
     let currentIndex = campaign.current_index || 0;
     let sentCount = campaign.sent_count || 0;
     let failedCount = campaign.failed_count || 0;
 
     // Process messages in batches
-    const batchSize = 10; // Process 10 messages per function call
+    const batchSize = 10;
     const endIndex = Math.min(currentIndex + batchSize, phoneNumbers.length);
     
     console.log(`Processing messages from index ${currentIndex} to ${endIndex}`);
@@ -117,12 +120,64 @@ serve(async (req) => {
       }
 
       const phone = phoneNumbers[i];
-      const message = messageVariations[Math.floor(Math.random() * messageVariations.length)];
-      const instance = instances[i % instances.length];
+      const message = messageVariations.length > 0 
+        ? messageVariations[Math.floor(Math.random() * messageVariations.length)]
+        : '';
+      
+      // Calculate which instance to use based on dispatches_per_instance
+      const instanceIndex = Math.floor(i / dispatchesPerInstance) % instances.length;
+      const instance = instances[instanceIndex];
 
       try {
-        // Send message via Evolution API
-        const evolutionUrl = `${config.evolution_base_url}/message/sendText/${instance.instance_name}`;
+        let evolutionUrl: string;
+        let body: any;
+
+        // Determine the endpoint and body based on media type
+        switch (mediaType) {
+          case 'image':
+            evolutionUrl = `${config.evolution_base_url}/message/sendMedia/${instance.instance_name}`;
+            body = {
+              number: phone,
+              mediatype: 'image',
+              media: mediaUrl,
+              caption: message,
+            };
+            break;
+          case 'video':
+            evolutionUrl = `${config.evolution_base_url}/message/sendMedia/${instance.instance_name}`;
+            body = {
+              number: phone,
+              mediatype: 'video',
+              media: mediaUrl,
+              caption: message,
+            };
+            break;
+          case 'audio':
+            evolutionUrl = `${config.evolution_base_url}/message/sendWhatsAppAudio/${instance.instance_name}`;
+            body = {
+              number: phone,
+              audio: mediaUrl,
+            };
+            break;
+          case 'document':
+            evolutionUrl = `${config.evolution_base_url}/message/sendMedia/${instance.instance_name}`;
+            body = {
+              number: phone,
+              mediatype: 'document',
+              media: mediaUrl,
+              caption: message,
+              fileName: 'document',
+            };
+            break;
+          default: // text
+            evolutionUrl = `${config.evolution_base_url}/message/sendText/${instance.instance_name}`;
+            body = {
+              number: phone,
+              text: message,
+            };
+        }
+        
+        console.log(`Sending ${mediaType} to ${phone} via ${instance.instance_name}`);
         
         const response = await fetch(evolutionUrl, {
           method: 'POST',
@@ -130,10 +185,7 @@ serve(async (req) => {
             'Content-Type': 'application/json',
             'apikey': config.evolution_api_key,
           },
-          body: JSON.stringify({
-            number: phone,
-            text: message,
-          }),
+          body: JSON.stringify(body),
         });
 
         if (response.ok) {
@@ -147,7 +199,7 @@ serve(async (req) => {
               campaign_id: campaignId,
               user_id: campaign.user_id,
               phone,
-              message,
+              message: message || `[${mediaType}] ${mediaUrl}`,
               instance_id: instance.id,
               status: 'sent',
               sent_at: new Date().toISOString(),
@@ -164,7 +216,7 @@ serve(async (req) => {
               campaign_id: campaignId,
               user_id: campaign.user_id,
               phone,
-              message,
+              message: message || `[${mediaType}] ${mediaUrl}`,
               instance_id: instance.id,
               status: 'failed',
               error_message: errorText.substring(0, 500),
@@ -180,7 +232,7 @@ serve(async (req) => {
             campaign_id: campaignId,
             user_id: campaign.user_id,
             phone,
-            message,
+            message: message || `[${mediaType}] ${mediaUrl}`,
             status: 'failed',
             error_message: error.message,
           });
@@ -199,7 +251,9 @@ serve(async (req) => {
 
       // Random delay between messages
       if (i < endIndex - 1) {
-        const delay = Math.floor(Math.random() * (delayMax - delayMin + 1)) + delayMin;
+        const delay = delayMin === delayMax 
+          ? delayMin 
+          : Math.floor(Math.random() * (delayMax - delayMin + 1)) + delayMin;
         console.log(`Waiting ${delay} seconds...`);
         await new Promise(resolve => setTimeout(resolve, delay * 1000));
       }
