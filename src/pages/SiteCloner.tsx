@@ -22,7 +22,7 @@ import {
   Type,
   Palette,
   Layout,
-  Code,
+  Paperclip,
   FileText,
   CheckCircle2,
   History,
@@ -248,7 +248,7 @@ export default function SiteCloner() {
           {/* Header */}
           <div className="text-center space-y-2">
             <h1 className="text-3xl font-bold flex items-center justify-center gap-2">
-              <Code className="h-8 w-8 text-primary" />
+              <Paperclip className="h-8 w-8 text-primary" />
               Clonador de Entregável
             </h1>
             <p className="text-muted-foreground">
