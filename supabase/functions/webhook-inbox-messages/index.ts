@@ -123,7 +123,8 @@ serve(async (req) => {
       const userId = instanceData.user_id;
       const instanceId = instanceData.id;
 
-      // Find or create contact
+      // Find or create contact - search by user_id + phone only (not instance_id)
+      // This prevents duplicate contacts when messages come from different instances
       let { data: contact, error: contactError } = await supabaseClient
         .from('inbox_contacts')
         .select('*')
@@ -158,10 +159,11 @@ serve(async (req) => {
 
         contact = newContact;
       } else {
-        // Update existing contact: increment unread and update pushName if available
+        // Update existing contact: increment unread, update pushName, and update instance_id
         const updates: Record<string, any> = {
           unread_count: (contact.unread_count || 0) + 1,
           last_message_at: new Date().toISOString(),
+          instance_id: instanceId, // Always update to the latest instance that received the message
         };
         
         // Only update name if we have a valid pushName and contact doesn't have a name yet
