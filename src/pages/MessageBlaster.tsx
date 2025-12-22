@@ -71,6 +71,7 @@ const MessageBlaster = () => {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showInstancesDialog, setShowInstancesDialog] = useState(false);
   
   // Form state
   const [campaignName, setCampaignName] = useState('');
@@ -601,16 +602,13 @@ const MessageBlaster = () => {
                 {/* Instance Selection */}
                 <div className="space-y-2">
                   <Label>Números para Envio</Label>
-                  {instances.length === 0 ? (
-                    <p className="text-sm text-muted-foreground p-4 bg-muted rounded-lg text-center">
-                      Nenhum número conectado encontrado.
-                      <Button variant="link" className="p-0 h-auto ml-1" onClick={() => navigate('/maturador/instancias')}>
-                        Conectar número
-                      </Button>
-                    </p>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto border rounded-lg p-2">
-                      {instances.map(instance => (
+                  <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto border rounded-lg p-2">
+                    {instances.length === 0 ? (
+                      <p className="text-sm text-muted-foreground p-4 text-center">
+                        Nenhum número conectado encontrado.
+                      </p>
+                    ) : (
+                      instances.map(instance => (
                         <div key={instance.id} className="flex items-center space-x-3 p-2 rounded hover:bg-muted">
                           <Checkbox
                             id={`instance-${instance.id}`}
@@ -625,9 +623,12 @@ const MessageBlaster = () => {
                             Conectado
                           </Badge>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      ))
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedInstances.length} número(s) selecionado(s)
+                  </p>
                 </div>
 
                 {/* Actions */}
@@ -639,6 +640,47 @@ const MessageBlaster = () => {
                     Criar Campanha
                   </Button>
                 </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Connected Numbers Dialog */}
+          <Dialog open={showInstancesDialog} onOpenChange={setShowInstancesDialog}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Números Conectados</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                {instances.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Smartphone className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground mb-4">Nenhum número conectado</p>
+                    <Button onClick={() => { setShowInstancesDialog(false); navigate('/maturador/instancias'); }}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Conectar Número
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {instances.map(instance => (
+                        <div key={instance.id} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div>
+                            <p className="font-medium">{instance.label || instance.instance_name}</p>
+                            <p className="text-sm text-muted-foreground">{instance.phone_number || 'Sem número'}</p>
+                          </div>
+                          <Badge variant="outline" className="text-green-500 border-green-500">
+                            Conectado
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                    <Button className="w-full" onClick={() => { setShowInstancesDialog(false); navigate('/maturador/instancias'); }}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Gerenciar Números
+                    </Button>
+                  </>
+                )}
               </div>
             </DialogContent>
           </Dialog>
@@ -689,7 +731,10 @@ const MessageBlaster = () => {
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card 
+            className="cursor-pointer hover:shadow-md transition-shadow"
+            onClick={() => setShowInstancesDialog(true)}
+          >
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-purple-500/10">
