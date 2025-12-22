@@ -68,9 +68,42 @@ const FlowEditorPage = () => {
   }, [user]);
 
   useEffect(() => {
-    const fetchFlow = async () => {
-      if (!id || !user) return;
+    const fetchOrCreateFlow = async () => {
+      if (!user) return;
 
+      // If no id, create a new flow
+      if (!id || id === 'novo') {
+        try {
+          const { data, error } = await supabase
+            .from('inbox_flows')
+            .insert({
+              user_id: user.id,
+              name: 'Novo Fluxo',
+              description: '',
+              nodes: [],
+              edges: [],
+              trigger_type: 'keyword',
+              trigger_keywords: [],
+              assigned_instances: [],
+              is_active: false,
+            })
+            .select()
+            .single();
+
+          if (error) throw error;
+
+          // Navigate to the new flow
+          navigate(`/disparazap/fluxos/${data.id}`, { replace: true });
+          return;
+        } catch (error: unknown) {
+          console.error('Error creating flow:', error);
+          toast.error('Erro ao criar fluxo');
+          navigate('/disparador');
+          return;
+        }
+      }
+
+      // Fetch existing flow
       try {
         const { data, error } = await supabase
           .from('inbox_flows')
@@ -100,13 +133,13 @@ const FlowEditorPage = () => {
       } catch (error: unknown) {
         console.error('Error fetching flow:', error);
         toast.error('Erro ao carregar fluxo');
-        navigate('/inbox/flows');
+        navigate('/disparador');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchFlow();
+    fetchOrCreateFlow();
   }, [id, user, navigate]);
 
   const handleSave = async (nodes: FlowNode[], edges: FlowEdge[]) => {
@@ -167,7 +200,7 @@ const FlowEditorPage = () => {
       
       <div className="border-b border-border px-4 py-2 flex items-center justify-between bg-card shrink-0">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/inbox/flows')} title="Voltar para Fluxos">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/disparador')} title="Voltar para DisparaZap">
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <Input
