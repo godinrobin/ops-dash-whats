@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,11 +9,12 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ArrowLeft, MessageSquare, Smartphone, GitBranch, Tag, Plus, RefreshCw, Loader2, QrCode, Trash2, PowerOff, RotateCcw, ChevronDown, ChevronRight, Phone, Zap } from "lucide-react";
+import { ArrowLeft, MessageSquare, Smartphone, GitBranch, Tag, Plus, RefreshCw, Loader2, QrCode, Trash2, PowerOff, RotateCcw, ChevronDown, ChevronRight, Phone, Zap, Users, TrendingUp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import automatizapIcon from "@/assets/automatizap-icon.png";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 
 interface Instance {
   id: string;
@@ -45,6 +46,8 @@ export default function InboxDashboard() {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [flows, setFlows] = useState<Flow[]>([]);
   const [tags, setTags] = useState<InboxTag[]>([]);
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedInstances, setExpandedInstances] = useState<Set<string>>(new Set());
@@ -81,15 +84,19 @@ export default function InboxDashboard() {
     if (!user) return;
 
     try {
-      const [instancesRes, flowsRes, tagsRes] = await Promise.all([
+      const [instancesRes, flowsRes, tagsRes, contactsRes, messagesRes] = await Promise.all([
         supabase.from('maturador_instances').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
         supabase.from('inbox_flows').select('id, name, is_active, assigned_instances').eq('user_id', user.id),
         supabase.from('inbox_tags').select('*').eq('user_id', user.id),
+        supabase.from('inbox_contacts').select('*').eq('user_id', user.id),
+        supabase.from('inbox_messages').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(500),
       ]);
 
       if (instancesRes.data) setInstances(instancesRes.data);
       if (flowsRes.data) setFlows(flowsRes.data);
       if (tagsRes.data) setTags(tagsRes.data);
+      if (contactsRes.data) setContacts(contactsRes.data);
+      if (messagesRes.data) setMessages(messagesRes.data);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Erro ao carregar dados');
@@ -335,6 +342,36 @@ export default function InboxDashboard() {
     setExpandedInstances(newExpanded);
   };
 
+  // Stats calculations
+  const todayMessages = useMemo(() => {
+    const today = new Date().toDateString();
+    return messages.filter(m => new Date(m.created_at).toDateString() === today);
+  }, [messages]);
+
+  const messagesByInstance = useMemo(() => {
+    const map = new Map<string, number>();
+    messages.forEach(m => {
+      if (m.instance_id) {
+        map.set(m.instance_id, (map.get(m.instance_id) || 0) + 1);
+      }
+    });
+    return instances.map(inst => ({
+      name: inst.label || inst.instance_name,
+      messages: map.get(inst.id) || 0,
+    }));
+  }, [messages, instances]);
+
+  const messagesByDirection = useMemo(() => {
+    const incoming = messages.filter(m => m.direction === 'incoming').length;
+    const outgoing = messages.filter(m => m.direction === 'outgoing').length;
+    return [
+      { name: 'Recebidas', value: incoming, fill: '#22c55e' },
+      { name: 'Enviadas', value: outgoing, fill: '#3b82f6' },
+    ];
+  }, [messages]);
+
+  const CHART_COLORS = ['#f97316', '#3b82f6', '#22c55e', '#a855f7', '#ec4899', '#06b6d4', '#eab308', '#ef4444'];
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -415,6 +452,126 @@ export default function InboxDashboard() {
             </Card>
           ))}
         </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Total de Contatos</CardDescription>
+              <CardTitle className="text-3xl">{contacts.length}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Users className="h-4 w-4" />
+                <span>Contatos salvos</span>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Mensagens Hoje</CardDescription>
+              <CardTitle className="text-3xl">{todayMessages.length}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <MessageSquare className="h-4 w-4" />
+                <span>Recebidas e enviadas</span>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Fluxos Ativos</CardDescription>
+              <CardTitle className="text-3xl">{flows.filter(f => f.is_active).length}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Zap className="h-4 w-4" />
+                <span>De {flows.length} total</span>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Números Conectados</CardDescription>
+              <CardTitle className="text-3xl">{instances.filter(i => i.status === 'connected').length}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Smartphone className="h-4 w-4" />
+                <span>De {instances.length} total</span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Charts */}
+        {messages.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  Mensagens por Número
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={messagesByInstance}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="name" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+                    <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }}
+                    />
+                    <Bar dataKey="messages" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5" />
+                  Direção das Mensagens
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={250}>
+                  <PieChart>
+                    <Pie
+                      data={messagesByDirection}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={90}
+                      paddingAngle={5}
+                      dataKey="value"
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {messagesByDirection.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }}
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Números Conectados Section */}
         <div className="mb-8">
@@ -621,7 +778,11 @@ export default function InboxDashboard() {
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
             ) : qrCode ? (
-              <img src={`data:image/png;base64,${qrCode}`} alt="QR Code" className="w-64 h-64" />
+              <img 
+                src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`} 
+                alt="QR Code" 
+                className="w-64 h-64" 
+              />
             ) : (
               <div className="w-64 h-64 flex items-center justify-center text-muted-foreground">
                 QR Code não disponível

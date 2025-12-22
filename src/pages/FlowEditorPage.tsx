@@ -285,9 +285,9 @@ const FlowEditorPage = () => {
                           </div>
                           <Badge 
                             variant="outline" 
-                            className={instance.status === 'open' ? 'bg-green-500/20 text-green-500 border-green-500' : 'bg-red-500/20 text-red-500 border-red-500'}
+                            className={instance.status === 'connected' || instance.status === 'open' ? 'bg-green-500/20 text-green-500 border-green-500' : 'bg-red-500/20 text-red-500 border-red-500'}
                           >
-                            {instance.status === 'open' ? 'Online' : 'Offline'}
+                            {instance.status === 'connected' || instance.status === 'open' ? 'Online' : 'Offline'}
                           </Badge>
                         </div>
                       ))

@@ -87,6 +87,28 @@ const FlowListPage = () => {
     }
   };
 
+  const handleDuplicateFlow = async (flow: typeof flows[0]) => {
+    const result = await createFlow(`${flow.name} (Cópia)`, flow.description || '');
+    if (result.error) {
+      toast.error('Erro ao duplicar fluxo: ' + result.error);
+    } else if (result.data) {
+      // Update the duplicated flow with nodes, edges, and settings
+      const updateResult = await updateFlow(result.data.id, {
+        nodes: flow.nodes,
+        edges: flow.edges,
+        trigger_type: flow.trigger_type,
+        trigger_keywords: flow.trigger_keywords,
+        assigned_instances: flow.assigned_instances,
+        is_active: false, // Start as inactive
+      });
+      if (updateResult.error) {
+        toast.error('Erro ao configurar fluxo duplicado: ' + updateResult.error);
+      } else {
+        toast.success('Fluxo duplicado com sucesso');
+      }
+    }
+  };
+
   const openInstancesDialog = (flowId: string) => {
     const flow = flows.find(f => f.id === flowId);
     setSelectedFlowId(flowId);
@@ -335,7 +357,13 @@ const FlowListPage = () => {
                     >
                       <Smartphone className="h-3 w-3" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8"
+                      onClick={() => handleDuplicateFlow(flow)}
+                      title="Duplicar fluxo"
+                    >
                       <Copy className="h-3 w-3" />
                     </Button>
                     <Button 
