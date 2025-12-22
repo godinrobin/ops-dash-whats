@@ -11,6 +11,7 @@ import { useAccessLevel } from "@/hooks/useAccessLevel";
 import { RestrictedFeatureModal } from "@/components/RestrictedFeatureModal";
 import { Lock } from "lucide-react";
 import tiktokLogo from "@/assets/tiktok-logo.png";
+import automatizapIcon from "@/assets/automatizap-icon.png";
 
 const Home = () => {
   const navigate = useNavigate();
@@ -194,9 +195,9 @@ const Home = () => {
     },
     { 
       path: "/inbox", 
-      emoji: "📥", 
-      title: "Inbox WhatsApp",
-      description: "Gerencie todas suas conversas de WhatsApp em um só lugar",
+      image: automatizapIcon,
+      title: "Automati-Zap",
+      description: "Sistema para automatizar as conversas do WhatsApp",
       subtext: "Chat em tempo real + FlowBuilder de automação",
       gradient: "from-green-400 to-teal-500",
       restricted: true

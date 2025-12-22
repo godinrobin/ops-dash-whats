@@ -39,6 +39,7 @@ import NotFound from "./pages/NotFound";
 import InboxPage from "./pages/InboxPage";
 import FlowListPage from "./pages/FlowListPage";
 import FlowEditorPage from "./pages/FlowEditorPage";
+import InboxDashboard from "./pages/InboxDashboard";
 
 const queryClient = new QueryClient();
 
@@ -81,9 +82,10 @@ const App = () => (
             <Route path="/maturador/chat" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorChat /></MemberRoute>} />
             <Route path="/maturador/verified-contacts" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorVerifiedContacts /></MemberRoute>} />
             <Route path="/save-whatsapp" element={<ProtectedRoute><SaveWhatsApp /></ProtectedRoute>} />
-            <Route path="/inbox" element={<MemberRoute featureName="Inbox WhatsApp"><InboxPage /></MemberRoute>} />
-            <Route path="/inbox/flows" element={<MemberRoute featureName="Inbox WhatsApp"><FlowListPage /></MemberRoute>} />
-            <Route path="/inbox/flows/:id" element={<MemberRoute featureName="Inbox WhatsApp"><FlowEditorPage /></MemberRoute>} />
+            <Route path="/inbox" element={<MemberRoute featureName="Automati-Zap"><InboxDashboard /></MemberRoute>} />
+            <Route path="/inbox/chat" element={<MemberRoute featureName="Automati-Zap"><InboxPage /></MemberRoute>} />
+            <Route path="/inbox/flows" element={<MemberRoute featureName="Automati-Zap"><FlowListPage /></MemberRoute>} />
+            <Route path="/inbox/flows/:id" element={<MemberRoute featureName="Automati-Zap"><FlowEditorPage /></MemberRoute>} />
             
             {/* ADMIN ROUTES */}
             <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />

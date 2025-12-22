@@ -1,5 +1,5 @@
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { Mic, CheckCircle } from 'lucide-react';
+import { Mic } from 'lucide-react';
 
 export const AudioNode = ({ data }: NodeProps) => {
   const mediaUrl = (data as { mediaUrl?: string })?.mediaUrl;
@@ -19,9 +19,13 @@ export const AudioNode = ({ data }: NodeProps) => {
         <span className="font-medium text-sm">Áudio</span>
       </div>
       {hasMedia ? (
-        <div className="flex items-center gap-2 text-xs text-green-500">
-          <CheckCircle className="h-4 w-4" />
-          <span>Áudio carregado</span>
+        <div className="w-full">
+          <audio 
+            src={mediaUrl} 
+            controls 
+            className="w-full h-8"
+            style={{ maxWidth: '160px' }}
+          />
         </div>
       ) : (
         <div className="text-xs text-muted-foreground truncate max-w-[160px]">

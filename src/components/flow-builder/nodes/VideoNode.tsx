@@ -1,5 +1,5 @@
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { Video, CheckCircle } from 'lucide-react';
+import { Video } from 'lucide-react';
 
 export const VideoNode = ({ data }: NodeProps) => {
   const mediaUrl = (data as { mediaUrl?: string })?.mediaUrl;
@@ -19,9 +19,13 @@ export const VideoNode = ({ data }: NodeProps) => {
         <span className="font-medium text-sm">Vídeo</span>
       </div>
       {hasMedia ? (
-        <div className="flex items-center gap-2 text-xs text-green-500">
-          <CheckCircle className="h-4 w-4" />
-          <span>Vídeo carregado</span>
+        <div className="w-full">
+          <video 
+            src={mediaUrl} 
+            controls 
+            className="w-full rounded"
+            style={{ maxWidth: '160px', maxHeight: '90px' }}
+          />
         </div>
       ) : (
         <div className="text-xs text-muted-foreground truncate max-w-[160px]">
