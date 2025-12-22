@@ -130,58 +130,70 @@ export const PropertiesPanel = ({
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>
-                {selectedNode.type === 'image' ? 'Imagem' : selectedNode.type === 'audio' ? 'Áudio' : 'Vídeo'}
+                Enviar {selectedNode.type === 'image' ? 'Imagem' : selectedNode.type === 'audio' ? 'Áudio' : 'Vídeo'}
               </Label>
-              <div className="space-y-2">
-                <Input
-                  type="file"
-                  accept={
-                    selectedNode.type === 'image' ? 'image/*' : 
-                    selectedNode.type === 'audio' ? 'audio/*' : 
-                    'video/*'
-                  }
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    
-                    // Get current user for path
-                    const { supabase } = await import('@/integrations/supabase/client');
-                    const { data: { user } } = await supabase.auth.getUser();
-                    if (!user) {
-                      console.error('User not authenticated');
-                      return;
+              <div className="space-y-3">
+                <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
+                  <Input
+                    type="file"
+                    accept={
+                      selectedNode.type === 'image' ? 'image/*' : 
+                      selectedNode.type === 'audio' ? 'audio/*' : 
+                      'video/*'
                     }
-                    
-                    // Upload to Supabase storage with user ID in path
-                    const fileName = `${user.id}/flow-media/${Date.now()}-${file.name}`;
-                    const { data, error } = await supabase.storage.from('video-clips').upload(fileName, file);
-                    
-                    if (error) {
-                      console.error('Upload error:', error);
-                      return;
-                    }
-                    
-                    // Get public URL
-                    const { data: urlData } = supabase.storage.from('video-clips').getPublicUrl(fileName);
-                    
-                    onUpdateNode(selectedNode.id, { mediaUrl: urlData.publicUrl });
-                  }}
-                  className="cursor-pointer"
-                />
-                {(nodeData.mediaUrl as string) && (
-                  <p className="text-xs text-green-500 truncate">
-                    ✓ Arquivo carregado
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      
+                      const { supabase } = await import('@/integrations/supabase/client');
+                      const { data: { user } } = await supabase.auth.getUser();
+                      if (!user) {
+                        const { toast } = await import('sonner');
+                        toast.error('Você precisa estar logado');
+                        return;
+                      }
+                      
+                      const { toast } = await import('sonner');
+                      toast.loading('Enviando arquivo...');
+                      
+                      const fileName = `${user.id}/flow-media/${Date.now()}-${file.name}`;
+                      const { error } = await supabase.storage.from('video-clips').upload(fileName, file);
+                      
+                      if (error) {
+                        toast.dismiss();
+                        toast.error('Erro ao enviar arquivo');
+                        console.error('Upload error:', error);
+                        return;
+                      }
+                      
+                      const { data: urlData } = supabase.storage.from('video-clips').getPublicUrl(fileName);
+                      onUpdateNode(selectedNode.id, { mediaUrl: urlData.publicUrl });
+                      toast.dismiss();
+                      toast.success('Arquivo enviado!');
+                    }}
+                    className="cursor-pointer"
+                  />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Clique para selecionar um arquivo
                   </p>
+                </div>
+                {(nodeData.mediaUrl as string) && (
+                  <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-2 flex items-center gap-2">
+                    <span className="text-green-500">✓</span>
+                    <span className="text-xs text-green-500 truncate flex-1">
+                      Arquivo carregado
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+                      onClick={() => onUpdateNode(selectedNode.id, { mediaUrl: '' })}
+                    >
+                      Remover
+                    </Button>
+                  </div>
                 )}
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Ou cole uma URL</Label>
-              <Input
-                placeholder="https://..."
-                value={(nodeData.mediaUrl as string) || ''}
-                onChange={(e) => onUpdateNode(selectedNode.id, { mediaUrl: e.target.value })}
-              />
             </div>
             <div className="space-y-2">
               <Label>Legenda (opcional)</Label>

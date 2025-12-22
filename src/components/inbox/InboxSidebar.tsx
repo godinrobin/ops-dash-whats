@@ -142,14 +142,6 @@ export const InboxSidebar = ({ selectedInstanceId, onInstanceChange }: InboxSide
           </SelectContent>
         </Select>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="w-10 h-10"
-          title="Configurações"
-        >
-          <Settings className="h-5 w-5" />
-        </Button>
       </div>
     </div>
   );

@@ -187,13 +187,13 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
   };
 
   return (
-    <div className="flex h-full w-full overflow-hidden" style={{ minHeight: 'calc(100vh - 140px)' }}>
+    <div className="flex w-full overflow-hidden" style={{ height: 'calc(100vh - 140px)' }}>
       <NodeSidebar />
       
       <div 
         className="flex-1 relative" 
         ref={reactFlowWrapper}
-        style={{ height: '100%', minHeight: '500px' }}
+        style={{ height: '100%' }}
       >
         <ReactFlow
           nodes={nodes}
@@ -208,15 +208,11 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
           onInit={onInit}
           nodeTypes={nodeTypes}
           fitView
-          className="bg-muted/30"
+          className="bg-background"
           proOptions={{ hideAttribution: true }}
         >
-          <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
-          <Controls />
-          <MiniMap 
-            nodeStrokeWidth={3}
-            className="!bg-background border border-border rounded-lg"
-          />
+          <Background variant={BackgroundVariant.Dots} gap={20} size={1} className="!bg-background" />
+          <Controls className="!bg-card !border-border !shadow-md" />
         </ReactFlow>
       </div>
 
