@@ -12,6 +12,7 @@ import { RestrictedFeatureModal } from "@/components/RestrictedFeatureModal";
 import { Lock } from "lucide-react";
 import tiktokLogo from "@/assets/tiktok-logo.png";
 import automatizapIcon from "@/assets/automatizap-icon.png";
+import disparazapIcon from "@/assets/disparazap-icon.png";
 
 const Home = () => {
   const navigate = useNavigate();
@@ -204,7 +205,7 @@ const Home = () => {
     },
     { 
       path: "/disparador", 
-      emoji: "✈️", 
+      image: disparazapIcon, 
       title: "DisparaZap",
       description: "Envie mensagens em massa para múltiplos contatos",
       subtext: "Variações de texto, delays e múltiplos números",
