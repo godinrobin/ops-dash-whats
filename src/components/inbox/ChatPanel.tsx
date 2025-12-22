@@ -350,7 +350,69 @@ export const ChatPanel = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          {/* Flow pause/resume buttons */}
+          <TooltipProvider>
+            {flowPaused ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-9 w-9 text-green-500 hover:text-green-600 hover:bg-green-500/10"
+                    onClick={handleResumeFlow}
+                  >
+                    <Play className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Continuar Funil</TooltipContent>
+              </Tooltip>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-9 w-9 text-orange-500 hover:text-orange-600 hover:bg-orange-500/10"
+                    onClick={handlePauseFlow}
+                  >
+                    <Pause className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Pausar Funil</TooltipContent>
+              </Tooltip>
+            )}
+
+            {/* Mark as read/unread */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-9 w-9"
+                  onClick={handleMarkAsRead}
+                >
+                  <MailOpen className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Marcar como lido</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-9 w-9"
+                  onClick={handleMarkAsUnread}
+                >
+                  <Mail className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Marcar como não lido</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
           {/* Label dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
