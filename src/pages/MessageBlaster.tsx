@@ -1,0 +1,729 @@
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Header } from '@/components/Header';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Progress } from '@/components/ui/progress';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { 
+  Plus, 
+  Send, 
+  Trash2, 
+  Play, 
+  Pause, 
+  RotateCcw, 
+  Upload, 
+  FileText, 
+  Smartphone,
+  Clock,
+  MessageSquare,
+  Users,
+  CheckCircle,
+  XCircle,
+  ArrowLeft,
+  Copy,
+  Download
+} from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
+
+interface Campaign {
+  id: string;
+  name: string;
+  message_variations: string[];
+  phone_numbers: string[];
+  delay_min: number;
+  delay_max: number;
+  status: 'draft' | 'running' | 'paused' | 'completed' | 'cancelled';
+  sent_count: number;
+  failed_count: number;
+  total_count: number;
+  current_index: number;
+  assigned_instances: string[];
+  created_at: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
+interface Instance {
+  id: string;
+  instance_name: string;
+  phone_number: string | null;
+  label: string | null;
+  status: string;
+}
+
+const MessageBlaster = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [instances, setInstances] = useState<Instance[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  
+  // Form state
+  const [campaignName, setCampaignName] = useState('');
+  const [messageVariations, setMessageVariations] = useState<string[]>(['']);
+  const [phoneNumbers, setPhoneNumbers] = useState('');
+  const [delayMin, setDelayMin] = useState(5);
+  const [delayMax, setDelayMax] = useState(15);
+  const [selectedInstances, setSelectedInstances] = useState<string[]>([]);
+  const [importMethod, setImportMethod] = useState<'manual' | 'file'>('manual');
+
+  const fetchCampaigns = useCallback(async () => {
+    if (!user) return;
+    
+    const { data, error } = await supabase
+      .from('blaster_campaigns')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('Error fetching campaigns:', error);
+      toast.error('Erro ao carregar campanhas');
+    } else {
+      setCampaigns((data || []).map(c => ({
+        ...c,
+        message_variations: c.message_variations as string[],
+        phone_numbers: c.phone_numbers as string[],
+        assigned_instances: c.assigned_instances || [],
+      })) as Campaign[]);
+    }
+    setLoading(false);
+  }, [user]);
+
+  const fetchInstances = useCallback(async () => {
+    if (!user) return;
+    
+    const { data } = await supabase
+      .from('maturador_instances')
+      .select('id, instance_name, phone_number, label, status')
+      .eq('user_id', user.id)
+      .in('status', ['connected', 'open']);
+    
+    if (data) {
+      setInstances(data);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchCampaigns();
+    fetchInstances();
+  }, [fetchCampaigns, fetchInstances]);
+
+  // Real-time subscription
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('blaster-campaigns-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'blaster_campaigns',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          fetchCampaigns();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, fetchCampaigns]);
+
+  const addMessageVariation = () => {
+    if (messageVariations.length < 5) {
+      setMessageVariations([...messageVariations, '']);
+    }
+  };
+
+  const removeMessageVariation = (index: number) => {
+    if (messageVariations.length > 1) {
+      setMessageVariations(messageVariations.filter((_, i) => i !== index));
+    }
+  };
+
+  const updateMessageVariation = (index: number, value: string) => {
+    const updated = [...messageVariations];
+    updated[index] = value;
+    setMessageVariations(updated);
+  };
+
+  const parsePhoneNumbers = (text: string): string[] => {
+    // Split by newlines, commas, or semicolons
+    const numbers = text
+      .split(/[\n,;]+/)
+      .map(n => n.trim().replace(/\D/g, ''))
+      .filter(n => n.length >= 10 && n.length <= 15);
+    
+    // Remove duplicates
+    return [...new Set(numbers)];
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      setPhoneNumbers(content);
+      toast.success(`Arquivo carregado: ${file.name}`);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleCreateCampaign = async () => {
+    if (!user) return;
+    
+    if (!campaignName.trim()) {
+      toast.error('Digite um nome para a campanha');
+      return;
+    }
+
+    const validMessages = messageVariations.filter(m => m.trim());
+    if (validMessages.length === 0) {
+      toast.error('Adicione pelo menos uma variação de mensagem');
+      return;
+    }
+
+    const numbers = parsePhoneNumbers(phoneNumbers);
+    if (numbers.length === 0) {
+      toast.error('Adicione pelo menos um número válido');
+      return;
+    }
+
+    if (selectedInstances.length === 0) {
+      toast.error('Selecione pelo menos um número para enviar');
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('blaster_campaigns')
+      .insert({
+        user_id: user.id,
+        name: campaignName,
+        message_variations: validMessages,
+        phone_numbers: numbers,
+        delay_min: delayMin,
+        delay_max: delayMax,
+        total_count: numbers.length,
+        assigned_instances: selectedInstances,
+        status: 'draft',
+      })
+      .select()
+      .single();
+
+    if (error) {
+      toast.error('Erro ao criar campanha: ' + error.message);
+    } else {
+      toast.success('Campanha criada com sucesso!');
+      setShowCreateDialog(false);
+      resetForm();
+      fetchCampaigns();
+    }
+  };
+
+  const resetForm = () => {
+    setCampaignName('');
+    setMessageVariations(['']);
+    setPhoneNumbers('');
+    setDelayMin(5);
+    setDelayMax(15);
+    setSelectedInstances([]);
+  };
+
+  const startCampaign = async (campaignId: string) => {
+    try {
+      const response = await supabase.functions.invoke('blaster-send', {
+        body: { campaignId, action: 'start' },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      toast.success('Campanha iniciada!');
+    } catch (error: any) {
+      toast.error('Erro ao iniciar campanha: ' + error.message);
+    }
+  };
+
+  const pauseCampaign = async (campaignId: string) => {
+    const { error } = await supabase
+      .from('blaster_campaigns')
+      .update({ status: 'paused' })
+      .eq('id', campaignId);
+
+    if (error) {
+      toast.error('Erro ao pausar campanha');
+    } else {
+      toast.success('Campanha pausada');
+      fetchCampaigns();
+    }
+  };
+
+  const cancelCampaign = async (campaignId: string) => {
+    const { error } = await supabase
+      .from('blaster_campaigns')
+      .update({ status: 'cancelled' })
+      .eq('id', campaignId);
+
+    if (error) {
+      toast.error('Erro ao cancelar campanha');
+    } else {
+      toast.success('Campanha cancelada');
+      fetchCampaigns();
+    }
+  };
+
+  const deleteCampaign = async (campaignId: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta campanha?')) return;
+
+    const { error } = await supabase
+      .from('blaster_campaigns')
+      .delete()
+      .eq('id', campaignId);
+
+    if (error) {
+      toast.error('Erro ao excluir campanha');
+    } else {
+      toast.success('Campanha excluída');
+      fetchCampaigns();
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    const statusConfig: Record<string, { label: string; className: string }> = {
+      draft: { label: 'Rascunho', className: 'bg-gray-500' },
+      running: { label: 'Enviando', className: 'bg-green-500 animate-pulse' },
+      paused: { label: 'Pausado', className: 'bg-yellow-500' },
+      completed: { label: 'Concluído', className: 'bg-blue-500' },
+      cancelled: { label: 'Cancelado', className: 'bg-red-500' },
+    };
+
+    const config = statusConfig[status] || statusConfig.draft;
+    return <Badge className={`${config.className} text-white`}>{config.label}</Badge>;
+  };
+
+  const toggleInstance = (instanceId: string) => {
+    setSelectedInstances(prev =>
+      prev.includes(instanceId)
+        ? prev.filter(id => id !== instanceId)
+        : [...prev, instanceId]
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Header />
+      <div className="h-14 md:h-16" />
+
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center gap-4 mb-6">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/')}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold">Disparador de Mensagens</h1>
+            <p className="text-muted-foreground">Envie mensagens em massa com variações e delays</p>
+          </div>
+          <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Nova Campanha
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Criar Nova Campanha</DialogTitle>
+              </DialogHeader>
+              
+              <div className="space-y-6 py-4">
+                {/* Campaign Name */}
+                <div className="space-y-2">
+                  <Label>Nome da Campanha</Label>
+                  <Input
+                    placeholder="Ex: Black Friday 2024"
+                    value={campaignName}
+                    onChange={(e) => setCampaignName(e.target.value)}
+                  />
+                </div>
+
+                {/* Message Variations */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Variações de Mensagem ({messageVariations.length}/5)</Label>
+                    {messageVariations.length < 5 && (
+                      <Button variant="outline" size="sm" onClick={addMessageVariation}>
+                        <Plus className="h-3 w-3 mr-1" />
+                        Adicionar
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Use {'{nome}'} para inserir o nome do contato
+                  </p>
+                  {messageVariations.map((msg, index) => (
+                    <div key={index} className="flex gap-2">
+                      <Textarea
+                        placeholder={`Mensagem ${index + 1}...`}
+                        value={msg}
+                        onChange={(e) => updateMessageVariation(index, e.target.value)}
+                        rows={2}
+                        className="flex-1"
+                      />
+                      {messageVariations.length > 1 && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeMessageVariation(index)}
+                          className="text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Phone Numbers */}
+                <div className="space-y-2">
+                  <Label>Números de Telefone</Label>
+                  <Tabs value={importMethod} onValueChange={(v) => setImportMethod(v as 'manual' | 'file')}>
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="manual">
+                        <MessageSquare className="h-4 w-4 mr-2" />
+                        Manual
+                      </TabsTrigger>
+                      <TabsTrigger value="file">
+                        <Upload className="h-4 w-4 mr-2" />
+                        Arquivo
+                      </TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="manual" className="mt-2">
+                      <Textarea
+                        placeholder="Cole os números aqui (um por linha ou separados por vírgula)&#10;Ex: 5511999999999&#10;5521888888888"
+                        value={phoneNumbers}
+                        onChange={(e) => setPhoneNumbers(e.target.value)}
+                        rows={5}
+                      />
+                    </TabsContent>
+                    <TabsContent value="file" className="mt-2">
+                      <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+                        <Input
+                          type="file"
+                          accept=".txt,.csv"
+                          onChange={handleFileUpload}
+                          className="cursor-pointer"
+                        />
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Aceita arquivos .txt ou .csv com um número por linha
+                        </p>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                  <p className="text-xs text-muted-foreground">
+                    {parsePhoneNumbers(phoneNumbers).length} números válidos encontrados
+                  </p>
+                </div>
+
+                {/* Delay Settings */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Delay Mínimo (segundos)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={delayMin}
+                      onChange={(e) => setDelayMin(parseInt(e.target.value) || 5)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Delay Máximo (segundos)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={delayMax}
+                      onChange={(e) => setDelayMax(parseInt(e.target.value) || 15)}
+                    />
+                  </div>
+                </div>
+
+                {/* Instance Selection */}
+                <div className="space-y-2">
+                  <Label>Números para Envio</Label>
+                  {instances.length === 0 ? (
+                    <p className="text-sm text-muted-foreground p-4 bg-muted rounded-lg text-center">
+                      Nenhum número conectado encontrado.
+                      <Button variant="link" className="p-0 h-auto ml-1" onClick={() => navigate('/maturador/instancias')}>
+                        Conectar número
+                      </Button>
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto border rounded-lg p-2">
+                      {instances.map(instance => (
+                        <div key={instance.id} className="flex items-center space-x-3 p-2 rounded hover:bg-muted">
+                          <Checkbox
+                            id={`instance-${instance.id}`}
+                            checked={selectedInstances.includes(instance.id)}
+                            onCheckedChange={() => toggleInstance(instance.id)}
+                          />
+                          <label htmlFor={`instance-${instance.id}`} className="flex-1 cursor-pointer">
+                            <p className="font-medium text-sm">{instance.label || instance.instance_name}</p>
+                            <p className="text-xs text-muted-foreground">{instance.phone_number || 'Sem número'}</p>
+                          </label>
+                          <Badge variant="outline" className="text-green-500 border-green-500">
+                            Conectado
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div className="flex justify-end gap-2 pt-4">
+                  <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={handleCreateCampaign}>
+                    Criar Campanha
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        {/* Stats Overview */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-blue-500/10">
+                  <MessageSquare className="h-5 w-5 text-blue-500" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Campanhas</p>
+                  <p className="text-2xl font-bold">{campaigns.length}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-green-500/10">
+                  <CheckCircle className="h-5 w-5 text-green-500" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Enviadas</p>
+                  <p className="text-2xl font-bold">
+                    {campaigns.reduce((acc, c) => acc + c.sent_count, 0)}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-red-500/10">
+                  <XCircle className="h-5 w-5 text-red-500" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Falhas</p>
+                  <p className="text-2xl font-bold">
+                    {campaigns.reduce((acc, c) => acc + c.failed_count, 0)}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-purple-500/10">
+                  <Smartphone className="h-5 w-5 text-purple-500" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Números Conectados</p>
+                  <p className="text-2xl font-bold">{instances.length}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Campaigns List */}
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3].map(i => (
+              <Card key={i} className="animate-pulse">
+                <CardHeader>
+                  <div className="h-6 bg-muted rounded w-3/4"></div>
+                  <div className="h-4 bg-muted rounded w-1/2 mt-2"></div>
+                </CardHeader>
+              </Card>
+            ))}
+          </div>
+        ) : campaigns.length === 0 ? (
+          <Card className="text-center py-12">
+            <CardContent>
+              <Send className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium mb-2">Nenhuma campanha encontrada</h3>
+              <p className="text-muted-foreground mb-4">Crie sua primeira campanha de disparo</p>
+              <Button onClick={() => setShowCreateDialog(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Nova Campanha
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {campaigns.map(campaign => (
+              <Card key={campaign.id} className="hover:shadow-md transition-shadow">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <CardTitle className="text-lg">{campaign.name}</CardTitle>
+                      <CardDescription className="mt-1">
+                        Criado em {new Date(campaign.created_at).toLocaleDateString('pt-BR')}
+                      </CardDescription>
+                    </div>
+                    {getStatusBadge(campaign.status)}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {/* Progress */}
+                  <div className="space-y-2 mb-4">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Progresso</span>
+                      <span className="font-medium">
+                        {campaign.sent_count + campaign.failed_count}/{campaign.total_count}
+                      </span>
+                    </div>
+                    <Progress 
+                      value={campaign.total_count > 0 
+                        ? ((campaign.sent_count + campaign.failed_count) / campaign.total_count) * 100 
+                        : 0
+                      } 
+                    />
+                  </div>
+
+                  {/* Stats */}
+                  <div className="grid grid-cols-3 gap-2 text-center mb-4">
+                    <div className="p-2 bg-muted rounded">
+                      <p className="text-lg font-bold text-green-500">{campaign.sent_count}</p>
+                      <p className="text-xs text-muted-foreground">Enviadas</p>
+                    </div>
+                    <div className="p-2 bg-muted rounded">
+                      <p className="text-lg font-bold text-red-500">{campaign.failed_count}</p>
+                      <p className="text-xs text-muted-foreground">Falhas</p>
+                    </div>
+                    <div className="p-2 bg-muted rounded">
+                      <p className="text-lg font-bold">{campaign.total_count}</p>
+                      <p className="text-xs text-muted-foreground">Total</p>
+                    </div>
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    <Badge variant="outline">
+                      <MessageSquare className="h-3 w-3 mr-1" />
+                      {campaign.message_variations.length} variação(ões)
+                    </Badge>
+                    <Badge variant="outline">
+                      <Clock className="h-3 w-3 mr-1" />
+                      {campaign.delay_min}-{campaign.delay_max}s
+                    </Badge>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2">
+                    {campaign.status === 'draft' && (
+                      <Button 
+                        size="sm" 
+                        className="flex-1 bg-green-500 hover:bg-green-600"
+                        onClick={() => startCampaign(campaign.id)}
+                      >
+                        <Play className="h-3 w-3 mr-1" />
+                        Iniciar
+                      </Button>
+                    )}
+                    {campaign.status === 'running' && (
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => pauseCampaign(campaign.id)}
+                      >
+                        <Pause className="h-3 w-3 mr-1" />
+                        Pausar
+                      </Button>
+                    )}
+                    {campaign.status === 'paused' && (
+                      <>
+                        <Button 
+                          size="sm" 
+                          className="flex-1 bg-green-500 hover:bg-green-600"
+                          onClick={() => startCampaign(campaign.id)}
+                        >
+                          <Play className="h-3 w-3 mr-1" />
+                          Continuar
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => cancelCampaign(campaign.id)}
+                        >
+                          <XCircle className="h-3 w-3" />
+                        </Button>
+                      </>
+                    )}
+                    {(campaign.status === 'completed' || campaign.status === 'cancelled') && (
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        className="flex-1"
+                        disabled
+                      >
+                        {campaign.status === 'completed' ? 'Concluído' : 'Cancelado'}
+                      </Button>
+                    )}
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 text-destructive hover:text-destructive"
+                      onClick={() => deleteCampaign(campaign.id)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default MessageBlaster;

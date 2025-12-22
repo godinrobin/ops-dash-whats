@@ -40,6 +40,7 @@ import InboxPage from "./pages/InboxPage";
 import FlowListPage from "./pages/FlowListPage";
 import FlowEditorPage from "./pages/FlowEditorPage";
 import InboxDashboard from "./pages/InboxDashboard";
+import MessageBlaster from "./pages/MessageBlaster";
 
 const queryClient = new QueryClient();
 
@@ -86,6 +87,7 @@ const App = () => (
             <Route path="/inbox/chat" element={<MemberRoute featureName="Automati-Zap"><InboxPage /></MemberRoute>} />
             <Route path="/inbox/flows" element={<MemberRoute featureName="Automati-Zap"><FlowListPage /></MemberRoute>} />
             <Route path="/inbox/flows/:id" element={<MemberRoute featureName="Automati-Zap"><FlowEditorPage /></MemberRoute>} />
+            <Route path="/disparador" element={<MemberRoute featureName="Disparador de Mensagens"><MessageBlaster /></MemberRoute>} />
             
             {/* ADMIN ROUTES */}
             <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />
