@@ -77,11 +77,16 @@ export const useInboxConversations = (instanceId?: string) => {
 
       if (fetchError) throw fetchError;
 
-      // Show all contacts regardless of instance status
-      // Previously we filtered by connectedInstanceIds but this caused messages from
-      // disconnected instances to not appear
+      // Filter contacts to only show those from connected instances
+      const filteredData = (data || []).filter((contact) => {
+        // If no instance_id, hide the contact (orphaned)
+        if (!contact.instance_id) return false;
+        // Only show contacts from connected instances
+        return connectedInstanceIds.size === 0 || connectedInstanceIds.has(contact.instance_id);
+      });
+
       setContacts(
-        (data || []).map((contact) => ({
+        filteredData.map((contact) => ({
           ...contact,
           tags: Array.isArray(contact.tags) ? (contact.tags as any[]).map((t) => String(t)) : [],
           status: contact.status as 'active' | 'archived',
