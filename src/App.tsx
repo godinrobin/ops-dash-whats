@@ -41,6 +41,7 @@ import FlowListPage from "./pages/FlowListPage";
 import FlowEditorPage from "./pages/FlowEditorPage";
 import InboxDashboard from "./pages/InboxDashboard";
 import MessageBlaster from "./pages/MessageBlaster";
+import SiteCloner from "./pages/SiteCloner";
 
 const queryClient = new QueryClient();
 
@@ -88,6 +89,7 @@ const App = () => (
             <Route path="/inbox/flows" element={<MemberRoute featureName="Automati-Zap"><FlowListPage /></MemberRoute>} />
             <Route path="/inbox/flows/:id" element={<MemberRoute featureName="Automati-Zap"><FlowEditorPage /></MemberRoute>} />
             <Route path="/disparador" element={<MemberRoute featureName="Disparador de Mensagens"><MessageBlaster /></MemberRoute>} />
+            <Route path="/clonador" element={<MemberRoute featureName="Clonador de Entregável"><SiteCloner /></MemberRoute>} />
             
             {/* ADMIN ROUTES */}
             <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />
