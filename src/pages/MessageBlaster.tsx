@@ -778,7 +778,7 @@ const MessageBlaster = () => {
                   <div className="text-center py-8">
                     <Smartphone className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                     <p className="text-muted-foreground mb-4">Nenhum número conectado</p>
-                    <Button onClick={() => { setShowInstancesDialog(false); navigate('/maturador/instancias'); }}>
+                    <Button onClick={() => { setShowInstancesDialog(false); navigate('/maturador/instances'); }}>
                       <Plus className="h-4 w-4 mr-2" />
                       Conectar Número
                     </Button>
@@ -798,7 +798,7 @@ const MessageBlaster = () => {
                         </div>
                       ))}
                     </div>
-                    <Button className="w-full" onClick={() => { setShowInstancesDialog(false); navigate('/maturador/instancias'); }}>
+                    <Button className="w-full" onClick={() => { setShowInstancesDialog(false); navigate('/maturador/instances'); }}>
                       <Plus className="h-4 w-4 mr-2" />
                       Gerenciar Números
                     </Button>
