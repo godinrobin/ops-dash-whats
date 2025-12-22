@@ -276,6 +276,7 @@ export type Database = {
           delay_min: number
           dispatches_per_instance: number | null
           failed_count: number
+          flow_id: string | null
           id: string
           media_type: string | null
           media_url: string | null
@@ -298,6 +299,7 @@ export type Database = {
           delay_min?: number
           dispatches_per_instance?: number | null
           failed_count?: number
+          flow_id?: string | null
           id?: string
           media_type?: string | null
           media_url?: string | null
@@ -320,6 +322,7 @@ export type Database = {
           delay_min?: number
           dispatches_per_instance?: number | null
           failed_count?: number
+          flow_id?: string | null
           id?: string
           media_type?: string | null
           media_url?: string | null
@@ -333,7 +336,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "blaster_campaigns_flow_id_fkey"
+            columns: ["flow_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_flows"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       blaster_logs: {
         Row: {

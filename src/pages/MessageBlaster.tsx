@@ -29,7 +29,8 @@ import {
   Image as ImageIcon,
   Video,
   FileText,
-  Music
+  Music,
+  GitBranch
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -54,6 +55,14 @@ interface Campaign {
   media_type?: string;
   media_url?: string;
   dispatches_per_instance?: number;
+  flow_id?: string;
+}
+
+interface InboxFlow {
+  id: string;
+  name: string;
+  description: string | null;
+  is_active: boolean;
 }
 
 interface Instance {
@@ -72,6 +81,7 @@ const MessageBlaster = () => {
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showInstancesDialog, setShowInstancesDialog] = useState(false);
+  const [availableFlows, setAvailableFlows] = useState<InboxFlow[]>([]);
   
   // Form state
   const [campaignName, setCampaignName] = useState('');
@@ -85,6 +95,8 @@ const MessageBlaster = () => {
   const [mediaType, setMediaType] = useState<'text' | 'image' | 'video' | 'audio' | 'document'>('text');
   const [mediaUrl, setMediaUrl] = useState('');
   const [dispatchesPerInstance, setDispatchesPerInstance] = useState(1);
+  const [useFlow, setUseFlow] = useState(false);
+  const [selectedFlowId, setSelectedFlowId] = useState<string>('');
 
   const fetchCampaigns = useCallback(async () => {
     if (!user) return;
@@ -123,10 +135,25 @@ const MessageBlaster = () => {
     }
   }, [user]);
 
+  const fetchFlows = useCallback(async () => {
+    if (!user) return;
+    
+    const { data } = await supabase
+      .from('inbox_flows')
+      .select('id, name, description, is_active')
+      .eq('user_id', user.id)
+      .order('name');
+    
+    if (data) {
+      setAvailableFlows(data);
+    }
+  }, [user]);
+
   useEffect(() => {
     fetchCampaigns();
     fetchInstances();
-  }, [fetchCampaigns, fetchInstances]);
+    fetchFlows();
+  }, [fetchCampaigns, fetchInstances, fetchFlows]);
 
   // Real-time subscription
   useEffect(() => {
@@ -201,13 +228,19 @@ const MessageBlaster = () => {
       return;
     }
 
+    // Validations - flow requires either flow or messages
     const validMessages = messageVariations.filter(m => m.trim());
-    if (validMessages.length === 0 && mediaType === 'text') {
+    if (!useFlow && validMessages.length === 0 && mediaType === 'text') {
       toast.error('Adicione pelo menos uma variação de mensagem');
       return;
     }
 
-    if (mediaType !== 'text' && !mediaUrl.trim()) {
+    if (useFlow && !selectedFlowId) {
+      toast.error('Selecione um fluxo para enviar');
+      return;
+    }
+
+    if (!useFlow && mediaType !== 'text' && !mediaUrl.trim()) {
       toast.error('Adicione a URL da mídia');
       return;
     }
@@ -231,16 +264,17 @@ const MessageBlaster = () => {
       .insert({
         user_id: user.id,
         name: campaignName,
-        message_variations: validMessages,
+        message_variations: useFlow ? [] : validMessages,
         phone_numbers: numbers,
         delay_min: finalDelayMin,
         delay_max: finalDelayMax,
         total_count: numbers.length,
         assigned_instances: selectedInstances,
         status: 'draft',
-        media_type: mediaType,
-        media_url: mediaType !== 'text' ? mediaUrl : null,
+        media_type: useFlow ? 'flow' : mediaType,
+        media_url: !useFlow && mediaType !== 'text' ? mediaUrl : null,
         dispatches_per_instance: dispatchesPerInstance,
+        flow_id: useFlow ? selectedFlowId : null,
       });
 
     if (error) {
@@ -264,6 +298,8 @@ const MessageBlaster = () => {
     setMediaType('text');
     setMediaUrl('');
     setDispatchesPerInstance(1);
+    setUseFlow(false);
+    setSelectedFlowId('');
   };
 
   const startCampaign = async (campaignId: string) => {
@@ -345,6 +381,7 @@ const MessageBlaster = () => {
       case 'video': return <Video className="h-3 w-3" />;
       case 'audio': return <Music className="h-3 w-3" />;
       case 'document': return <FileText className="h-3 w-3" />;
+      case 'flow': return <GitBranch className="h-3 w-3" />;
       default: return <MessageSquare className="h-3 w-3" />;
     }
   };
@@ -394,101 +431,170 @@ const MessageBlaster = () => {
                   />
                 </div>
 
-                {/* Media Type */}
-                <div className="space-y-2">
-                  <Label>Tipo de Conteúdo</Label>
-                  <Select value={mediaType} onValueChange={(v) => setMediaType(v as any)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="text">
-                        <div className="flex items-center gap-2">
-                          <MessageSquare className="h-4 w-4" />
-                          Texto
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="image">
-                        <div className="flex items-center gap-2">
-                          <ImageIcon className="h-4 w-4" />
-                          Imagem
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="video">
-                        <div className="flex items-center gap-2">
-                          <Video className="h-4 w-4" />
-                          Vídeo
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="audio">
-                        <div className="flex items-center gap-2">
-                          <Music className="h-4 w-4" />
-                          Áudio
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="document">
-                        <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4" />
-                          Documento
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                {/* Use Flow Toggle */}
+                <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/30">
+                  <div className="flex items-center gap-3">
+                    <GitBranch className="h-5 w-5 text-primary" />
+                    <div>
+                      <Label htmlFor="use-flow" className="cursor-pointer">Usar Fluxo de Mensagens</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Envie todas as mensagens de um fluxo criado
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    id="use-flow"
+                    checked={useFlow}
+                    onCheckedChange={(checked) => {
+                      setUseFlow(checked);
+                      if (checked) {
+                        setMediaType('text');
+                        setMediaUrl('');
+                      }
+                    }}
+                  />
                 </div>
 
-                {/* Media URL */}
-                {mediaType !== 'text' && (
+                {/* Flow Selection */}
+                {useFlow ? (
                   <div className="space-y-2">
-                    <Label>URL da Mídia</Label>
-                    <Input
-                      placeholder="https://exemplo.com/arquivo.jpg"
-                      value={mediaUrl}
-                      onChange={(e) => setMediaUrl(e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Cole a URL direta do arquivo ({mediaType})
-                    </p>
-                  </div>
-                )}
-
-                {/* Message Variations */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>
-                      {mediaType !== 'text' ? 'Legenda (opcional)' : 'Variações de Mensagem'} ({messageVariations.length}/5)
-                    </Label>
-                    {messageVariations.length < 5 && (
-                      <Button variant="outline" size="sm" onClick={addMessageVariation}>
-                        <Plus className="h-3 w-3 mr-1" />
-                        Adicionar
-                      </Button>
+                    <Label>Selecionar Fluxo</Label>
+                    {availableFlows.length === 0 ? (
+                      <div className="p-4 border rounded-lg text-center">
+                        <p className="text-sm text-muted-foreground mb-2">Nenhum fluxo encontrado</p>
+                        <Button variant="outline" size="sm" onClick={() => navigate('/automatico-zap')}>
+                          <Plus className="h-4 w-4 mr-1" />
+                          Criar Fluxo
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <Select value={selectedFlowId} onValueChange={setSelectedFlowId}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione um fluxo..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableFlows.map(flow => (
+                              <SelectItem key={flow.id} value={flow.id}>
+                                <div className="flex items-center gap-2">
+                                  <GitBranch className="h-4 w-4" />
+                                  {flow.name}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          O fluxo será executado para cada contato da lista
+                        </p>
+                        <Button variant="outline" size="sm" onClick={() => navigate('/automatico-zap')}>
+                          <Plus className="h-4 w-4 mr-1" />
+                          Gerenciar Fluxos
+                        </Button>
+                      </>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground mb-2">
-                    Use {'{nome}'} para inserir o nome do contato
-                  </p>
-                  {messageVariations.map((msg, index) => (
-                    <div key={index} className="flex gap-2">
-                      <Textarea
-                        placeholder={mediaType !== 'text' ? `Legenda ${index + 1}...` : `Mensagem ${index + 1}...`}
-                        value={msg}
-                        onChange={(e) => updateMessageVariation(index, e.target.value)}
-                        rows={2}
-                        className="flex-1"
-                      />
-                      {messageVariations.length > 1 && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeMessageVariation(index)}
-                          className="text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
+                ) : (
+                  <>
+                    {/* Media Type */}
+                    <div className="space-y-2">
+                      <Label>Tipo de Conteúdo</Label>
+                      <Select value={mediaType} onValueChange={(v) => setMediaType(v as any)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="text">
+                            <div className="flex items-center gap-2">
+                              <MessageSquare className="h-4 w-4" />
+                              Texto
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="image">
+                            <div className="flex items-center gap-2">
+                              <ImageIcon className="h-4 w-4" />
+                              Imagem
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="video">
+                            <div className="flex items-center gap-2">
+                              <Video className="h-4 w-4" />
+                              Vídeo
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="audio">
+                            <div className="flex items-center gap-2">
+                              <Music className="h-4 w-4" />
+                              Áudio
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="document">
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-4 w-4" />
+                              Documento
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Media URL */}
+                    {mediaType !== 'text' && (
+                      <div className="space-y-2">
+                        <Label>URL da Mídia</Label>
+                        <Input
+                          placeholder="https://exemplo.com/arquivo.jpg"
+                          value={mediaUrl}
+                          onChange={(e) => setMediaUrl(e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Cole a URL direta do arquivo ({mediaType})
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Message Variations - Only show if not using flow */}
+                {!useFlow && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>
+                        {mediaType !== 'text' ? 'Legenda (opcional)' : 'Variações de Mensagem'} ({messageVariations.length}/5)
+                      </Label>
+                      {messageVariations.length < 5 && (
+                        <Button variant="outline" size="sm" onClick={addMessageVariation}>
+                          <Plus className="h-3 w-3 mr-1" />
+                          Adicionar
                         </Button>
                       )}
                     </div>
-                  ))}
-                </div>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Use {'{nome}'} para inserir o nome do contato
+                    </p>
+                    {messageVariations.map((msg, index) => (
+                      <div key={index} className="flex gap-2">
+                        <Textarea
+                          placeholder={mediaType !== 'text' ? `Legenda ${index + 1}...` : `Mensagem ${index + 1}...`}
+                          value={msg}
+                          onChange={(e) => updateMessageVariation(index, e.target.value)}
+                          rows={2}
+                          className="flex-1"
+                        />
+                        {messageVariations.length > 1 && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeMessageVariation(index)}
+                            className="text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* Phone Numbers */}
                 <div className="space-y-2">
