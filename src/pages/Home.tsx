@@ -257,7 +257,7 @@ const Home = () => {
                     <CardHeader className="text-center p-3 md:p-6">
                       <div className="flex justify-center mb-2 md:mb-4">
                         {'image' in system && system.image ? (
-                          <img src={system.image} alt={system.title} className="w-8 h-8 md:w-16 md:h-16 object-contain" />
+                          <img src={system.image} alt={system.title} className="w-12 h-12 md:w-20 md:h-20 object-contain" />
                         ) : (
                           <span className="text-3xl md:text-6xl">{(system as any).emoji}</span>
                         )}

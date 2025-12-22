@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { InboxSidebar } from './InboxSidebar';
 import { ConversationList } from './ConversationList';
 import { ChatPanel } from './ChatPanel';
@@ -12,14 +14,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 export const InboxLayout = () => {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedContact, setSelectedContact] = useState<InboxContact | null>(null);
   const [showContactDetails, setShowContactDetails] = useState(false);
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | undefined>();
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedLabel, setSelectedLabel] = useState('');
 
-  const { contacts, loading: contactsLoading } = useInboxConversations(selectedInstanceId);
-  const { messages, loading: messagesLoading, sendMessage } = useInboxMessages(selectedContact?.id || null);
+  const { contacts, loading: contactsLoading, refetch: refetchContacts } = useInboxConversations(selectedInstanceId);
+  const { messages, loading: messagesLoading, sendMessage, refetch: refetchMessages } = useInboxMessages(selectedContact?.id || null);
   const { flows } = useInboxFlows();
 
   // Handle URL params for contact selection
@@ -105,17 +109,39 @@ export const InboxLayout = () => {
     }
   }, [selectedContact]);
 
+  // Filter contacts by search query and label
   const filteredContacts = contacts.filter(contact => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      contact.phone.includes(query) ||
-      contact.name?.toLowerCase().includes(query)
-    );
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const matchesSearch = contact.phone.includes(query) || contact.name?.toLowerCase().includes(query);
+      if (!matchesSearch) return false;
+    }
+    
+    // Label filter
+    if (selectedLabel && selectedLabel !== 'all') {
+      const contactTags = Array.isArray((contact as any).tags) ? (contact as any).tags : [];
+      if (!contactTags.includes(selectedLabel)) return false;
+    }
+    
+    return true;
   });
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] md:h-[calc(100vh-4rem)] bg-background">
+      {/* Back button */}
+      <div className="absolute top-16 left-4 z-10 md:top-20">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate('/inbox')}
+          className="gap-1"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span className="hidden md:inline">Voltar</span>
+        </Button>
+      </div>
+
       {/* Sidebar - Filtros */}
       <InboxSidebar 
         selectedInstanceId={selectedInstanceId}
@@ -130,6 +156,8 @@ export const InboxLayout = () => {
         onSelectContact={handleSelectContact}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
+        selectedLabel={selectedLabel}
+        onLabelChange={setSelectedLabel}
       />
 
       {/* Painel de Chat */}

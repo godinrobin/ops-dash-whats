@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Node } from '@xyflow/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +27,20 @@ export const PropertiesPanel = ({
   triggerKeywords = [],
   onUpdateFlowSettings,
 }: PropertiesPanelProps) => {
+  // State for condition variable management
+  const [showNewVariableInput, setShowNewVariableInput] = useState(false);
+  const [newVariableName, setNewVariableName] = useState('');
+  const [customVariables, setCustomVariables] = useState<string[]>(() => {
+    const saved = localStorage.getItem('flowBuilderCustomVariables');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // Reset new variable input when node changes
+  useEffect(() => {
+    setShowNewVariableInput(false);
+    setNewVariableName('');
+  }, [selectedNode?.id]);
+
   if (!selectedNode) {
     return (
       <div className="w-72 bg-background border-l border-border p-4 flex flex-col">
@@ -34,7 +49,7 @@ export const PropertiesPanel = ({
             <Settings className="h-4 w-4" />
             Propriedades
           </h3>
-          <Button size="sm" onClick={onSave}>
+          <Button size="sm" onClick={onSave} className="bg-green-500 hover:bg-green-600 text-white">
             <Save className="h-4 w-4 mr-1" />
             Salvar
           </Button>
@@ -106,6 +121,19 @@ export const PropertiesPanel = ({
         );
 
       case 'text':
+        // Get available variables from other nodes
+        const getAvailableVariablesForText = () => {
+          const variables: string[] = ['nome', 'telefone'];
+          // This would need access to all nodes - for now we show common ones
+          return variables;
+        };
+        const textVariables = getAvailableVariablesForText();
+        
+        const insertVariable = (varName: string) => {
+          const currentMessage = (nodeData.message as string) || '';
+          onUpdateNode(selectedNode.id, { message: currentMessage + `{{${varName}}}` });
+        };
+        
         return (
           <div className="space-y-4">
             <div className="space-y-2">
@@ -117,9 +145,24 @@ export const PropertiesPanel = ({
                 rows={4}
               />
             </div>
-            <p className="text-xs text-muted-foreground">
-              Use {'{{nome}}'} para variáveis dinâmicas
-            </p>
+            <div className="space-y-2">
+              <Label className="text-xs">Variáveis disponíveis</Label>
+              <div className="flex flex-wrap gap-1">
+                {textVariables.map((varName) => (
+                  <Badge 
+                    key={varName}
+                    variant="secondary" 
+                    className="cursor-pointer hover:bg-primary hover:text-primary-foreground text-xs"
+                    onClick={() => insertVariable(varName)}
+                  >
+                    {`{{${varName}}}`}
+                  </Badge>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Clique para inserir no texto
+              </p>
+            </div>
           </div>
         );
 
@@ -248,27 +291,75 @@ export const PropertiesPanel = ({
               />
             </div>
             <div className="space-y-2">
-              <Label>Timeout (segundos)</Label>
+              <Label>Prazo para responder (segundos)</Label>
               <Input
                 type="number"
                 min={30}
                 value={(nodeData.timeout as number) || 300}
                 onChange={(e) => onUpdateNode(selectedNode.id, { timeout: parseInt(e.target.value) })}
               />
+              <p className="text-xs text-muted-foreground">
+                O fluxo continuará automaticamente após este prazo, mesmo sem resposta.
+              </p>
             </div>
           </div>
         );
 
       case 'condition':
+        // Common system variables + user-created ones
+        const systemVariables = ['nome', 'telefone', 'resposta'];
+        const allConditionVariables = [...systemVariables, ...customVariables];
+        
+        const addNewVariable = () => {
+          if (newVariableName.trim() && !allConditionVariables.includes(newVariableName.trim())) {
+            const newVars = [...customVariables, newVariableName.trim()];
+            setCustomVariables(newVars);
+            localStorage.setItem('flowBuilderCustomVariables', JSON.stringify(newVars));
+            onUpdateNode(selectedNode.id, { variable: newVariableName.trim() });
+            setNewVariableName('');
+            setShowNewVariableInput(false);
+          }
+        };
+        
         return (
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Variável</Label>
-              <Input
-                placeholder="{{variavel}}"
+              <Select
                 value={(nodeData.variable as string) || ''}
-                onChange={(e) => onUpdateNode(selectedNode.id, { variable: e.target.value })}
-              />
+                onValueChange={(value) => {
+                  if (value === '__new__') {
+                    setShowNewVariableInput(true);
+                  } else {
+                    onUpdateNode(selectedNode.id, { variable: value });
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione uma variável" />
+                </SelectTrigger>
+                <SelectContent>
+                  {allConditionVariables.map((v) => (
+                    <SelectItem key={v} value={v}>{`{{${v}}}`}</SelectItem>
+                  ))}
+                  <SelectItem value="__new__" className="text-primary">+ Adicionar nova variável</SelectItem>
+                </SelectContent>
+              </Select>
+              {showNewVariableInput && (
+                <div className="flex gap-2 mt-2">
+                  <Input
+                    placeholder="Nome da variável"
+                    value={newVariableName}
+                    onChange={(e) => setNewVariableName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') addNewVariable();
+                      if (e.key === 'Escape') setShowNewVariableInput(false);
+                    }}
+                    autoFocus
+                  />
+                  <Button size="sm" onClick={addNewVariable}>Adicionar</Button>
+                </div>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Operador</Label>
@@ -472,7 +563,7 @@ export const PropertiesPanel = ({
           <Settings className="h-4 w-4" />
           Propriedades
         </h3>
-        <Button size="sm" onClick={onSave}>
+        <Button size="sm" onClick={onSave} className="bg-green-500 hover:bg-green-600 text-white">
           <Save className="h-4 w-4 mr-1" />
           Salvar
         </Button>
