@@ -201,6 +201,15 @@ const Home = () => {
       subtext: "Chat em tempo real + FlowBuilder de automação",
       gradient: "from-green-400 to-teal-500",
       restricted: true
+    },
+    { 
+      path: "/disparador", 
+      emoji: "📤", 
+      title: "Disparador de Mensagens",
+      description: "Envie mensagens em massa para múltiplos contatos",
+      subtext: "Variações de texto, delays e múltiplos números",
+      gradient: "from-blue-500 to-indigo-600",
+      restricted: true
     }
   ];
 

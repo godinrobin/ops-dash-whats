@@ -266,6 +266,113 @@ export type Database = {
         }
         Relationships: []
       }
+      blaster_campaigns: {
+        Row: {
+          assigned_instances: string[] | null
+          completed_at: string | null
+          created_at: string
+          current_index: number
+          delay_max: number
+          delay_min: number
+          failed_count: number
+          id: string
+          message_variations: Json
+          name: string
+          phone_numbers: Json
+          sent_count: number
+          started_at: string | null
+          status: string
+          total_count: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assigned_instances?: string[] | null
+          completed_at?: string | null
+          created_at?: string
+          current_index?: number
+          delay_max?: number
+          delay_min?: number
+          failed_count?: number
+          id?: string
+          message_variations?: Json
+          name: string
+          phone_numbers?: Json
+          sent_count?: number
+          started_at?: string | null
+          status?: string
+          total_count?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assigned_instances?: string[] | null
+          completed_at?: string | null
+          created_at?: string
+          current_index?: number
+          delay_max?: number
+          delay_min?: number
+          failed_count?: number
+          id?: string
+          message_variations?: Json
+          name?: string
+          phone_numbers?: Json
+          sent_count?: number
+          started_at?: string | null
+          status?: string
+          total_count?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      blaster_logs: {
+        Row: {
+          campaign_id: string
+          created_at: string
+          error_message: string | null
+          id: string
+          instance_id: string | null
+          message: string
+          phone: string
+          sent_at: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          campaign_id: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          instance_id?: string | null
+          message: string
+          phone: string
+          sent_at?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          campaign_id?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          instance_id?: string | null
+          message?: string
+          phone?: string
+          sent_at?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blaster_logs_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "blaster_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_update_status: {
         Row: {
           completed_at: string | null
