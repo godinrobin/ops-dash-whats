@@ -9,7 +9,8 @@ import {
   List,
   Bot,
   Tag,
-  Play
+  Play,
+  FileText
 } from 'lucide-react';
 
 const nodeCategories = [
@@ -26,6 +27,7 @@ const nodeCategories = [
       { type: 'image', label: 'Imagem', icon: Image, color: 'bg-purple-500' },
       { type: 'audio', label: 'Áudio', icon: Mic, color: 'bg-orange-500' },
       { type: 'video', label: 'Vídeo', icon: Video, color: 'bg-pink-500' },
+      { type: 'document', label: 'Documento', icon: FileText, color: 'bg-red-500' },
     ],
   },
   {

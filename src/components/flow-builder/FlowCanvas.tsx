@@ -20,6 +20,7 @@ import { TextNode } from './nodes/TextNode';
 import { ImageNode } from './nodes/ImageNode';
 import { AudioNode } from './nodes/AudioNode';
 import { VideoNode } from './nodes/VideoNode';
+import { DocumentNode } from './nodes/DocumentNode';
 import { DelayNode } from './nodes/DelayNode';
 import { WaitInputNode } from './nodes/WaitInputNode';
 import { ConditionNode } from './nodes/ConditionNode';
@@ -39,6 +40,7 @@ const nodeTypes = {
   image: ImageNode,
   audio: AudioNode,
   video: VideoNode,
+  document: DocumentNode,
   delay: DelayNode,
   waitInput: WaitInputNode,
   condition: ConditionNode,
@@ -149,6 +151,7 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
       image: 'Enviar Imagem',
       audio: 'Enviar Áudio',
       video: 'Enviar Vídeo',
+      document: 'Enviar Documento',
       delay: 'Aguardar',
       waitInput: 'Aguardar Resposta',
       condition: 'Condição',

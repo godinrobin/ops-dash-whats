@@ -169,21 +169,38 @@ export const PropertiesPanel = ({
       case 'image':
       case 'audio':
       case 'video':
+      case 'document':
+        const getMediaLabel = () => {
+          switch (selectedNode.type) {
+            case 'image': return 'Imagem';
+            case 'audio': return 'Áudio';
+            case 'video': return 'Vídeo';
+            case 'document': return 'Documento';
+            default: return 'Arquivo';
+          }
+        };
+        
+        const getAcceptType = () => {
+          switch (selectedNode.type) {
+            case 'image': return 'image/*';
+            case 'audio': return 'audio/*';
+            case 'video': return 'video/*';
+            case 'document': return '.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.ppt,.pptx';
+            default: return '*/*';
+          }
+        };
+        
         return (
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>
-                Enviar {selectedNode.type === 'image' ? 'Imagem' : selectedNode.type === 'audio' ? 'Áudio' : 'Vídeo'}
+                Enviar {getMediaLabel()}
               </Label>
               <div className="space-y-3">
                 <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
                   <Input
                     type="file"
-                    accept={
-                      selectedNode.type === 'image' ? 'image/*' : 
-                      selectedNode.type === 'audio' ? 'audio/*' : 
-                      'video/*'
-                    }
+                    accept={getAcceptType()}
                     onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
@@ -210,7 +227,10 @@ export const PropertiesPanel = ({
                       }
                       
                       const { data: urlData } = supabase.storage.from('video-clips').getPublicUrl(fileName);
-                      onUpdateNode(selectedNode.id, { mediaUrl: urlData.publicUrl });
+                      onUpdateNode(selectedNode.id, { 
+                        mediaUrl: urlData.publicUrl,
+                        fileName: file.name 
+                      });
                       toast.dismiss();
                       toast.success('Arquivo enviado!');
                     }}
@@ -224,13 +244,13 @@ export const PropertiesPanel = ({
                   <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-2 flex items-center gap-2">
                     <span className="text-green-500">✓</span>
                     <span className="text-xs text-green-500 truncate flex-1">
-                      Arquivo carregado
+                      {(nodeData.fileName as string) || 'Arquivo carregado'}
                     </span>
                     <Button
                       size="sm"
                       variant="ghost"
                       className="h-6 px-2 text-xs text-destructive hover:text-destructive"
-                      onClick={() => onUpdateNode(selectedNode.id, { mediaUrl: '' })}
+                      onClick={() => onUpdateNode(selectedNode.id, { mediaUrl: '', fileName: '' })}
                     >
                       Remover
                     </Button>

@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import automatizapIcon from "@/assets/automatizap-icon.png";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { InboxMenu } from '@/components/inbox/InboxMenu';
+import { cn } from '@/lib/utils';
 
 interface Instance {
   id: string;
@@ -411,7 +412,8 @@ export default function InboxDashboard() {
       icon: MessageSquare, 
       path: "/inbox/chat",
       count: null,
-      gradient: "from-green-400 to-emerald-500"
+      gradient: "from-green-400 to-emerald-500",
+      comingSoon: false,
     },
     { 
       title: "Fluxos", 
@@ -419,7 +421,8 @@ export default function InboxDashboard() {
       icon: GitBranch, 
       path: "/inbox/flows",
       count: flows.length,
-      gradient: "from-blue-400 to-cyan-500"
+      gradient: "from-blue-400 to-cyan-500",
+      comingSoon: false,
     },
     { 
       title: "Etiquetas", 
@@ -427,7 +430,8 @@ export default function InboxDashboard() {
       icon: Tag, 
       path: null,
       count: tags.length,
-      gradient: "from-purple-400 to-pink-500"
+      gradient: "from-purple-400 to-pink-500",
+      comingSoon: true,
     },
   ];
 
@@ -458,8 +462,14 @@ export default function InboxDashboard() {
           {menuCards.map((card) => (
             <Card 
               key={card.title}
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
+              className={cn(
+                "transition-all border-2 border-accent",
+                card.comingSoon 
+                  ? "opacity-60 cursor-not-allowed" 
+                  : "cursor-pointer hover:shadow-lg hover:scale-105"
+              )}
               onClick={() => {
+                if (card.comingSoon) return;
                 if (card.path) {
                   navigate(card.path);
                 } else if (card.title === 'Etiquetas') {
@@ -472,9 +482,14 @@ export default function InboxDashboard() {
                   <div className={`p-3 rounded-lg bg-gradient-to-r ${card.gradient}`}>
                     <card.icon className="h-6 w-6 text-white" />
                   </div>
-                  {card.count !== null && (
-                    <Badge variant="secondary">{card.count}</Badge>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {card.comingSoon && (
+                      <Badge variant="outline" className="text-xs">Em breve</Badge>
+                    )}
+                    {card.count !== null && !card.comingSoon && (
+                      <Badge variant="secondary">{card.count}</Badge>
+                    )}
+                  </div>
                 </div>
                 <CardTitle className="text-lg mt-3">{card.title}</CardTitle>
                 <CardDescription>{card.description}</CardDescription>
