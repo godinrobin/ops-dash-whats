@@ -15,6 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import automatizapIcon from "@/assets/automatizap-icon.png";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { InboxMenu } from '@/components/inbox/InboxMenu';
 
 interface Instance {
   id: string;
@@ -51,6 +52,7 @@ export default function InboxDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedInstances, setExpandedInstances] = useState<Set<string>>(new Set());
+  const [tagsMenuOpen, setTagsMenuOpen] = useState(false);
 
   // Create instance modal
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -448,7 +450,13 @@ export default function InboxDashboard() {
             <Card 
               key={card.title}
               className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent"
-              onClick={() => card.path && navigate(card.path)}
+              onClick={() => {
+                if (card.path) {
+                  navigate(card.path);
+                } else if (card.title === 'Etiquetas') {
+                  setTagsMenuOpen(true);
+                }
+              }}
             >
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
@@ -465,6 +473,9 @@ export default function InboxDashboard() {
             </Card>
           ))}
         </div>
+
+        {/* Tags Menu */}
+        <InboxMenu open={tagsMenuOpen} onOpenChange={setTagsMenuOpen} />
 
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
