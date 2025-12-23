@@ -88,7 +88,11 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
         body: { action: 'purchase' }
       });
 
-      if (error || !data?.success) {
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      if (!data?.success) {
         throw new Error(data?.error || 'Erro ao comprar proxy');
       }
 
