@@ -34,7 +34,7 @@ const SystemCard = ({ icon, title, shortTitle, description, onClick, isLocked, g
     <GlowCard
       glowColor={glowColor}
       customSize
-      className="h-full w-full cursor-pointer flex flex-col"
+      className="h-full w-full cursor-pointer flex flex-col transition-all duration-300 hover:scale-[1.02] hover:-translate-y-1 hover:shadow-xl hover:shadow-primary/10"
       onClick={onClick}
     >
       {isLocked && (

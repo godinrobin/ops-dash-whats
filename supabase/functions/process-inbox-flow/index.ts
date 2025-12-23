@@ -43,7 +43,7 @@ serve(async (req) => {
     }
 
     const flow = session.flow;
-    const contact = session.contact;
+    let contact = session.contact;
     const nodes = flow.nodes as Array<{
       id: string;
       type: string;
@@ -245,31 +245,50 @@ serve(async (req) => {
             });
           }
 
-          const contactTags = (contact.tags as string[]) || [];
+          // IMPORTANT: Re-fetch contact to get updated tags
+          // Tags might have been added/removed during the flow execution
+          const { data: freshContact } = await supabaseClient
+            .from('inbox_contacts')
+            .select('tags')
+            .eq('id', contact.id)
+            .single();
+          
+          const contactTags = (freshContact?.tags as string[]) || [];
+          console.log(`Condition node: checking ${conditions.length} conditions, contact tags:`, contactTags);
+          console.log(`Session variables:`, variables);
           
           const evaluateCondition = (cond: typeof conditions[0]): boolean => {
             if (cond.type === 'tag') {
-              const hasTag = contactTags.includes(cond.tagName || '');
-              return cond.tagCondition === 'has' ? hasTag : !hasTag;
+              const tagToCheck = (cond.tagName || '').trim();
+              const hasTag = contactTags.some(t => t.toLowerCase() === tagToCheck.toLowerCase());
+              const result = cond.tagCondition === 'has' ? hasTag : !hasTag;
+              console.log(`Tag condition: "${tagToCheck}" ${cond.tagCondition} -> hasTag=${hasTag}, result=${result}`);
+              return result;
             }
             
-            // Variable condition
-            const varValue = String(variables[(cond.variable || '').replace(/[{}]/g, '')] || '');
+            // Variable condition - normalize variable name (remove {{ }})
+            const varName = (cond.variable || '').replace(/\{\{|\}\}/g, '').trim();
+            const varValue = String(variables[varName] || '');
             const compareValue = cond.value || '';
             
+            console.log(`Variable condition: ${varName}="${varValue}" ${cond.operator} "${compareValue}"`);
+            
+            let result: boolean;
             switch (cond.operator) {
-              case 'equals': return varValue === compareValue;
-              case 'not_equals': return varValue !== compareValue;
-              case 'contains': return varValue.includes(compareValue);
-              case 'not_contains': return !varValue.includes(compareValue);
-              case 'startsWith': return varValue.startsWith(compareValue);
-              case 'endsWith': return varValue.endsWith(compareValue);
-              case 'greater': return parseFloat(varValue) > parseFloat(compareValue);
-              case 'less': return parseFloat(varValue) < parseFloat(compareValue);
-              case 'exists': return varValue !== '' && varValue !== 'undefined';
-              case 'not_exists': return varValue === '' || varValue === 'undefined';
-              default: return varValue === compareValue;
+              case 'equals': result = varValue.toLowerCase() === compareValue.toLowerCase(); break;
+              case 'not_equals': result = varValue.toLowerCase() !== compareValue.toLowerCase(); break;
+              case 'contains': result = varValue.toLowerCase().includes(compareValue.toLowerCase()); break;
+              case 'not_contains': result = !varValue.toLowerCase().includes(compareValue.toLowerCase()); break;
+              case 'startsWith': result = varValue.toLowerCase().startsWith(compareValue.toLowerCase()); break;
+              case 'endsWith': result = varValue.toLowerCase().endsWith(compareValue.toLowerCase()); break;
+              case 'greater': result = parseFloat(varValue) > parseFloat(compareValue); break;
+              case 'less': result = parseFloat(varValue) < parseFloat(compareValue); break;
+              case 'exists': result = varValue !== '' && varValue !== 'undefined'; break;
+              case 'not_exists': result = varValue === '' || varValue === 'undefined'; break;
+              default: result = varValue.toLowerCase() === compareValue.toLowerCase();
             }
+            console.log(`Variable condition result: ${result}`);
+            return result;
           };
 
           let conditionMet: boolean;
@@ -282,6 +301,7 @@ serve(async (req) => {
           }
           
           console.log(`Condition evaluated: ${conditionMet} (${logicOperator}, ${conditions.length} conditions)`);
+          processedActions.push(`Condition: ${conditionMet ? 'YES' : 'NO'}`);
           
           const conditionEdge = edges.find(e => 
             e.source === currentNodeId && 
@@ -324,6 +344,7 @@ serve(async (req) => {
           const varVal = replaceVariables(currentNode.data.value as string || '', variables);
           if (varName) {
             variables[varName] = varVal;
+            console.log(`Set variable: ${varName} = ${varVal}`);
           }
           
           const setVarEdge = edges.find(e => e.source === currentNodeId);
@@ -339,7 +360,14 @@ serve(async (req) => {
           const tagAction = currentNode.data.action as string || 'add';
           
           if (tagName) {
-            const currentTags = (contact.tags as string[]) || [];
+            // Re-fetch current tags to ensure we have the latest
+            const { data: currentContact } = await supabaseClient
+              .from('inbox_contacts')
+              .select('tags')
+              .eq('id', contact.id)
+              .single();
+            
+            const currentTags = (currentContact?.tags as string[]) || [];
             let newTags: string[];
             
             if (tagAction === 'add') {
@@ -353,6 +381,10 @@ serve(async (req) => {
               .update({ tags: newTags })
               .eq('id', contact.id);
             
+            // Update local contact reference for subsequent condition checks
+            contact = { ...contact, tags: newTags };
+            
+            console.log(`Tag ${tagAction}: ${tagName}, new tags:`, newTags);
             processedActions.push(`${tagAction === 'add' ? 'Added' : 'Removed'} tag: ${tagName}`);
           }
           
@@ -471,32 +503,40 @@ async function sendMessage(
         number: formattedPhone, 
         mediatype: 'document', 
         media: mediaUrl, 
-        fileName: fileName || 'document',
-        caption: content 
+        fileName: fileName || 'document'
       };
       break;
     default:
-      endpoint = `/message/sendText/${instanceName}`;
-      body = { number: formattedPhone, text: content };
+      console.log(`Unknown message type: ${messageType}`);
+      return;
   }
 
   console.log(`Sending ${messageType} to ${formattedPhone} via ${endpoint}`);
+  console.log('Request body:', JSON.stringify(body, null, 2));
 
-  const response = await fetch(`${EVOLUTION_BASE_URL}${endpoint}`, {
-    method: 'POST',
-    headers: {
-      'apikey': EVOLUTION_API_KEY,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
+  try {
+    const response = await fetch(`${EVOLUTION_BASE_URL}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': EVOLUTION_API_KEY,
+      },
+      body: JSON.stringify(body),
+    });
 
-  const result = await response.text();
-  console.log(`Message send result:`, result);
+    const responseText = await response.text();
+    console.log(`Evolution API response (${response.status}):`, responseText);
+    
+    if (!response.ok) {
+      console.error(`Failed to send ${messageType}:`, responseText);
+    }
+  } catch (error) {
+    console.error(`Error sending ${messageType}:`, error);
+  }
 }
 
 async function saveOutboundMessage(
-  supabase: any,
+  supabaseClient: any,
   contactId: string,
   instanceId: string,
   userId: string,
@@ -505,7 +545,7 @@ async function saveOutboundMessage(
   flowId: string,
   mediaUrl?: string
 ) {
-  await supabase
+  const { error } = await supabaseClient
     .from('inbox_messages')
     .insert({
       contact_id: contactId,
@@ -519,4 +559,8 @@ async function saveOutboundMessage(
       is_from_flow: true,
       flow_id: flowId,
     });
+
+  if (error) {
+    console.error('Error saving outbound message:', error);
+  }
 }
