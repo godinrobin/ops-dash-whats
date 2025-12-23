@@ -173,7 +173,7 @@ serve(async (req) => {
         case 'video':
         case 'document':
           const mediaUrl = currentNode.data.mediaUrl as string;
-          const caption = currentNode.data.caption as string || '';
+          const caption = replaceVariables(currentNode.data.caption as string || '', variables);
           const fileName = currentNode.data.fileName as string || '';
           
           console.log(`=== Processing ${currentNode.type} node ===`);
@@ -186,9 +186,13 @@ serve(async (req) => {
           
           if (instanceName && phone && mediaUrl) {
             console.log(`Sending ${currentNode.type} message...`);
-            await sendMessage(instanceName, phone, caption || fileName, currentNode.type, mediaUrl, fileName);
-            await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, fileName || caption, currentNode.type, flow.id, mediaUrl);
-            processedActions.push(`Sent ${currentNode.type}: ${fileName || 'media'}`);
+            // For images/videos, send caption. For documents, send fileName.
+            // DO NOT send fileName as caption for image/video - that causes the filename to appear to the user
+            const contentToSend = currentNode.type === 'document' ? fileName : caption;
+            await sendMessage(instanceName, phone, contentToSend, currentNode.type, mediaUrl, fileName);
+            // Save the caption (not filename) as content for display purposes
+            await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, caption || '', currentNode.type, flow.id, mediaUrl);
+            processedActions.push(`Sent ${currentNode.type}: ${caption || fileName || 'media'}`);
             console.log(`${currentNode.type} sent successfully`);
           } else {
             console.log(`Skipping ${currentNode.type} - missing required data:`, {

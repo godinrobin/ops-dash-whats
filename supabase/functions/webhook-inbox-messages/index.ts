@@ -320,7 +320,7 @@ serve(async (req) => {
       // This prevents duplicate flows from triggering
       const { data: anyActiveSession } = await supabaseClient
         .from('inbox_flow_sessions')
-        .select('id, started_at')
+        .select('id, started_at, current_node_id')
         .eq('contact_id', contact.id)
         .eq('status', 'active')
         .order('started_at', { ascending: false })
@@ -329,12 +329,23 @@ serve(async (req) => {
 
       if (anyActiveSession) {
         const sessionAge = Date.now() - new Date(anyActiveSession.started_at).getTime();
-        // If there's an active session created in the last 5 seconds, don't trigger new flow
-        if (sessionAge < 5000) {
-          console.log(`Skipping flow trigger - active session ${anyActiveSession.id} is too recent (${sessionAge}ms old)`);
-          return new Response(JSON.stringify({ success: true, skipped: true, reason: 'session_cooldown' }), {
+        // If there's an active session (regardless of age), don't trigger new flow
+        // This prevents duplicate flows when user sends multiple messages quickly
+        // The existing session will handle the messages through waitInput/menu nodes
+        console.log(`Active session ${anyActiveSession.id} exists (${sessionAge}ms old, at node: ${anyActiveSession.current_node_id})`);
+        
+        // Only allow new flow trigger if session is older than 1 hour (stale session)
+        if (sessionAge < 3600000) {
+          console.log(`Skipping flow trigger - active session exists and is not stale`);
+          return new Response(JSON.stringify({ success: true, skipped: true, reason: 'active_session_exists' }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
+        } else {
+          console.log(`Session is stale (${sessionAge}ms), marking as completed and allowing new flow`);
+          await supabaseClient
+            .from('inbox_flow_sessions')
+            .update({ status: 'completed' })
+            .eq('id', anyActiveSession.id);
         }
       }
 

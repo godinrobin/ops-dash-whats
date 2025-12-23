@@ -48,12 +48,26 @@ serve(async (req) => {
       });
     }
 
-    // Get user's Evolution API config
-    const { data: config } = await supabaseClient
+    // Get user's Evolution API config, fallback to admin config
+    let { data: config } = await supabaseClient
       .from('maturador_config')
       .select('*')
       .eq('user_id', user.id)
       .single();
+
+    // If user doesn't have their own config, fallback to admin config (global)
+    if (!config?.evolution_base_url || !config?.evolution_api_key) {
+      const { data: adminConfig } = await supabaseAdmin
+        .from('maturador_config')
+        .select('evolution_base_url, evolution_api_key')
+        .limit(1)
+        .single();
+      
+      if (adminConfig?.evolution_base_url && adminConfig?.evolution_api_key) {
+        config = adminConfig;
+        console.log("Using admin Evolution API config as fallback");
+      }
+    }
 
     const EVOLUTION_BASE_URL = config?.evolution_base_url?.replace(/\/$/, '') || 'https://api.chatwp.xyz';
     const EVOLUTION_API_KEY = config?.evolution_api_key || Deno.env.get('EVOLUTION_API_KEY') || '';
