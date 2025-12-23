@@ -338,6 +338,19 @@ serve(async (req) => {
         }
       }
 
+      // Check for recently completed sessions to prevent flow restart
+      // If a flow completed recently (within 1 hour), don't trigger the same flow again
+      const { data: recentlyCompletedSession } = await supabaseClient
+        .from('inbox_flow_sessions')
+        .select('id, flow_id, status')
+        .eq('contact_id', contact.id)
+        .eq('status', 'completed')
+        .order('last_interaction', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      const completedFlowId = recentlyCompletedSession?.flow_id;
+
       // Check for active flows to trigger (only if no active session is waiting for input)
       const { data: flows } = await supabaseClient
         .from('inbox_flows')
@@ -364,6 +377,13 @@ serve(async (req) => {
           const assignedInstances = flow.assigned_instances as string[] || [];
           if (assignedInstances.length > 0 && !assignedInstances.includes(instanceId)) {
             console.log(`Flow ${flow.name} not assigned to instance ${instanceId}, skipping`);
+            continue;
+          }
+
+          // IMPORTANT: Check if this flow was already completed for this contact
+          // This prevents the flow from restarting after it finishes
+          if (completedFlowId === flow.id) {
+            console.log(`Flow ${flow.name} already completed for contact ${contact.id}, skipping to prevent restart`);
             continue;
           }
 

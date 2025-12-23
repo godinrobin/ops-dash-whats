@@ -1,6 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+// Declare EdgeRuntime for Supabase Edge Functions
+declare const EdgeRuntime: { waitUntil: (promise: Promise<unknown>) => void } | undefined;
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -8,6 +11,9 @@ const corsHeaders = {
 
 const EVOLUTION_BASE_URL = 'https://api.chatwp.xyz';
 const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || '';
+
+// Maximum delay we can handle in a single edge function call (20 seconds to be safe)
+const MAX_INLINE_DELAY_MS = 20000;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -20,8 +26,8 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { sessionId, userInput } = await req.json();
-    console.log('Processing flow session:', sessionId, 'Input:', userInput);
+    const { sessionId, userInput, resumeFromDelay } = await req.json();
+    console.log('Processing flow session:', sessionId, 'Input:', userInput, 'ResumeFromDelay:', resumeFromDelay);
 
     // Get session with flow data
     const { data: session, error: sessionError } = await supabaseClient
@@ -42,6 +48,14 @@ serve(async (req) => {
       });
     }
 
+    // Check if session is already completed - do not process
+    if (session.status === 'completed') {
+      console.log('Session already completed, skipping');
+      return new Response(JSON.stringify({ success: true, skipped: true, reason: 'session_completed' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const flow = session.flow;
     let contact = session.contact;
     const nodes = flow.nodes as Array<{
@@ -58,6 +72,34 @@ serve(async (req) => {
 
     let currentNodeId = session.current_node_id || 'start-1';
     let variables = (session.variables || {}) as Record<string, unknown>;
+
+    // Check if we're resuming from a scheduled delay
+    if (resumeFromDelay) {
+      const pendingDelay = variables._pendingDelay as { nodeId: string; resumeAt: number } | undefined;
+      if (pendingDelay) {
+        const now = Date.now();
+        if (now < pendingDelay.resumeAt) {
+          // Still waiting - reschedule
+          const remainingMs = pendingDelay.resumeAt - now;
+          console.log(`Still waiting for delay, ${remainingMs}ms remaining`);
+          return new Response(JSON.stringify({ 
+            success: true, 
+            waiting: true, 
+            remainingMs 
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        // Delay completed - move to next node
+        console.log('Delay completed, resuming flow from node:', pendingDelay.nodeId);
+        const delayEdge = edges.find(e => e.source === pendingDelay.nodeId);
+        if (delayEdge) {
+          currentNodeId = delayEdge.target;
+        }
+        // Clear pending delay
+        delete variables._pendingDelay;
+      }
+    }
 
     // If user provided input, store it and move to next node
     if (userInput !== undefined && userInput !== null) {
@@ -182,22 +224,101 @@ serve(async (req) => {
           if (unit === 'minutes') delayMs = delay * 60 * 1000;
           if (unit === 'hours') delayMs = delay * 60 * 60 * 1000;
           
-          // Cap delay at 25 seconds (Edge function timeout is ~30s)
-          const maxDelayMs = 25000;
-          const actualDelayMs = Math.min(delayMs, maxDelayMs);
-          
-          console.log(`Delay node: waiting ${actualDelayMs}ms (requested: ${delayMs}ms, type: ${delayType})`);
-          await new Promise(resolve => setTimeout(resolve, actualDelayMs));
-          
-          // If the delay was longer than what we actually waited, we need to continue after
-          // For now, we proceed to next node (for very long delays, a scheduler would be needed)
           const unitLabel = unit === 'seconds' ? 's' : unit === 'minutes' ? 'min' : 'h';
-          if (delayMs > maxDelayMs) {
-            console.log(`Note: Delay was capped. Original: ${delay} ${unit}, executed: ${actualDelayMs}ms`);
-            processedActions.push(`Delay ${delay}${unitLabel} (capped to 25s)`);
-          } else {
-            processedActions.push(`Waited ${delay}${unitLabel}${delayType === 'variable' ? ' (variable)' : ''}`);
+          
+          // Check if delay is longer than what we can handle inline
+          if (delayMs > MAX_INLINE_DELAY_MS) {
+            // Schedule the delay - save state and exit
+            const resumeAt = Date.now() + delayMs;
+            variables._pendingDelay = {
+              nodeId: currentNodeId,
+              resumeAt,
+              delayMs,
+            };
+            
+            console.log(`Long delay detected: ${delay} ${unit} (${delayMs}ms). Scheduling resume at ${new Date(resumeAt).toISOString()}`);
+            
+            // Update session with pending delay state
+            await supabaseClient
+              .from('inbox_flow_sessions')
+              .update({
+                current_node_id: currentNodeId,
+                variables,
+                last_interaction: new Date().toISOString(),
+              })
+              .eq('id', sessionId);
+            
+            processedActions.push(`Scheduled delay: ${delay}${unitLabel} (will resume at ${new Date(resumeAt).toLocaleTimeString()})`);
+            
+            // Schedule a background task to resume the flow after the delay
+            // Using EdgeRuntime.waitUntil to keep the function running
+            const selfUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+            const authKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+            
+            // Use EdgeRuntime.waitUntil if available, otherwise just schedule
+            const resumeFlow = async () => {
+              console.log(`Waiting ${delayMs}ms before resuming flow...`);
+              await new Promise(resolve => setTimeout(resolve, Math.min(delayMs, 50000))); // Cap at 50s for safety
+              
+              // If delay was longer than 50s, we need to check if there's still remaining time
+              const remaining = delayMs - 50000;
+              if (remaining > 0) {
+                // Update the pending delay with remaining time
+                const { data: currentSession } = await supabaseClient
+                  .from('inbox_flow_sessions')
+                  .select('variables')
+                  .eq('id', sessionId)
+                  .single();
+                
+                if (currentSession) {
+                  const vars = currentSession.variables as Record<string, unknown>;
+                  const pendingDelay = vars._pendingDelay as { nodeId: string; resumeAt: number } | undefined;
+                  if (pendingDelay && Date.now() < pendingDelay.resumeAt) {
+                    console.log(`Still ${pendingDelay.resumeAt - Date.now()}ms remaining, will be resumed by next trigger`);
+                    return;
+                  }
+                }
+              }
+              
+              console.log('Resuming flow after delay...');
+              try {
+                await fetch(selfUrl, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authKey}`,
+                  },
+                  body: JSON.stringify({ sessionId, resumeFromDelay: true }),
+                });
+              } catch (e) {
+                console.error('Error resuming flow after delay:', e);
+              }
+            };
+            
+            // Start the background task
+            if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
+              EdgeRuntime.waitUntil(resumeFlow());
+            } else {
+              // Fallback: just start the promise
+              resumeFlow().catch(e => console.error('Resume flow error:', e));
+            }
+            
+            continueProcessing = false;
+            return new Response(JSON.stringify({ 
+              success: true, 
+              currentNode: currentNodeId,
+              actions: processedActions,
+              scheduledDelay: true,
+              resumeAt: new Date(resumeAt).toISOString()
+            }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
           }
+          
+          // Short delay - execute inline
+          console.log(`Short delay: waiting ${delayMs}ms`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          processedActions.push(`Waited ${delay}${unitLabel}${delayType === 'variable' ? ' (variable)' : ''}`);
           
           const delayEdge = edges.find(e => e.source === currentNodeId);
           if (delayEdge) {
@@ -424,6 +545,102 @@ serve(async (req) => {
           continueProcessing = false;
           break;
 
+        case 'ai':
+          // AI node - use Lovable AI to generate response
+          const aiPrompt = replaceVariables(currentNode.data.prompt as string || '', variables);
+          const aiModel = (currentNode.data.model as string) || 'google/gemini-2.5-flash';
+          const saveToVariable = currentNode.data.saveToVariable as string || 'ai_response';
+          
+          if (aiPrompt) {
+            try {
+              const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+              if (!LOVABLE_API_KEY) {
+                console.error('LOVABLE_API_KEY not configured');
+                processedActions.push('AI error: API key not configured');
+              } else {
+                const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    model: aiModel,
+                    messages: [
+                      { role: 'system', content: 'Você é um assistente prestativo. Responda de forma concisa e útil.' },
+                      { role: 'user', content: aiPrompt },
+                    ],
+                  }),
+                });
+
+                if (aiResponse.ok) {
+                  const aiData = await aiResponse.json();
+                  const aiContent = aiData.choices?.[0]?.message?.content || '';
+                  variables[saveToVariable] = aiContent;
+                  console.log(`AI response saved to ${saveToVariable}: ${aiContent.substring(0, 100)}`);
+                  processedActions.push(`AI generated response (${aiContent.length} chars)`);
+                } else {
+                  console.error('AI API error:', await aiResponse.text());
+                  processedActions.push('AI error: API request failed');
+                }
+              }
+            } catch (aiError) {
+              console.error('AI node error:', aiError);
+              processedActions.push('AI error: Exception');
+            }
+          }
+          
+          const aiEdge = edges.find(e => e.source === currentNodeId);
+          if (aiEdge) {
+            currentNodeId = aiEdge.target;
+          } else {
+            continueProcessing = false;
+          }
+          break;
+
+        case 'webhook':
+          // Webhook node - call external URL
+          const webhookUrl = replaceVariables(currentNode.data.url as string || '', variables);
+          const webhookMethod = (currentNode.data.method as string) || 'POST';
+          const webhookHeaders = currentNode.data.headers as Record<string, string> || {};
+          const webhookBody = replaceVariables(currentNode.data.body as string || '', variables);
+          const saveResponseTo = currentNode.data.saveResponseTo as string || '';
+          
+          if (webhookUrl) {
+            try {
+              const webhookResponse = await fetch(webhookUrl, {
+                method: webhookMethod,
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...webhookHeaders,
+                },
+                body: webhookMethod !== 'GET' ? webhookBody : undefined,
+              });
+              
+              const responseText = await webhookResponse.text();
+              if (saveResponseTo) {
+                try {
+                  variables[saveResponseTo] = JSON.parse(responseText);
+                } catch {
+                  variables[saveResponseTo] = responseText;
+                }
+              }
+              console.log(`Webhook ${webhookMethod} ${webhookUrl}: ${webhookResponse.status}`);
+              processedActions.push(`Webhook called: ${webhookResponse.status}`);
+            } catch (webhookError) {
+              console.error('Webhook error:', webhookError);
+              processedActions.push('Webhook error');
+            }
+          }
+          
+          const webhookEdge = edges.find(e => e.source === currentNodeId);
+          if (webhookEdge) {
+            currentNodeId = webhookEdge.target;
+          } else {
+            continueProcessing = false;
+          }
+          break;
+
         default:
           console.log(`Unknown node type: ${currentNode.type}`);
           const defaultEdge = edges.find(e => e.source === currentNodeId);
@@ -435,15 +652,17 @@ serve(async (req) => {
       }
     }
 
-    // Update session with final state
-    await supabaseClient
-      .from('inbox_flow_sessions')
-      .update({
-        current_node_id: currentNodeId,
-        variables,
-        last_interaction: new Date().toISOString(),
-      })
-      .eq('id', sessionId);
+    // Update session with final state (only if not already updated for scheduled delay)
+    if (!variables._pendingDelay) {
+      await supabaseClient
+        .from('inbox_flow_sessions')
+        .update({
+          current_node_id: currentNodeId,
+          variables,
+          last_interaction: new Date().toISOString(),
+        })
+        .eq('id', sessionId);
+    }
 
     return new Response(JSON.stringify({ 
       success: true, 
