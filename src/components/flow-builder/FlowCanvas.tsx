@@ -65,7 +65,7 @@ interface FlowCanvasProps {
 
 const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, triggerKeywords, onUpdateFlowSettings }: FlowCanvasProps) => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, getViewport } = useReactFlow();
+  const { screenToFlowPosition, getNodes, getEdges } = useReactFlow();
   
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes.length > 0 ? initialNodes : [
     {
@@ -209,7 +209,20 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
 
   const handleSave = () => {
     setSaveStatus('saving');
-    onSave(nodes, edges);
+
+    // Use ReactFlow's latest state to avoid saving stale node data
+    const latestNodes = getNodes();
+    const latestEdges = getEdges();
+
+    // Do not persist validation-only fields
+    const nodesToSave = latestNodes.map((n) => {
+      const data = { ...(n.data as Record<string, unknown>) };
+      delete (data as any).undefinedVariables;
+      return { ...n, data };
+    });
+
+    onSave(nodesToSave as any, latestEdges as any);
+
     setTimeout(() => {
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
