@@ -209,7 +209,7 @@ export const ConditionEditor = ({
                           {`{{${v}}}`}
                         </SelectItem>
                       ))}
-                      <SelectItem value="__new__" className="text-primary text-xs">
+                      <SelectItem value="__new__" className="text-orange-400 text-xs font-medium">
                         + Nova variável
                       </SelectItem>
                     </SelectContent>
