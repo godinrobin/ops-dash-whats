@@ -19,17 +19,28 @@ const Auth = () => {
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [activeTab, setActiveTab] = useState<"login" | "signup">("login");
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
+  const [isDesktop, setIsDesktop] = useState(false);
   const { signIn, signUp, user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  // For 3D card effect
+  // Detect if desktop with mouse (not touch device)
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(hover: hover) and (pointer: fine)");
+    setIsDesktop(mediaQuery.matches);
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mediaQuery.addEventListener("change", handler);
+    return () => mediaQuery.removeEventListener("change", handler);
+  }, []);
+
+  // For 3D card effect (only on desktop)
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
   const rotateX = useTransform(mouseY, [-300, 300], [8, -8]);
   const rotateY = useTransform(mouseX, [-300, 300], [-8, 8]);
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDesktop) return;
     const rect = e.currentTarget.getBoundingClientRect();
     mouseX.set(e.clientX - rect.left - rect.width / 2);
     mouseY.set(e.clientY - rect.top - rect.height / 2);
@@ -138,21 +149,21 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background overflow-hidden relative">
-      {/* Background gradient effect using accent (orange) */}
-      <div className="fixed inset-0 bg-gradient-to-b from-background via-background to-background">
+    <div className="min-h-screen flex items-center justify-center bg-background overflow-hidden relative isolate">
+      {/* Background gradient effect using accent (orange) - pointer-events-none */}
+      <div className="fixed inset-0 z-0 pointer-events-none bg-gradient-to-b from-background via-background to-background">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-[radial-gradient(ellipse_at_center,hsl(var(--accent)/0.15)_0%,transparent_70%)]" />
       </div>
 
-      {/* Subtle noise texture overlay */}
-      <div className="fixed inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIj48ZmlsdGVyIGlkPSJhIiB4PSIwIiB5PSIwIj48ZmVUdXJidWxlbmNlIGJhc2VGcmVxdWVuY3k9Ii43NSIgc3RpdGNoVGlsZXM9InN0aXRjaCIgdHlwZT0iZnJhY3RhbE5vaXNlIi8+PGZlQ29sb3JNYXRyaXggdHlwZT0ic2F0dXJhdGUiIHZhbHVlcz0iMCIvPjwvZmlsdGVyPjxwYXRoIGQ9Ik0wIDBoMzAwdjMwMEgweiIgZmlsdGVyPSJ1cmwoI2EpIiBvcGFjaXR5PSIuMDUiLz48L3N2Zz4=')] opacity-50" />
+      {/* Subtle noise texture overlay - pointer-events-none */}
+      <div className="fixed inset-0 z-0 pointer-events-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIj48ZmlsdGVyIGlkPSJhIiB4PSIwIiB5PSIwIj48ZmVUdXJidWxlbmNlIGJhc2VGcmVxdWVuY3k9Ii43NSIgc3RpdGNoVGlsZXM9InN0aXRjaCIgdHlwZT0iZnJhY3RhbE5vaXNlIi8+PGZlQ29sb3JNYXRyaXggdHlwZT0ic2F0dXJhdGUiIHZhbHVlcz0iMCIvPjwvZmlsdGVyPjxwYXRoIGQ9Ik0wIDBoMzAwdjMwMEgweiIgZmlsdGVyPSJ1cmwoI2EpIiBvcGFjaXR5PSIuMDUiLz48L3N2Zz4=')] opacity-50" />
 
-      {/* Top radial glow */}
-      <div className="fixed top-0 left-0 right-0 h-64 bg-gradient-to-b from-accent/5 to-transparent" />
+      {/* Top radial glow - pointer-events-none */}
+      <div className="fixed top-0 left-0 right-0 h-64 z-0 pointer-events-none bg-gradient-to-b from-accent/5 to-transparent" />
 
-      {/* Animated glow spots */}
+      {/* Animated glow spots - pointer-events-none */}
       <motion.div
-        className="fixed top-1/4 left-1/4 w-96 h-96 bg-accent/10 rounded-full blur-3xl"
+        className="fixed top-1/4 left-1/4 w-96 h-96 z-0 pointer-events-none bg-accent/10 rounded-full blur-3xl"
         animate={{
           x: [0, 50, 0],
           y: [0, -30, 0],
@@ -161,7 +172,7 @@ const Auth = () => {
         transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
       />
       <motion.div
-        className="fixed bottom-1/4 right-1/4 w-96 h-96 bg-accent/8 rounded-full blur-3xl"
+        className="fixed bottom-1/4 right-1/4 w-96 h-96 z-0 pointer-events-none bg-accent/8 rounded-full blur-3xl"
         animate={{
           x: [0, -30, 0],
           y: [0, 50, 0],
@@ -170,11 +181,11 @@ const Auth = () => {
         transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
       />
 
-      <div className="relative z-10 w-full max-w-md px-4" style={{ perspective: "1000px" }}>
+      <div className="relative z-10 w-full max-w-md px-4" style={isDesktop ? { perspective: "1000px" } : undefined}>
         <motion.div
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-          style={{ rotateX, rotateY, transformStyle: "preserve-3d" }}
+          onMouseMove={isDesktop ? handleMouseMove : undefined}
+          onMouseLeave={isDesktop ? handleMouseLeave : undefined}
+          style={isDesktop ? { rotateX, rotateY, transformStyle: "preserve-3d" } : undefined}
           className="relative"
         >
           {/* Card glow effect */}
