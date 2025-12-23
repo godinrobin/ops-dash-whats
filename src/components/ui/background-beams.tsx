@@ -60,12 +60,12 @@ export const BackgroundBeams = React.memo(
     return (
       <div
         className={cn(
-          "absolute inset-0 flex items-center justify-center overflow-hidden rounded-lg pointer-events-none",
+          "absolute h-full w-full inset-0 [mask-image:radial-gradient(ellipse_at_center,transparent_20%,black)]",
           className
         )}
       >
         <svg
-          className="absolute h-full w-full"
+          className="pointer-events-none absolute h-full w-full"
           viewBox="0 0 696 316"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
@@ -142,7 +142,7 @@ export const BackgroundBeams = React.memo(
         </svg>
       </div>
     )
-  }
+  },
 )
 
 BackgroundBeams.displayName = "BackgroundBeams"

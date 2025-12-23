@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { HoverButton } from "@/components/ui/hover-button";
+import { BackgroundBeams } from "@/components/ui/background-beams";
 
 const Auth = () => {
   const [loginEmail, setLoginEmail] = useState("");
@@ -119,8 +120,9 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background/95 to-secondary/20 p-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4 relative overflow-hidden">
+      <BackgroundBeams className="z-0" />
+      <Card className="w-full max-w-md relative z-10 bg-card/80 backdrop-blur-sm">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold text-center">Zapdata</CardTitle>
           <CardDescription className="text-center">
@@ -160,9 +162,13 @@ const Auth = () => {
                     className="focus-visible:ring-accent focus-visible:border-accent"
                   />
                 </div>
-                <Button type="submit" className="w-full bg-accent hover:bg-accent/90 text-accent-foreground" disabled={loading}>
+                <HoverButton 
+                  type="submit" 
+                  className="w-full bg-accent hover:bg-accent/90 text-accent-foreground" 
+                  disabled={loading}
+                >
                   {loading ? "Entrando..." : "Entrar"}
-                </Button>
+                </HoverButton>
               </form>
             </TabsContent>
 
@@ -204,9 +210,13 @@ const Auth = () => {
                     className="focus-visible:ring-accent focus-visible:border-accent"
                   />
                 </div>
-                <Button type="submit" className="w-full bg-accent hover:bg-accent/90 text-accent-foreground" disabled={loading}>
+                <HoverButton 
+                  type="submit" 
+                  className="w-full bg-accent hover:bg-accent/90 text-accent-foreground" 
+                  disabled={loading}
+                >
                   {loading ? "Criando conta..." : "Criar conta"}
-                </Button>
+                </HoverButton>
                 <p className="text-xs text-muted-foreground text-center mt-4">
                   Ao criar uma conta, você terá acesso limitado às funcionalidades. 
                   Para acesso completo, torne-se membro da comunidade.
