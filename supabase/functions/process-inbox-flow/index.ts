@@ -228,15 +228,15 @@ serve(async (req) => {
           
           // Check if delay is longer than what we can handle inline
           if (delayMs > MAX_INLINE_DELAY_MS) {
-            // Schedule the delay - save state and exit
-            const resumeAt = Date.now() + delayMs;
+            // Schedule the delay using the job queue for robust processing
+            const resumeAt = new Date(Date.now() + delayMs);
             variables._pendingDelay = {
               nodeId: currentNodeId,
-              resumeAt,
+              resumeAt: resumeAt.getTime(),
               delayMs,
             };
             
-            console.log(`Long delay detected: ${delay} ${unit} (${delayMs}ms). Scheduling resume at ${new Date(resumeAt).toISOString()}`);
+            console.log(`Long delay detected: ${delay} ${unit} (${delayMs}ms). Scheduling resume at ${resumeAt.toISOString()}`);
             
             // Update session with pending delay state
             await supabaseClient
@@ -248,60 +248,25 @@ serve(async (req) => {
               })
               .eq('id', sessionId);
             
-            processedActions.push(`Scheduled delay: ${delay}${unitLabel} (will resume at ${new Date(resumeAt).toLocaleTimeString()})`);
+            // Insert job into the delay queue (pg_cron will process this)
+            const { error: jobError } = await supabaseClient
+              .from('inbox_flow_delay_jobs')
+              .upsert({
+                session_id: sessionId,
+                user_id: session.user_id,
+                run_at: resumeAt.toISOString(),
+                status: 'scheduled',
+                attempts: 0,
+                last_error: null,
+              }, { onConflict: 'session_id' });
             
-            // Schedule a background task to resume the flow after the delay
-            // Using EdgeRuntime.waitUntil to keep the function running
-            const selfUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
-            const authKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-            
-            // Use EdgeRuntime.waitUntil if available, otherwise just schedule
-            const resumeFlow = async () => {
-              console.log(`Waiting ${delayMs}ms before resuming flow...`);
-              await new Promise(resolve => setTimeout(resolve, Math.min(delayMs, 50000))); // Cap at 50s for safety
-              
-              // If delay was longer than 50s, we need to check if there's still remaining time
-              const remaining = delayMs - 50000;
-              if (remaining > 0) {
-                // Update the pending delay with remaining time
-                const { data: currentSession } = await supabaseClient
-                  .from('inbox_flow_sessions')
-                  .select('variables')
-                  .eq('id', sessionId)
-                  .single();
-                
-                if (currentSession) {
-                  const vars = currentSession.variables as Record<string, unknown>;
-                  const pendingDelay = vars._pendingDelay as { nodeId: string; resumeAt: number } | undefined;
-                  if (pendingDelay && Date.now() < pendingDelay.resumeAt) {
-                    console.log(`Still ${pendingDelay.resumeAt - Date.now()}ms remaining, will be resumed by next trigger`);
-                    return;
-                  }
-                }
-              }
-              
-              console.log('Resuming flow after delay...');
-              try {
-                await fetch(selfUrl, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${authKey}`,
-                  },
-                  body: JSON.stringify({ sessionId, resumeFromDelay: true }),
-                });
-              } catch (e) {
-                console.error('Error resuming flow after delay:', e);
-              }
-            };
-            
-            // Start the background task
-            if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
-              EdgeRuntime.waitUntil(resumeFlow());
+            if (jobError) {
+              console.error('Error inserting delay job:', jobError);
             } else {
-              // Fallback: just start the promise
-              resumeFlow().catch(e => console.error('Resume flow error:', e));
+              console.log(`Delay job created for session ${sessionId}, will run at ${resumeAt.toISOString()}`);
             }
+            
+            processedActions.push(`Scheduled delay: ${delay}${unitLabel} (will resume at ${resumeAt.toLocaleTimeString()})`);
             
             continueProcessing = false;
             return new Response(JSON.stringify({ 
@@ -309,7 +274,7 @@ serve(async (req) => {
               currentNode: currentNodeId,
               actions: processedActions,
               scheduledDelay: true,
-              resumeAt: new Date(resumeAt).toISOString()
+              resumeAt: resumeAt.toISOString()
             }), {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
