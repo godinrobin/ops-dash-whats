@@ -10,63 +10,59 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAccessLevel } from "@/hooks/useAccessLevel";
 import { RestrictedFeatureModal } from "@/components/RestrictedFeatureModal";
 import { Lock } from "lucide-react";
-import { GlowingEffect } from "@/components/ui/glowing-effect";
+import { BackgroundBeams } from "@/components/ui/background-beams";
+import { GlowCard } from "@/components/ui/spotlight-card";
 import { cn } from "@/lib/utils";
 import tiktokLogo from "@/assets/tiktok-logo.png";
 import automatizapIcon from "@/assets/automatizap-icon.png";
 import disparazapIcon from "@/assets/disparazap-icon.png";
 
-interface GridItemProps {
-  area: string;
+interface SystemCardProps {
   icon: React.ReactNode;
   title: string;
   description: string;
   onClick: () => void;
   isLocked?: boolean;
   gradient?: string | null;
+  glowColor?: 'blue' | 'purple' | 'green' | 'red' | 'orange';
 }
 
-const GridItem = ({ area, icon, title, description, onClick, isLocked, gradient }: GridItemProps) => {
+const SystemCard = ({ icon, title, description, onClick, isLocked, gradient, glowColor = 'purple' }: SystemCardProps) => {
   return (
-    <li className={cn("min-h-[14rem] list-none", area)}>
-      <div 
-        className="relative h-full rounded-2xl border border-border/50 p-2 md:rounded-3xl md:p-3 cursor-pointer"
-        onClick={onClick}
-      >
-        <GlowingEffect
-          spread={40}
-          glow={true}
-          disabled={false}
-          proximity={64}
-          inactiveZone={0.01}
-        />
-        <div className="relative flex h-full flex-col justify-between gap-6 overflow-hidden rounded-xl border-0.75 p-6 bg-card/80 backdrop-blur-sm md:p-6">
-          {isLocked && (
-            <div className="absolute top-3 right-3 z-10">
-              <div className="w-7 h-7 rounded-full bg-accent/20 flex items-center justify-center">
-                <Lock className="w-4 h-4 text-accent" />
-              </div>
-            </div>
-          )}
-          <div className="relative flex flex-1 flex-col justify-between gap-3">
-            <div className="w-fit rounded-lg border border-border/50 p-2">
-              {icon}
-            </div>
-            <div className="space-y-2">
-              <h3 className={cn(
-                "text-xl font-semibold tracking-tight text-foreground",
-                gradient && `bg-gradient-to-r ${gradient} bg-clip-text text-transparent`
-              )}>
-                {title}
-              </h3>
-              <p className="text-sm text-muted-foreground line-clamp-2">
-                {description}
-              </p>
-            </div>
+    <GlowCard
+      glowColor={glowColor}
+      customSize
+      className="h-full w-full cursor-pointer flex flex-col"
+      onClick={onClick}
+    >
+      {isLocked && (
+        <div className="absolute top-3 right-3 z-10">
+          <div className="w-7 h-7 rounded-full bg-accent/20 flex items-center justify-center">
+            <Lock className="w-4 h-4 text-accent" />
           </div>
         </div>
+      )}
+      
+      <div className="flex flex-col items-center text-center h-full">
+        {/* Icon centered at top */}
+        <div className="w-12 h-12 rounded-xl border border-border/50 flex items-center justify-center bg-background/50 mb-4">
+          {icon}
+        </div>
+        
+        {/* Title and description */}
+        <div className="flex-1 flex flex-col">
+          <h3 className={cn(
+            "text-lg font-semibold tracking-tight text-foreground mb-2",
+            gradient && `bg-gradient-to-r ${gradient} bg-clip-text text-transparent`
+          )}>
+            {title}
+          </h3>
+          <p className="text-sm text-muted-foreground line-clamp-2">
+            {description}
+          </p>
+        </div>
       </div>
-    </li>
+    </GlowCard>
   );
 };
 
@@ -107,14 +103,24 @@ const Home = () => {
     { id: "FXpRT-Dsqes", name: "ORGANIZADOR DE NÚMEROS DE WHATSAPP" },
   ];
 
-  const systems = [
+  const systems: Array<{
+    path: string;
+    emoji?: string;
+    image?: string;
+    title: string;
+    description: string;
+    gradient: string | null;
+    restricted: boolean;
+    glowColor: 'blue' | 'purple' | 'green' | 'red' | 'orange';
+  }> = [
     { 
       path: "/metricas", 
       emoji: "📊", 
       title: "Sistema de Métricas",
       description: "Gerencie suas métricas de produtos e acompanhe resultados",
       gradient: null,
-      restricted: false
+      restricted: false,
+      glowColor: 'blue'
     },
     { 
       path: "/organizador-numeros", 
@@ -122,7 +128,8 @@ const Home = () => {
       title: "Organizador de Números",
       description: "Organize e gerencie seus números de trabalho",
       gradient: null,
-      restricted: false
+      restricted: false,
+      glowColor: 'blue'
     },
     { 
       path: "/track-ofertas", 
@@ -130,7 +137,8 @@ const Home = () => {
       title: "Track Ofertas",
       description: "Acompanhe a performance dos anúncios de seus concorrentes",
       gradient: "from-accent to-orange-400",
-      restricted: false
+      restricted: false,
+      glowColor: 'orange'
     },
     { 
       path: "/criador-funil", 
@@ -138,7 +146,8 @@ const Home = () => {
       title: "Criador de Funil",
       description: "Crie funis de vendas personalizados para WhatsApp",
       gradient: "from-green-400 to-green-600",
-      restricted: true
+      restricted: true,
+      glowColor: 'green'
     },
     { 
       path: "/gerador-criativos", 
@@ -146,7 +155,8 @@ const Home = () => {
       title: "Gerador de Criativos em Imagem",
       description: "Crie imagens profissionais para anúncios com IA",
       gradient: "from-purple-400 to-pink-500",
-      restricted: true
+      restricted: true,
+      glowColor: 'purple'
     },
     { 
       path: "/gerador-variacoes-video", 
@@ -154,7 +164,8 @@ const Home = () => {
       title: "Gerador de Criativos em Vídeo",
       description: "Crie variações de anúncios combinando vídeos",
       gradient: "from-violet-400 to-fuchsia-500",
-      restricted: true
+      restricted: true,
+      glowColor: 'purple'
     },
     { 
       path: "/gerador-audio", 
@@ -162,7 +173,8 @@ const Home = () => {
       title: "Gerador de Áudio",
       description: "Transforme texto em áudio com vozes realistas",
       gradient: "from-red-400 to-orange-500",
-      restricted: true
+      restricted: true,
+      glowColor: 'red'
     },
     { 
       path: "/transcricao-audio", 
@@ -170,7 +182,8 @@ const Home = () => {
       title: "Transcrição de Áudio",
       description: "Converta áudios em texto automaticamente",
       gradient: "from-blue-400 to-cyan-500",
-      restricted: true
+      restricted: true,
+      glowColor: 'blue'
     },
     { 
       path: "/analisador-criativos", 
@@ -178,7 +191,8 @@ const Home = () => {
       title: "Analisador de Criativos",
       description: "Analise seus criativos com IA",
       gradient: "from-cyan-400 to-blue-500",
-      restricted: true
+      restricted: true,
+      glowColor: 'blue'
     },
     { 
       path: "/zap-spy",
@@ -186,7 +200,8 @@ const Home = () => {
       title: "Zap Spy",
       description: "Acesse as ofertas mais escaladas de X1",
       gradient: "from-accent to-yellow-400",
-      restricted: false
+      restricted: false,
+      glowColor: 'orange'
     },
     { 
       path: "/tag-whats", 
@@ -194,7 +209,8 @@ const Home = () => {
       title: "Tag Whats",
       description: "Marque vendas do WhatsApp automaticamente",
       gradient: "from-teal-400 to-emerald-500",
-      restricted: true
+      restricted: true,
+      glowColor: 'green'
     },
     { 
       path: "/extensao-ads", 
@@ -202,7 +218,8 @@ const Home = () => {
       title: "Extensão Ads WhatsApp",
       description: "Extensão para analisar anúncios no Chrome",
       gradient: "from-orange-400 to-amber-500",
-      restricted: false
+      restricted: false,
+      glowColor: 'orange'
     },
     { 
       path: "/video-downloader", 
@@ -210,7 +227,8 @@ const Home = () => {
       title: "Download Vídeos TikTok",
       description: "Baixe vídeos do TikTok sem marca d'água",
       gradient: "from-pink-500 to-cyan-400",
-      restricted: false
+      restricted: false,
+      glowColor: 'purple'
     },
     { 
       path: "/maturador", 
@@ -218,7 +236,8 @@ const Home = () => {
       title: "Maturador de WhatsApp",
       description: "Aqueça seus chips com conversas naturais entre instâncias",
       gradient: "from-green-400 to-emerald-500",
-      restricted: true
+      restricted: true,
+      glowColor: 'green'
     },
     { 
       path: "/save-whatsapp", 
@@ -226,7 +245,8 @@ const Home = () => {
       title: "Save WhatsApp",
       description: "Extensão para salvar contatos do WhatsApp",
       gradient: "from-green-400 to-green-600",
-      restricted: false
+      restricted: false,
+      glowColor: 'green'
     },
     { 
       path: "/inbox", 
@@ -234,7 +254,8 @@ const Home = () => {
       title: "Automati-Zap",
       description: "Sistema para automatizar as conversas do WhatsApp",
       gradient: "from-green-400 to-teal-500",
-      restricted: true
+      restricted: true,
+      glowColor: 'green'
     },
     { 
       path: "/disparador", 
@@ -242,7 +263,8 @@ const Home = () => {
       title: "DisparaZap",
       description: "Envie mensagens em massa para múltiplos contatos",
       gradient: "from-blue-500 to-indigo-600",
-      restricted: true
+      restricted: true,
+      glowColor: 'blue'
     }
   ];
 
@@ -269,15 +291,17 @@ const Home = () => {
         />
       );
     }
-    return <span className="text-2xl">{(system as any).emoji}</span>;
+    return <span className="text-2xl">{system.emoji}</span>;
   };
 
   return (
     <>
       <Header mode={mode} onModeChange={setMode} />
       <div className="h-14 md:h-16" />
-      <div className="min-h-screen bg-background p-4 md:p-10">
-        <div className="container mx-auto max-w-7xl">
+      <div className="min-h-screen bg-background p-4 md:p-10 relative overflow-hidden">
+        <BackgroundBeams className="z-0" />
+        
+        <div className="container mx-auto max-w-7xl relative z-10">
           <header className="text-center mb-10">
             <h1 className="text-4xl md:text-5xl font-bold mb-4">🎯 Bem-vindo!</h1>
             <p className="text-muted-foreground text-lg">
@@ -285,45 +309,26 @@ const Home = () => {
             </p>
           </header>
 
-          <ul className="grid grid-cols-1 grid-rows-none gap-4 md:grid-cols-12 md:grid-rows-6 lg:gap-4 xl:max-h-[50rem] xl:grid-rows-4">
-            {systems.map((system, index) => {
+          {/* Grid with 3 columns and equal sized cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+            {systems.map((system) => {
               const isLocked = !accessLoading && isFullMember === false && system.restricted;
               
-              // Define grid areas for variety
-              const areas = [
-                "md:[grid-area:1/1/2/5]",    // Row 1, spans 4 cols
-                "md:[grid-area:1/5/2/9]",    // Row 1, spans 4 cols
-                "md:[grid-area:1/9/3/13]",   // Row 1-2, spans 4 cols (tall)
-                "md:[grid-area:2/1/3/5]",    // Row 2, spans 4 cols
-                "md:[grid-area:2/5/3/9]",    // Row 2, spans 4 cols
-                "md:[grid-area:3/1/4/7]",    // Row 3, spans 6 cols (wide)
-                "md:[grid-area:3/7/4/13]",   // Row 3, spans 6 cols (wide)
-                "md:[grid-area:4/1/5/5]",    // Row 4, spans 4 cols
-                "md:[grid-area:4/5/5/9]",    // Row 4, spans 4 cols
-                "md:[grid-area:4/9/5/13]",   // Row 4, spans 4 cols
-                "md:[grid-area:5/1/6/5]",    // Row 5, spans 4 cols
-                "md:[grid-area:5/5/6/9]",    // Row 5, spans 4 cols
-                "md:[grid-area:5/9/6/13]",   // Row 5, spans 4 cols
-                "md:[grid-area:6/1/7/7]",    // Row 6, spans 6 cols (wide)
-                "md:[grid-area:6/7/7/13]",   // Row 6, spans 6 cols (wide)
-                "md:[grid-area:7/1/8/5]",    // Row 7, spans 4 cols
-                "md:[grid-area:7/5/8/9]",    // Row 7, spans 4 cols
-              ];
-              
               return (
-                <GridItem
-                  key={system.path}
-                  area={areas[index % areas.length]}
-                  icon={renderIcon(system)}
-                  title={system.title}
-                  description={system.description}
-                  onClick={() => handleSystemClick(system)}
-                  isLocked={isLocked}
-                  gradient={system.gradient}
-                />
+                <div key={system.path} className="h-48">
+                  <SystemCard
+                    icon={renderIcon(system)}
+                    title={system.title}
+                    description={system.description}
+                    onClick={() => handleSystemClick(system)}
+                    isLocked={isLocked}
+                    gradient={system.gradient}
+                    glowColor={system.glowColor}
+                  />
+                </div>
               );
             })}
-          </ul>
+          </div>
 
           <section className="mt-16">
             <h2 className="text-3xl font-bold text-center mb-8">Conteúdo</h2>
