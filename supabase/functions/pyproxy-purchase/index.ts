@@ -160,100 +160,119 @@ Deno.serve(async (req) => {
 
       console.log('Creating proxy order:', order.id);
 
-      // Call PYPROXY API to create sub-user with 1GB traffic
-      // API Documentation: https://www.pyproxy.com/PYPROXY-api-document.html
+      // Provisionamento via PYPROXY (documentação)
+      // 1) Token: POST https://api.pyproxy.com/g/open/get_access_token
+      //    sign=sha256(access_key+access_secret+timestamp)
+      // 2) Host:  POST https://api.pyproxy.com/g/open/get_user_proxy_host (proxy_type=other)
+      // 3) User:  POST https://api.pyproxy.com/g/open/add_or_edit_user (Bearer)
+
       const timestamp = Math.floor(Date.now() / 1000).toString();
-      
-      // Generate signature (simplified - adjust based on actual API requirements)
-      const signaturePayload = `${pyproxyApiKey}${timestamp}${pyproxyApiSecret}`;
-      const encoder = new TextEncoder();
-      const data = encoder.encode(signaturePayload);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const signature = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+      const sha256Hex = async (input: string) => {
+        const bytes = new TextEncoder().encode(input);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
+        return Array.from(new Uint8Array(hashBuffer))
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join('');
+      };
+
+      const parseJsonResponse = async (res: Response) => {
+        const raw = await res.text();
+        const preview = raw?.slice?.(0, 1000) ?? '';
+        return { raw, preview, json: raw ? (JSON.parse(raw) as any) : null };
+      };
 
       try {
-        // PYPROXY API call to create sub-user
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 20000);
+        // (1) Get access token
+        const sign = await sha256Hex(`${pyproxyApiKey}${pyproxyApiSecret}${timestamp}`);
+        const tokenForm = new FormData();
+        tokenForm.append('access_key', pyproxyApiKey);
+        tokenForm.append('sign', sign);
+        tokenForm.append('timestamp', timestamp);
 
-        const pyproxyResponse = await fetch('https://api.pyproxy.com/api/v1/sub-user/create', {
+        const tokenRes = await fetch('https://api.pyproxy.com/g/open/get_access_token', {
+          method: 'POST',
+          body: tokenForm,
+        });
+
+        const tokenParsed = await parseJsonResponse(tokenRes);
+        console.log('PYPROXY get_access_token status:', tokenRes.status);
+        console.log('PYPROXY get_access_token body (first 500):', tokenParsed.preview.slice(0, 500));
+
+        const accessToken = tokenParsed.json?.ret_data?.access_token as string | undefined;
+        if (!tokenRes.ok || tokenParsed.json?.ret !== 0 || tokenParsed.json?.code !== 1 || !accessToken) {
+          await logAction('error', 'Falha ao obter access_token', {
+            status: tokenRes.status,
+            body: tokenParsed.preview,
+          });
+          await supabaseAdmin.from('proxy_orders').delete().eq('id', order.id);
+          return new Response(
+            JSON.stringify({ success: false, error: 'Falha ao autenticar no fornecedor' }),
+            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // (2) Get proxy host/port
+        const hostForm = new FormData();
+        hostForm.append('proxy_type', 'other');
+        const hostRes = await fetch('https://api.pyproxy.com/g/open/get_user_proxy_host', {
+          method: 'POST',
+          body: hostForm,
+        });
+
+        const hostParsed = await parseJsonResponse(hostRes);
+        console.log('PYPROXY get_user_proxy_host status:', hostRes.status);
+        console.log('PYPROXY get_user_proxy_host body (first 500):', hostParsed.preview.slice(0, 500));
+
+        const firstHost = hostParsed.json?.ret_data?.list?.[0];
+        const host = firstHost?.host as string | undefined;
+        const port = firstHost?.port as string | undefined;
+        if (!hostRes.ok || hostParsed.json?.ret !== 0 || hostParsed.json?.code !== 1 || !host || !port) {
+          await logAction('error', 'Falha ao obter host/porta', {
+            status: hostRes.status,
+            body: hostParsed.preview,
+          });
+          await supabaseAdmin.from('proxy_orders').delete().eq('id', order.id);
+          return new Response(
+            JSON.stringify({ success: false, error: 'Fornecedor não retornou host/porta' }),
+            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // (3) Create user with 1GB limit_flow
+        const username = `px${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
+        const password = `pw${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
+
+        const userForm = new FormData();
+        userForm.append('username', username);
+        userForm.append('password', password);
+        userForm.append('status', '1');
+        userForm.append('limit_flow', '1');
+        userForm.append('remark', `lovable:${order.id}`);
+
+        const userRes = await fetch('https://api.pyproxy.com/g/open/add_or_edit_user', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            'Api-Key': pyproxyApiKey,
-            'Timestamp': timestamp,
-            'Signature': signature,
+            Authorization: `Bearer ${accessToken}`,
           },
-          body: JSON.stringify({
-            traffic_amount: 1, // 1 GB
-            traffic_unit: 'GB',
-            product_type: 'residential', // Residential/ISP Rotating
-            validity_days: 30, // Monthly
-          }),
-          signal: controller.signal,
-        }).finally(() => clearTimeout(timeout));
+          body: userForm,
+        });
 
-        const rawBody = await pyproxyResponse.text();
-        console.log('PYPROXY API status:', pyproxyResponse.status);
-        console.log('PYPROXY API raw body (first 500):', rawBody?.slice?.(0, 500) ?? '');
+        const userParsed = await parseJsonResponse(userRes);
+        console.log('PYPROXY add_or_edit_user status:', userRes.status);
+        console.log('PYPROXY add_or_edit_user body (first 500):', userParsed.preview.slice(0, 500));
 
-        let pyproxyData: PyProxyResponse | null = null;
-        try {
-          pyproxyData = rawBody ? (JSON.parse(rawBody) as PyProxyResponse) : null;
-        } catch (parseError) {
-          await logAction('error', 'Resposta inválida do fornecedor (não-JSON)', {
-            status: pyproxyResponse.status,
-            body: rawBody?.slice?.(0, 2000) ?? '',
+        if (!userRes.ok || userParsed.json?.ret !== 0 || userParsed.json?.code !== 1) {
+          await logAction('error', 'Falha ao criar usuário no fornecedor', {
+            status: userRes.status,
+            body: userParsed.preview,
           });
-
-          // Rollback: delete the pending order
           await supabaseAdmin.from('proxy_orders').delete().eq('id', order.id);
-
           return new Response(
-            JSON.stringify({
-              success: false,
-              error: 'Fornecedor retornou uma resposta inválida',
-            }),
+            JSON.stringify({ success: false, error: 'Fornecedor recusou criação do usuário' }),
             { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-
-        if (!pyproxyResponse.ok || !pyproxyData) {
-          await logAction('error', 'Falha na chamada do fornecedor', {
-            status: pyproxyResponse.status,
-            body: rawBody?.slice?.(0, 2000) ?? '',
-          });
-
-          // Rollback: delete the pending order
-          await supabaseAdmin.from('proxy_orders').delete().eq('id', order.id);
-
-          return new Response(
-            JSON.stringify({ success: false, error: 'Erro ao provisionar proxy' }),
-            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        console.log('PYPROXY API Response JSON:', pyproxyData);
-
-        if (pyproxyData.code !== 0 || !pyproxyData.data) {
-          await logAction('error', 'Erro na API PYPROXY', pyproxyData);
-
-          // Rollback: delete the pending order
-          await supabaseAdmin.from('proxy_orders').delete().eq('id', order.id);
-
-          return new Response(
-            JSON.stringify({ success: false, error: 'Erro ao provisionar proxy' }),
-            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        // Parse proxy credentials from response
-        // Format may vary - adjust based on actual API response
-        const proxyAddress = pyproxyData.data.proxy_address || '';
-        const [host, port] = proxyAddress.split(':');
-        const username = pyproxyData.data.username || '';
-        const password = pyproxyData.data.password || '';
 
         // Update order with credentials
         const expiresAt = new Date();
@@ -262,13 +281,13 @@ Deno.serve(async (req) => {
         await supabaseAdmin
           .from('proxy_orders')
           .update({
-            pyproxy_subuser_id: pyproxyData.data.sub_user_no,
+            pyproxy_subuser_id: username,
             host,
             port,
             username,
             password,
             status: 'active',
-            expires_at: expiresAt.toISOString()
+            expires_at: expiresAt.toISOString(),
           })
           .eq('id', order.id);
 
@@ -285,14 +304,18 @@ Deno.serve(async (req) => {
             user_id: user.id,
             type: 'purchase',
             amount: -finalPrice,
-            description: 'Proxy Otimizado para WhatsApp (Evolution API)'
+            description: 'Proxy Otimizado para WhatsApp (Evolution API)',
           });
 
-        await logAction('success', 'Proxy provisionado com sucesso', pyproxyData);
+        await logAction('success', 'Proxy provisionado com sucesso', {
+          host,
+          port,
+          username,
+        });
 
         return new Response(
-          JSON.stringify({ 
-            success: true, 
+          JSON.stringify({
+            success: true,
             order: {
               id: order.id,
               host,
@@ -300,25 +323,23 @@ Deno.serve(async (req) => {
               username,
               password,
               expires_at: expiresAt.toISOString(),
-              status: 'active'
-            }
+              status: 'active',
+            },
           }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
-
       } catch (apiError) {
-        console.error('PYPROXY API Error:', apiError);
-        await logAction('error', 'Erro de conexão com PYPROXY', { error: String(apiError) });
-        
+        console.error('PYPROXY Error:', apiError);
+        await logAction('error', 'Erro inesperado no provisionamento', { error: String(apiError) });
+
         // Rollback: delete the pending order
         await supabaseAdmin.from('proxy_orders').delete().eq('id', order.id);
-        
+
         return new Response(
           JSON.stringify({ success: false, error: 'Erro de conexão com fornecedor' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-
     } else if (action === 'get-orders') {
       // Get user's proxy orders
       const { data: orders, error } = await supabaseAdmin

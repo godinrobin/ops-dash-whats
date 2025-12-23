@@ -89,7 +89,9 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
       });
 
       if (error) {
-        throw new Error(error.message);
+        const body = (error as any)?.context?.body;
+        const message = body?.error || body?.message || error.message;
+        throw new Error(message);
       }
 
       if (!data?.success) {
