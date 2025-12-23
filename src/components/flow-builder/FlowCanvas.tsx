@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect, useRef } from 'react';
+import { useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import {
   ReactFlow,
   Background,
@@ -33,6 +33,7 @@ import { TagNode } from './nodes/TagNode';
 import { EndNode } from './nodes/EndNode';
 import { NodeSidebar } from './NodeSidebar';
 import { PropertiesPanel } from './PropertiesPanel';
+import { useFlowValidation } from './hooks/useFlowValidation';
 
 const nodeTypes = {
   start: StartNode,
@@ -78,6 +79,26 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+
+  // Validate flow and get warnings for condition nodes
+  const validationResults = useFlowValidation(nodes, edges);
+
+  // Apply validation data to nodes
+  const nodesWithValidation = useMemo(() => {
+    return nodes.map(node => {
+      if (node.type === 'condition') {
+        const validation = validationResults.get(node.id);
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            undefinedVariables: validation?.undefinedVariables || [],
+          },
+        };
+      }
+      return node;
+    });
+  }, [nodes, validationResults]);
 
   useEffect(() => {
     if (initialNodes.length > 0) {
@@ -218,7 +239,7 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
         )}
         
         <ReactFlow
-          nodes={nodes}
+          nodes={nodesWithValidation}
           edges={edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
