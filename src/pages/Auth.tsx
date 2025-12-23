@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { HoverButton } from "@/components/ui/hover-button";
+import { NeonButton } from "@/components/ui/neon-button";
 import { BackgroundBeams } from "@/components/ui/background-beams";
 import { 
   AnimatedTabs, 
@@ -169,13 +169,14 @@ const Auth = () => {
                       className="focus-visible:ring-accent focus-visible:border-accent"
                     />
                   </div>
-                  <HoverButton 
+                  <NeonButton 
                     type="submit" 
+                    variant="solid"
                     className="w-full bg-accent hover:bg-accent/90 text-accent-foreground" 
                     disabled={loading}
                   >
                     {loading ? "Entrando..." : "Entrar"}
-                  </HoverButton>
+                  </NeonButton>
                 </form>
               </AnimatedTabsContent>
 
@@ -217,13 +218,14 @@ const Auth = () => {
                       className="focus-visible:ring-accent focus-visible:border-accent"
                     />
                   </div>
-                  <HoverButton 
+                  <NeonButton 
                     type="submit" 
+                    variant="solid"
                     className="w-full bg-accent hover:bg-accent/90 text-accent-foreground" 
                     disabled={loading}
                   >
                     {loading ? "Criando conta..." : "Criar conta"}
-                  </HoverButton>
+                  </NeonButton>
                   <p className="text-xs text-muted-foreground text-center mt-4">
                     Ao criar uma conta, você terá acesso limitado às funcionalidades. 
                     Para acesso completo, torne-se membro da comunidade.

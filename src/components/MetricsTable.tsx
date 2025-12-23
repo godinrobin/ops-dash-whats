@@ -21,6 +21,7 @@ import { Pencil, Trash2, ChevronDown, ChevronUp, ArrowUpDown } from "lucide-reac
 import { deleteMetric } from "@/utils/storage";
 import { toast } from "sonner";
 import { EditMetricModal } from "./EditMetricModal";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface MetricsTableProps {
   productId: string;
@@ -338,60 +339,77 @@ export const MetricsTable = ({ productId, metrics, onMetricChanged }: MetricsTab
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {displayedMetrics.map((metric) => (
-                    <TableRow key={metric.id}>
-                      <TableCell className="font-medium">{metric.date}</TableCell>
-                      <TableCell>{metric.structure}</TableCell>
-                      <TableCell>
-                        {metric.invested.toLocaleString("pt-BR", {
-                          style: "currency",
-                          currency: "BRL",
-                        })}
-                      </TableCell>
-                      <TableCell>{metric.leads}</TableCell>
-                      <TableCell>{metric.pixCount}</TableCell>
-                      <TableCell>
-                        {metric.pixTotal.toLocaleString("pt-BR", {
-                          style: "currency",
-                          currency: "BRL",
-                        })}
-                      </TableCell>
-                      <TableCell>
-                        {metric.cpl.toLocaleString("pt-BR", {
-                          style: "currency",
-                          currency: "BRL",
-                        })}
-                      </TableCell>
-                      <TableCell>{metric.conversion.toFixed(2)}%</TableCell>
-                      <TableCell
-                        className={metric.result >= 0 ? "text-positive" : "text-negative"}
+                  <AnimatePresence mode="popLayout">
+                    {displayedMetrics.map((metric, index) => (
+                      <motion.tr
+                        key={metric.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ 
+                          opacity: 1, 
+                          y: 0,
+                          transition: {
+                            delay: index * 0.03,
+                            type: "spring",
+                            stiffness: 300,
+                            damping: 24,
+                          }
+                        }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="border-b border-border/20 hover:bg-muted/20 transition-colors"
                       >
-                        {metric.result.toLocaleString("pt-BR", {
-                          style: "currency",
-                          currency: "BRL",
-                        })}
-                      </TableCell>
-                      <TableCell>{metric.roas.toFixed(2)}x</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="secondary"
-                            size="icon"
-                            onClick={() => setEditingMetric(metric)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="icon"
-                            onClick={() => handleDelete(metric.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        <TableCell className="font-medium">{metric.date}</TableCell>
+                        <TableCell>{metric.structure}</TableCell>
+                        <TableCell>
+                          {metric.invested.toLocaleString("pt-BR", {
+                            style: "currency",
+                            currency: "BRL",
+                          })}
+                        </TableCell>
+                        <TableCell>{metric.leads}</TableCell>
+                        <TableCell>{metric.pixCount}</TableCell>
+                        <TableCell>
+                          {metric.pixTotal.toLocaleString("pt-BR", {
+                            style: "currency",
+                            currency: "BRL",
+                          })}
+                        </TableCell>
+                        <TableCell>
+                          {metric.cpl.toLocaleString("pt-BR", {
+                            style: "currency",
+                            currency: "BRL",
+                          })}
+                        </TableCell>
+                        <TableCell>{metric.conversion.toFixed(2)}%</TableCell>
+                        <TableCell
+                          className={metric.result >= 0 ? "text-positive" : "text-negative"}
+                        >
+                          {metric.result.toLocaleString("pt-BR", {
+                            style: "currency",
+                            currency: "BRL",
+                          })}
+                        </TableCell>
+                        <TableCell>{metric.roas.toFixed(2)}x</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="secondary"
+                              size="icon"
+                              onClick={() => setEditingMetric(metric)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              onClick={() => handleDelete(metric.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </motion.tr>
+                    ))}
+                  </AnimatePresence>
                   {/* Totals Row - Sticky at bottom */}
                   <TableRow className="bg-muted/50 font-semibold sticky bottom-0">
                     <TableCell colSpan={2}>TOTAIS / MÉDIAS</TableCell>

@@ -13,6 +13,7 @@ import { Lock } from "lucide-react";
 import { BackgroundBeams } from "@/components/ui/background-beams";
 import { GlowCard } from "@/components/ui/spotlight-card";
 import { cn } from "@/lib/utils";
+import { motion } from "framer-motion";
 import tiktokLogo from "@/assets/tiktok-logo.png";
 import automatizapIcon from "@/assets/automatizap-icon.png";
 import disparazapIcon from "@/assets/disparazap-icon.png";
@@ -309,13 +310,45 @@ const Home = () => {
             </p>
           </header>
 
-          {/* Grid with 3 columns and equal sized cards */}
-          <div className="grid grid-cols-3 gap-3 md:gap-4">
-            {systems.map((system) => {
+          {/* Grid with 3 columns and equal sized cards with stagger animation */}
+          <motion.div 
+            className="grid grid-cols-3 gap-3 md:gap-4"
+            initial="hidden"
+            animate="visible"
+            variants={{
+              hidden: {},
+              visible: {
+                transition: {
+                  staggerChildren: 0.05,
+                },
+              },
+            }}
+          >
+            {systems.map((system, index) => {
               const isLocked = !accessLoading && isFullMember === false && system.restricted;
               
               return (
-                <div key={system.path} className="h-40 md:h-48">
+                <motion.div 
+                  key={system.path} 
+                  className="h-40 md:h-48"
+                  variants={{
+                    hidden: { 
+                      opacity: 0, 
+                      y: 30,
+                      scale: 0.95,
+                    },
+                    visible: { 
+                      opacity: 1, 
+                      y: 0,
+                      scale: 1,
+                      transition: {
+                        type: "spring",
+                        stiffness: 300,
+                        damping: 24,
+                      },
+                    },
+                  }}
+                >
                   <SystemCard
                     icon={renderIcon(system)}
                     title={system.title}
@@ -325,10 +358,10 @@ const Home = () => {
                     gradient={system.gradient}
                     glowColor={system.glowColor}
                   />
-                </div>
+                </motion.div>
               );
             })}
-          </div>
+          </motion.div>
 
           <section className="mt-16">
             <h2 className="text-3xl font-bold text-center mb-8">Conteúdo</h2>
