@@ -21,6 +21,19 @@ interface ConditionNodeData {
   value?: string;
 }
 
+const operatorLabels: Record<string, string> = {
+  equals: 'Igual a',
+  not_equals: 'Diferente de',
+  contains: 'Contém',
+  not_contains: 'Não contém',
+  startsWith: 'Começa com',
+  endsWith: 'Termina com',
+  greater: 'Maior que',
+  less: 'Menor que',
+  exists: 'Existe',
+  not_exists: 'Não existe',
+};
+
 export const ConditionNode = ({ data }: NodeProps) => {
   const nodeData = data as ConditionNodeData;
   const conditions = nodeData.conditions || [];
@@ -29,9 +42,14 @@ export const ConditionNode = ({ data }: NodeProps) => {
   // Legacy support - if no conditions array but has old format
   const hasLegacyCondition = !conditions.length && nodeData.variable;
 
+  const getOperatorLabel = (operator: string | undefined) => {
+    if (!operator) return '?';
+    return operatorLabels[operator] || operator;
+  };
+
   const getConditionSummary = () => {
     if (hasLegacyCondition) {
-      return `${nodeData.variable} ${nodeData.operator || '='} ${nodeData.value || '?'}`;
+      return `${nodeData.variable} ${getOperatorLabel(nodeData.operator)} ${nodeData.value || '?'}`;
     }
 
     if (conditions.length === 0) {
@@ -43,7 +61,7 @@ export const ConditionNode = ({ data }: NodeProps) => {
       if (c.type === 'tag') {
         return `Tag: ${c.tagCondition === 'has' ? 'Tem' : 'Não tem'} "${c.tagName || '?'}"`;
       }
-      return `${c.variable || '?'} ${c.operator || '='} ${c.value || '?'}`;
+      return `${c.variable || '?'} ${getOperatorLabel(c.operator)} ${c.value || '?'}`;
     }
 
     return `${conditions.length} condições (${logicOperator === 'and' ? 'E' : 'OU'})`;

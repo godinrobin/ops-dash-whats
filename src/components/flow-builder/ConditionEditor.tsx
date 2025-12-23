@@ -291,7 +291,7 @@ export const ConditionEditor = ({
                           {tag}
                         </SelectItem>
                       ))}
-                      <SelectItem value="__new__" className="text-primary text-xs">
+                      <SelectItem value="__new__" className="text-orange-400 text-xs font-medium">
                         + Nova tag
                       </SelectItem>
                     </SelectContent>
