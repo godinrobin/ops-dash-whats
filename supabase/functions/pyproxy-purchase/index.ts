@@ -212,11 +212,14 @@ Deno.serve(async (req) => {
           );
         }
 
-        // (2) Get proxy host/port
+        // (2) Get proxy host/port (requires Bearer token)
         const hostForm = new FormData();
         hostForm.append('proxy_type', 'other');
         const hostRes = await fetch('https://api.pyproxy.com/g/open/get_user_proxy_host', {
           method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
           body: hostForm,
         });
 
