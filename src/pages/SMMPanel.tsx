@@ -9,13 +9,14 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Search, Wallet, RefreshCw, ShoppingCart, ExternalLink, XCircle } from "lucide-react";
+import { Loader2, Wallet, RefreshCw, ShoppingCart, ExternalLink, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { RechargeModal } from "@/components/RechargeModal";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { createAdminNotification } from "@/utils/adminNotifications";
+import { AnimatedSearchBar } from "@/components/ui/animated-search-bar";
 
 interface Service {
   id: string;
@@ -436,13 +437,11 @@ const SMMPanel = () => {
 
                   {/* Filters */}
                   <div className="flex flex-col md:flex-row gap-3">
-                    <div className="relative flex-1">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input
+                    <div className="flex-1">
+                      <AnimatedSearchBar
                         placeholder="Buscar serviço..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10"
                       />
                     </div>
                     <Select value={selectedCategory} onValueChange={setSelectedCategory}>

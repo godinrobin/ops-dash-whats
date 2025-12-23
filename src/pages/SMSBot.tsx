@@ -6,13 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Copy, RefreshCw, Search, X, CheckCircle2, Clock, XCircle, Wallet } from "lucide-react";
+import { Loader2, Copy, RefreshCw, X, CheckCircle2, Clock, XCircle, Wallet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { RechargeModal } from "@/components/RechargeModal";
 import { createAdminNotification } from "@/utils/adminNotifications";
+import { AnimatedSearchBar } from "@/components/ui/animated-search-bar";
 
 interface Country {
   code: string;
@@ -400,15 +401,11 @@ const SMSBot = () => {
               <Card className="border-2 border-border">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-lg">2. Escolha o serviço</CardTitle>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Buscar serviço..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9"
-                    />
-                  </div>
+                  <AnimatedSearchBar
+                    placeholder="Buscar serviço..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
                 </CardHeader>
                 <CardContent>
                   {loadingServices ? (

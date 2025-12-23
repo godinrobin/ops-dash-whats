@@ -14,6 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
 import { toast } from "sonner";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
+import { AnimatedSearchBar } from "@/components/ui/animated-search-bar";
 
 interface ZapSpyOffer {
   id: string;
@@ -418,7 +419,7 @@ const ZapSpy = () => {
           {/* Filters */}
           <div className="flex flex-col md:flex-row gap-4 mb-6">
             <div className="flex-1">
-              <Input
+              <AnimatedSearchBar
                 placeholder="Buscar oferta..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}

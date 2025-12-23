@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Search, Zap, Edit2, Trash2, Copy, ArrowLeft, Smartphone } from 'lucide-react';
+import { Plus, Zap, Edit2, Trash2, Copy, ArrowLeft, Smartphone } from 'lucide-react';
 import { useInboxFlows } from '@/hooks/useInboxFlows';
 import { toast } from 'sonner';
 import { Label } from '@/components/ui/label';
@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
+import { AnimatedSearchBar } from '@/components/ui/animated-search-bar';
 
 const FlowListPage = () => {
   const location = useLocation();
@@ -226,11 +227,9 @@ const FlowListPage = () => {
         </div>
 
         <div className="flex items-center justify-between gap-4 mb-6">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
+          <div className="flex-1 max-w-md">
+            <AnimatedSearchBar
               placeholder="Buscar fluxos..."
-              className="pl-10"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
