@@ -212,37 +212,7 @@ Deno.serve(async (req) => {
           );
         }
 
-        // (2) Get proxy host/port (requires Bearer token)
-        const hostForm = new FormData();
-        hostForm.append('proxy_type', 'other');
-        const hostRes = await fetch('https://api.pyproxy.com/g/open/get_user_proxy_host', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: hostForm,
-        });
-
-        const hostParsed = await parseJsonResponse(hostRes);
-        console.log('PYPROXY get_user_proxy_host status:', hostRes.status);
-        console.log('PYPROXY get_user_proxy_host body (first 500):', hostParsed.preview.slice(0, 500));
-
-        const firstHost = hostParsed.json?.ret_data?.list?.[0];
-        const host = firstHost?.host as string | undefined;
-        const port = firstHost?.port as string | undefined;
-        if (!hostRes.ok || hostParsed.json?.ret !== 0 || hostParsed.json?.code !== 1 || !host || !port) {
-          await logAction('error', 'Falha ao obter host/porta', {
-            status: hostRes.status,
-            body: hostParsed.preview,
-          });
-          await supabaseAdmin.from('proxy_orders').delete().eq('id', order.id);
-          return new Response(
-            JSON.stringify({ success: false, error: 'Fornecedor não retornou host/porta' }),
-            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        // (3) Create user with 1GB limit_flow
+        // (2) Create user with 1GB limit_flow
         const username = `px${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
         const password = `pw${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
 
@@ -273,6 +243,65 @@ Deno.serve(async (req) => {
           await supabaseAdmin.from('proxy_orders').delete().eq('id', order.id);
           return new Response(
             JSON.stringify({ success: false, error: 'Fornecedor recusou criação do usuário' }),
+            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // (3) Get proxy host/port (some accounts require user created first)
+        const hostForm = new FormData();
+        hostForm.append('proxy_type', 'other');
+        hostForm.append('username', username);
+        const hostRes = await fetch('https://api.pyproxy.com/g/open/get_user_proxy_host', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: hostForm,
+        });
+
+        const hostParsed = await parseJsonResponse(hostRes);
+        console.log('PYPROXY get_user_proxy_host status:', hostRes.status);
+        console.log('PYPROXY get_user_proxy_host body (first 500):', hostParsed.preview.slice(0, 500));
+
+        const extractHostPort = (retData: any): { host?: string; port?: string } => {
+          if (!retData) return {};
+
+          // Common shapes:
+          // - { list: [{ host, port }] }
+          // - { host, port }
+          // - "host:port"
+          const fromObj = (obj: any) => {
+            if (!obj || typeof obj !== 'object') return {};
+            const h = obj.host ?? obj.ip ?? obj.domain ?? obj.proxy_host ?? obj.proxyHost;
+            const p = obj.port ?? obj.proxy_port ?? obj.proxyPort;
+            return {
+              host: typeof h === 'string' ? h : undefined,
+              port: typeof p === 'string' || typeof p === 'number' ? String(p) : undefined,
+            };
+          };
+
+          if (typeof retData === 'string') {
+            const m = retData.match(/^([^:]+):(\d+)$/);
+            return m ? { host: m[1], port: m[2] } : {};
+          }
+
+          if (Array.isArray(retData)) return fromObj(retData[0]);
+          if (Array.isArray(retData.list)) return fromObj(retData.list[0]);
+          return fromObj(retData);
+        };
+
+        const extracted = extractHostPort(hostParsed.json?.ret_data);
+        const host = extracted.host;
+        const port = extracted.port;
+
+        if (!hostRes.ok || hostParsed.json?.ret !== 0 || hostParsed.json?.code !== 1 || !host || !port) {
+          await logAction('error', 'Falha ao obter host/porta', {
+            status: hostRes.status,
+            body: hostParsed.preview,
+          });
+          await supabaseAdmin.from('proxy_orders').delete().eq('id', order.id);
+          return new Response(
+            JSON.stringify({ success: false, error: 'Fornecedor não retornou host/porta' }),
             { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
