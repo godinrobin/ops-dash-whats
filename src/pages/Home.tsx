@@ -53,12 +53,12 @@ const SystemCard = ({ icon, title, description, onClick, isLocked, gradient, glo
         {/* Title and description */}
         <div className="flex-1 flex flex-col">
           <h3 className={cn(
-            "text-lg font-semibold tracking-tight text-foreground mb-2",
+            "text-base md:text-lg font-semibold tracking-tight text-foreground mb-1 md:mb-2",
             gradient && `bg-gradient-to-r ${gradient} bg-clip-text text-transparent`
           )}>
             {title}
           </h3>
-          <p className="text-sm text-muted-foreground line-clamp-2">
+          <p className="hidden md:block text-sm text-muted-foreground line-clamp-2">
             {description}
           </p>
         </div>
