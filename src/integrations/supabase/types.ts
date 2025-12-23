@@ -1380,6 +1380,89 @@ export type Database = {
         }
         Relationships: []
       }
+      proxy_logs: {
+        Row: {
+          action: string
+          api_response: Json | null
+          created_at: string
+          id: string
+          message: string | null
+          order_id: string | null
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          api_response?: Json | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          order_id?: string | null
+          status: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          api_response?: Json | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          order_id?: string | null
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "proxy_logs_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "proxy_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      proxy_orders: {
+        Row: {
+          created_at: string
+          expires_at: string | null
+          host: string | null
+          id: string
+          password: string | null
+          port: string | null
+          pyproxy_subuser_id: string | null
+          status: string
+          updated_at: string
+          user_id: string
+          username: string | null
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string | null
+          host?: string | null
+          id?: string
+          password?: string | null
+          port?: string | null
+          pyproxy_subuser_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+          username?: string | null
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string | null
+          host?: string | null
+          id?: string
+          password?: string | null
+          port?: string | null
+          pyproxy_subuser_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
       saved_funnels: {
         Row: {
           config: Json
