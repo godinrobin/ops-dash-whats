@@ -348,23 +348,17 @@ const Auth = () => {
                 </div>
 
                 <div className="relative pt-2">
-                  <motion.div
-                    className="absolute -inset-1 rounded-lg bg-gradient-to-r from-accent/50 to-accent/30 opacity-50 blur-sm"
-                    animate={{ opacity: [0.3, 0.5, 0.3] }}
-                    transition={{ duration: 2, repeat: Infinity }}
+                  <div
+                    className="absolute -inset-1 rounded-lg bg-gradient-to-r from-accent/50 to-accent/30 opacity-50 blur-sm animate-pulse"
                   />
-                  <motion.button
+                  <button
                     type="submit"
                     disabled={loading}
-                    className="relative w-full py-3 px-4 bg-accent hover:bg-accent/90 text-accent-foreground font-medium rounded-lg flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
+                    className="relative w-full py-3 px-4 bg-accent hover:bg-accent/90 text-accent-foreground font-medium rounded-lg flex items-center justify-center gap-2 transition-all disabled:opacity-50 hover:scale-[1.02] active:scale-[0.98]"
                   >
                     {loading ? (
-                      <motion.div
-                        className="w-5 h-5 border-2 border-accent-foreground/30 border-t-accent-foreground rounded-full"
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                      <div
+                        className="w-5 h-5 border-2 border-accent-foreground/30 border-t-accent-foreground rounded-full animate-spin"
                       />
                     ) : (
                       <>
@@ -372,7 +366,7 @@ const Auth = () => {
                         <ArrowRight className="h-4 w-4" />
                       </>
                     )}
-                  </motion.button>
+                  </button>
                 </div>
               </motion.form>
             )}
@@ -448,23 +442,17 @@ const Auth = () => {
                 </div>
 
                 <div className="relative pt-2">
-                  <motion.div
-                    className="absolute -inset-1 rounded-lg bg-gradient-to-r from-accent/50 to-accent/30 opacity-50 blur-sm"
-                    animate={{ opacity: [0.3, 0.5, 0.3] }}
-                    transition={{ duration: 2, repeat: Infinity }}
+                  <div
+                    className="absolute -inset-1 rounded-lg bg-gradient-to-r from-accent/50 to-accent/30 opacity-50 blur-sm animate-pulse"
                   />
-                  <motion.button
+                  <button
                     type="submit"
                     disabled={loading}
-                    className="relative w-full py-3 px-4 bg-accent hover:bg-accent/90 text-accent-foreground font-medium rounded-lg flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
+                    className="relative w-full py-3 px-4 bg-accent hover:bg-accent/90 text-accent-foreground font-medium rounded-lg flex items-center justify-center gap-2 transition-all disabled:opacity-50 hover:scale-[1.02] active:scale-[0.98]"
                   >
                     {loading ? (
-                      <motion.div
-                        className="w-5 h-5 border-2 border-accent-foreground/30 border-t-accent-foreground rounded-full"
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                      <div
+                        className="w-5 h-5 border-2 border-accent-foreground/30 border-t-accent-foreground rounded-full animate-spin"
                       />
                     ) : (
                       <>
@@ -472,7 +460,7 @@ const Auth = () => {
                         <ArrowRight className="h-4 w-4" />
                       </>
                     )}
-                  </motion.button>
+                  </button>
                 </div>
 
                 <p className="text-xs text-muted-foreground text-center mt-4">
