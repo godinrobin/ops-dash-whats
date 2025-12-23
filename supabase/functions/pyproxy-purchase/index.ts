@@ -28,14 +28,33 @@ Deno.serve(async (req) => {
     const pyproxyApiKey = Deno.env.get('PYPROXY_API_KEY');
     const pyproxyApiSecret = Deno.env.get('PYPROXY_API_SECRET');
 
-    if (!pyproxyApiKey || !pyproxyApiSecret) {
-      console.error('PYPROXY credentials not configured');
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+    const { action, orderId } = await req.json();
+    console.log('pyproxy-purchase action:', action);
+
+    // get-price is public - no auth required
+    if (action === 'get-price') {
+      const { data: marginData } = await supabaseAdmin
+        .from('platform_margins')
+        .select('margin_percent')
+        .eq('system_name', 'proxy')
+        .single();
+
+      const marginPercent = marginData?.margin_percent || 50;
+      const baseCostUSD = 0.60;
+      const exchangeRate = 5.5;
+      const baseCostBRL = baseCostUSD * exchangeRate;
+      const finalPrice = baseCostBRL * (1 + marginPercent / 100);
+
+      console.log('Price calculated:', finalPrice);
       return new Response(
-        JSON.stringify({ success: false, error: 'Credenciais PYPROXY não configuradas' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ success: true, price: finalPrice }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    // All other actions require authentication
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(
@@ -44,7 +63,14 @@ Deno.serve(async (req) => {
       );
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    if (!pyproxyApiKey || !pyproxyApiSecret) {
+      console.error('PYPROXY credentials not configured');
+      return new Response(
+        JSON.stringify({ success: false, error: 'Credenciais PYPROXY não configuradas' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const supabaseUser = createClient(supabaseUrl, supabaseServiceKey, {
       global: { headers: { Authorization: authHeader } }
     });
@@ -56,8 +82,6 @@ Deno.serve(async (req) => {
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    const { action, orderId } = await req.json();
 
     // Log the action
     const logAction = async (status: string, message: string, apiResponse?: unknown) => {
@@ -251,25 +275,6 @@ Deno.serve(async (req) => {
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-
-    } else if (action === 'get-price') {
-      // Get product price for display
-      const { data: marginData } = await supabaseAdmin
-        .from('platform_margins')
-        .select('margin_percent')
-        .eq('system_name', 'proxy')
-        .single();
-
-      const marginPercent = marginData?.margin_percent || 50;
-      const baseCostUSD = 0.60;
-      const exchangeRate = 5.5;
-      const baseCostBRL = baseCostUSD * exchangeRate;
-      const finalPrice = baseCostBRL * (1 + marginPercent / 100);
-
-      return new Response(
-        JSON.stringify({ success: true, price: finalPrice }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
 
     } else if (action === 'get-orders') {
       // Get user's proxy orders

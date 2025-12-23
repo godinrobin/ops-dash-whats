@@ -136,4 +136,4 @@ verify_jwt = true
 verify_jwt = false
 
 [functions.pyproxy-purchase]
-verify_jwt = true
+verify_jwt = false
