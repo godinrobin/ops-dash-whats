@@ -8,8 +8,8 @@ import { MemberRoute } from "@/components/MemberRoute";
 import { AdminRoute } from "@/components/AdminRoute";
 import { AnnouncementPopup } from "@/components/AnnouncementPopup";
 import { AdminNotifications } from "@/components/AdminNotifications";
-import { SplashedPushNotifications, SplashedPushNotificationsHandle } from "@/components/ui/splashed-push-notifications";
-import { setGlobalToastRef } from "@/hooks/useSplashedToast";
+import Toaster, { ToasterRef } from "@/components/ui/toast";
+import { setGlobalToasterRef } from "@/hooks/useSplashedToast";
 import Home from "./pages/Home";
 import Index from "./pages/Index";
 import ProductMetrics from "./pages/ProductMetrics";
@@ -47,21 +47,21 @@ import SiteCloner from "./pages/SiteCloner";
 const queryClient = new QueryClient();
 
 const App = () => {
-  const splashedToastRef = useRef<SplashedPushNotificationsHandle>(null);
+  const toasterRef = useRef<ToasterRef>(null);
 
   useEffect(() => {
-    if (splashedToastRef.current) {
-      setGlobalToastRef(splashedToastRef.current);
+    if (toasterRef.current) {
+      setGlobalToasterRef(toasterRef.current);
     }
     return () => {
-      setGlobalToastRef(null);
+      setGlobalToasterRef(null);
     };
   }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <SplashedPushNotifications ref={splashedToastRef} />
+        <Toaster ref={toasterRef} defaultPosition="bottom-right" />
         <HashRouter>
           <AuthProvider>
             <AnnouncementPopup />

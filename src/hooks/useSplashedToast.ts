@@ -1,38 +1,75 @@
-import { useRef, useEffect } from 'react';
-import { SplashedPushNotificationsHandle, NotificationType } from '@/components/ui/splashed-push-notifications';
+import { useRef, createRef } from 'react';
+import type { ToasterRef } from '@/components/ui/toast';
 
-let globalToastRef: SplashedPushNotificationsHandle | null = null;
+// Global ref for the toaster
+let globalToasterRef: ToasterRef | null = null;
 
-export const setGlobalToastRef = (ref: SplashedPushNotificationsHandle | null) => {
-  globalToastRef = ref;
+export const setGlobalToasterRef = (ref: ToasterRef | null) => {
+  globalToasterRef = ref;
 };
 
+// Main toast API - use this everywhere
 export const splashedToast = {
   success: (title: string, description: string = '') => {
-    globalToastRef?.createNotification('success', title, description);
+    globalToasterRef?.show({
+      title,
+      message: description,
+      variant: 'success',
+      highlightTitle: true,
+    });
   },
   error: (title: string, description: string = '') => {
-    globalToastRef?.createNotification('error', title, description);
+    globalToasterRef?.show({
+      title,
+      message: description,
+      variant: 'error',
+      highlightTitle: true,
+    });
   },
   warning: (title: string, description: string = '') => {
-    globalToastRef?.createNotification('warning', title, description);
+    globalToasterRef?.show({
+      title,
+      message: description,
+      variant: 'warning',
+      highlightTitle: true,
+    });
   },
   info: (title: string, description: string = '') => {
-    globalToastRef?.createNotification('help', title, description);
+    globalToasterRef?.show({
+      title,
+      message: description,
+      variant: 'default',
+    });
+  },
+  show: (props: {
+    title?: string;
+    message: string;
+    variant?: 'default' | 'success' | 'error' | 'warning';
+    duration?: number;
+    actions?: { label: string; onClick: () => void };
+  }) => {
+    globalToasterRef?.show(props);
   },
 };
 
 // Legacy toast function for compatibility with old useToast pattern
-// Usage: toast({ title: "...", description: "...", variant?: "destructive" })
 export const toast = (options: { title?: string; description?: string; variant?: string } | string) => {
   if (typeof options === 'string') {
-    globalToastRef?.createNotification('success', '', options);
+    globalToasterRef?.show({
+      message: options,
+      variant: 'success',
+    });
     return;
   }
   
   const { title = '', description = '', variant } = options;
-  const type: NotificationType = variant === 'destructive' ? 'error' : 'success';
-  globalToastRef?.createNotification(type, title, description);
+  const toastVariant = variant === 'destructive' ? 'error' : 'success';
+  globalToasterRef?.show({
+    title,
+    message: description,
+    variant: toastVariant,
+    highlightTitle: true,
+  });
 };
 
 // Compatibility hook for components using useToast pattern
@@ -44,33 +81,17 @@ export const useToast = () => {
   };
 };
 
+// Hook for components that need direct ref access
 export const useSplashedToast = () => {
-  const toastRef = useRef<SplashedPushNotificationsHandle>(null);
-
-  useEffect(() => {
-    if (toastRef.current) {
-      setGlobalToastRef(toastRef.current);
-    }
-    return () => {
-      setGlobalToastRef(null);
-    };
-  }, []);
+  const toastRef = useRef<ToasterRef>(null);
 
   return {
     toastRef,
-    toast: {
-      success: (title: string, description: string = '') => {
-        toastRef.current?.createNotification('success', title, description);
-      },
-      error: (title: string, description: string = '') => {
-        toastRef.current?.createNotification('error', title, description);
-      },
-      warning: (title: string, description: string = '') => {
-        toastRef.current?.createNotification('warning', title, description);
-      },
-      info: (title: string, description: string = '') => {
-        toastRef.current?.createNotification('help', title, description);
-      },
+    setRef: (ref: ToasterRef | null) => {
+      if (ref) {
+        setGlobalToasterRef(ref);
+      }
     },
+    toast: splashedToast,
   };
 };
