@@ -545,6 +545,39 @@ export type Database = {
         }
         Relationships: []
       }
+      inbox_flow_delay_jobs: {
+        Row: {
+          attempts: number
+          created_at: string
+          last_error: string | null
+          run_at: string
+          session_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          last_error?: string | null
+          run_at: string
+          session_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          last_error?: string | null
+          run_at?: string
+          session_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       inbox_flow_sessions: {
         Row: {
           contact_id: string
