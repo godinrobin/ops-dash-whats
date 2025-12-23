@@ -78,10 +78,6 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
-  
-  // Auto-save debounce timer
-  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const hasChangesRef = useRef(false);
 
   useEffect(() => {
     if (initialNodes.length > 0) {
@@ -91,41 +87,6 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
       setEdges(initialEdges);
     }
   }, [initialNodes, initialEdges, setNodes, setEdges]);
-
-  // Auto-save effect - triggers when nodes or edges change
-  useEffect(() => {
-    // Skip initial render and empty flows
-    if (nodes.length === 0 && edges.length === 0) return;
-    
-    // Mark that we have unsaved changes
-    hasChangesRef.current = true;
-    
-    // Clear existing timer
-    if (autoSaveTimerRef.current) {
-      clearTimeout(autoSaveTimerRef.current);
-    }
-    
-    // Set new auto-save timer (1.5 seconds debounce)
-    autoSaveTimerRef.current = setTimeout(() => {
-      if (hasChangesRef.current) {
-        setSaveStatus('saving');
-        onSave(nodes, edges);
-        hasChangesRef.current = false;
-        
-        // Show "saved" status briefly
-        setTimeout(() => {
-          setSaveStatus('saved');
-          setTimeout(() => setSaveStatus('idle'), 2000);
-        }, 500);
-      }
-    }, 1500);
-    
-    return () => {
-      if (autoSaveTimerRef.current) {
-        clearTimeout(autoSaveTimerRef.current);
-      }
-    };
-  }, [nodes, edges, onSave]);
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
@@ -228,7 +189,6 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
   const handleSave = () => {
     setSaveStatus('saving');
     onSave(nodes, edges);
-    hasChangesRef.current = false;
     setTimeout(() => {
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
