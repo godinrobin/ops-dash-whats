@@ -137,11 +137,26 @@ serve(async (req) => {
       });
     }
 
-    const { data: config } = await supabaseClient
+    // First try to get user's own config
+    let { data: config } = await supabaseClient
       .from("maturador_config")
       .select("evolution_base_url, evolution_api_key")
       .eq("user_id", user.id)
       .single();
+
+    // If user doesn't have their own config, fallback to admin config (global)
+    if (!config?.evolution_base_url || !config?.evolution_api_key) {
+      const { data: adminConfig } = await supabaseAdmin
+        .from("maturador_config")
+        .select("evolution_base_url, evolution_api_key")
+        .limit(1)
+        .single();
+      
+      if (adminConfig?.evolution_base_url && adminConfig?.evolution_api_key) {
+        config = adminConfig;
+        console.log("Using admin Evolution API config as fallback");
+      }
+    }
 
     if (!config?.evolution_base_url || !config?.evolution_api_key) {
       return new Response(JSON.stringify({ error: "Evolution API not configured" }), {
