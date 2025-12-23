@@ -20,8 +20,8 @@ interface PropertiesPanelProps {
   allNodes?: Node[];
 }
 
-// System variables that are always available
-const SYSTEM_VARIABLES = ['nome', 'telefone', 'ultima_mensagem'];
+// System variables that are always available (synchronized with backend)
+const SYSTEM_VARIABLES = ['nome', 'telefone', 'resposta', 'lastMessage', 'contactName', 'ultima_mensagem'];
 
 // Function to extract custom variables from all nodes in the flow
 const extractCustomVariablesFromNodes = (nodes: Node[]): string[] => {
