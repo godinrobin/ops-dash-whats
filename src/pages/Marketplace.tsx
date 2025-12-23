@@ -3,6 +3,13 @@ import { Header } from "@/components/Header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { 
+  AnimatedTabs, 
+  AnimatedTabsList, 
+  AnimatedTabsTrigger, 
+  AnimatedTabsContent,
+  AnimatedTabsContents 
+} from "@/components/ui/animated-tabs";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -397,31 +404,31 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
           </Card>
 
           {/* Tabs */}
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3 mb-6">
-              <TabsTrigger value="numeros-virtuais" className="flex items-center gap-2">
+          <AnimatedTabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <AnimatedTabsList className="grid w-full grid-cols-3 mb-6">
+              <AnimatedTabsTrigger value="numeros-virtuais" className="flex items-center gap-2">
                 <Phone className="h-4 w-4" />
                 <span className="hidden sm:inline">Números Virtuais</span>
-              </TabsTrigger>
-              <TabsTrigger value="painel-marketing" className="flex items-center gap-2">
+              </AnimatedTabsTrigger>
+              <AnimatedTabsTrigger value="painel-marketing" className="flex items-center gap-2">
                 <BarChart3 className="h-4 w-4" />
                 <span className="hidden sm:inline">Painel Marketing</span>
-              </TabsTrigger>
-              <TabsTrigger value="ativos" className="flex items-center gap-2">
+              </AnimatedTabsTrigger>
+              <AnimatedTabsTrigger value="ativos" className="flex items-center gap-2">
                 <ShoppingBag className="h-4 w-4" />
                 <span className="hidden sm:inline">Ativos para Anúncios</span>
-              </TabsTrigger>
-            </TabsList>
+              </AnimatedTabsTrigger>
+            </AnimatedTabsList>
 
-            <TabsContent value="numeros-virtuais" className="-mx-4 md:-mx-6 -mb-4 md:-mb-6">
+            <AnimatedTabsContent value="numeros-virtuais" className="-mx-4 md:-mx-6 -mb-4 md:-mb-6">
               <SMSBotEmbed />
-            </TabsContent>
+            </AnimatedTabsContent>
 
-            <TabsContent value="painel-marketing" className="-mx-4 md:-mx-6 -mb-4 md:-mb-6">
+            <AnimatedTabsContent value="painel-marketing" className="-mx-4 md:-mx-6 -mb-4 md:-mb-6">
               <SMMPanelEmbed />
-            </TabsContent>
+            </AnimatedTabsContent>
 
-            <TabsContent value="ativos">
+            <AnimatedTabsContent value="ativos">
               {/* Orders Button + Category Filter */}
               <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
                 <div className="flex flex-wrap gap-2">
@@ -534,8 +541,8 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
                   )}
                 </>
               )}
-            </TabsContent>
-          </Tabs>
+            </AnimatedTabsContent>
+          </AnimatedTabs>
         </div>
       </div>
 

@@ -7,6 +7,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  AnimatedTabs, 
+  AnimatedTabsList, 
+  AnimatedTabsTrigger, 
+  AnimatedTabsContent 
+} from "@/components/ui/animated-tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Wallet, RefreshCw, ShoppingCart, ExternalLink, XCircle } from "lucide-react";
@@ -374,13 +380,13 @@ const SMMPanel = () => {
             </CardContent>
           </Card>
 
-          <Tabs defaultValue="services" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6">
-              <TabsTrigger value="services">Serviços</TabsTrigger>
-              <TabsTrigger value="orders">Meus Pedidos</TabsTrigger>
-            </TabsList>
+          <AnimatedTabs defaultValue="services" className="w-full">
+            <AnimatedTabsList className="grid w-full grid-cols-2 mb-6">
+              <AnimatedTabsTrigger value="services">Serviços</AnimatedTabsTrigger>
+              <AnimatedTabsTrigger value="orders">Meus Pedidos</AnimatedTabsTrigger>
+            </AnimatedTabsList>
 
-            <TabsContent value="services">
+            <AnimatedTabsContent value="services">
               {loading ? (
                 <div className="flex items-center justify-center py-20">
                   <Loader2 className="w-8 h-8 animate-spin text-accent" />
@@ -593,9 +599,9 @@ const SMMPanel = () => {
                   </ScrollArea>
                 </div>
               )}
-            </TabsContent>
+            </AnimatedTabsContent>
 
-            <TabsContent value="orders">
+            <AnimatedTabsContent value="orders">
               <div className="space-y-4">
                 <div className="flex justify-end">
                   <Button 
@@ -714,8 +720,8 @@ const SMMPanel = () => {
                   </ScrollArea>
                 )}
               </div>
-            </TabsContent>
-          </Tabs>
+            </AnimatedTabsContent>
+          </AnimatedTabs>
         </div>
       </div>
 
