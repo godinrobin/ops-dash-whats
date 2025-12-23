@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
+import { splashedToast } from "@/hooks/useSplashedToast";
 import { motion, useMotionValue, useTransform } from "framer-motion";
 import { Mail, Lock, Eye, EyeClosed, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -21,7 +21,6 @@ const Auth = () => {
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const [isDesktop, setIsDesktop] = useState(false);
   const { signIn, signUp, user } = useAuth();
-  const { toast } = useToast();
   const navigate = useNavigate();
 
   // Detect if desktop with mouse (not touch device)
@@ -61,11 +60,7 @@ const Auth = () => {
     e.preventDefault();
     
     if (!loginEmail || !loginPassword) {
-      toast({
-        variant: "destructive",
-        title: "Campos obrigatórios",
-        description: "Por favor, preencha todos os campos",
-      });
+      splashedToast.error("Campos obrigatórios", "Por favor, preencha todos os campos");
       return;
     }
 
@@ -74,15 +69,9 @@ const Auth = () => {
     setLoading(false);
 
     if (error) {
-      toast({
-        variant: "destructive",
-        title: "Erro ao fazer login",
-        description: error.message,
-      });
+      splashedToast.error("Erro ao fazer login", error.message);
     } else {
-      toast({
-        title: "Login realizado com sucesso!",
-      });
+      splashedToast.success("Sucesso", "Login realizado com sucesso!");
       navigate("/");
     }
   };
@@ -91,38 +80,22 @@ const Auth = () => {
     e.preventDefault();
     
     if (!signupEmail || !signupPassword || !signupConfirmPassword) {
-      toast({
-        variant: "destructive",
-        title: "Campos obrigatórios",
-        description: "Por favor, preencha todos os campos",
-      });
+      splashedToast.error("Campos obrigatórios", "Por favor, preencha todos os campos");
       return;
     }
 
     if (!signupEmail.includes('@') || !signupEmail.includes('.')) {
-      toast({
-        variant: "destructive",
-        title: "Email inválido",
-        description: "Por favor, insira um email válido",
-      });
+      splashedToast.error("Email inválido", "Por favor, insira um email válido");
       return;
     }
 
     if (signupPassword !== signupConfirmPassword) {
-      toast({
-        variant: "destructive",
-        title: "Senhas não conferem",
-        description: "As senhas digitadas não são iguais",
-      });
+      splashedToast.error("Senhas não conferem", "As senhas digitadas não são iguais");
       return;
     }
 
     if (signupPassword.length < 6) {
-      toast({
-        variant: "destructive",
-        title: "Senha muito curta",
-        description: "A senha deve ter pelo menos 6 caracteres",
-      });
+      splashedToast.error("Senha muito curta", "A senha deve ter pelo menos 6 caracteres");
       return;
     }
 
@@ -131,16 +104,9 @@ const Auth = () => {
     setLoading(false);
 
     if (error) {
-      toast({
-        variant: "destructive",
-        title: "Erro ao criar conta",
-        description: error.message,
-      });
+      splashedToast.error("Erro ao criar conta", error.message);
     } else {
-      toast({
-        title: "Conta criada com sucesso!",
-        description: "Você já pode fazer login",
-      });
+      splashedToast.success("Conta criada!", "Você já pode fazer login");
       const { error: loginError } = await signIn(signupEmail, signupPassword);
       if (!loginError) {
         navigate("/");

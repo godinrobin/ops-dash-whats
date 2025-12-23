@@ -22,6 +22,28 @@ export const splashedToast = {
   },
 };
 
+// Legacy toast function for compatibility with old useToast pattern
+// Usage: toast({ title: "...", description: "...", variant?: "destructive" })
+export const toast = (options: { title?: string; description?: string; variant?: string } | string) => {
+  if (typeof options === 'string') {
+    globalToastRef?.createNotification('success', '', options);
+    return;
+  }
+  
+  const { title = '', description = '', variant } = options;
+  const type: NotificationType = variant === 'destructive' ? 'error' : 'success';
+  globalToastRef?.createNotification(type, title, description);
+};
+
+// Compatibility hook for components using useToast pattern
+export const useToast = () => {
+  return {
+    toast,
+    toasts: [],
+    dismiss: () => {},
+  };
+};
+
 export const useSplashedToast = () => {
   const toastRef = useRef<SplashedPushNotificationsHandle>(null);
 

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Users, Phone, Package, TrendingUp, UserPlus, Loader2, Key } from "lucide-react";
-import { toast } from "sonner";
+import { splashedToast } from "@/hooks/useSplashedToast";
 
 interface UserData {
   id: string;
@@ -80,7 +80,7 @@ export default function AdminPanel() {
 
   const handleCreateUser = async () => {
     if (!newUserEmail.trim()) {
-      toast.error("Digite o email do usuário");
+      splashedToast.error("Erro", "Digite o email do usuário");
       return;
     }
 
@@ -91,22 +91,22 @@ export default function AdminPanel() {
       });
 
       if (error) {
-        toast.error("Erro ao criar usuário: " + error.message);
+        splashedToast.error("Erro", "Erro ao criar usuário: " + error.message);
         return;
       }
 
       if (data?.results?.[0]?.status === "exists") {
-        toast.info("Usuário já existe no sistema");
+        splashedToast.info("Info", "Usuário já existe no sistema");
       } else if (data?.results?.[0]?.status === "created") {
-        toast.success("Usuário criado com sucesso! Senha padrão: 123456");
+        splashedToast.success("Sucesso", "Usuário criado com sucesso! Senha padrão: 123456");
         setNewUserEmail("");
         loadAllData();
       } else if (data?.results?.[0]?.status === "error") {
-        toast.error("Erro: " + data.results[0].error);
+        splashedToast.error("Erro", data.results[0].error);
       }
     } catch (error) {
       console.error("Erro ao criar usuário:", error);
-      toast.error("Erro ao criar usuário");
+      splashedToast.error("Erro", "Erro ao criar usuário");
     } finally {
       setCreatingUser(false);
     }
@@ -114,12 +114,12 @@ export default function AdminPanel() {
 
   const handleResetPassword = async () => {
     if (!resetEmail.trim() || !resetPassword.trim()) {
-      toast.error("Digite o email e a nova senha");
+      splashedToast.error("Erro", "Digite o email e a nova senha");
       return;
     }
 
     if (resetPassword.length < 6) {
-      toast.error("A senha deve ter pelo menos 6 caracteres");
+      splashedToast.error("Erro", "A senha deve ter pelo menos 6 caracteres");
       return;
     }
 
@@ -130,20 +130,20 @@ export default function AdminPanel() {
       });
 
       if (error) {
-        toast.error("Erro ao resetar senha: " + error.message);
+        splashedToast.error("Erro", "Erro ao resetar senha: " + error.message);
         return;
       }
 
       if (data?.success) {
-        toast.success(data.message || "Senha resetada com sucesso!");
+        splashedToast.success("Sucesso", data.message || "Senha resetada com sucesso!");
         setResetEmail("");
         setResetPassword("");
       } else if (data?.error) {
-        toast.error(data.error);
+        splashedToast.error("Erro", data.error);
       }
     } catch (error) {
       console.error("Erro ao resetar senha:", error);
-      toast.error("Erro ao resetar senha");
+      splashedToast.error("Erro", "Erro ao resetar senha");
     } finally {
       setResettingPassword(false);
     }
