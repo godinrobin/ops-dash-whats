@@ -1,3 +1,4 @@
+import { useRef, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,6 +10,8 @@ import { MemberRoute } from "@/components/MemberRoute";
 import { AdminRoute } from "@/components/AdminRoute";
 import { AnnouncementPopup } from "@/components/AnnouncementPopup";
 import { AdminNotifications } from "@/components/AdminNotifications";
+import { SplashedPushNotifications, SplashedPushNotificationsHandle } from "@/components/ui/splashed-push-notifications";
+import { setGlobalToastRef } from "@/hooks/useSplashedToast";
 import Home from "./pages/Home";
 import Index from "./pages/Index";
 import ProductMetrics from "./pages/ProductMetrics";
@@ -45,65 +48,79 @@ import SiteCloner from "./pages/SiteCloner";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <HashRouter>
-        <AuthProvider>
-          <AnnouncementPopup />
-          <AdminNotifications />
-          <Routes>
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
-            
-            {/* FREE SYSTEMS - Available to all users */}
-            <Route path="/metricas" element={<ProtectedRoute><Index /></ProtectedRoute>} />
-            <Route path="/organizador-numeros" element={<ProtectedRoute><NumberOrganizer /></ProtectedRoute>} />
-            <Route path="/track-ofertas" element={<ProtectedRoute><TrackOfertas /></ProtectedRoute>} />
-            <Route path="/zap-spy" element={<ProtectedRoute><ZapSpy /></ProtectedRoute>} />
-            <Route path="/sms-bot" element={<ProtectedRoute><SMSBot /></ProtectedRoute>} />
-            <Route path="/smm-panel" element={<ProtectedRoute><SMMPanel /></ProtectedRoute>} />
-            <Route path="/produto/:productId" element={<ProtectedRoute><ProductMetrics /></ProtectedRoute>} />
-            <Route path="/produto/:productId/analise" element={<ProtectedRoute><ProductAnalysis /></ProtectedRoute>} />
-            
-            {/* MEMBER-ONLY SYSTEMS - Requires full membership */}
-            <Route path="/criador-funil" element={<MemberRoute featureName="Criador de Funil"><WhatsAppFunnelCreator /></MemberRoute>} />
-            <Route path="/gerador-criativos" element={<MemberRoute featureName="Gerador de Criativos em Imagem"><CreativeGenerator /></MemberRoute>} />
-            <Route path="/gerador-variacoes-video" element={<MemberRoute featureName="Gerador de Criativos em Vídeo"><VideoVariationGenerator /></MemberRoute>} />
-            <Route path="/gerador-audio" element={<MemberRoute featureName="Gerador de Áudio"><AudioGenerator /></MemberRoute>} />
-            <Route path="/transcricao-audio" element={<MemberRoute featureName="Transcrição de Áudio"><AudioTranscriber /></MemberRoute>} />
-            <Route path="/analisador-criativos" element={<MemberRoute featureName="Analisador de Criativos"><CreativeAnalyzer /></MemberRoute>} />
-            <Route path="/tag-whats" element={<MemberRoute featureName="Tag Whats"><TagWhats /></MemberRoute>} />
-            <Route path="/extensao-ads" element={<ProtectedRoute><ExtensaoAdsWhatsApp /></ProtectedRoute>} />
-            <Route path="/video-downloader" element={<ProtectedRoute><VideoDownloader /></ProtectedRoute>} />
-            <Route path="/maturador" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorDashboard /></MemberRoute>} />
-            <Route path="/maturador/instances" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorInstances /></MemberRoute>} />
-            <Route path="/maturador/conversations" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorConversations /></MemberRoute>} />
-            <Route path="/maturador/chat" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorChat /></MemberRoute>} />
-            <Route path="/maturador/verified-contacts" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorVerifiedContacts /></MemberRoute>} />
-            <Route path="/save-whatsapp" element={<ProtectedRoute><SaveWhatsApp /></ProtectedRoute>} />
-            <Route path="/inbox" element={<MemberRoute featureName="Automati-Zap"><InboxDashboard /></MemberRoute>} />
-            <Route path="/inbox/chat" element={<MemberRoute featureName="Automati-Zap"><InboxPage /></MemberRoute>} />
-            <Route path="/inbox/flows" element={<MemberRoute featureName="Automati-Zap"><FlowListPage /></MemberRoute>} />
-            <Route path="/inbox/flows/:id" element={<MemberRoute featureName="Automati-Zap"><FlowEditorPage /></MemberRoute>} />
-            <Route path="/disparador" element={<MemberRoute featureName="DisparaZap"><MessageBlaster /></MemberRoute>} />
-            <Route path="/disparazap/fluxos" element={<MemberRoute featureName="DisparaZap"><FlowListPage /></MemberRoute>} />
-            <Route path="/disparazap/fluxos/novo" element={<MemberRoute featureName="DisparaZap"><FlowEditorPage /></MemberRoute>} />
-            <Route path="/disparazap/fluxos/:id" element={<MemberRoute featureName="DisparaZap"><FlowEditorPage /></MemberRoute>} />
-            <Route path="/clonador" element={<MemberRoute featureName="Clonador de Entregável"><SiteCloner /></MemberRoute>} />
-            
-            {/* ADMIN ROUTES */}
-            <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />
-            
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AuthProvider>
-      </HashRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  const splashedToastRef = useRef<SplashedPushNotificationsHandle>(null);
+
+  useEffect(() => {
+    if (splashedToastRef.current) {
+      setGlobalToastRef(splashedToastRef.current);
+    }
+    return () => {
+      setGlobalToastRef(null);
+    };
+  }, []);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <SplashedPushNotifications ref={splashedToastRef} />
+        <HashRouter>
+          <AuthProvider>
+            <AnnouncementPopup />
+            <AdminNotifications />
+            <Routes>
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+              
+              {/* FREE SYSTEMS - Available to all users */}
+              <Route path="/metricas" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+              <Route path="/organizador-numeros" element={<ProtectedRoute><NumberOrganizer /></ProtectedRoute>} />
+              <Route path="/track-ofertas" element={<ProtectedRoute><TrackOfertas /></ProtectedRoute>} />
+              <Route path="/zap-spy" element={<ProtectedRoute><ZapSpy /></ProtectedRoute>} />
+              <Route path="/sms-bot" element={<ProtectedRoute><SMSBot /></ProtectedRoute>} />
+              <Route path="/smm-panel" element={<ProtectedRoute><SMMPanel /></ProtectedRoute>} />
+              <Route path="/produto/:productId" element={<ProtectedRoute><ProductMetrics /></ProtectedRoute>} />
+              <Route path="/produto/:productId/analise" element={<ProtectedRoute><ProductAnalysis /></ProtectedRoute>} />
+              
+              {/* MEMBER-ONLY SYSTEMS - Requires full membership */}
+              <Route path="/criador-funil" element={<MemberRoute featureName="Criador de Funil"><WhatsAppFunnelCreator /></MemberRoute>} />
+              <Route path="/gerador-criativos" element={<MemberRoute featureName="Gerador de Criativos em Imagem"><CreativeGenerator /></MemberRoute>} />
+              <Route path="/gerador-variacoes-video" element={<MemberRoute featureName="Gerador de Criativos em Vídeo"><VideoVariationGenerator /></MemberRoute>} />
+              <Route path="/gerador-audio" element={<MemberRoute featureName="Gerador de Áudio"><AudioGenerator /></MemberRoute>} />
+              <Route path="/transcricao-audio" element={<MemberRoute featureName="Transcrição de Áudio"><AudioTranscriber /></MemberRoute>} />
+              <Route path="/analisador-criativos" element={<MemberRoute featureName="Analisador de Criativos"><CreativeAnalyzer /></MemberRoute>} />
+              <Route path="/tag-whats" element={<MemberRoute featureName="Tag Whats"><TagWhats /></MemberRoute>} />
+              <Route path="/extensao-ads" element={<ProtectedRoute><ExtensaoAdsWhatsApp /></ProtectedRoute>} />
+              <Route path="/video-downloader" element={<ProtectedRoute><VideoDownloader /></ProtectedRoute>} />
+              <Route path="/maturador" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorDashboard /></MemberRoute>} />
+              <Route path="/maturador/instances" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorInstances /></MemberRoute>} />
+              <Route path="/maturador/conversations" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorConversations /></MemberRoute>} />
+              <Route path="/maturador/chat" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorChat /></MemberRoute>} />
+              <Route path="/maturador/verified-contacts" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorVerifiedContacts /></MemberRoute>} />
+              <Route path="/save-whatsapp" element={<ProtectedRoute><SaveWhatsApp /></ProtectedRoute>} />
+              <Route path="/inbox" element={<MemberRoute featureName="Automati-Zap"><InboxDashboard /></MemberRoute>} />
+              <Route path="/inbox/chat" element={<MemberRoute featureName="Automati-Zap"><InboxPage /></MemberRoute>} />
+              <Route path="/inbox/flows" element={<MemberRoute featureName="Automati-Zap"><FlowListPage /></MemberRoute>} />
+              <Route path="/inbox/flows/:id" element={<MemberRoute featureName="Automati-Zap"><FlowEditorPage /></MemberRoute>} />
+              <Route path="/disparador" element={<MemberRoute featureName="DisparaZap"><MessageBlaster /></MemberRoute>} />
+              <Route path="/disparazap/fluxos" element={<MemberRoute featureName="DisparaZap"><FlowListPage /></MemberRoute>} />
+              <Route path="/disparazap/fluxos/novo" element={<MemberRoute featureName="DisparaZap"><FlowEditorPage /></MemberRoute>} />
+              <Route path="/disparazap/fluxos/:id" element={<MemberRoute featureName="DisparaZap"><FlowEditorPage /></MemberRoute>} />
+              <Route path="/clonador" element={<MemberRoute featureName="Clonador de Entregável"><SiteCloner /></MemberRoute>} />
+              
+              {/* ADMIN ROUTES */}
+              <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />
+              
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </AuthProvider>
+        </HashRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;
