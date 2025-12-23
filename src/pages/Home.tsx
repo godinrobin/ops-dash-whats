@@ -310,12 +310,12 @@ const Home = () => {
           </header>
 
           {/* Grid with 3 columns and equal sized cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+          <div className="grid grid-cols-3 gap-3 md:gap-4">
             {systems.map((system) => {
               const isLocked = !accessLoading && isFullMember === false && system.restricted;
               
               return (
-                <div key={system.path} className="h-48">
+                <div key={system.path} className="h-40 md:h-48">
                   <SystemCard
                     icon={renderIcon(system)}
                     title={system.title}

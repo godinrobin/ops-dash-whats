@@ -6,6 +6,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { LogOut, ArrowLeft, User, Shield, Settings, LayoutGrid, ShoppingBag } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ProfileModal } from "./ProfileModal";
+import Dock from "@/components/ui/dock";
+import { AnimatedText } from "@/components/ui/animated-shiny-text";
+import { motion } from "framer-motion";
 
 interface HeaderProps {
   mode?: "sistemas" | "marketplace";
@@ -22,30 +25,63 @@ export const Header = ({ mode, onModeChange }: HeaderProps) => {
   const showBackButton = location.pathname !== "/" && location.pathname !== "/auth";
   const showModeToggle = location.pathname === "/" && mode && onModeChange;
 
+  const dockItems = [
+    { 
+      icon: User, 
+      label: "Perfil", 
+      onClick: () => setProfileOpen(true),
+      active: false
+    },
+    ...(isAdmin ? [{
+      icon: Shield,
+      label: "Admin",
+      onClick: () => navigate("/admin-panel"),
+      active: false
+    }] : []),
+    {
+      icon: LogOut,
+      label: "Sair",
+      onClick: signOut,
+      active: false
+    }
+  ];
+
   return (
     <>
       <header className="fixed top-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-b border-border z-50">
         <div className="container mx-auto px-4 h-14 md:h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {showBackButton && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => navigate("/")}
-                className="shrink-0"
+              <motion.div
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.95 }}
               >
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => navigate("/")}
+                  className="shrink-0"
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+              </motion.div>
             )}
-            <h1 className="text-xl font-bold bg-gradient-to-r from-accent to-orange-400 bg-clip-text text-transparent">Zapdata</h1>
+            <AnimatedText 
+              text="Zapdata" 
+              gradientColors="linear-gradient(90deg, hsl(var(--accent)), hsl(35 100% 60%), hsl(var(--accent)))"
+              gradientAnimationDuration={2}
+              textClassName="text-xl font-bold"
+            />
           </div>
 
           <div className="flex items-center gap-2">
             {/* Mode Toggle */}
             {showModeToggle && (
               <div className="flex items-center bg-secondary/50 rounded-lg p-1 border border-border/50 mr-2">
-                <button
+                <motion.button
                   onClick={() => onModeChange("sistemas")}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                   className={`
                     flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all
                     ${mode === "sistemas" 
@@ -56,9 +92,11 @@ export const Header = ({ mode, onModeChange }: HeaderProps) => {
                 >
                   <LayoutGrid className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">Sistemas</span>
-                </button>
-                <button
+                </motion.button>
+                <motion.button
                   onClick={() => onModeChange("marketplace")}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                   className={`
                     flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all
                     ${mode === "marketplace" 
@@ -69,50 +107,11 @@ export const Header = ({ mode, onModeChange }: HeaderProps) => {
                 >
                   <ShoppingBag className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">Marketplace</span>
-                </button>
+                </motion.button>
               </div>
             )}
 
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setProfileOpen(true)}
-              className="flex items-center gap-2"
-            >
-              <User className="h-4 w-4" />
-              <span className="hidden sm:inline">Perfil</span>
-            </Button>
-            
-            {isAdmin && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="flex items-center gap-2 text-accent"
-                  >
-                    <Shield className="h-4 w-4" />
-                    <span className="hidden sm:inline">Admin</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="border-accent">
-                  <DropdownMenuItem onClick={() => navigate("/admin-panel")}>
-                    <Settings className="h-4 w-4 mr-2" />
-                    Painel Administrativo
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={signOut}
-              className="flex items-center gap-2"
-            >
-              <LogOut className="h-4 w-4" />
-              Sair
-            </Button>
+            <Dock items={dockItems} />
           </div>
         </div>
       </header>
