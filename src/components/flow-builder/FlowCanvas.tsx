@@ -57,7 +57,10 @@ const nodeTypes = {
 interface FlowCanvasProps {
   initialNodes: Node[];
   initialEdges: { id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string }[];
-  onSave: (nodes: Node[], edges: { id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string }[]) => void;
+  onSave: (
+    nodes: Node[],
+    edges: { id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string }[]
+  ) => void | Promise<void>;
   triggerType?: 'keyword' | 'all' | 'schedule';
   triggerKeywords?: string[];
   onUpdateFlowSettings?: (settings: { triggerType?: string; triggerKeywords?: string[] }) => void;
@@ -65,7 +68,7 @@ interface FlowCanvasProps {
 
 const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, triggerKeywords, onUpdateFlowSettings }: FlowCanvasProps) => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, getNodes, getEdges } = useReactFlow();
+  const { screenToFlowPosition } = useReactFlow();
   
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes.length > 0 ? initialNodes : [
     {
@@ -79,6 +82,9 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+
+  const latestNodesRef = useRef<Node[]>([]);
+  const latestEdgesRef = useRef<typeof initialEdges>([]);
 
   // Validate flow and get warnings for condition nodes
   const validationResults = useFlowValidation(nodes, edges);
@@ -99,6 +105,18 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
       return node;
     });
   }, [nodes, validationResults]);
+
+  useEffect(() => {
+    // Keep refs in sync so we can always save the latest canvas state
+    latestNodesRef.current = nodes;
+    latestEdgesRef.current = edges as any;
+
+    // Also keep selectedNode data synced with the latest nodes
+    if (selectedNode) {
+      const fresh = nodes.find((n) => n.id === selectedNode.id) || null;
+      if (fresh && fresh !== selectedNode) setSelectedNode(fresh);
+    }
+  }, [nodes, edges, selectedNode]);
 
   useEffect(() => {
     if (initialNodes.length > 0) {
@@ -164,6 +182,14 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
   
   const onInit = useCallback((instance: any) => {
     setReactFlowInstance(instance);
+
+    // Ensure our refs start with the real instance state
+    try {
+      latestNodesRef.current = instance.getNodes?.() || latestNodesRef.current;
+      latestEdgesRef.current = instance.getEdges?.() || latestEdgesRef.current;
+    } catch {
+      // ignore
+    }
   }, []);
 
   const getNodeLabel = (type: string): string => {
@@ -207,12 +233,12 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setSaveStatus('saving');
 
-    // Use ReactFlow's latest state to avoid saving stale node data
-    const latestNodes = getNodes();
-    const latestEdges = getEdges();
+    // Always save the latest state captured from React state (refs)
+    const latestNodes = latestNodesRef.current;
+    const latestEdges = latestEdgesRef.current;
 
     // Do not persist validation-only fields
     const nodesToSave = latestNodes.map((n) => {
@@ -221,12 +247,14 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
       return { ...n, data };
     });
 
-    onSave(nodesToSave as any, latestEdges as any);
-
-    setTimeout(() => {
+    try {
+      await onSave(nodesToSave as any, latestEdges as any);
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
-    }, 500);
+    } catch {
+      // Backend already reports errors via toast; just reset visual status.
+      setSaveStatus('idle');
+    }
   };
 
   return (
