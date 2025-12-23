@@ -137,6 +137,7 @@ export const useInboxMessages = (contactId: string | null) => {
     let cancelled = false;
     let inFlight = false;
     let intervalId: ReturnType<typeof setInterval> | undefined;
+    let configMissing = false; // Track if Evolution API is not configured
 
     const stopPolling = () => {
       cancelled = true;
@@ -144,7 +145,7 @@ export const useInboxMessages = (contactId: string | null) => {
     };
 
     const tick = async () => {
-      if (cancelled || inFlight) return;
+      if (cancelled || inFlight || configMissing) return;
       inFlight = true;
       try {
         const { data, error: syncError } = await supabase.functions.invoke('sync-inbox-messages', {
@@ -153,11 +154,19 @@ export const useInboxMessages = (contactId: string | null) => {
 
         if (syncError) {
           const errorBody = (syncError as any)?.context?.body;
+          const errorStr = typeof errorBody === 'string' ? errorBody : JSON.stringify(errorBody || '');
 
           // Contact was deleted/cleaned up; stop polling and show a stable UI state.
-          if (errorBody?.includes?.('Contact not found')) {
+          if (errorStr.includes('Contact not found')) {
             setError('Contact not found');
             stopPolling();
+            return;
+          }
+
+          // Evolution API not configured - stop polling silently (user needs to configure in Maturador)
+          if (errorStr.includes('Evolution API not configured')) {
+            console.info('Evolution API not configured - message sync disabled');
+            configMissing = true;
             return;
           }
 
