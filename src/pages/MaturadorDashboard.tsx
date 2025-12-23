@@ -16,7 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
-import { toast } from "sonner";
+import { splashedToast as toast } from "@/hooks/useSplashedToast";
 
 interface Instance {
   id: string;

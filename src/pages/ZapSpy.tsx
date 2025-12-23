@@ -13,7 +13,7 @@ import { ExternalLink, Plus, Pencil, Trash2, EyeOff, Eye, Search, Flame, Calenda
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
-import { toast } from "sonner";
+import { splashedToast, splashedToast as toast } from "@/hooks/useSplashedToast";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { AnimatedSearchBar } from "@/components/ui/animated-search-bar";
 
@@ -69,13 +69,13 @@ const ZapSpy = () => {
   // Save offer to Track Ofertas
   const handleSaveOfferToTrack = async (offer: ZapSpyOffer) => {
     if (!user) {
-      toast.error("Você precisa estar logado para salvar ofertas");
+      splashedToast.error("Erro", "Você precisa estar logado para salvar ofertas");
       return;
     }
     
     // Check if already saved
     if (savedOfferLinks.has(offer.ad_library_link)) {
-      toast.info("Você já salvou esta oferta");
+      splashedToast.info("Info", "Você já salvou esta oferta");
       return;
     }
     
@@ -91,18 +91,18 @@ const ZapSpy = () => {
 
       if (error) {
         if (error.code === '23505') {
-          toast.info("Você já salvou esta oferta");
+          splashedToast.info("Info", "Você já salvou esta oferta");
           setSavedOfferLinks(prev => new Set(prev).add(offer.ad_library_link));
         } else {
           throw error;
         }
       } else {
-        toast.success("Oferta salva no Track Ofertas!");
+        splashedToast.success("Sucesso", "Oferta salva no Track Ofertas!");
         setSavedOfferLinks(prev => new Set(prev).add(offer.ad_library_link));
       }
     } catch (err) {
       console.error("Error saving offer:", err);
-      toast.error("Erro ao salvar oferta");
+      splashedToast.error("Erro", "Erro ao salvar oferta");
     } finally {
       setSavingOfferId(null);
     }
@@ -156,7 +156,7 @@ const ZapSpy = () => {
       setNicheSuggestions(niches);
     } catch (err) {
       console.error("Error loading offers:", err);
-      toast.error("Erro ao carregar ofertas");
+      splashedToast.error("Erro", "Erro ao carregar ofertas");
     } finally {
       setLoading(false);
     }
@@ -164,7 +164,7 @@ const ZapSpy = () => {
 
   const handleAddOffer = async () => {
     if (!formName.trim() || !formLink.trim() || !formNiche.trim()) {
-      toast.error("Preencha todos os campos obrigatórios");
+      splashedToast.error("Erro", "Preencha todos os campos obrigatórios");
       return;
     }
 
@@ -205,13 +205,13 @@ const ZapSpy = () => {
 
       if (error) throw error;
 
-      toast.success("Oferta cadastrada com sucesso!");
+      splashedToast.success("Sucesso", "Oferta cadastrada com sucesso!");
       setAddDialogOpen(false);
       resetForm();
       loadOffers();
     } catch (err) {
       console.error("Error adding offer:", err);
-      toast.error("Erro ao cadastrar oferta");
+      splashedToast.error("Erro", "Erro ao cadastrar oferta");
     } finally {
       setSubmitting(false);
     }
@@ -219,7 +219,7 @@ const ZapSpy = () => {
 
   const handleEditOffer = async () => {
     if (!selectedOffer || !formName.trim() || !formLink.trim() || !formNiche.trim()) {
-      toast.error("Preencha todos os campos obrigatórios");
+      splashedToast.error("Erro", "Preencha todos os campos obrigatórios");
       return;
     }
 
@@ -260,13 +260,13 @@ const ZapSpy = () => {
 
       if (error) throw error;
 
-      toast.success("Oferta atualizada com sucesso!");
+      splashedToast.success("Sucesso", "Oferta atualizada com sucesso!");
       setEditDialogOpen(false);
       setSelectedOffer(null);
       loadOffers();
     } catch (err) {
       console.error("Error updating offer:", err);
-      toast.error("Erro ao atualizar oferta");
+      splashedToast.error("Erro", "Erro ao atualizar oferta");
     } finally {
       setSubmitting(false);
     }
@@ -284,13 +284,13 @@ const ZapSpy = () => {
 
       if (error) throw error;
 
-      toast.success("Oferta removida com sucesso!");
+      splashedToast.success("Sucesso", "Oferta removida com sucesso!");
       setDeleteDialogOpen(false);
       setSelectedOffer(null);
       loadOffers();
     } catch (err) {
       console.error("Error deleting offer:", err);
-      toast.error("Erro ao remover oferta");
+      splashedToast.error("Erro", "Erro ao remover oferta");
     } finally {
       setSubmitting(false);
     }
@@ -305,11 +305,11 @@ const ZapSpy = () => {
 
       if (error) throw error;
 
-      toast.success(offer.is_hidden ? "Oferta visível" : "Oferta oculta");
+      splashedToast.success("Sucesso", offer.is_hidden ? "Oferta visível" : "Oferta oculta");
       loadOffers();
     } catch (err) {
       console.error("Error toggling visibility:", err);
-      toast.error("Erro ao alterar visibilidade");
+      splashedToast.error("Erro", "Erro ao alterar visibilidade");
     }
   };
 

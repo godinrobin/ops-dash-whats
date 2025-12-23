@@ -19,7 +19,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Wallet, RefreshCw, ShoppingCart, ExternalLink, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/hooks/useSplashedToast";
 import { RechargeModal } from "@/components/RechargeModal";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { createAdminNotification } from "@/utils/adminNotifications";

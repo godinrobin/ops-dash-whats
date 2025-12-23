@@ -3,7 +3,7 @@ import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/hooks/useSplashedToast";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Upload, Copy, FileAudio, Check } from "lucide-react";
 import { useActivityTracker } from "@/hooks/useActivityTracker";

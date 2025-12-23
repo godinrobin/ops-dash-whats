@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { AnimatedTabs, AnimatedTabsList, AnimatedTabsTrigger, AnimatedTabsContent } from "@/components/ui/animated-tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Copy, RefreshCw, X, CheckCircle2, Clock, XCircle, Wallet } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/hooks/useSplashedToast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
