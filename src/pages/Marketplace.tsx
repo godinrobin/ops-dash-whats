@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { 
   Wallet, Phone, BarChart3, ShoppingBag, ArrowLeft, Shield, Truck, CreditCard, 
-  Check, Minus, Plus, Clock, X, Loader2, ClipboardList
+  Check, Minus, Plus, Clock, X, Loader2, ClipboardList, Globe
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -41,6 +41,7 @@ import comboDiamondImg from "@/assets/combo-diamond.png";
 // Import the actual pages for embedding
 import SMSBot from "@/pages/SMSBot";
 import SMMPanel from "@/pages/SMMPanel";
+import { ProxiesTab } from "@/components/marketplace/ProxiesTab";
 
 interface MarketplaceProduct {
   id: string;
@@ -406,7 +407,7 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
 
           {/* Tabs */}
           <AnimatedTabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <AnimatedTabsList className="grid w-full grid-cols-3 mb-6">
+            <AnimatedTabsList className="grid w-full grid-cols-4 mb-6">
               <AnimatedTabsTrigger value="numeros-virtuais" className="flex items-center gap-2">
                 <Phone className="h-4 w-4" />
                 <span className="hidden sm:inline">Números Virtuais</span>
@@ -415,9 +416,13 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
                 <BarChart3 className="h-4 w-4" />
                 <span className="hidden sm:inline">Painel Marketing</span>
               </AnimatedTabsTrigger>
+              <AnimatedTabsTrigger value="proxies" className="flex items-center gap-2">
+                <Globe className="h-4 w-4" />
+                <span className="hidden sm:inline">Proxies</span>
+              </AnimatedTabsTrigger>
               <AnimatedTabsTrigger value="ativos" className="flex items-center gap-2">
                 <ShoppingBag className="h-4 w-4" />
-                <span className="hidden sm:inline">Ativos para Anúncios</span>
+                <span className="hidden sm:inline">Ativos</span>
               </AnimatedTabsTrigger>
             </AnimatedTabsList>
 
@@ -427,6 +432,14 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
 
             <AnimatedTabsContent value="painel-marketing" className="-mx-4 md:-mx-6 -mb-4 md:-mb-6">
               <SMMPanelEmbed />
+            </AnimatedTabsContent>
+
+            <AnimatedTabsContent value="proxies">
+              <ProxiesTab 
+                balance={balance}
+                onRecharge={() => setRechargeOpen(true)}
+                onBalanceChange={setBalance}
+              />
             </AnimatedTabsContent>
 
             <AnimatedTabsContent value="ativos">

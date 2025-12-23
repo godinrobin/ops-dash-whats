@@ -134,3 +134,6 @@ verify_jwt = true
 
 [functions.process-delay-queue]
 verify_jwt = false
+
+[functions.pyproxy-purchase]
+verify_jwt = true
