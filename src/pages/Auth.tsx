@@ -4,10 +4,16 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { HoverButton } from "@/components/ui/hover-button";
 import { BackgroundBeams } from "@/components/ui/background-beams";
+import { 
+  AnimatedTabs, 
+  AnimatedTabsList, 
+  AnimatedTabsTrigger, 
+  AnimatedTabsContents, 
+  AnimatedTabsContent 
+} from "@/components/ui/animated-tabs";
 
 const Auth = () => {
   const [loginEmail, setLoginEmail] = useState("");
@@ -130,100 +136,102 @@ const Auth = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6">
-              <TabsTrigger value="login">Entrar</TabsTrigger>
-              <TabsTrigger value="signup">Criar conta</TabsTrigger>
-            </TabsList>
+          <AnimatedTabs defaultValue="login" className="w-full">
+            <AnimatedTabsList className="grid w-full grid-cols-2 mb-6">
+              <AnimatedTabsTrigger value="login">Entrar</AnimatedTabsTrigger>
+              <AnimatedTabsTrigger value="signup">Criar conta</AnimatedTabsTrigger>
+            </AnimatedTabsList>
 
-            <TabsContent value="login">
-              <form onSubmit={handleSignIn} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="login-email">Email</Label>
-                  <Input
-                    id="login-email"
-                    type="text"
-                    placeholder="Digite seu email"
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
+            <AnimatedTabsContents>
+              <AnimatedTabsContent value="login">
+                <form onSubmit={handleSignIn} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="login-email">Email</Label>
+                    <Input
+                      id="login-email"
+                      type="text"
+                      placeholder="Digite seu email"
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      disabled={loading}
+                      className="focus-visible:ring-accent focus-visible:border-accent"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="login-password">Senha</Label>
+                    <Input
+                      id="login-password"
+                      type="password"
+                      placeholder="Digite sua senha"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      disabled={loading}
+                      className="focus-visible:ring-accent focus-visible:border-accent"
+                    />
+                  </div>
+                  <HoverButton 
+                    type="submit" 
+                    className="w-full bg-accent hover:bg-accent/90 text-accent-foreground" 
                     disabled={loading}
-                    className="focus-visible:ring-accent focus-visible:border-accent"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="login-password">Senha</Label>
-                  <Input
-                    id="login-password"
-                    type="password"
-                    placeholder="Digite sua senha"
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    disabled={loading}
-                    className="focus-visible:ring-accent focus-visible:border-accent"
-                  />
-                </div>
-                <HoverButton 
-                  type="submit" 
-                  className="w-full bg-accent hover:bg-accent/90 text-accent-foreground" 
-                  disabled={loading}
-                >
-                  {loading ? "Entrando..." : "Entrar"}
-                </HoverButton>
-              </form>
-            </TabsContent>
+                  >
+                    {loading ? "Entrando..." : "Entrar"}
+                  </HoverButton>
+                </form>
+              </AnimatedTabsContent>
 
-            <TabsContent value="signup">
-              <form onSubmit={handleSignUp} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="signup-email">Email</Label>
-                  <Input
-                    id="signup-email"
-                    type="email"
-                    placeholder="Digite seu email"
-                    value={signupEmail}
-                    onChange={(e) => setSignupEmail(e.target.value)}
+              <AnimatedTabsContent value="signup">
+                <form onSubmit={handleSignUp} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-email">Email</Label>
+                    <Input
+                      id="signup-email"
+                      type="email"
+                      placeholder="Digite seu email"
+                      value={signupEmail}
+                      onChange={(e) => setSignupEmail(e.target.value)}
+                      disabled={loading}
+                      className="focus-visible:ring-accent focus-visible:border-accent"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-password">Senha</Label>
+                    <Input
+                      id="signup-password"
+                      type="password"
+                      placeholder="Crie uma senha"
+                      value={signupPassword}
+                      onChange={(e) => setSignupPassword(e.target.value)}
+                      disabled={loading}
+                      className="focus-visible:ring-accent focus-visible:border-accent"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-confirm-password">Confirmar Senha</Label>
+                    <Input
+                      id="signup-confirm-password"
+                      type="password"
+                      placeholder="Confirme sua senha"
+                      value={signupConfirmPassword}
+                      onChange={(e) => setSignupConfirmPassword(e.target.value)}
+                      disabled={loading}
+                      className="focus-visible:ring-accent focus-visible:border-accent"
+                    />
+                  </div>
+                  <HoverButton 
+                    type="submit" 
+                    className="w-full bg-accent hover:bg-accent/90 text-accent-foreground" 
                     disabled={loading}
-                    className="focus-visible:ring-accent focus-visible:border-accent"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-password">Senha</Label>
-                  <Input
-                    id="signup-password"
-                    type="password"
-                    placeholder="Crie uma senha"
-                    value={signupPassword}
-                    onChange={(e) => setSignupPassword(e.target.value)}
-                    disabled={loading}
-                    className="focus-visible:ring-accent focus-visible:border-accent"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-confirm-password">Confirmar Senha</Label>
-                  <Input
-                    id="signup-confirm-password"
-                    type="password"
-                    placeholder="Confirme sua senha"
-                    value={signupConfirmPassword}
-                    onChange={(e) => setSignupConfirmPassword(e.target.value)}
-                    disabled={loading}
-                    className="focus-visible:ring-accent focus-visible:border-accent"
-                  />
-                </div>
-                <HoverButton 
-                  type="submit" 
-                  className="w-full bg-accent hover:bg-accent/90 text-accent-foreground" 
-                  disabled={loading}
-                >
-                  {loading ? "Criando conta..." : "Criar conta"}
-                </HoverButton>
-                <p className="text-xs text-muted-foreground text-center mt-4">
-                  Ao criar uma conta, você terá acesso limitado às funcionalidades. 
-                  Para acesso completo, torne-se membro da comunidade.
-                </p>
-              </form>
-            </TabsContent>
-          </Tabs>
+                  >
+                    {loading ? "Criando conta..." : "Criar conta"}
+                  </HoverButton>
+                  <p className="text-xs text-muted-foreground text-center mt-4">
+                    Ao criar uma conta, você terá acesso limitado às funcionalidades. 
+                    Para acesso completo, torne-se membro da comunidade.
+                  </p>
+                </form>
+              </AnimatedTabsContent>
+            </AnimatedTabsContents>
+          </AnimatedTabs>
         </CardContent>
       </Card>
     </div>
