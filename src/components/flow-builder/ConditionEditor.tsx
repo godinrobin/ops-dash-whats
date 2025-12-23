@@ -48,12 +48,14 @@ export const ConditionEditor = ({
   const [newTagName, setNewTagName] = useState('');
   const [editingTagConditionId, setEditingTagConditionId] = useState<string | null>(null);
   const [existingTags, setExistingTags] = useState<string[]>([]);
+  const [dbCustomVariables, setDbCustomVariables] = useState<string[]>([]);
 
-  const allVariables = [...SYSTEM_VARIABLES, ...customVariables];
+  // Combined variables: system + from database + from flow nodes
+  const allVariables = [...new Set([...SYSTEM_VARIABLES, ...dbCustomVariables, ...customVariables])];
 
-  // Fetch existing tags from database
+  // Fetch existing tags and custom variables from database
   useEffect(() => {
-    const fetchTags = async () => {
+    const fetchData = async () => {
       if (!user) return;
       
       // Fetch from inbox_tags table
@@ -68,6 +70,12 @@ export const ConditionEditor = ({
         .select('tags')
         .eq('user_id', user.id);
       
+      // Fetch custom variables from database
+      const { data: variablesData } = await supabase
+        .from('inbox_custom_variables')
+        .select('name')
+        .eq('user_id', user.id);
+      
       const tagSet = new Set<string>();
       
       // Add tags from inbox_tags table
@@ -80,9 +88,10 @@ export const ConditionEditor = ({
       });
       
       setExistingTags(Array.from(tagSet).sort());
+      setDbCustomVariables(variablesData?.map(v => v.name) || []);
     };
     
-    fetchTags();
+    fetchData();
   }, [user]);
 
   const generateId = () => Math.random().toString(36).substring(2, 9);
@@ -106,32 +115,122 @@ export const ConditionEditor = ({
     onUpdateConditions(conditions.filter((c) => c.id !== id));
   };
 
-  const handleAddVariable = () => {
+  // Save custom variable to database
+  const saveVariableToDb = async (name: string) => {
+    if (!user || !name.trim()) return;
+    
+    try {
+      const { error } = await supabase
+        .from('inbox_custom_variables')
+        .upsert(
+          { user_id: user.id, name: name.trim() },
+          { onConflict: 'user_id,name' }
+        );
+      
+      if (error) {
+        console.error('Error saving variable:', error);
+        return;
+      }
+      
+      // Update local state
+      if (!dbCustomVariables.includes(name.trim())) {
+        setDbCustomVariables(prev => [...prev, name.trim()].sort());
+      }
+    } catch (error) {
+      console.error('Error saving variable:', error);
+    }
+  };
+
+  // Delete custom variable from database
+  const deleteVariableFromDb = async (name: string) => {
+    if (!user || !name.trim()) return;
+    
+    try {
+      const { error } = await supabase
+        .from('inbox_custom_variables')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('name', name.trim());
+      
+      if (error) {
+        console.error('Error deleting variable:', error);
+        toast.error('Erro ao deletar variável');
+        return;
+      }
+      
+      // Update local state
+      setDbCustomVariables(prev => prev.filter(v => v !== name.trim()));
+      toast.success(`Variável "${name}" deletada com sucesso`);
+    } catch (error) {
+      console.error('Error deleting variable:', error);
+      toast.error('Erro ao deletar variável');
+    }
+  };
+
+  // Save tag to database
+  const saveTagToDb = async (name: string) => {
+    if (!user || !name.trim()) return;
+    
+    try {
+      const { error } = await supabase
+        .from('inbox_tags')
+        .upsert(
+          { user_id: user.id, name: name.trim() },
+          { onConflict: 'user_id,name', ignoreDuplicates: true }
+        );
+      
+      if (error && !error.message.includes('duplicate')) {
+        console.error('Error saving tag:', error);
+        return;
+      }
+      
+      // Update local state
+      if (!existingTags.includes(name.trim())) {
+        setExistingTags(prev => [...prev, name.trim()].sort());
+      }
+    } catch (error) {
+      console.error('Error saving tag:', error);
+    }
+  };
+
+  const handleAddVariable = async () => {
     if (newVariableName.trim() && !allVariables.includes(newVariableName.trim())) {
+      // Save to database
+      await saveVariableToDb(newVariableName.trim());
+      
+      // Notify parent
       onAddCustomVariable(newVariableName.trim());
+      
       if (editingConditionId) {
         updateCondition(editingConditionId, { variable: newVariableName.trim() });
       }
       setNewVariableName('');
       setShowNewVariableInput(false);
       setEditingConditionId(null);
+      
+      toast.success(`Variável "${newVariableName.trim()}" criada com sucesso`);
     }
   };
 
-  const handleAddTag = () => {
+  const handleAddTag = async () => {
     if (newTagName.trim()) {
+      // Save to database
+      await saveTagToDb(newTagName.trim());
+      
       if (editingTagConditionId) {
         updateCondition(editingTagConditionId, { tagName: newTagName.trim() });
       }
-      // Add to existing tags list if not already present
-      if (!existingTags.includes(newTagName.trim())) {
-        setExistingTags(prev => [...prev, newTagName.trim()].sort());
-      }
+      
       setNewTagName('');
       setShowNewTagInput(false);
       setEditingTagConditionId(null);
+      
+      toast.success(`Tag "${newTagName.trim()}" criada com sucesso`);
     }
   };
+
+  // Check if a variable is a system variable (cannot be deleted)
+  const isSystemVariable = (name: string) => SYSTEM_VARIABLES.includes(name);
 
   return (
     <div className="space-y-4">
@@ -207,9 +306,36 @@ export const ConditionEditor = ({
                     </SelectTrigger>
                     <SelectContent>
                       {allVariables.map((v) => (
-                        <SelectItem key={v} value={v} className="text-xs">
-                          {`{{${v}}}`}
-                        </SelectItem>
+                        <div key={v} className="flex items-center justify-between group px-2 py-1.5 hover:bg-accent rounded-sm">
+                          <span 
+                            className="text-xs cursor-pointer flex-1"
+                            onClick={() => {
+                              updateCondition(condition.id, { variable: v });
+                            }}
+                          >
+                            {`{{${v}}}`}
+                            {isSystemVariable(v) && (
+                              <span className="ml-1 text-muted-foreground">(sistema)</span>
+                            )}
+                          </span>
+                          {!isSystemVariable(v) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                await deleteVariableFromDb(v);
+                                // Clear from condition if it was selected
+                                if (condition.variable === v) {
+                                  updateCondition(condition.id, { variable: '' });
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
                       ))}
                       <SelectItem value="__new__" className="text-orange-400 text-xs font-medium">
                         + Nova variável
