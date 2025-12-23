@@ -586,6 +586,8 @@ export type Database = {
           id: string
           instance_id: string | null
           last_interaction: string
+          processing: boolean | null
+          processing_started_at: string | null
           started_at: string
           status: string
           user_id: string
@@ -598,6 +600,8 @@ export type Database = {
           id?: string
           instance_id?: string | null
           last_interaction?: string
+          processing?: boolean | null
+          processing_started_at?: string | null
           started_at?: string
           status?: string
           user_id: string
@@ -610,6 +614,8 @@ export type Database = {
           id?: string
           instance_id?: string | null
           last_interaction?: string
+          processing?: boolean | null
+          processing_started_at?: string | null
           started_at?: string
           status?: string
           user_id?: string

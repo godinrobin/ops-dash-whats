@@ -268,6 +268,7 @@ serve(async (req) => {
         });
       }
 
+      // === FLOW SESSION HANDLING ===
       // First, check for active flow sessions waiting for input (waitInput or menu)
       const { data: activeSession } = await supabaseClient
         .from('inbox_flow_sessions')
@@ -281,6 +282,22 @@ serve(async (req) => {
       if (activeSession) {
         const flowNodes = (activeSession.flow?.nodes || []) as Array<{ id: string; type: string; data: Record<string, unknown> }>;
         const currentNode = flowNodes.find((n: { id: string }) => n.id === activeSession.current_node_id);
+        
+        // Check if session is currently being processed (locked)
+        if (activeSession.processing) {
+          const lockAge = activeSession.processing_started_at 
+            ? Date.now() - new Date(activeSession.processing_started_at).getTime() 
+            : 0;
+          
+          // If lock is not stale (less than 60 seconds), skip processing
+          if (lockAge < 60000) {
+            console.log(`Session ${activeSession.id} is locked (${lockAge}ms), skipping to prevent duplicate processing`);
+            return new Response(JSON.stringify({ success: true, skipped: true, reason: 'session_locked' }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          console.log(`Session ${activeSession.id} has stale lock (${lockAge}ms), proceeding`);
+        }
         
         // Check if the current node is waiting for input
         if (currentNode && (currentNode.type === 'waitInput' || currentNode.type === 'menu')) {
@@ -316,16 +333,31 @@ serve(async (req) => {
         }
       }
 
-      // Check if there's already ANY active session for this contact (cooldown check)
+      // Check if there's already ANY active session for this contact
       // This prevents duplicate flows from triggering
-      const { data: anyActiveSession } = await supabaseClient
+      const { data: allActiveSessions } = await supabaseClient
         .from('inbox_flow_sessions')
-        .select('id, started_at, current_node_id')
+        .select('id, started_at, current_node_id, flow_id')
         .eq('contact_id', contact.id)
         .eq('status', 'active')
-        .order('started_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .order('started_at', { ascending: false });
+
+      // Auto-correction: if there are multiple active sessions, keep only the most recent one
+      if (allActiveSessions && allActiveSessions.length > 1) {
+        console.log(`Found ${allActiveSessions.length} active sessions for contact ${contact.id}, cleaning up duplicates`);
+        const [mostRecent, ...duplicates] = allActiveSessions;
+        
+        // Mark duplicates as completed
+        for (const dup of duplicates) {
+          await supabaseClient
+            .from('inbox_flow_sessions')
+            .update({ status: 'completed' })
+            .eq('id', dup.id);
+          console.log(`Marked duplicate session ${dup.id} as completed`);
+        }
+      }
+
+      const anyActiveSession = allActiveSessions?.[0];
 
       if (anyActiveSession) {
         const sessionAge = Date.now() - new Date(anyActiveSession.started_at).getTime();
@@ -418,64 +450,75 @@ serve(async (req) => {
           if (shouldTrigger) {
             console.log(`Triggering flow ${flow.name} for contact ${contact.id}`);
             
-            // Check if there's already an active session for this flow and contact
-            const { data: existingSession } = await supabaseClient
+            // Use upsert with ON CONFLICT to prevent duplicate active sessions
+            // The unique index idx_inbox_flow_sessions_unique_active ensures only one active session per flow+contact
+            const { data: newSession, error: sessionError } = await supabaseClient
               .from('inbox_flow_sessions')
-              .select('*')
-              .eq('flow_id', flow.id)
-              .eq('contact_id', contact.id)
-              .eq('status', 'active')
-              .maybeSingle();
+              .upsert({
+                flow_id: flow.id,
+                contact_id: contact.id,
+                instance_id: instanceId,
+                user_id: userId,
+                current_node_id: 'start-1',
+                variables: { 
+                  nome: contact.name || '',
+                  telefone: phone,
+                  resposta: '',
+                  lastMessage: content,
+                  contactName: contact.name || phone,
+                  ultima_mensagem: content,
+                },
+                status: 'active',
+                processing: false,
+                processing_started_at: null,
+              }, {
+                onConflict: 'flow_id,contact_id',
+                ignoreDuplicates: false,
+              })
+              .select()
+              .single();
 
-            if (!existingSession) {
-              // Create new flow session with all system variables
-              const { data: newSession, error: sessionError } = await supabaseClient
-                .from('inbox_flow_sessions')
-                .insert({
-                  flow_id: flow.id,
-                  contact_id: contact.id,
-                  instance_id: instanceId,
-                  user_id: userId,
-                  current_node_id: 'start-1',
-                  variables: { 
-                    nome: contact.name || '',
-                    telefone: phone,
-                    resposta: '',
-                    lastMessage: content,
-                    contactName: contact.name || phone,
-                    ultima_mensagem: content,
+            // Execute the flow immediately after creating/updating session
+            if (newSession && !sessionError) {
+              console.log(`Executing flow for session ${newSession.id}`);
+              try {
+                const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+                const processResponse = await fetch(processUrl, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
                   },
-                  status: 'active',
-                })
-                .select()
-                .single();
-
-              // Execute the flow immediately after creating session
-              if (newSession && !sessionError) {
-                console.log(`Executing flow for session ${newSession.id}`);
-                try {
-                  const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
-                  const processResponse = await fetch(processUrl, {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-                    },
-                    body: JSON.stringify({ sessionId: newSession.id }),
-                  });
-                  
-                  if (!processResponse.ok) {
-                    const errorText = await processResponse.text();
-                    console.error('Error executing flow:', errorText);
-                  } else {
-                    console.log('Flow executed successfully');
-                  }
-                } catch (flowError) {
-                  console.error('Error calling process-inbox-flow:', flowError);
+                  body: JSON.stringify({ sessionId: newSession.id }),
+                });
+                
+                if (!processResponse.ok) {
+                  const errorText = await processResponse.text();
+                  console.error('Error executing flow:', errorText);
+                } else {
+                  console.log('Flow executed successfully');
+                }
+              } catch (flowError) {
+                console.error('Error calling process-inbox-flow:', flowError);
+              }
+            } else if (sessionError) {
+              console.error('Error creating/upserting session:', sessionError);
+              
+              // If upsert failed due to unique constraint, try to find existing session
+              if (sessionError.code === '23505') {
+                console.log('Session already exists (unique constraint), fetching existing session');
+                const { data: existingSession } = await supabaseClient
+                  .from('inbox_flow_sessions')
+                  .select('id')
+                  .eq('flow_id', flow.id)
+                  .eq('contact_id', contact.id)
+                  .eq('status', 'active')
+                  .single();
+                
+                if (existingSession) {
+                  console.log(`Using existing session ${existingSession.id}`);
                 }
               }
-            } else {
-              console.log(`Session already exists for flow ${flow.name} and contact ${contact.id}`);
             }
 
             break; // Only trigger one flow
