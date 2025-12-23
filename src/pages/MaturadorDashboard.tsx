@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AnimatedTabs, AnimatedTabsList, AnimatedTabsTrigger, AnimatedTabsContent } from "@/components/ui/animated-tabs";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -482,14 +482,14 @@ export default function MaturadorDashboard() {
         </div>
 
         {/* Main Content */}
-        <Tabs defaultValue="instances" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-3 lg:w-[600px]">
-            <TabsTrigger value="instances">Números</TabsTrigger>
-            <TabsTrigger value="conversations">Aquecedor</TabsTrigger>
-            <TabsTrigger value="verified">Contatos Verificados</TabsTrigger>
-          </TabsList>
+        <AnimatedTabs defaultValue="instances" className="space-y-4">
+          <AnimatedTabsList className="grid w-full grid-cols-3 lg:w-[600px]">
+            <AnimatedTabsTrigger value="instances">Números</AnimatedTabsTrigger>
+            <AnimatedTabsTrigger value="conversations">Aquecedor</AnimatedTabsTrigger>
+            <AnimatedTabsTrigger value="verified">Contatos Verificados</AnimatedTabsTrigger>
+          </AnimatedTabsList>
 
-          <TabsContent value="instances" className="space-y-4">
+          <AnimatedTabsContent value="instances" className="space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-semibold">Seus Números</h2>
               <Button onClick={() => navigate('/maturador/instances')}>
@@ -544,9 +544,9 @@ export default function MaturadorDashboard() {
                 </Button>
               </div>
             )}
-          </TabsContent>
+          </AnimatedTabsContent>
 
-          <TabsContent value="conversations" className="space-y-4">
+          <AnimatedTabsContent value="conversations" className="space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-semibold">Conversas Configuradas</h2>
               <Button onClick={() => navigate('/maturador/conversations')} disabled={instances.length < 2}>
@@ -593,9 +593,9 @@ export default function MaturadorDashboard() {
                 ))}
               </div>
             )}
-          </TabsContent>
+          </AnimatedTabsContent>
 
-          <TabsContent value="verified" className="space-y-4">
+          <AnimatedTabsContent value="verified" className="space-y-4">
             {/* Header with Add Button for Admin */}
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-semibold">Contatos Verificados</h2>
@@ -708,8 +708,8 @@ export default function MaturadorDashboard() {
                 </Card>
               ))}
             </div>
-          </TabsContent>
-        </Tabs>
+          </AnimatedTabsContent>
+        </AnimatedTabs>
 
         {/* Send Message Modal */}
         <Dialog open={sendModalOpen} onOpenChange={setSendModalOpen}>

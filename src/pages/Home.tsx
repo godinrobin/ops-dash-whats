@@ -21,6 +21,7 @@ import disparazapIcon from "@/assets/disparazap-icon.png";
 interface SystemCardProps {
   icon: React.ReactNode;
   title: string;
+  shortTitle?: string;
   description: string;
   onClick: () => void;
   isLocked?: boolean;
@@ -28,7 +29,7 @@ interface SystemCardProps {
   glowColor?: 'blue' | 'purple' | 'green' | 'red' | 'orange';
 }
 
-const SystemCard = ({ icon, title, description, onClick, isLocked, gradient, glowColor = 'purple' }: SystemCardProps) => {
+const SystemCard = ({ icon, title, shortTitle, description, onClick, isLocked, gradient, glowColor = 'purple' }: SystemCardProps) => {
   return (
     <GlowCard
       glowColor={glowColor}
@@ -44,19 +45,20 @@ const SystemCard = ({ icon, title, description, onClick, isLocked, gradient, glo
         </div>
       )}
       
-      <div className="flex flex-col items-center text-center h-full">
+      <div className="flex flex-col items-center text-center h-full overflow-hidden">
         {/* Icon centered at top */}
-        <div className="w-12 h-12 rounded-xl border border-border/50 flex items-center justify-center bg-background/50 mb-4">
+        <div className="w-12 h-12 rounded-xl border border-border/50 flex items-center justify-center bg-background/50 mb-3 md:mb-4 flex-shrink-0">
           {icon}
         </div>
         
         {/* Title and description */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col min-w-0 w-full px-1">
           <h3 className={cn(
-            "text-base md:text-lg font-semibold tracking-tight text-foreground mb-1 md:mb-2",
+            "text-xs md:text-lg font-semibold tracking-tight text-foreground mb-1 md:mb-2 line-clamp-2 md:line-clamp-none",
             gradient && `bg-gradient-to-r ${gradient} bg-clip-text text-transparent`
           )}>
-            {title}
+            <span className="md:hidden">{shortTitle || title}</span>
+            <span className="hidden md:inline">{title}</span>
           </h3>
           <p className="hidden md:block text-sm text-muted-foreground line-clamp-2">
             {description}
@@ -109,6 +111,7 @@ const Home = () => {
     emoji?: string;
     image?: string;
     title: string;
+    shortTitle?: string;
     description: string;
     gradient: string | null;
     restricted: boolean;
@@ -118,6 +121,7 @@ const Home = () => {
       path: "/metricas", 
       emoji: "📊", 
       title: "Sistema de Métricas",
+      shortTitle: "Métricas",
       description: "Gerencie suas métricas de produtos e acompanhe resultados",
       gradient: null,
       restricted: false,
@@ -127,6 +131,7 @@ const Home = () => {
       path: "/organizador-numeros", 
       emoji: "📱", 
       title: "Organizador de Números",
+      shortTitle: "Organizador",
       description: "Organize e gerencie seus números de trabalho",
       gradient: null,
       restricted: false,
@@ -145,6 +150,7 @@ const Home = () => {
       path: "/criador-funil", 
       emoji: "💬", 
       title: "Criador de Funil",
+      shortTitle: "Funil",
       description: "Crie funis de vendas personalizados para WhatsApp",
       gradient: "from-green-400 to-green-600",
       restricted: true,
@@ -154,6 +160,7 @@ const Home = () => {
       path: "/gerador-criativos", 
       emoji: "🖼️", 
       title: "Gerador de Criativos em Imagem",
+      shortTitle: "Criativos Imagem",
       description: "Crie imagens profissionais para anúncios com IA",
       gradient: "from-purple-400 to-pink-500",
       restricted: true,
@@ -163,6 +170,7 @@ const Home = () => {
       path: "/gerador-variacoes-video", 
       emoji: "🎬", 
       title: "Gerador de Criativos em Vídeo",
+      shortTitle: "Criativos Vídeo",
       description: "Crie variações de anúncios combinando vídeos",
       gradient: "from-violet-400 to-fuchsia-500",
       restricted: true,
@@ -172,6 +180,7 @@ const Home = () => {
       path: "/gerador-audio", 
       emoji: "🎙️", 
       title: "Gerador de Áudio",
+      shortTitle: "Áudio",
       description: "Transforme texto em áudio com vozes realistas",
       gradient: "from-red-400 to-orange-500",
       restricted: true,
@@ -181,6 +190,7 @@ const Home = () => {
       path: "/transcricao-audio", 
       emoji: "📝", 
       title: "Transcrição de Áudio",
+      shortTitle: "Transcrição",
       description: "Converta áudios em texto automaticamente",
       gradient: "from-blue-400 to-cyan-500",
       restricted: true,
@@ -190,6 +200,7 @@ const Home = () => {
       path: "/analisador-criativos", 
       emoji: "🔬", 
       title: "Analisador de Criativos",
+      shortTitle: "Analisador",
       description: "Analise seus criativos com IA",
       gradient: "from-cyan-400 to-blue-500",
       restricted: true,
@@ -217,6 +228,7 @@ const Home = () => {
       path: "/extensao-ads", 
       emoji: "🧩", 
       title: "Extensão Ads WhatsApp",
+      shortTitle: "Extensão Ads",
       description: "Extensão para analisar anúncios no Chrome",
       gradient: "from-orange-400 to-amber-500",
       restricted: false,
@@ -226,6 +238,7 @@ const Home = () => {
       path: "/video-downloader", 
       image: tiktokLogo,
       title: "Download Vídeos TikTok",
+      shortTitle: "TikTok",
       description: "Baixe vídeos do TikTok sem marca d'água",
       gradient: "from-pink-500 to-cyan-400",
       restricted: false,
@@ -235,6 +248,7 @@ const Home = () => {
       path: "/maturador", 
       emoji: "🔥", 
       title: "Maturador de WhatsApp",
+      shortTitle: "Maturador",
       description: "Aqueça seus chips com conversas naturais entre instâncias",
       gradient: "from-green-400 to-emerald-500",
       restricted: true,
@@ -244,6 +258,7 @@ const Home = () => {
       path: "/save-whatsapp", 
       emoji: "💾", 
       title: "Save WhatsApp",
+      shortTitle: "Save Whats",
       description: "Extensão para salvar contatos do WhatsApp",
       gradient: "from-green-400 to-green-600",
       restricted: false,
@@ -352,6 +367,7 @@ const Home = () => {
                   <SystemCard
                     icon={renderIcon(system)}
                     title={system.title}
+                    shortTitle={system.shortTitle}
                     description={system.description}
                     onClick={() => handleSystemClick(system)}
                     isLocked={isLocked}

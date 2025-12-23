@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AnimatedTabs, AnimatedTabsList, AnimatedTabsTrigger, AnimatedTabsContent } from "@/components/ui/animated-tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Copy, RefreshCw, X, CheckCircle2, Clock, XCircle, Wallet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -355,20 +355,20 @@ const SMSBot = () => {
             }}
           />
 
-          <Tabs defaultValue="buy" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="buy">Comprar Número</TabsTrigger>
-              <TabsTrigger value="orders">
+          <AnimatedTabs defaultValue="buy" className="space-y-4">
+            <AnimatedTabsList className="grid w-full grid-cols-2">
+              <AnimatedTabsTrigger value="buy">Comprar Número</AnimatedTabsTrigger>
+              <AnimatedTabsTrigger value="orders">
                 Meus Pedidos
                 {orders.filter(o => o.status === 'waiting_sms').length > 0 && (
                   <Badge className="ml-2 bg-accent" variant="secondary">
                     {orders.filter(o => o.status === 'waiting_sms').length}
                   </Badge>
                 )}
-              </TabsTrigger>
-            </TabsList>
+              </AnimatedTabsTrigger>
+            </AnimatedTabsList>
 
-            <TabsContent value="buy" className="space-y-4">
+            <AnimatedTabsContent value="buy" className="space-y-4">
               {/* Seleção de País */}
               <Card className="border-2 border-border">
                 <CardHeader className="pb-2">
@@ -488,9 +488,9 @@ const SMSBot = () => {
                   )}
                 </CardContent>
               </Card>
-            </TabsContent>
+            </AnimatedTabsContent>
 
-            <TabsContent value="orders">
+            <AnimatedTabsContent value="orders">
               <Card className="border-2 border-border">
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center justify-between">
@@ -621,8 +621,8 @@ const SMSBot = () => {
                   )}
                 </CardContent>
               </Card>
-            </TabsContent>
-          </Tabs>
+            </AnimatedTabsContent>
+          </AnimatedTabs>
         </div>
       </div>
     </>

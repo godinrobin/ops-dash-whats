@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Upload, Loader2, Video, Image, Star, Sparkles, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AnimatedTabs, AnimatedTabsList, AnimatedTabsTrigger, AnimatedTabsContent } from "@/components/ui/animated-tabs";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -237,21 +237,21 @@ const CreativeAnalyzer = () => {
         {/* Type Selection */}
         <Card className="border-2 border-accent mb-6">
           <CardContent className="pt-6">
-            <Tabs value={creativeType} onValueChange={(v) => {
+            <AnimatedTabs value={creativeType} onValueChange={(v) => {
               setCreativeType(v as "video" | "image");
               handleReset();
             }}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="video" className="flex items-center gap-2">
+              <AnimatedTabsList className="grid w-full grid-cols-2">
+                <AnimatedTabsTrigger value="video" className="flex items-center gap-2">
                   <Video className="h-4 w-4" />
                   Vídeo
-                </TabsTrigger>
-                <TabsTrigger value="image" className="flex items-center gap-2">
+                </AnimatedTabsTrigger>
+                <AnimatedTabsTrigger value="image" className="flex items-center gap-2">
                   <Image className="h-4 w-4" />
                   Imagem
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+                </AnimatedTabsTrigger>
+              </AnimatedTabsList>
+            </AnimatedTabs>
           </CardContent>
         </Card>
 
