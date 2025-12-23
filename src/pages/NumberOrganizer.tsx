@@ -5,13 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { toast } from "sonner";
+import { splashedToast } from "@/hooks/useSplashedToast";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { Trash2, Plus, Edit2, ArrowUpDown, Search, GripVertical, Eye, EyeOff } from "lucide-react";
 import { formatPhoneNumber } from "@/utils/phoneFormatter";
 import { EditNumberModal } from "@/components/EditNumberModal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   DndContext,
   closestCenter,
@@ -43,13 +44,28 @@ interface OrganizedNumber {
 type SortField = 'numero' | 'celular' | 'status' | 'operacao';
 type SortDirection = 'asc' | 'desc' | null;
 
-function SortableRow({ number, isSelected, onSelect, onEdit, onDelete, numbersBlurred }: {
+const rowVariants = {
+  hidden: { opacity: 0, x: -20 },
+  visible: (i: number) => ({
+    opacity: 1,
+    x: 0,
+    transition: {
+      delay: i * 0.03,
+      duration: 0.3,
+      ease: [0.4, 0, 0.2, 1] as const,
+    },
+  }),
+  exit: { opacity: 0, x: 20, transition: { duration: 0.2 } },
+};
+
+function SortableRow({ number, isSelected, onSelect, onEdit, onDelete, numbersBlurred, index }: {
   number: OrganizedNumber;
   isSelected: boolean;
   onSelect: (id: string) => void;
   onEdit: (number: OrganizedNumber) => void;
   onDelete: (id: string) => void;
   numbersBlurred: boolean;
+  index: number;
 }) {
   const {
     attributes,
@@ -67,7 +83,17 @@ function SortableRow({ number, isSelected, onSelect, onEdit, onDelete, numbersBl
   };
 
   return (
-    <TableRow ref={setNodeRef} style={style}>
+    <motion.tr
+      ref={setNodeRef}
+      style={style}
+      custom={index}
+      variants={rowVariants}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      layout
+      className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
+    >
       <TableCell className="w-12">
         <div className="flex items-center gap-2">
           <Checkbox
@@ -109,7 +135,7 @@ function SortableRow({ number, isSelected, onSelect, onEdit, onDelete, numbersBl
           </Button>
         </div>
       </TableCell>
-    </TableRow>
+    </motion.tr>
   );
 }
 
@@ -161,7 +187,7 @@ const NumberOrganizer = () => {
       .order("created_at", { ascending: false });
 
     if (error) {
-      toast.error("Erro ao carregar números");
+      splashedToast.error("Erro", "Erro ao carregar números");
       console.error(error);
     } else {
       setNumbers(data || []);
@@ -218,7 +244,7 @@ const NumberOrganizer = () => {
     if (!user) return;
     
     if (!newNumber.numero) {
-      toast.error("Preencha ao menos o campo número");
+      splashedToast.error("Campo obrigatório", "Preencha ao menos o campo número");
       return;
     }
 
@@ -238,10 +264,10 @@ const NumberOrganizer = () => {
       }]);
 
     if (error) {
-      toast.error("Erro ao adicionar número");
+      splashedToast.error("Erro", "Erro ao adicionar número");
       console.error(error);
     } else {
-      toast.success("Número adicionado com sucesso!");
+      splashedToast.success("Sucesso", "Número adicionado com sucesso!");
       setNewNumber({ numero: "", celular: "", status: "", operacao: "" });
       loadNumbers();
     }
@@ -259,10 +285,10 @@ const NumberOrganizer = () => {
       .eq("id", id);
 
     if (error) {
-      toast.error("Erro ao atualizar número");
+      splashedToast.error("Erro", "Erro ao atualizar número");
       console.error(error);
     } else {
-      toast.success("Número atualizado com sucesso!");
+      splashedToast.success("Sucesso", "Número atualizado com sucesso!");
       loadNumbers();
     }
   };
@@ -293,10 +319,10 @@ const NumberOrganizer = () => {
       .eq("id", id);
 
     if (error) {
-      toast.error("Erro ao deletar número");
+      splashedToast.error("Erro", "Erro ao deletar número");
       console.error(error);
     } else {
-      toast.success("Número deletado com sucesso!");
+      splashedToast.success("Sucesso", "Número deletado com sucesso!");
       loadNumbers();
     }
   };
@@ -324,7 +350,7 @@ const NumberOrganizer = () => {
           .eq("id", update.id);
       }
 
-      toast.success("Ordem atualizada!");
+      splashedToast.success("Sucesso", "Ordem atualizada!");
     }
   };
 
@@ -355,10 +381,10 @@ const NumberOrganizer = () => {
       .in("id", Array.from(selectedIds));
 
     if (error) {
-      toast.error("Erro ao deletar números");
+      splashedToast.error("Erro", "Erro ao deletar números");
       console.error(error);
     } else {
-      toast.success(`${selectedIds.size} números deletados com sucesso!`);
+      splashedToast.success("Sucesso", `${selectedIds.size} números deletados!`);
       setSelectedIds(new Set());
       loadNumbers();
     }
@@ -373,7 +399,7 @@ const NumberOrganizer = () => {
     if (bulkEditData.operacao) updates.operacao = bulkEditData.operacao;
 
     if (Object.keys(updates).length === 0) {
-      toast.error("Preencha ao menos um campo para editar");
+      splashedToast.error("Campo obrigatório", "Preencha ao menos um campo para editar");
       return;
     }
 
@@ -383,10 +409,10 @@ const NumberOrganizer = () => {
       .in("id", Array.from(selectedIds));
 
     if (error) {
-      toast.error("Erro ao atualizar números");
+      splashedToast.error("Erro", "Erro ao atualizar números");
       console.error(error);
     } else {
-      toast.success(`${selectedIds.size} números atualizados com sucesso!`);
+      splashedToast.success("Sucesso", `${selectedIds.size} números atualizados!`);
       setSelectedIds(new Set());
       setBulkEditMode(false);
       setBulkEditData({ celular: "", status: "", operacao: "" });
@@ -676,17 +702,20 @@ const NumberOrganizer = () => {
                       items={filteredAndSortedNumbers.map(n => n.id)}
                       strategy={verticalListSortingStrategy}
                     >
-                      {filteredAndSortedNumbers.map((number) => (
-                        <SortableRow
-                          key={number.id}
-                          number={number}
-                          isSelected={selectedIds.has(number.id)}
-                          onSelect={handleSelectNumber}
-                          onEdit={setEditingNumber}
-                          onDelete={handleDeleteNumber}
-                          numbersBlurred={numbersBlurred}
-                        />
-                      ))}
+                      <AnimatePresence mode="popLayout">
+                        {filteredAndSortedNumbers.map((number, index) => (
+                          <SortableRow
+                            key={number.id}
+                            number={number}
+                            isSelected={selectedIds.has(number.id)}
+                            onSelect={handleSelectNumber}
+                            onEdit={setEditingNumber}
+                            onDelete={handleDeleteNumber}
+                            numbersBlurred={numbersBlurred}
+                            index={index}
+                          />
+                        ))}
+                      </AnimatePresence>
                     </SortableContext>
                   </TableBody>
                 </Table>
