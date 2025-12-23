@@ -174,34 +174,77 @@ Deno.serve(async (req) => {
 
       try {
         // PYPROXY API call to create sub-user
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 20000);
+
         const pyproxyResponse = await fetch('https://api.pyproxy.com/api/v1/sub-user/create', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Api-Key': pyproxyApiKey,
             'Timestamp': timestamp,
-            'Signature': signature
+            'Signature': signature,
           },
           body: JSON.stringify({
             traffic_amount: 1, // 1 GB
             traffic_unit: 'GB',
             product_type: 'residential', // Residential/ISP Rotating
-            validity_days: 30 // Monthly
-          })
-        });
+            validity_days: 30, // Monthly
+          }),
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeout));
 
-        const pyproxyData: PyProxyResponse = await pyproxyResponse.json();
-        console.log('PYPROXY API Response:', pyproxyData);
+        const rawBody = await pyproxyResponse.text();
+        console.log('PYPROXY API status:', pyproxyResponse.status);
+        console.log('PYPROXY API raw body (first 500):', rawBody?.slice?.(0, 500) ?? '');
+
+        let pyproxyData: PyProxyResponse | null = null;
+        try {
+          pyproxyData = rawBody ? (JSON.parse(rawBody) as PyProxyResponse) : null;
+        } catch (parseError) {
+          await logAction('error', 'Resposta inválida do fornecedor (não-JSON)', {
+            status: pyproxyResponse.status,
+            body: rawBody?.slice?.(0, 2000) ?? '',
+          });
+
+          // Rollback: delete the pending order
+          await supabaseAdmin.from('proxy_orders').delete().eq('id', order.id);
+
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: 'Fornecedor retornou uma resposta inválida',
+            }),
+            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        if (!pyproxyResponse.ok || !pyproxyData) {
+          await logAction('error', 'Falha na chamada do fornecedor', {
+            status: pyproxyResponse.status,
+            body: rawBody?.slice?.(0, 2000) ?? '',
+          });
+
+          // Rollback: delete the pending order
+          await supabaseAdmin.from('proxy_orders').delete().eq('id', order.id);
+
+          return new Response(
+            JSON.stringify({ success: false, error: 'Erro ao provisionar proxy' }),
+            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('PYPROXY API Response JSON:', pyproxyData);
 
         if (pyproxyData.code !== 0 || !pyproxyData.data) {
           await logAction('error', 'Erro na API PYPROXY', pyproxyData);
-          
+
           // Rollback: delete the pending order
           await supabaseAdmin.from('proxy_orders').delete().eq('id', order.id);
-          
+
           return new Response(
             JSON.stringify({ success: false, error: 'Erro ao provisionar proxy' }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
