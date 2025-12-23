@@ -17,7 +17,47 @@ interface PropertiesPanelProps {
   triggerType?: 'keyword' | 'all' | 'schedule';
   triggerKeywords?: string[];
   onUpdateFlowSettings?: (settings: { triggerType?: string; triggerKeywords?: string[] }) => void;
+  allNodes?: Node[];
 }
+
+// System variables that are always available
+const SYSTEM_VARIABLES = ['nome', 'telefone', 'ultima_mensagem'];
+
+// Function to extract custom variables from all nodes in the flow
+const extractCustomVariablesFromNodes = (nodes: Node[]): string[] => {
+  const customVariables = new Set<string>();
+  
+  nodes.forEach((node) => {
+    const nodeData = node.data as Record<string, unknown>;
+    
+    // Extract from setVariable nodes
+    if (node.type === 'setVariable' && nodeData.variableName) {
+      const varName = nodeData.variableName as string;
+      if (!SYSTEM_VARIABLES.includes(varName)) {
+        customVariables.add(varName);
+      }
+    }
+    
+    // Extract from waitInput nodes
+    if (node.type === 'waitInput' && nodeData.variableName) {
+      const varName = nodeData.variableName as string;
+      if (!SYSTEM_VARIABLES.includes(varName)) {
+        customVariables.add(varName);
+      }
+    }
+    
+    // Extract from condition nodes (from conditions array)
+    if (node.type === 'condition' && nodeData.conditions && Array.isArray(nodeData.conditions)) {
+      (nodeData.conditions as Array<{ type: string; variable?: string }>).forEach((condition) => {
+        if (condition.type === 'variable' && condition.variable && !SYSTEM_VARIABLES.includes(condition.variable)) {
+          customVariables.add(condition.variable);
+        }
+      });
+    }
+  });
+  
+  return Array.from(customVariables).sort();
+};
 
 export const PropertiesPanel = ({
   selectedNode,
@@ -27,14 +67,14 @@ export const PropertiesPanel = ({
   triggerType = 'keyword',
   triggerKeywords = [],
   onUpdateFlowSettings,
+  allNodes = [],
 }: PropertiesPanelProps) => {
   // State for condition variable management
   const [showNewVariableInput, setShowNewVariableInput] = useState(false);
   const [newVariableName, setNewVariableName] = useState('');
-  const [customVariables, setCustomVariables] = useState<string[]>(() => {
-    const saved = localStorage.getItem('flowBuilderCustomVariables');
-    return saved ? JSON.parse(saved) : [];
-  });
+  
+  // Extract custom variables from all nodes in the flow (instead of localStorage)
+  const customVariables = extractCustomVariablesFromNodes(allNodes);
 
   // Reset new variable input when node changes
   useEffect(() => {
@@ -420,12 +460,12 @@ export const PropertiesPanel = ({
         const currentConditions = getConditions();
         const currentLogicOperator = (nodeData.logicOperator as 'and' | 'or') || 'and';
 
+        // When a new custom variable is added, it will automatically appear 
+        // in the list once it's used in a condition, setVariable, or waitInput node
         const handleAddCustomVariable = (name: string) => {
-          if (name.trim() && !customVariables.includes(name.trim())) {
-            const newVars = [...customVariables, name.trim()];
-            setCustomVariables(newVars);
-            localStorage.setItem('flowBuilderCustomVariables', JSON.stringify(newVars));
-          }
+          // No-op: variables are now automatically extracted from flow nodes
+          // The variable will appear in the list once it's used in a condition
+          console.log('Custom variable added:', name);
         };
 
         return (

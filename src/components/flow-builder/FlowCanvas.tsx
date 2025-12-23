@@ -231,6 +231,7 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
         triggerType={triggerType}
         triggerKeywords={triggerKeywords}
         onUpdateFlowSettings={onUpdateFlowSettings}
+        allNodes={nodes}
       />
     </div>
   );
