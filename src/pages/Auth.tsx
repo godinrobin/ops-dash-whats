@@ -189,7 +189,7 @@ const Auth = () => {
           className="relative"
         >
           {/* Card glow effect */}
-          <div className="absolute -inset-1 rounded-2xl overflow-hidden">
+          <div className="absolute -inset-1 rounded-2xl overflow-hidden pointer-events-none">
             {/* Traveling light beam effect */}
             <div className="absolute inset-0">
               {/* Top light beam */}
@@ -241,7 +241,7 @@ const Auth = () => {
           {/* Glass card background */}
           <div className="relative bg-card/80 backdrop-blur-xl rounded-2xl border border-border/50 p-8 shadow-2xl">
             {/* Subtle card inner pattern */}
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-accent/5 via-transparent to-accent/5 opacity-50" />
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-accent/5 via-transparent to-accent/5 opacity-50 pointer-events-none" />
 
             {/* Logo and header */}
             <div className="relative flex flex-col items-center mb-8">
@@ -252,7 +252,7 @@ const Auth = () => {
               >
                 <span className="text-2xl font-bold text-accent-foreground">Z</span>
                 {/* Inner lighting effect */}
-                <div className="absolute inset-0 bg-gradient-to-t from-transparent via-white/20 to-white/10" />
+                <div className="absolute inset-0 bg-gradient-to-t from-transparent via-white/20 to-white/10 pointer-events-none" />
               </motion.div>
               <h1 className="text-2xl font-bold text-foreground">Bem-vindo de volta</h1>
               <p className="text-muted-foreground text-sm mt-1">
@@ -300,7 +300,7 @@ const Auth = () => {
                 <div className="space-y-2">
                   <Label htmlFor="login-email" className="text-foreground/80 text-sm">Email</Label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                     <Input
                       id="login-email"
                       type="text"
@@ -327,7 +327,7 @@ const Auth = () => {
                 <div className="space-y-2">
                   <Label htmlFor="login-password" className="text-foreground/80 text-sm">Senha</Label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                     <Input
                       id="login-password"
                       type={showPassword ? "text" : "password"}
@@ -360,7 +360,7 @@ const Auth = () => {
 
                 <div className="relative pt-2">
                   <div
-                    className="absolute -inset-1 rounded-lg bg-gradient-to-r from-accent/50 to-accent/30 opacity-50 blur-sm animate-pulse"
+                    className="absolute -inset-1 rounded-lg bg-gradient-to-r from-accent/50 to-accent/30 opacity-50 blur-sm animate-pulse pointer-events-none"
                   />
                   <button
                     type="submit"
@@ -394,7 +394,7 @@ const Auth = () => {
                 <div className="space-y-2">
                   <Label htmlFor="signup-email" className="text-foreground/80 text-sm">Email</Label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                     <Input
                       id="signup-email"
                       type="email"
@@ -412,7 +412,7 @@ const Auth = () => {
                 <div className="space-y-2">
                   <Label htmlFor="signup-password" className="text-foreground/80 text-sm">Senha</Label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                     <Input
                       id="signup-password"
                       type={showSignupPassword ? "text" : "password"}
@@ -437,7 +437,7 @@ const Auth = () => {
                 <div className="space-y-2">
                   <Label htmlFor="signup-confirm-password" className="text-foreground/80 text-sm">Confirmar Senha</Label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                     <Input
                       id="signup-confirm-password"
                       type={showSignupPassword ? "text" : "password"}
@@ -454,7 +454,7 @@ const Auth = () => {
 
                 <div className="relative pt-2">
                   <div
-                    className="absolute -inset-1 rounded-lg bg-gradient-to-r from-accent/50 to-accent/30 opacity-50 blur-sm animate-pulse"
+                    className="absolute -inset-1 rounded-lg bg-gradient-to-r from-accent/50 to-accent/30 opacity-50 blur-sm animate-pulse pointer-events-none"
                   />
                   <button
                     type="submit"
