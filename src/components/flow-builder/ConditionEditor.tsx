@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Plus, Trash2, Variable, Tag } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 
 interface ConditionRule {
   id: string;
@@ -28,7 +29,8 @@ interface ConditionEditorProps {
   onAddCustomVariable: (name: string) => void;
 }
 
-const SYSTEM_VARIABLES = ['nome', 'telefone', 'resposta', 'lastMessage', 'contactName'];
+// System variables (synchronized with backend webhook-inbox-messages)
+const SYSTEM_VARIABLES = ['nome', 'telefone', 'resposta', 'lastMessage', 'contactName', 'ultima_mensagem'];
 
 export const ConditionEditor = ({
   conditions,
@@ -287,9 +289,74 @@ export const ConditionEditor = ({
                     </SelectTrigger>
                     <SelectContent>
                       {existingTags.map((tag) => (
-                        <SelectItem key={tag} value={tag} className="text-xs">
-                          {tag}
-                        </SelectItem>
+                        <div key={tag} className="flex items-center justify-between group px-2 py-1.5 hover:bg-accent rounded-sm">
+                          <span 
+                            className="text-xs cursor-pointer flex-1"
+                            onClick={() => {
+                              updateCondition(condition.id, { tagName: tag });
+                            }}
+                          >
+                            {tag}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (!user) return;
+                              
+                              try {
+                                // Delete from inbox_tags table
+                                const { error: deleteError } = await supabase
+                                  .from('inbox_tags')
+                                  .delete()
+                                  .eq('user_id', user.id)
+                                  .eq('name', tag);
+                                
+                                if (deleteError) {
+                                  console.error('Error deleting tag:', deleteError);
+                                  toast.error('Erro ao deletar tag');
+                                  return;
+                                }
+                                
+                                // Also remove tag from all contacts that have it
+                                const { data: contactsWithTag } = await supabase
+                                  .from('inbox_contacts')
+                                  .select('id, tags')
+                                  .eq('user_id', user.id);
+                                
+                                if (contactsWithTag) {
+                                  for (const contact of contactsWithTag) {
+                                    const contactTags = contact.tags as string[] | null;
+                                    if (contactTags && contactTags.includes(tag)) {
+                                      const newTags = contactTags.filter(t => t !== tag);
+                                      await supabase
+                                        .from('inbox_contacts')
+                                        .update({ tags: newTags })
+                                        .eq('id', contact.id);
+                                    }
+                                  }
+                                }
+                                
+                                // Remove from local state
+                                setExistingTags(prev => prev.filter(t => t !== tag));
+                                
+                                // Clear from condition if it was selected
+                                if (condition.tagName === tag) {
+                                  updateCondition(condition.id, { tagName: '' });
+                                }
+                                
+                                toast.success(`Tag "${tag}" deletada com sucesso`);
+                              } catch (error) {
+                                console.error('Error deleting tag:', error);
+                                toast.error('Erro ao deletar tag');
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
                       ))}
                       <SelectItem value="__new__" className="text-orange-400 text-xs font-medium">
                         + Nova tag

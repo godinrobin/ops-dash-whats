@@ -397,7 +397,7 @@ serve(async (req) => {
               .maybeSingle();
 
             if (!existingSession) {
-              // Create new flow session
+              // Create new flow session with all system variables
               const { data: newSession, error: sessionError } = await supabaseClient
                 .from('inbox_flow_sessions')
                 .insert({
@@ -406,7 +406,14 @@ serve(async (req) => {
                   instance_id: instanceId,
                   user_id: userId,
                   current_node_id: 'start-1',
-                  variables: { lastMessage: content, contactName: contact.name || phone },
+                  variables: { 
+                    nome: contact.name || '',
+                    telefone: phone,
+                    resposta: '',
+                    lastMessage: content,
+                    contactName: contact.name || phone,
+                    ultima_mensagem: content,
+                  },
                   status: 'active',
                 })
                 .select()
