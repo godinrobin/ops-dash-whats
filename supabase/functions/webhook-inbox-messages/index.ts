@@ -316,6 +316,28 @@ serve(async (req) => {
         }
       }
 
+      // Check if there's already ANY active session for this contact (cooldown check)
+      // This prevents duplicate flows from triggering
+      const { data: anyActiveSession } = await supabaseClient
+        .from('inbox_flow_sessions')
+        .select('id, started_at')
+        .eq('contact_id', contact.id)
+        .eq('status', 'active')
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (anyActiveSession) {
+        const sessionAge = Date.now() - new Date(anyActiveSession.started_at).getTime();
+        // If there's an active session created in the last 5 seconds, don't trigger new flow
+        if (sessionAge < 5000) {
+          console.log(`Skipping flow trigger - active session ${anyActiveSession.id} is too recent (${sessionAge}ms old)`);
+          return new Response(JSON.stringify({ success: true, skipped: true, reason: 'session_cooldown' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+
       // Check for active flows to trigger (only if no active session is waiting for input)
       const { data: flows } = await supabaseClient
         .from('inbox_flows')
@@ -325,6 +347,16 @@ serve(async (req) => {
         .order('priority', { ascending: false });
 
       if (flows && flows.length > 0 && content) {
+        // Count total messages from this contact to determine if this is first message
+        const { count: messageCount } = await supabaseClient
+          .from('inbox_messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('contact_id', contact.id)
+          .eq('direction', 'inbound');
+        
+        const isFirstMessage = (messageCount || 0) <= 1;
+        console.log(`Contact ${contact.id} message count: ${messageCount}, isFirstMessage: ${isFirstMessage}`);
+
         for (const flow of flows) {
           let shouldTrigger = false;
 
@@ -336,11 +368,20 @@ serve(async (req) => {
           }
 
           if (flow.trigger_type === 'all') {
-            shouldTrigger = true;
+            // For 'all' trigger type, only trigger on FIRST message to prevent looping
+            if (isFirstMessage) {
+              shouldTrigger = true;
+              console.log(`Flow ${flow.name} triggered on first message (trigger_type: all)`);
+            } else {
+              console.log(`Flow ${flow.name} skipped - trigger_type 'all' only triggers on first message`);
+            }
           } else if (flow.trigger_type === 'keyword' && flow.trigger_keywords) {
             const keywords = flow.trigger_keywords as string[];
             const lowerContent = content.toLowerCase();
             shouldTrigger = keywords.some(kw => lowerContent.includes(kw.toLowerCase()));
+            if (shouldTrigger) {
+              console.log(`Flow ${flow.name} triggered by keyword match`);
+            }
           }
 
           if (shouldTrigger) {
@@ -395,6 +436,8 @@ serve(async (req) => {
                   console.error('Error calling process-inbox-flow:', flowError);
                 }
               }
+            } else {
+              console.log(`Session already exists for flow ${flow.name} and contact ${contact.id}`);
             }
 
             break; // Only trigger one flow

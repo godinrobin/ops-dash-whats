@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -6,6 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Plus, Trash2, Variable, Tag } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ConditionRule {
   id: string;
@@ -26,7 +28,7 @@ interface ConditionEditorProps {
   onAddCustomVariable: (name: string) => void;
 }
 
-const SYSTEM_VARIABLES = ['nome', 'telefone', 'resposta'];
+const SYSTEM_VARIABLES = ['nome', 'telefone', 'resposta', 'lastMessage', 'contactName'];
 
 export const ConditionEditor = ({
   conditions,
@@ -36,11 +38,50 @@ export const ConditionEditor = ({
   onUpdateLogicOperator,
   onAddCustomVariable,
 }: ConditionEditorProps) => {
+  const { user } = useAuth();
   const [showNewVariableInput, setShowNewVariableInput] = useState(false);
   const [newVariableName, setNewVariableName] = useState('');
   const [editingConditionId, setEditingConditionId] = useState<string | null>(null);
+  const [showNewTagInput, setShowNewTagInput] = useState(false);
+  const [newTagName, setNewTagName] = useState('');
+  const [editingTagConditionId, setEditingTagConditionId] = useState<string | null>(null);
+  const [existingTags, setExistingTags] = useState<string[]>([]);
 
   const allVariables = [...SYSTEM_VARIABLES, ...customVariables];
+
+  // Fetch existing tags from database
+  useEffect(() => {
+    const fetchTags = async () => {
+      if (!user) return;
+      
+      // Fetch from inbox_tags table
+      const { data: tagsData } = await supabase
+        .from('inbox_tags')
+        .select('name')
+        .eq('user_id', user.id);
+      
+      // Also fetch unique tags from contacts
+      const { data: contactsData } = await supabase
+        .from('inbox_contacts')
+        .select('tags')
+        .eq('user_id', user.id);
+      
+      const tagSet = new Set<string>();
+      
+      // Add tags from inbox_tags table
+      tagsData?.forEach(t => tagSet.add(t.name));
+      
+      // Add tags from contacts
+      contactsData?.forEach(c => {
+        const contactTags = c.tags as string[] | null;
+        contactTags?.forEach(t => tagSet.add(t));
+      });
+      
+      setExistingTags(Array.from(tagSet).sort());
+    };
+    
+    fetchTags();
+  }, [user]);
 
   const generateId = () => Math.random().toString(36).substring(2, 9);
 
@@ -72,6 +113,21 @@ export const ConditionEditor = ({
       setNewVariableName('');
       setShowNewVariableInput(false);
       setEditingConditionId(null);
+    }
+  };
+
+  const handleAddTag = () => {
+    if (newTagName.trim()) {
+      if (editingTagConditionId) {
+        updateCondition(editingTagConditionId, { tagName: newTagName.trim() });
+      }
+      // Add to existing tags list if not already present
+      if (!existingTags.includes(newTagName.trim())) {
+        setExistingTags(prev => [...prev, newTagName.trim()].sort());
+      }
+      setNewTagName('');
+      setShowNewTagInput(false);
+      setEditingTagConditionId(null);
     }
   };
 
@@ -215,12 +271,31 @@ export const ConditionEditor = ({
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Nome da Tag</Label>
-                  <Input
-                    className="h-8 text-xs"
-                    placeholder="Ex: cliente_vip, interessado..."
+                  <Select
                     value={condition.tagName || ''}
-                    onChange={(e) => updateCondition(condition.id, { tagName: e.target.value })}
-                  />
+                    onValueChange={(value) => {
+                      if (value === '__new__') {
+                        setShowNewTagInput(true);
+                        setEditingTagConditionId(condition.id);
+                      } else {
+                        updateCondition(condition.id, { tagName: value });
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Selecione uma tag..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {existingTags.map((tag) => (
+                        <SelectItem key={tag} value={tag} className="text-xs">
+                          {tag}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="__new__" className="text-primary text-xs">
+                        + Nova tag
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </>
             )}
@@ -246,6 +321,29 @@ export const ConditionEditor = ({
             autoFocus
           />
           <Button size="sm" className="h-8 text-xs" onClick={handleAddVariable}>
+            Criar
+          </Button>
+        </div>
+      )}
+
+      {/* New tag input */}
+      {showNewTagInput && (
+        <div className="flex gap-2">
+          <Input
+            className="h-8 text-xs"
+            placeholder="Nome da tag"
+            value={newTagName}
+            onChange={(e) => setNewTagName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleAddTag();
+              if (e.key === 'Escape') {
+                setShowNewTagInput(false);
+                setEditingTagConditionId(null);
+              }
+            }}
+            autoFocus
+          />
+          <Button size="sm" className="h-8 text-xs" onClick={handleAddTag}>
             Criar
           </Button>
         </div>
