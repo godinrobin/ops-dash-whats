@@ -87,12 +87,20 @@ export const ConditionEditor = ({
         contactTags?.forEach(t => tagSet.add(t));
       });
       
+      // IMPORTANT: Also include tags that are already used in conditions
+      // This ensures that tags saved in the flow appear in the dropdown even if not in DB
+      conditions.forEach(c => {
+        if (c.type === 'tag' && c.tagName && c.tagName.trim()) {
+          tagSet.add(c.tagName.trim());
+        }
+      });
+      
       setExistingTags(Array.from(tagSet).sort());
       setDbCustomVariables(variablesData?.map(v => v.name) || []);
     };
     
     fetchData();
-  }, [user]);
+  }, [user, conditions]);
 
   const generateId = () => Math.random().toString(36).substring(2, 9);
 
@@ -168,28 +176,48 @@ export const ConditionEditor = ({
   };
 
   // Save tag to database
-  const saveTagToDb = async (name: string) => {
-    if (!user || !name.trim()) return;
+  const saveTagToDb = async (name: string): Promise<boolean> => {
+    if (!user || !name.trim()) return false;
+    
+    const trimmedName = name.trim();
     
     try {
+      // First, check if tag already exists
+      const { data: existingTag } = await supabase
+        .from('inbox_tags')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('name', trimmedName)
+        .maybeSingle();
+      
+      if (existingTag) {
+        // Tag already exists, just update local state
+        if (!existingTags.includes(trimmedName)) {
+          setExistingTags(prev => [...prev, trimmedName].sort());
+        }
+        return true;
+      }
+      
+      // Insert new tag
       const { error } = await supabase
         .from('inbox_tags')
-        .upsert(
-          { user_id: user.id, name: name.trim() },
-          { onConflict: 'user_id,name', ignoreDuplicates: true }
-        );
+        .insert({ user_id: user.id, name: trimmedName });
       
-      if (error && !error.message.includes('duplicate')) {
+      if (error) {
         console.error('Error saving tag:', error);
-        return;
+        toast.error('Erro ao salvar tag no banco de dados');
+        return false;
       }
       
       // Update local state
-      if (!existingTags.includes(name.trim())) {
-        setExistingTags(prev => [...prev, name.trim()].sort());
+      if (!existingTags.includes(trimmedName)) {
+        setExistingTags(prev => [...prev, trimmedName].sort());
       }
+      return true;
     } catch (error) {
       console.error('Error saving tag:', error);
+      toast.error('Erro ao salvar tag');
+      return false;
     }
   };
 
@@ -214,18 +242,19 @@ export const ConditionEditor = ({
 
   const handleAddTag = async () => {
     if (newTagName.trim()) {
-      // Save to database
-      await saveTagToDb(newTagName.trim());
+      const trimmedName = newTagName.trim();
       
-      if (editingTagConditionId) {
-        updateCondition(editingTagConditionId, { tagName: newTagName.trim() });
+      // Save to database
+      const saved = await saveTagToDb(trimmedName);
+      
+      if (saved && editingTagConditionId) {
+        updateCondition(editingTagConditionId, { tagName: trimmedName });
+        toast.success(`Tag "${trimmedName}" criada com sucesso`);
       }
       
       setNewTagName('');
       setShowNewTagInput(false);
       setEditingTagConditionId(null);
-      
-      toast.success(`Tag "${newTagName.trim()}" criada com sucesso`);
     }
   };
 
