@@ -1,8 +1,8 @@
 import { useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
+import { Card, CardContent } from "@/components/ui/card";
 import Autoplay from "embla-carousel-autoplay";
 import Marketplace from "./Marketplace";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,14 +10,70 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAccessLevel } from "@/hooks/useAccessLevel";
 import { RestrictedFeatureModal } from "@/components/RestrictedFeatureModal";
 import { Lock } from "lucide-react";
+import { GlowingEffect } from "@/components/ui/glowing-effect";
+import { cn } from "@/lib/utils";
 import tiktokLogo from "@/assets/tiktok-logo.png";
 import automatizapIcon from "@/assets/automatizap-icon.png";
 import disparazapIcon from "@/assets/disparazap-icon.png";
 
+interface GridItemProps {
+  area: string;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  onClick: () => void;
+  isLocked?: boolean;
+  gradient?: string | null;
+}
+
+const GridItem = ({ area, icon, title, description, onClick, isLocked, gradient }: GridItemProps) => {
+  return (
+    <li className={cn("min-h-[14rem] list-none", area)}>
+      <div 
+        className="relative h-full rounded-2xl border border-border/50 p-2 md:rounded-3xl md:p-3 cursor-pointer"
+        onClick={onClick}
+      >
+        <GlowingEffect
+          spread={40}
+          glow={true}
+          disabled={false}
+          proximity={64}
+          inactiveZone={0.01}
+        />
+        <div className="relative flex h-full flex-col justify-between gap-6 overflow-hidden rounded-xl border-0.75 p-6 bg-card/80 backdrop-blur-sm md:p-6">
+          {isLocked && (
+            <div className="absolute top-3 right-3 z-10">
+              <div className="w-7 h-7 rounded-full bg-accent/20 flex items-center justify-center">
+                <Lock className="w-4 h-4 text-accent" />
+              </div>
+            </div>
+          )}
+          <div className="relative flex flex-1 flex-col justify-between gap-3">
+            <div className="w-fit rounded-lg border border-border/50 p-2">
+              {icon}
+            </div>
+            <div className="space-y-2">
+              <h3 className={cn(
+                "text-xl font-semibold tracking-tight text-foreground",
+                gradient && `bg-gradient-to-r ${gradient} bg-clip-text text-transparent`
+              )}>
+                {title}
+              </h3>
+              <p className="text-sm text-muted-foreground line-clamp-2">
+                {description}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </li>
+  );
+};
+
 const Home = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { isFullMember, canAccessSystem, loading: accessLoading } = useAccessLevel();
+  const { isFullMember, loading: accessLoading } = useAccessLevel();
   const [restrictedModalOpen, setRestrictedModalOpen] = useState(false);
   const [selectedFeatureName, setSelectedFeatureName] = useState<string>("");
   
@@ -25,27 +81,20 @@ const Home = () => {
     Autoplay({ delay: 3000, stopOnInteraction: true })
   );
 
-  // Load mode from localStorage or default to "sistemas"
   const [mode, setMode] = useState<"sistemas" | "marketplace">(() => {
     const saved = localStorage.getItem("homeMode");
     return (saved === "marketplace" ? "marketplace" : "sistemas");
   });
 
-  // Save mode to localStorage when it changes
   useEffect(() => {
     localStorage.setItem("homeMode", mode);
   }, [mode]);
 
-  // Pre-load marketplace data in background when user is on sistemas mode
   useEffect(() => {
     if (user && mode === "sistemas") {
-      // Pre-load marketplace products
       supabase.from("marketplace_products").select("*").then(() => {});
-      // Pre-load wallet balance
       supabase.from("sms_user_wallets").select("balance").eq("user_id", user.id).maybeSingle().then(() => {});
-      // Pre-load SMSBot services
       supabase.functions.invoke("sms-get-services").then(() => {});
-      // Pre-load SMM services
       supabase.functions.invoke("smm-get-services").then(() => {});
     }
   }, [user, mode]);
@@ -58,14 +107,12 @@ const Home = () => {
     { id: "FXpRT-Dsqes", name: "ORGANIZADOR DE NÚMEROS DE WHATSAPP" },
   ];
 
-  // System definitions with access control
   const systems = [
     { 
       path: "/metricas", 
       emoji: "📊", 
       title: "Sistema de Métricas",
       description: "Gerencie suas métricas de produtos e acompanhe resultados",
-      subtext: "Acompanhe investimentos, leads, conversões e ROAS",
       gradient: null,
       restricted: false
     },
@@ -74,7 +121,6 @@ const Home = () => {
       emoji: "📱", 
       title: "Organizador de Números",
       description: "Organize e gerencie seus números de trabalho",
-      subtext: "Mantenha controle de números, status e operações",
       gradient: null,
       restricted: false
     },
@@ -83,7 +129,6 @@ const Home = () => {
       emoji: "🎯", 
       title: "Track Ofertas",
       description: "Acompanhe a performance dos anúncios de seus concorrentes",
-      subtext: "Monitore anúncios ativos e tendências diariamente",
       gradient: "from-accent to-orange-400",
       restricted: false
     },
@@ -92,7 +137,6 @@ const Home = () => {
       emoji: "💬", 
       title: "Criador de Funil",
       description: "Crie funis de vendas personalizados para WhatsApp",
-      subtext: "Gere scripts de vendas completos com IA",
       gradient: "from-green-400 to-green-600",
       restricted: true
     },
@@ -101,7 +145,6 @@ const Home = () => {
       emoji: "🖼️", 
       title: "Gerador de Criativos em Imagem",
       description: "Crie imagens profissionais para anúncios com IA",
-      subtext: "Gere criativos de alta qualidade automaticamente",
       gradient: "from-purple-400 to-pink-500",
       restricted: true
     },
@@ -110,7 +153,6 @@ const Home = () => {
       emoji: "🎬", 
       title: "Gerador de Criativos em Vídeo",
       description: "Crie variações de anúncios combinando vídeos",
-      subtext: "Combine hooks, corpos e CTAs automaticamente",
       gradient: "from-violet-400 to-fuchsia-500",
       restricted: true
     },
@@ -119,7 +161,6 @@ const Home = () => {
       emoji: "🎙️", 
       title: "Gerador de Áudio",
       description: "Transforme texto em áudio com vozes realistas",
-      subtext: "Gere áudios profissionais com IA",
       gradient: "from-red-400 to-orange-500",
       restricted: true
     },
@@ -128,7 +169,6 @@ const Home = () => {
       emoji: "📝", 
       title: "Transcrição de Áudio",
       description: "Converta áudios em texto automaticamente",
-      subtext: "Transcreva áudios MP3, OGG e OPUS",
       gradient: "from-blue-400 to-cyan-500",
       restricted: true
     },
@@ -137,7 +177,6 @@ const Home = () => {
       emoji: "🔬", 
       title: "Analisador de Criativos",
       description: "Analise seus criativos com IA",
-      subtext: "Receba feedback detalhado sobre vídeos e imagens",
       gradient: "from-cyan-400 to-blue-500",
       restricted: true
     },
@@ -146,7 +185,6 @@ const Home = () => {
       emoji: "🔍", 
       title: "Zap Spy",
       description: "Acesse as ofertas mais escaladas de X1",
-      subtext: "Encontre ofertas validadas por nicho",
       gradient: "from-accent to-yellow-400",
       restricted: false
     },
@@ -155,7 +193,6 @@ const Home = () => {
       emoji: "🏷️", 
       title: "Tag Whats",
       description: "Marque vendas do WhatsApp automaticamente",
-      subtext: "Sistema automático de marcação de vendas",
       gradient: "from-teal-400 to-emerald-500",
       restricted: true
     },
@@ -164,7 +201,6 @@ const Home = () => {
       emoji: "🧩", 
       title: "Extensão Ads WhatsApp",
       description: "Extensão para analisar anúncios no Chrome",
-      subtext: "Filtre e salve ofertas da Biblioteca de Anúncios",
       gradient: "from-orange-400 to-amber-500",
       restricted: false
     },
@@ -173,7 +209,6 @@ const Home = () => {
       image: tiktokLogo,
       title: "Download Vídeos TikTok",
       description: "Baixe vídeos do TikTok sem marca d'água",
-      subtext: "Download grátis em MP4 ou MP3",
       gradient: "from-pink-500 to-cyan-400",
       restricted: false
     },
@@ -190,7 +225,6 @@ const Home = () => {
       emoji: "💾", 
       title: "Save WhatsApp",
       description: "Extensão para salvar contatos do WhatsApp",
-      subtext: "Salve seus contatos em poucos cliques",
       gradient: "from-green-400 to-green-600",
       restricted: false
     },
@@ -199,7 +233,6 @@ const Home = () => {
       image: automatizapIcon,
       title: "Automati-Zap",
       description: "Sistema para automatizar as conversas do WhatsApp",
-      subtext: "Chat em tempo real + FlowBuilder de automação",
       gradient: "from-green-400 to-teal-500",
       restricted: true
     },
@@ -208,98 +241,89 @@ const Home = () => {
       image: disparazapIcon, 
       title: "DisparaZap",
       description: "Envie mensagens em massa para múltiplos contatos",
-      subtext: "Variações de texto, delays e múltiplos números",
       gradient: "from-blue-500 to-indigo-600",
       restricted: true
     }
   ];
 
   const handleSystemClick = (system: typeof systems[0]) => {
-    // If full member or system is not restricted, navigate normally
     if (isFullMember || !system.restricted) {
       navigate(system.path);
       return;
     }
-
-    // Show restricted modal for non-members trying to access restricted features
     setSelectedFeatureName(system.title);
     setRestrictedModalOpen(true);
   };
 
-  // If marketplace mode, render marketplace component
   if (mode === "marketplace") {
     return <Marketplace onModeChange={setMode} currentMode={mode} />;
   }
+
+  const renderIcon = (system: typeof systems[0]) => {
+    if ('image' in system && system.image) {
+      return (
+        <img 
+          src={system.image} 
+          alt={system.title} 
+          className="w-8 h-8 object-contain"
+        />
+      );
+    }
+    return <span className="text-2xl">{(system as any).emoji}</span>;
+  };
 
   return (
     <>
       <Header mode={mode} onModeChange={setMode} />
       <div className="h-14 md:h-16" />
-      <div className="min-h-screen bg-background p-6 md:p-10">
-        <div className="container mx-auto max-w-6xl">
-          <header className="text-center mb-12">
+      <div className="min-h-screen bg-background p-4 md:p-10">
+        <div className="container mx-auto max-w-7xl">
+          <header className="text-center mb-10">
             <h1 className="text-4xl md:text-5xl font-bold mb-4">🎯 Bem-vindo!</h1>
             <p className="text-muted-foreground text-lg">
               Escolha o sistema que deseja acessar
             </p>
           </header>
 
-          <div className="grid grid-cols-3 gap-3 md:gap-6">
-            {systems.map((system) => {
-              // Only show lock after loading is complete and user is confirmed as non-member
+          <ul className="grid grid-cols-1 grid-rows-none gap-4 md:grid-cols-12 md:grid-rows-6 lg:gap-4 xl:max-h-[50rem] xl:grid-rows-4">
+            {systems.map((system, index) => {
               const isLocked = !accessLoading && isFullMember === false && system.restricted;
               
+              // Define grid areas for variety
+              const areas = [
+                "md:[grid-area:1/1/2/5]",    // Row 1, spans 4 cols
+                "md:[grid-area:1/5/2/9]",    // Row 1, spans 4 cols
+                "md:[grid-area:1/9/3/13]",   // Row 1-2, spans 4 cols (tall)
+                "md:[grid-area:2/1/3/5]",    // Row 2, spans 4 cols
+                "md:[grid-area:2/5/3/9]",    // Row 2, spans 4 cols
+                "md:[grid-area:3/1/4/7]",    // Row 3, spans 6 cols (wide)
+                "md:[grid-area:3/7/4/13]",   // Row 3, spans 6 cols (wide)
+                "md:[grid-area:4/1/5/5]",    // Row 4, spans 4 cols
+                "md:[grid-area:4/5/5/9]",    // Row 4, spans 4 cols
+                "md:[grid-area:4/9/5/13]",   // Row 4, spans 4 cols
+                "md:[grid-area:5/1/6/5]",    // Row 5, spans 4 cols
+                "md:[grid-area:5/5/6/9]",    // Row 5, spans 4 cols
+                "md:[grid-area:5/9/6/13]",   // Row 5, spans 4 cols
+                "md:[grid-area:6/1/7/7]",    // Row 6, spans 6 cols (wide)
+                "md:[grid-area:6/7/7/13]",   // Row 6, spans 6 cols (wide)
+                "md:[grid-area:7/1/8/5]",    // Row 7, spans 4 cols
+                "md:[grid-area:7/5/8/9]",    // Row 7, spans 4 cols
+              ];
+              
               return (
-                <Card 
+                <GridItem
                   key={system.path}
-                  className={`cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 border-accent relative ${
-                    isLocked ? 'opacity-80' : ''
-                  }`}
+                  area={areas[index % areas.length]}
+                  icon={renderIcon(system)}
+                  title={system.title}
+                  description={system.description}
                   onClick={() => handleSystemClick(system)}
-                >
-                  {isLocked && (
-                    <div className="absolute top-2 right-2 z-10">
-                      <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-accent/20 flex items-center justify-center">
-                        <Lock className="w-3 h-3 md:w-4 md:h-4 text-accent" />
-                      </div>
-                    </div>
-                  )}
-                    <CardHeader className="text-center p-3 md:p-6">
-                      <div className="flex justify-center mb-2 md:mb-4">
-                      {'image' in system && system.image ? (
-                          <img 
-                            src={system.image} 
-                            alt={system.title} 
-                            className={`object-contain ${
-                              system.title === 'DisparaZap' 
-                                ? 'w-10 h-10 md:w-20 md:h-20' 
-                                : 'w-16 h-16 md:w-28 md:h-28'
-                            }`} 
-                          />
-                        ) : (
-                          <span className="text-3xl md:text-6xl">{(system as any).emoji}</span>
-                        )}
-                      </div>
-                    <CardTitle className={`text-sm md:text-2xl ${
-                      system.gradient 
-                        ? `bg-gradient-to-r ${system.gradient} bg-clip-text text-transparent` 
-                        : ''
-                    }`}>
-                      {system.title}
-                    </CardTitle>
-                    <CardDescription className="text-xs md:text-base hidden md:block">
-                      {system.description}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="text-center p-3 pt-0 md:p-6 md:pt-0 hidden md:block">
-                    <p className="text-sm text-muted-foreground">
-                      {system.subtext}
-                    </p>
-                  </CardContent>
-                </Card>
+                  isLocked={isLocked}
+                  gradient={system.gradient}
+                />
               );
             })}
-          </div>
+          </ul>
 
           <section className="mt-16">
             <h2 className="text-3xl font-bold text-center mb-8">Conteúdo</h2>
@@ -313,9 +337,9 @@ const Home = () => {
             >
               <CarouselContent>
                 {videos.map((video, index) => (
-                <CarouselItem key={index} className="md:basis-1/2 lg:basis-1/3">
+                  <CarouselItem key={index} className="md:basis-1/2 lg:basis-1/3">
                     <div className="p-1 h-full">
-                      <Card className="h-full flex flex-col bg-black border-2 border-accent">
+                      <Card className="h-full flex flex-col bg-card border border-border/50">
                         <CardContent className="p-4 flex flex-col h-full">
                           <div className="aspect-video mb-3 flex-shrink-0">
                             <iframe
