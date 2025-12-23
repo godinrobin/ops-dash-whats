@@ -77,6 +77,11 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  
+  // Auto-save debounce timer
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const hasChangesRef = useRef(false);
 
   useEffect(() => {
     if (initialNodes.length > 0) {
@@ -86,6 +91,41 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
       setEdges(initialEdges);
     }
   }, [initialNodes, initialEdges, setNodes, setEdges]);
+
+  // Auto-save effect - triggers when nodes or edges change
+  useEffect(() => {
+    // Skip initial render and empty flows
+    if (nodes.length === 0 && edges.length === 0) return;
+    
+    // Mark that we have unsaved changes
+    hasChangesRef.current = true;
+    
+    // Clear existing timer
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+    
+    // Set new auto-save timer (1.5 seconds debounce)
+    autoSaveTimerRef.current = setTimeout(() => {
+      if (hasChangesRef.current) {
+        setSaveStatus('saving');
+        onSave(nodes, edges);
+        hasChangesRef.current = false;
+        
+        // Show "saved" status briefly
+        setTimeout(() => {
+          setSaveStatus('saved');
+          setTimeout(() => setSaveStatus('idle'), 2000);
+        }, 500);
+      }
+    }, 1500);
+    
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [nodes, edges, onSave]);
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
@@ -186,7 +226,13 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
   };
 
   const handleSave = () => {
+    setSaveStatus('saving');
     onSave(nodes, edges);
+    hasChangesRef.current = false;
+    setTimeout(() => {
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    }, 500);
   };
 
   return (
@@ -198,6 +244,19 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
         ref={reactFlowWrapper}
         style={{ height: '100%' }}
       >
+        {/* Auto-save status indicator */}
+        {saveStatus !== 'idle' && (
+          <div className="absolute top-2 left-1/2 transform -translate-x-1/2 z-10">
+            <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+              saveStatus === 'saving' 
+                ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/30' 
+                : 'bg-green-500/20 text-green-500 border border-green-500/30'
+            }`}>
+              {saveStatus === 'saving' ? 'Salvando...' : 'Salvo ✓'}
+            </div>
+          </div>
+        )}
+        
         <ReactFlow
           nodes={nodes}
           edges={edges}

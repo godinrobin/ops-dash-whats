@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Node } from '@xyflow/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Trash2, Save, Settings } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ConditionEditor } from './ConditionEditor';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 
 interface PropertiesPanelProps {
   selectedNode: Node | null;
@@ -69,12 +72,70 @@ export const PropertiesPanel = ({
   onUpdateFlowSettings,
   allNodes = [],
 }: PropertiesPanelProps) => {
+  const { user } = useAuth();
+  
   // State for condition variable management
   const [showNewVariableInput, setShowNewVariableInput] = useState(false);
   const [newVariableName, setNewVariableName] = useState('');
+  const [dbCustomVariables, setDbCustomVariables] = useState<string[]>([]);
   
-  // Extract custom variables from all nodes in the flow (instead of localStorage)
-  const customVariables = extractCustomVariablesFromNodes(allNodes);
+  // Extract custom variables from all nodes in the flow
+  const flowCustomVariables = extractCustomVariablesFromNodes(allNodes);
+  
+  // Combined custom variables from DB and flow nodes
+  const customVariables = [...new Set([...dbCustomVariables, ...flowCustomVariables])];
+
+  // Fetch custom variables from database
+  useEffect(() => {
+    const fetchVariables = async () => {
+      if (!user) return;
+      
+      const { data } = await supabase
+        .from('inbox_custom_variables')
+        .select('name')
+        .eq('user_id', user.id);
+      
+      setDbCustomVariables(data?.map(v => v.name) || []);
+    };
+    
+    fetchVariables();
+  }, [user]);
+
+  // Save variable to database when used in nodes
+  const saveVariableToDb = useCallback(async (name: string) => {
+    if (!user || !name.trim() || SYSTEM_VARIABLES.includes(name.trim())) return;
+    
+    try {
+      await supabase
+        .from('inbox_custom_variables')
+        .upsert(
+          { user_id: user.id, name: name.trim() },
+          { onConflict: 'user_id,name' }
+        );
+      
+      if (!dbCustomVariables.includes(name.trim())) {
+        setDbCustomVariables(prev => [...prev, name.trim()]);
+      }
+    } catch (error) {
+      console.error('Error saving variable:', error);
+    }
+  }, [user, dbCustomVariables]);
+
+  // Save tag to database when used in tag node
+  const saveTagToDb = useCallback(async (name: string) => {
+    if (!user || !name.trim()) return;
+    
+    try {
+      await supabase
+        .from('inbox_tags')
+        .upsert(
+          { user_id: user.id, name: name.trim() },
+          { onConflict: 'user_id,name', ignoreDuplicates: true }
+        );
+    } catch (error) {
+      console.error('Error saving tag:', error);
+    }
+  }, [user]);
 
   // Reset new variable input when node changes
   useEffect(() => {
@@ -413,6 +474,12 @@ export const PropertiesPanel = ({
                 placeholder="Nome da variável"
                 value={(nodeData.variableName as string) || ''}
                 onChange={(e) => onUpdateNode(selectedNode.id, { variableName: e.target.value })}
+                onBlur={(e) => {
+                  // Save variable to database when user finishes typing
+                  if (e.target.value.trim()) {
+                    saveVariableToDb(e.target.value.trim());
+                  }
+                }}
               />
             </div>
             <div className="space-y-2">
@@ -603,6 +670,12 @@ export const PropertiesPanel = ({
                 placeholder="nome_variavel"
                 value={(nodeData.variableName as string) || ''}
                 onChange={(e) => onUpdateNode(selectedNode.id, { variableName: e.target.value })}
+                onBlur={(e) => {
+                  // Save variable to database when user finishes typing
+                  if (e.target.value.trim()) {
+                    saveVariableToDb(e.target.value.trim());
+                  }
+                }}
               />
             </div>
             <div className="space-y-2">
@@ -625,6 +698,12 @@ export const PropertiesPanel = ({
                 placeholder="cliente_vip"
                 value={(nodeData.tagName as string) || ''}
                 onChange={(e) => onUpdateNode(selectedNode.id, { tagName: e.target.value })}
+                onBlur={(e) => {
+                  // Save tag to database when user finishes typing
+                  if (e.target.value.trim()) {
+                    saveTagToDb(e.target.value.trim());
+                  }
+                }}
               />
             </div>
             <div className="space-y-2">
