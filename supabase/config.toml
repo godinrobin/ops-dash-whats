@@ -131,3 +131,6 @@ verify_jwt = true
 
 [functions.configure-webhook]
 verify_jwt = true
+
+[functions.process-delay-queue]
+verify_jwt = false
