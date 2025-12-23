@@ -18,6 +18,7 @@ import { RechargeModal } from "@/components/RechargeModal";
 import { InsufficientBalanceModal } from "@/components/InsufficientBalanceModal";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { createAdminNotification } from "@/utils/adminNotifications";
+import { AnimatedSearchBar } from "@/components/ui/animated-search-bar";
 
 // Import product images
 import bmVerificadaImg from "@/assets/bm-verificada.png";
@@ -1016,11 +1017,11 @@ const SMSBotEmbed = () => {
           <Card className="border-border">
             <CardContent className="p-4">
               <h3 className="font-bold mb-3">2. Escolha o serviço</h3>
-              <Input
+              <AnimatedSearchBar
                 placeholder="Buscar serviço..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="mb-3"
+                containerClassName="mb-3"
               />
               {loadingServices ? (
                 <div className="flex justify-center p-4"><Loader2 className="h-6 w-6 animate-spin" /></div>
@@ -1290,11 +1291,11 @@ const SMMPanelEmbed = () => {
           ) : (
             <div className="space-y-4">
               <div className="flex flex-col md:flex-row gap-3">
-                <Input
+                <AnimatedSearchBar
                   placeholder="Buscar serviço..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="flex-1"
+                  containerClassName="flex-1"
                 />
                 <select
                   value={selectedCategory}
