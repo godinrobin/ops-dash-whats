@@ -306,36 +306,12 @@ export const ConditionEditor = ({
                     </SelectTrigger>
                     <SelectContent>
                       {allVariables.map((v) => (
-                        <div key={v} className="flex items-center justify-between group px-2 py-1.5 hover:bg-accent rounded-sm">
-                          <span 
-                            className="text-xs cursor-pointer flex-1"
-                            onClick={() => {
-                              updateCondition(condition.id, { variable: v });
-                            }}
-                          >
-                            {`{{${v}}}`}
-                            {isSystemVariable(v) && (
-                              <span className="ml-1 text-muted-foreground">(sistema)</span>
-                            )}
-                          </span>
-                          {!isSystemVariable(v) && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10"
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                await deleteVariableFromDb(v);
-                                // Clear from condition if it was selected
-                                if (condition.variable === v) {
-                                  updateCondition(condition.id, { variable: '' });
-                                }
-                              }}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
+                        <SelectItem key={v} value={v} className="text-xs">
+                          {`{{${v}}}`}
+                          {isSystemVariable(v) && (
+                            <span className="ml-1 text-muted-foreground">(sistema)</span>
                           )}
-                        </div>
+                        </SelectItem>
                       ))}
                       <SelectItem value="__new__" className="text-orange-400 text-xs font-medium">
                         + Nova variável
@@ -414,75 +390,15 @@ export const ConditionEditor = ({
                       <SelectValue placeholder="Selecione uma tag..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {existingTags.map((tag) => (
-                        <div key={tag} className="flex items-center justify-between group px-2 py-1.5 hover:bg-accent rounded-sm">
-                          <span 
-                            className="text-xs cursor-pointer flex-1"
-                            onClick={() => {
-                              updateCondition(condition.id, { tagName: tag });
-                            }}
-                          >
-                            {tag}
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              if (!user) return;
-                              
-                              try {
-                                // Delete from inbox_tags table
-                                const { error: deleteError } = await supabase
-                                  .from('inbox_tags')
-                                  .delete()
-                                  .eq('user_id', user.id)
-                                  .eq('name', tag);
-                                
-                                if (deleteError) {
-                                  console.error('Error deleting tag:', deleteError);
-                                  toast.error('Erro ao deletar tag');
-                                  return;
-                                }
-                                
-                                // Also remove tag from all contacts that have it
-                                const { data: contactsWithTag } = await supabase
-                                  .from('inbox_contacts')
-                                  .select('id, tags')
-                                  .eq('user_id', user.id);
-                                
-                                if (contactsWithTag) {
-                                  for (const contact of contactsWithTag) {
-                                    const contactTags = contact.tags as string[] | null;
-                                    if (contactTags && contactTags.includes(tag)) {
-                                      const newTags = contactTags.filter(t => t !== tag);
-                                      await supabase
-                                        .from('inbox_contacts')
-                                        .update({ tags: newTags })
-                                        .eq('id', contact.id);
-                                    }
-                                  }
-                                }
-                                
-                                // Remove from local state
-                                setExistingTags(prev => prev.filter(t => t !== tag));
-                                
-                                // Clear from condition if it was selected
-                                if (condition.tagName === tag) {
-                                  updateCondition(condition.id, { tagName: '' });
-                                }
-                                
-                                toast.success(`Tag "${tag}" deletada com sucesso`);
-                              } catch (error) {
-                                console.error('Error deleting tag:', error);
-                                toast.error('Erro ao deletar tag');
-                              }
-                            }}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
+                      {existingTags.length === 0 && (
+                        <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                          Nenhuma tag criada ainda
                         </div>
+                      )}
+                      {existingTags.map((tag) => (
+                        <SelectItem key={tag} value={tag} className="text-xs">
+                          {tag}
+                        </SelectItem>
                       ))}
                       <SelectItem value="__new__" className="text-orange-400 text-xs font-medium">
                         + Nova tag
