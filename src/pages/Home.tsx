@@ -54,11 +54,10 @@ const SystemCard = ({ icon, title, shortTitle, description, onClick, isLocked, g
         {/* Title and description */}
         <div className="flex-1 flex flex-col min-w-0 w-full px-1">
           <h3 className={cn(
-            "text-xs md:text-lg font-semibold tracking-tight text-foreground mb-1 md:mb-2 line-clamp-2 md:line-clamp-none",
+            "text-[10px] sm:text-xs md:text-lg font-semibold tracking-tight text-foreground mb-1 md:mb-2 leading-tight",
             gradient && `bg-gradient-to-r ${gradient} bg-clip-text text-transparent`
           )}>
-            <span className="md:hidden">{shortTitle || title}</span>
-            <span className="hidden md:inline">{title}</span>
+            {title}
           </h3>
           <p className="hidden md:block text-sm text-muted-foreground line-clamp-2">
             {description}
@@ -327,7 +326,7 @@ const Home = () => {
 
           {/* Grid with 3 columns and equal sized cards with stagger animation */}
           <motion.div 
-            className="grid grid-cols-3 gap-3 md:gap-4"
+            className="grid grid-cols-2 sm:grid-cols-3 gap-3 md:gap-4"
             initial="hidden"
             animate="visible"
             variants={{

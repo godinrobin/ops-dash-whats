@@ -246,10 +246,12 @@ export const AnimatedTabsContent = ({
   const { activeValue } = useTabs();
   const isActive = activeValue === value;
   
+  if (!isActive) return null;
+  
   return (
     <div
       role="tabpanel"
-      data-state={isActive ? 'active' : 'inactive'}
+      data-state="active"
       className={cn('w-full', className)}
       {...props}
     >

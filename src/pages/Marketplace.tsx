@@ -480,45 +480,48 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
                               case 'em_andamento':
                               case 'pending':
                               case 'confirmed':
-                                return 'bg-yellow-500/20 text-yellow-500 border-yellow-500/50';
-                              case 'entregue':
+                                return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+                              case 'delivered':
                               case 'completed':
-                                return 'bg-green-500/20 text-green-500 border-green-500/50';
-                              case 'cancelado':
-                                return 'bg-red-500/20 text-red-500 border-red-500/50';
+                                return 'bg-green-500/20 text-green-400 border-green-500/30';
+                              case 'cancelled':
+                                return 'bg-red-500/20 text-red-400 border-red-500/30';
                               default:
-                                return 'bg-muted text-muted-foreground';
+                                return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
                             }
                           };
-                          const getStatusLabel = (status: string) => {
+
+                          const getStatusText = (status: string) => {
                             switch (status) {
                               case 'em_andamento':
                               case 'pending':
-                              case 'confirmed':
                                 return 'Em andamento';
-                              case 'entregue':
+                              case 'confirmed':
+                                return 'Confirmado';
+                              case 'delivered':
                               case 'completed':
                                 return 'Entregue';
-                              case 'cancelado':
+                              case 'cancelled':
                                 return 'Cancelado';
                               default:
                                 return status;
                             }
                           };
+
                           return (
-                            <div key={order.id} className="flex items-center justify-between p-4 bg-secondary rounded-lg border border-border">
+                            <div key={order.id} className="flex items-center justify-between p-3 bg-secondary rounded-lg">
                               <div>
-                                <p className="font-semibold">{order.quantity}x {order.product_name}</p>
+                                <p className="font-medium">{order.product_name}</p>
                                 <p className="text-sm text-muted-foreground">
-                                  {new Date(order.created_at).toLocaleDateString('pt-BR')}
+                                  {new Date(order.created_at).toLocaleDateString('pt-BR')} • {order.quantity}x
                                 </p>
                               </div>
-                              <div className="flex items-center gap-4">
-                                <span className="text-green-500 font-bold">
+                              <div className="text-right">
+                                <p className="font-bold text-green-500">
                                   R$ {order.total_price.toFixed(2).replace('.', ',')}
-                                </span>
-                                <Badge className={`${getStatusColor(order.status)}`}>
-                                  {getStatusLabel(order.status)}
+                                </p>
+                                <Badge variant="outline" className={getStatusColor(order.status)}>
+                                  {getStatusText(order.status)}
                                 </Badge>
                               </div>
                             </div>
@@ -528,15 +531,16 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
                     )}
                   </CardContent>
                 </Card>
+              ) : loading ? (
+                <div className="flex justify-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent" />
+                </div>
               ) : (
                 <>
-                  {/* Products Grid */}
-                  {loading ? (
-                    <div className="flex justify-center py-12">
-                      <Loader2 className="h-8 w-8 animate-spin text-accent" />
-                    </div>
+                  {filteredProducts.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">Nenhum produto disponível</p>
                   ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       {filteredProducts.map(renderProductCard)}
                     </div>
                   )}
