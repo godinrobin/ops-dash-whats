@@ -1427,6 +1427,7 @@ export type Database = {
           expires_at: string | null
           host: string | null
           id: string
+          label: string | null
           password: string | null
           port: string | null
           pyproxy_subuser_id: string | null
@@ -1440,6 +1441,7 @@ export type Database = {
           expires_at?: string | null
           host?: string | null
           id?: string
+          label?: string | null
           password?: string | null
           port?: string | null
           pyproxy_subuser_id?: string | null
@@ -1453,6 +1455,7 @@ export type Database = {
           expires_at?: string | null
           host?: string | null
           id?: string
+          label?: string | null
           password?: string | null
           port?: string | null
           pyproxy_subuser_id?: string | null

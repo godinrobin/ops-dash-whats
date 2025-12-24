@@ -229,7 +229,15 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
 
   const saveLabel = async (orderId: string) => {
     try {
-      // Save locally for now (we'll update DB structure if needed)
+      // Save to database
+      const { error } = await supabase
+        .from('proxy_orders')
+        .update({ label: labelValue })
+        .eq('id', orderId);
+
+      if (error) throw error;
+
+      // Update local state
       setOrders(prev => prev.map(o => 
         o.id === orderId ? { ...o, label: labelValue } : o
       ));
@@ -240,6 +248,10 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
       });
     } catch (err) {
       console.error('Error saving label:', err);
+      toast({
+        title: "Erro ao salvar nome",
+        variant: "error"
+      });
     }
   };
 
