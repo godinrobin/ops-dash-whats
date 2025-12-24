@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { action, orderId } = await req.json();
+    const { action, orderId, quantity } = await req.json();
     console.log('pyproxy-purchase action:', action);
 
     // get-price is public - no auth required
@@ -488,6 +488,176 @@ Deno.serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true, orders: orders || [] }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+
+    } else if (action === 'renew') {
+      // Renew an existing proxy
+      if (!orderId) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'ID do pedido é obrigatório' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Get the order
+      const { data: existingOrder, error: orderFetchError } = await supabaseAdmin
+        .from('proxy_orders')
+        .select('*')
+        .eq('id', orderId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (orderFetchError || !existingOrder) {
+        await logAction('error', 'Pedido não encontrado para renovação');
+        return new Response(
+          JSON.stringify({ success: false, error: 'Pedido não encontrado' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Get price
+      const { data: renewMarginData } = await supabaseAdmin
+        .from('platform_margins')
+        .select('margin_percent')
+        .eq('system_name', 'proxy')
+        .single();
+
+      const renewMarginPercent = renewMarginData?.margin_percent || 50;
+      const renewBaseCostUSD = 0.60;
+      const renewExchangeRate = 5.5;
+      const renewBaseCostBRL = renewBaseCostUSD * renewExchangeRate;
+      const renewFinalPrice = renewBaseCostBRL * (1 + renewMarginPercent / 100);
+
+      // Check balance
+      const { data: renewWallet, error: renewWalletError } = await supabaseAdmin
+        .from('sms_user_wallets')
+        .select('balance')
+        .eq('user_id', user.id)
+        .single();
+
+      if (renewWalletError || !renewWallet) {
+        await logAction('error', 'Carteira não encontrada para renovação');
+        return new Response(
+          JSON.stringify({ success: false, error: 'Carteira não encontrada' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (Number(renewWallet.balance) < renewFinalPrice) {
+        await logAction('error', `Saldo insuficiente para renovação. Necessário: R$ ${renewFinalPrice.toFixed(2)}`);
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: 'Saldo insuficiente',
+            required: renewFinalPrice,
+            balance: Number(renewWallet.balance)
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const renewUsername = existingOrder.username || existingOrder.pyproxy_subuser_id;
+
+      if (!renewUsername) {
+        await logAction('error', 'Proxy sem username para renovação');
+        return new Response(
+          JSON.stringify({ success: false, error: 'Proxy inválida para renovação' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Get access token
+      const renewTimestamp = Math.floor(Date.now() / 1000).toString();
+      const renewSha256Hex = async (input: string) => {
+        const bytes = new TextEncoder().encode(input);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
+        return Array.from(new Uint8Array(hashBuffer))
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join('');
+      };
+
+      const renewSign = await renewSha256Hex(`${pyproxyApiKey}${pyproxyApiSecret}${renewTimestamp}`);
+      const renewTokenForm = new FormData();
+      renewTokenForm.append('access_key', pyproxyApiKey);
+      renewTokenForm.append('sign', renewSign);
+      renewTokenForm.append('timestamp', renewTimestamp);
+
+      const renewTokenRes = await fetch('https://api.pyproxy.com/g/open/get_access_token', {
+        method: 'POST',
+        body: renewTokenForm,
+      });
+
+      const renewTokenData = await renewTokenRes.json();
+      const renewAccessToken = renewTokenData?.ret_data?.access_token;
+
+      if (!renewAccessToken) {
+        await logAction('error', 'Falha ao obter token para renovação', renewTokenData);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Falha ao autenticar no fornecedor' }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Add 1GB to existing user
+      const renewUserForm = new FormData();
+      renewUserForm.append('username', renewUsername);
+      renewUserForm.append('status', '1');
+      renewUserForm.append('limit_flow', '1'); // Add 1GB
+
+      const renewUserRes = await fetch('https://api.pyproxy.com/g/open/add_or_edit_user', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${renewAccessToken}`,
+        },
+        body: renewUserForm,
+      });
+
+      const renewUserData = await renewUserRes.json();
+
+      if (!renewUserRes.ok || renewUserData?.ret !== 0 || renewUserData?.code !== 1) {
+        await logAction('error', 'Falha ao renovar proxy no fornecedor', renewUserData);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Fornecedor recusou renovação' }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Update expires_at to +30 days from now
+      const newExpiresAt = new Date();
+      newExpiresAt.setDate(newExpiresAt.getDate() + 30);
+
+      await supabaseAdmin
+        .from('proxy_orders')
+        .update({
+          status: 'active',
+          expires_at: newExpiresAt.toISOString(),
+        })
+        .eq('id', orderId);
+
+      // Deduct balance
+      await supabaseAdmin
+        .from('sms_user_wallets')
+        .update({ balance: Number(renewWallet.balance) - renewFinalPrice })
+        .eq('user_id', user.id);
+
+      // Record transaction
+      await supabaseAdmin
+        .from('sms_transactions')
+        .insert({
+          user_id: user.id,
+          type: 'purchase',
+          amount: -renewFinalPrice,
+          description: 'Renovação de Proxy WhatsApp',
+        });
+
+      await logAction('success', 'Proxy renovado com sucesso', { orderId, renewUsername });
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          expires_at: newExpiresAt.toISOString(),
+        }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
 

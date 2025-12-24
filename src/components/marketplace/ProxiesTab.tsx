@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { 
   Globe, Copy, Check, Loader2, Shield, Zap, Clock, 
-  Eye, EyeOff, RefreshCw, Wifi
+  Eye, EyeOff, RefreshCw, RotateCcw, Minus, Plus
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -31,8 +32,10 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
+  const [renewing, setRenewing] = useState<string | null>(null);
   const [orders, setOrders] = useState<ProxyOrder[]>([]);
   const [price, setPrice] = useState<number | null>(null);
+  const [quantity, setQuantity] = useState(1);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
 
@@ -72,10 +75,12 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
   const handlePurchase = async () => {
     if (!user || !price) return;
 
-    if (balance < price) {
+    const totalPrice = price * quantity;
+
+    if (balance < totalPrice) {
       toast({
         title: "Saldo insuficiente",
-        description: `Você precisa de R$ ${price.toFixed(2).replace('.', ',')} para esta compra.`,
+        description: `Você precisa de R$ ${totalPrice.toFixed(2).replace('.', ',')} para esta compra.`,
         variant: "error"
       });
       onRecharge();
@@ -84,31 +89,45 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
 
     setPurchasing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('pyproxy-purchase', {
-        body: { action: 'purchase' }
-      });
+      // Purchase multiple proxies sequentially
+      let successCount = 0;
+      let lastError = '';
 
-      if (error) {
-        const body = (error as any)?.context?.body;
-        const message = body?.error || body?.message || error.message;
-        throw new Error(message);
+      for (let i = 0; i < quantity; i++) {
+        const { data, error } = await supabase.functions.invoke('pyproxy-purchase', {
+          body: { action: 'purchase' }
+        });
+
+        if (error) {
+          const body = (error as any)?.context?.body;
+          lastError = body?.error || body?.message || error.message;
+          continue;
+        }
+
+        if (data?.success) {
+          successCount++;
+        } else {
+          lastError = data?.error || 'Erro ao comprar proxy';
+        }
       }
 
-      if (!data?.success) {
-        throw new Error(data?.error || 'Erro ao comprar proxy');
+      if (successCount > 0) {
+        toast({
+          title: successCount === quantity ? "Proxies adquiridas!" : `${successCount}/${quantity} proxies adquiridas`,
+          description: successCount === quantity 
+            ? `${quantity} proxy(s) pronta(s) para uso.`
+            : `Algumas compras falharam: ${lastError}`,
+          variant: successCount === quantity ? "success" : "default"
+        });
+
+        // Update balance locally
+        onBalanceChange(balance - (price * successCount));
+        
+        // Reload orders
+        loadData();
+      } else {
+        throw new Error(lastError || 'Erro ao comprar proxies');
       }
-
-      toast({
-        title: "Proxy adquirido!",
-        description: "Sua proxy está pronta para uso.",
-        variant: "success"
-      });
-
-      // Update balance locally
-      onBalanceChange(balance - price);
-      
-      // Reload orders
-      loadData();
     } catch (err: any) {
       console.error('Error purchasing proxy:', err);
       toast({
@@ -118,6 +137,58 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
       });
     } finally {
       setPurchasing(false);
+    }
+  };
+
+  const handleRenew = async (orderId: string) => {
+    if (!user || !price) return;
+
+    if (balance < price) {
+      toast({
+        title: "Saldo insuficiente",
+        description: `Você precisa de R$ ${price.toFixed(2).replace('.', ',')} para renovar.`,
+        variant: "error"
+      });
+      onRecharge();
+      return;
+    }
+
+    setRenewing(orderId);
+    try {
+      const { data, error } = await supabase.functions.invoke('pyproxy-purchase', {
+        body: { action: 'renew', orderId }
+      });
+
+      if (error) {
+        const body = (error as any)?.context?.body;
+        const message = body?.error || body?.message || error.message;
+        throw new Error(message);
+      }
+
+      if (!data?.success) {
+        throw new Error(data?.error || 'Erro ao renovar proxy');
+      }
+
+      toast({
+        title: "Proxy renovada!",
+        description: "Sua proxy foi renovada por mais 30 dias.",
+        variant: "success"
+      });
+
+      // Update balance locally
+      onBalanceChange(balance - price);
+      
+      // Reload orders
+      loadData();
+    } catch (err: any) {
+      console.error('Error renewing proxy:', err);
+      toast({
+        title: "Erro",
+        description: err.message || "Erro ao renovar proxy",
+        variant: "error"
+      });
+    } finally {
+      setRenewing(null);
     }
   };
 
@@ -181,10 +252,10 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
             <div className="flex-1 space-y-4">
               <div>
                 <h2 className="text-2xl font-bold text-foreground">
-                  Proxy Otimizado para WhatsApp
+                  Proxy Residencial Premium
                 </h2>
                 <p className="text-muted-foreground mt-1">
-                  Evolution API • Residential/ISP Rotating
+                  IP Residencial de Alta Qualidade
                 </p>
               </div>
 
@@ -199,47 +270,80 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                 </Badge>
                 <Badge variant="outline" className="flex items-center gap-1">
                   <Clock className="h-3 w-3" />
-                  Mensal
-                </Badge>
-                <Badge variant="outline" className="flex items-center gap-1">
-                  <Wifi className="h-3 w-3" />
-                  IP Rotativo
+                  Validade 30 dias
                 </Badge>
               </div>
 
               <ul className="text-sm text-muted-foreground space-y-1">
-                <li>✓ Otimizada para Evolution API e WhatsApp</li>
-                <li>✓ IP residencial rotativo de alta qualidade</li>
-                <li>✓ Renovação mensal automática disponível</li>
+                <li>✓ IP residencial de alta qualidade</li>
+                <li>✓ 1GB de tráfego mensal</li>
+                <li>✓ Renovação disponível</li>
                 <li>✓ Suporte técnico incluso</li>
               </ul>
 
-              <div className="flex items-center justify-between pt-4 border-t border-border">
-                <div>
-                  {price !== null && (
-                    <p className="text-3xl font-bold text-green-500">
-                      R$ {price.toFixed(2).replace('.', ',')}
-                      <span className="text-sm font-normal text-muted-foreground">/mês</span>
-                    </p>
-                  )}
+              <div className="flex flex-col gap-4 pt-4 border-t border-border">
+                <div className="flex items-center justify-between">
+                  <div>
+                    {price !== null && (
+                      <p className="text-3xl font-bold text-green-500">
+                        R$ {(price * quantity).toFixed(2).replace('.', ',')}
+                        <span className="text-sm font-normal text-muted-foreground">
+                          {quantity > 1 ? ` (${quantity}x R$ ${price.toFixed(2).replace('.', ',')})` : '/mês'}
+                        </span>
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <Button 
-                  onClick={handlePurchase}
-                  disabled={purchasing || !price}
-                  className="bg-accent hover:bg-accent/90 text-accent-foreground px-8"
-                >
-                  {purchasing ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Processando...
-                    </>
-                  ) : (
-                    <>
-                      <Globe className="h-4 w-4 mr-2" />
-                      Contratar Agora
-                    </>
-                  )}
-                </Button>
+                
+                <div className="flex items-center gap-3">
+                  {/* Quantity Selector */}
+                  <div className="flex items-center gap-2 bg-muted/50 rounded-lg p-1">
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                      disabled={quantity <= 1 || purchasing}
+                      className="h-8 w-8 p-0"
+                    >
+                      <Minus className="h-4 w-4" />
+                    </Button>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={quantity}
+                      onChange={(e) => setQuantity(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+                      className="w-14 h-8 text-center bg-transparent border-0"
+                    />
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => setQuantity(Math.min(10, quantity + 1))}
+                      disabled={quantity >= 10 || purchasing}
+                      className="h-8 w-8 p-0"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <Button 
+                    onClick={handlePurchase}
+                    disabled={purchasing || !price}
+                    className="bg-accent hover:bg-accent/90 text-accent-foreground flex-1"
+                  >
+                    {purchasing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Processando...
+                      </>
+                    ) : (
+                      <>
+                        <Globe className="h-4 w-4 mr-2" />
+                        Contratar {quantity > 1 ? `${quantity} Proxies` : 'Agora'}
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -395,6 +499,57 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                         Sua proxy está sendo provisionada. Isso pode levar até 30 segundos.
                       </p>
                     </div>
+                  )}
+
+                  {/* Renewal button for expired or expiring proxies */}
+                  {order.status === 'active' && order.expires_at && (
+                    (() => {
+                      const expiresDate = new Date(order.expires_at);
+                      const now = new Date();
+                      const daysUntilExpiry = Math.ceil((expiresDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                      const isExpired = daysUntilExpiry <= 0;
+                      const isExpiringSoon = daysUntilExpiry <= 7 && daysUntilExpiry > 0;
+
+                      if (isExpired || isExpiringSoon) {
+                        return (
+                          <div className={`mt-4 p-4 rounded-lg flex items-center justify-between gap-3 ${
+                            isExpired ? 'bg-red-500/10' : 'bg-yellow-500/10'
+                          }`}>
+                            <div>
+                              <p className={`text-sm font-medium ${isExpired ? 'text-red-400' : 'text-yellow-400'}`}>
+                                {isExpired 
+                                  ? 'Esta proxy expirou' 
+                                  : `Expira em ${daysUntilExpiry} dia${daysUntilExpiry > 1 ? 's' : ''}`}
+                              </p>
+                              {price && (
+                                <p className="text-xs text-muted-foreground">
+                                  Renovar por R$ {price.toFixed(2).replace('.', ',')}
+                                </p>
+                              )}
+                            </div>
+                            <Button
+                              onClick={() => handleRenew(order.id)}
+                              disabled={renewing === order.id || !price}
+                              size="sm"
+                              className="bg-accent hover:bg-accent/90"
+                            >
+                              {renewing === order.id ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  Renovando...
+                                </>
+                              ) : (
+                                <>
+                                  <RotateCcw className="h-4 w-4 mr-2" />
+                                  Renovar
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()
                   )}
                 </CardContent>
               </Card>
