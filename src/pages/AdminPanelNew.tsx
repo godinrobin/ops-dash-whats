@@ -14,7 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X, Key, Loader2, 
   UserPlus, Activity, Megaphone, Eye, MousePointer, Trash2, Image, Clock, Settings, Users, 
-  BarChart3, Phone, FileText, Wallet, History, Percent, Menu, ShoppingBag, Package
+  BarChart3, Phone, FileText, Wallet, History, Percent, Menu, ShoppingBag, Package, Globe, RefreshCw
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -103,6 +103,7 @@ const SIDEBAR_MENU = [
       { id: "margins", label: "Margens de Lucro", icon: Percent },
       { id: "marketplace-products", label: "Produtos", icon: Package },
       { id: "marketplace-sales", label: "Vendas de Ativos", icon: ShoppingBag },
+      { id: "proxy-orders", label: "Vendas de Proxies", icon: Globe },
     ]
   },
   {
@@ -252,6 +253,7 @@ const AdminPanelNew = () => {
   const [transactions, setTransactions] = useState<TransactionData[]>([]);
   const [marketplaceProducts, setMarketplaceProducts] = useState<MarketplaceProductData[]>([]);
   const [marketplaceOrders, setMarketplaceOrders] = useState<MarketplaceOrderData[]>([]);
+  const [proxyOrders, setProxyOrders] = useState<any[]>([]);
   const [showProductModal, setShowProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<MarketplaceProductData | null>(null);
   // Sidebar state
@@ -274,6 +276,7 @@ const AdminPanelNew = () => {
   // Margins state (in percentage, e.g., 30 = 30%)
   const [smsMargin, setSmsMargin] = useState("30");
   const [smmMargin, setSmmMargin] = useState("30");
+  const [proxyMargin, setProxyMargin] = useState("50");
   const [savingMargins, setSavingMargins] = useState(false);
 
   // Offers sorting and filtering
@@ -444,6 +447,7 @@ const AdminPanelNew = () => {
       data?.forEach((margin) => {
         if (margin.system_name === 'sms') setSmsMargin(String(margin.margin_percent));
         if (margin.system_name === 'smm') setSmmMargin(String(margin.margin_percent));
+        if (margin.system_name === 'proxy') setProxyMargin(String(margin.margin_percent));
       });
     } catch (err) {
       console.error("Error loading margins:", err);
@@ -469,6 +473,17 @@ const AdminPanelNew = () => {
         .eq('system_name', 'smm');
       
       if (smmError) throw smmError;
+
+      // Update or insert Proxy margin
+      const { error: proxyError } = await supabase
+        .from('platform_margins')
+        .upsert({ 
+          system_name: 'proxy', 
+          margin_percent: parseFloat(proxyMargin), 
+          updated_by: user.id 
+        }, { onConflict: 'system_name' });
+      
+      if (proxyError) throw proxyError;
       
       toast.success("Margens salvas com sucesso!");
     } catch (err) {
@@ -476,6 +491,36 @@ const AdminPanelNew = () => {
       toast.error("Erro ao salvar margens");
     } finally {
       setSavingMargins(false);
+    }
+  };
+
+  const loadProxyOrders = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('pyproxy-purchase', {
+        body: { action: 'admin-get-orders' }
+      });
+
+      if (!error && data?.success) {
+        // Get user info for orders
+        const userIds = new Set<string>();
+        data.orders?.forEach((o: any) => userIds.add(o.user_id));
+
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, username')
+          .in('id', Array.from(userIds));
+
+        const profileMap = new Map(profiles?.map(p => [p.id, p.username]) || []);
+        const userMap = new Map(users.map(u => [u.id, u.email]));
+
+        setProxyOrders(data.orders?.map((o: any) => ({
+          ...o,
+          user_email: userMap.get(o.user_id) || o.user_id,
+          username: profileMap.get(o.user_id) || userMap.get(o.user_id) || o.user_id,
+        })) || []);
+      }
+    } catch (err) {
+      console.error("Error loading proxy orders:", err);
     }
   };
 
@@ -1584,6 +1629,26 @@ const AdminPanelNew = () => {
                 </div>
               </div>
 
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-base font-semibold">Proxies Residenciais</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      step="1"
+                      min="0"
+                      max="300"
+                      value={proxyMargin}
+                      onChange={(e) => setProxyMargin(e.target.value)}
+                      placeholder="50"
+                      className="flex-1"
+                    />
+                    <span className="text-lg font-bold text-accent">%</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Custo base: $0.60 × R$5.50. Este valor define seu lucro.</p>
+                </div>
+              </div>
+
               <Button onClick={saveMargins} disabled={savingMargins} className="w-full">
                 {savingMargins ? (
                   <>
@@ -1600,9 +1665,69 @@ const AdminPanelNew = () => {
 
               <div className="p-4 bg-muted/50 rounded-lg">
                 <p className="text-sm text-muted-foreground">
-                  <strong>Fórmula:</strong> Preço USD × R$6.10 × (1 + margem%)
+                  <strong>Fórmula:</strong> Preço USD × R$5.50 × (1 + margem%)
                 </p>
               </div>
+            </CardContent>
+          </Card>
+        );
+
+      case "proxy-orders":
+        return (
+          <Card className="border-2 border-accent">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Globe className="h-5 w-5 text-accent" />
+                Vendas de Proxies
+              </CardTitle>
+              <CardDescription>
+                {proxyOrders.length} pedido(s) de proxy
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button variant="outline" size="sm" onClick={loadProxyOrders} className="mb-4">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Atualizar
+              </Button>
+              <ScrollArea className="h-[500px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Usuário</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Host</TableHead>
+                      <TableHead>Criado</TableHead>
+                      <TableHead>Expira</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {proxyOrders.map((order) => (
+                      <TableRow key={order.id}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium text-sm">{order.username}</p>
+                            <p className="text-xs text-muted-foreground">{order.user_email}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={
+                            order.status === 'active' ? 'bg-green-500/20 text-green-400' :
+                            order.status === 'suspended' ? 'bg-orange-500/20 text-orange-400' :
+                            'bg-gray-500/20 text-gray-400'
+                          }>
+                            {order.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{order.host || '-'}</TableCell>
+                        <TableCell className="text-xs">{new Date(order.created_at).toLocaleDateString('pt-BR')}</TableCell>
+                        <TableCell className="text-xs">
+                          {order.expires_at ? new Date(order.expires_at).toLocaleDateString('pt-BR') : '-'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
             </CardContent>
           </Card>
         );
