@@ -1963,6 +1963,39 @@ export type Database = {
         }
         Relationships: []
       }
+      webhook_history: {
+        Row: {
+          created_at: string | null
+          email: string
+          error_message: string | null
+          id: string
+          payload: Json | null
+          status: string
+          transaction_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          error_message?: string | null
+          id?: string
+          payload?: Json | null
+          status?: string
+          transaction_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          error_message?: string | null
+          id?: string
+          payload?: Json | null
+          status?: string
+          transaction_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       whatsapp_charges: {
         Row: {
           charge_code: string
