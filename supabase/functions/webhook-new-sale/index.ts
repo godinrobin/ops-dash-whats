@@ -12,6 +12,55 @@ const DEFAULT_PASSWORD = "123456";
 // Helper function to wait
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Helper to log webhook history
+async function logWebhookHistory(
+  supabase: SupabaseClient,
+  transactionId: string | null,
+  email: string,
+  payload: unknown,
+  status: string,
+  userId?: string,
+  errorMessage?: string
+): Promise<void> {
+  try {
+    await supabase.from("webhook_history").insert({
+      transaction_id: transactionId,
+      email: email,
+      payload: payload,
+      status: status,
+      user_id: userId || null,
+      error_message: errorMessage || null,
+    });
+    console.log(`[Webhook History] Logged: ${status} for ${email}`);
+  } catch (error) {
+    console.error(`[Webhook History] Failed to log:`, error);
+  }
+}
+
+// Helper to check if transaction was already processed
+async function isTransactionProcessed(
+  supabase: SupabaseClient,
+  transactionId: string
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("webhook_history")
+    .select("id, status")
+    .eq("transaction_id", transactionId)
+    .maybeSingle();
+
+  if (error) {
+    console.error(`[Webhook] Error checking transaction:`, error);
+    return false;
+  }
+
+  if (data && data.status === "success") {
+    console.log(`[Webhook] Transaction ${transactionId} already processed successfully`);
+    return true;
+  }
+
+  return false;
+}
+
 // Helper to update profile with retries
 async function updateProfileWithRetry(
   supabase: SupabaseClient,
@@ -171,9 +220,10 @@ serve(async (req: Request): Promise<Response> => {
     const body = await req.json();
     console.log("[Webhook] Payload received:", JSON.stringify(body, null, 2));
 
-    // Extract email from different possible formats
+    // Extract email and transaction ID from different possible formats
     let email: string | null = null;
     let name: string | null = null;
+    let transactionId: string | null = null;
 
     // Handle array format (some platforms send as array)
     const payload = Array.isArray(body) ? body[0]?.body || body[0] : body;
@@ -184,30 +234,35 @@ serve(async (req: Request): Promise<Response> => {
     if (payload.event?.userEmail) {
       email = payload.event.userEmail;
       name = payload.event.userName || payload.event.userEmail.split("@")[0];
+      transactionId = payload.event?.transactionId || payload.transactionId || null;
       console.log("[Webhook] Extracted from Hubla format");
     }
     // Standard format
     else if (payload.email) {
       email = payload.email;
       name = payload.name || payload.email.split("@")[0];
+      transactionId = payload.transactionId || payload.transaction_id || null;
       console.log("[Webhook] Extracted from standard format");
     }
     // Kiwify format
     else if (payload.Customer?.email) {
       email = payload.Customer.email;
       name = payload.Customer.full_name || payload.Customer.email.split("@")[0];
+      transactionId = payload.order_id || payload.transaction?.transaction_id || null;
       console.log("[Webhook] Extracted from Kiwify format");
     }
     // Hotmart format
     else if (payload.data?.buyer?.email) {
       email = payload.data.buyer.email;
       name = payload.data.buyer.name || payload.data.buyer.email.split("@")[0];
+      transactionId = payload.data?.purchase?.transaction || payload.data?.transaction || null;
       console.log("[Webhook] Extracted from Hotmart format");
     }
 
     if (!email) {
       console.error("[Webhook] Email not found in request body");
       console.error("[Webhook] Available keys:", Object.keys(payload));
+      await logWebhookHistory(supabase, transactionId, "unknown", payload, "error", undefined, "Email not found in payload");
       return new Response(
         JSON.stringify({ error: "Email não encontrado no payload", payload_keys: Object.keys(payload) }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -216,13 +271,31 @@ serve(async (req: Request): Promise<Response> => {
 
     // Normalize email
     email = email.toLowerCase().trim();
-    console.log(`[Webhook] Processing for email: ${email}, name: ${name}`);
+    console.log(`[Webhook] Processing for email: ${email}, name: ${name}, transactionId: ${transactionId}`);
+
+    // Check if this transaction was already processed (prevent duplicates)
+    if (transactionId) {
+      const alreadyProcessed = await isTransactionProcessed(supabase, transactionId);
+      if (alreadyProcessed) {
+        console.log(`[Webhook] Skipping duplicate transaction: ${transactionId}`);
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: "Transaction already processed",
+            transaction_id: transactionId,
+            skipped: true
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
 
     // Check if user already exists
     const { data: existingUsers, error: listError } = await supabase.auth.admin.listUsers();
     
     if (listError) {
       console.error("[Webhook] Error listing users:", listError);
+      await logWebhookHistory(supabase, transactionId, email, payload, "error", undefined, `Failed to list users: ${listError.message}`);
       return new Response(
         JSON.stringify({ error: "Failed to check existing users" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -239,6 +312,7 @@ serve(async (req: Request): Promise<Response> => {
 
       if (!result.success) {
         console.error("[Webhook] Failed to update profile after retries:", result.error);
+        await logWebhookHistory(supabase, transactionId, email, payload, "error", existingUser.id, `Profile update failed: ${result.error}`);
         return new Response(
           JSON.stringify({ 
             success: false, 
@@ -250,6 +324,7 @@ serve(async (req: Request): Promise<Response> => {
       }
 
       console.log(`[Webhook] Successfully upgraded user ${email} to full member`);
+      await logWebhookHistory(supabase, transactionId, email, payload, "success", existingUser.id);
 
       return new Response(
         JSON.stringify({ 
@@ -274,7 +349,35 @@ serve(async (req: Request): Promise<Response> => {
     });
 
     if (createError) {
+      // Check if it's a duplicate key error (race condition - user was created by another webhook)
+      if (createError.message?.includes("duplicate key") || createError.message?.includes("already registered")) {
+        console.log(`[Webhook] User creation race condition - fetching existing user`);
+        
+        // Refetch users to get the one that was just created
+        const { data: refreshedUsers } = await supabase.auth.admin.listUsers();
+        const justCreatedUser = refreshedUsers?.users?.find(u => u.email?.toLowerCase() === email);
+        
+        if (justCreatedUser) {
+          console.log(`[Webhook] Found user after race condition: ${justCreatedUser.id}`);
+          const result = await updateProfileWithRetry(supabase, justCreatedUser.id, name || email.split("@")[0]);
+          
+          await logWebhookHistory(supabase, transactionId, email, payload, result.success ? "success" : "partial", justCreatedUser.id, 
+            result.success ? undefined : `Profile update after race: ${result.error}`);
+          
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              message: "Usuário atualizado (race condition resolvida)",
+              user_id: justCreatedUser.id,
+              is_full_member: result.success
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+      
       console.error("[Webhook] Error creating user:", createError);
+      await logWebhookHistory(supabase, transactionId, email, payload, "error", undefined, `User creation failed: ${createError.message}`);
       return new Response(
         JSON.stringify({ error: createError.message }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -292,6 +395,7 @@ serve(async (req: Request): Promise<Response> => {
 
     if (!result.success) {
       console.error("[Webhook] Failed to set full member status after retries:", result.error);
+      await logWebhookHistory(supabase, transactionId, email, payload, "partial", newUser.user.id, `Profile update failed: ${result.error}`);
       // Don't fail the whole request - user was created, just profile update failed
       return new Response(
         JSON.stringify({ 
@@ -307,6 +411,7 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     console.log(`[Webhook] User ${email} set as full member successfully`);
+    await logWebhookHistory(supabase, transactionId, email, payload, "success", newUser.user.id);
 
     return new Response(
       JSON.stringify({ 
