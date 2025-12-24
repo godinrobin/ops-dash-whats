@@ -43,17 +43,33 @@ serve(async (req) => {
     }
 
     // Fetch user's Evolution API config
-    const { data: config } = await supabaseClient
+    let { data: config } = await supabaseClient
       .from('maturador_config')
       .select('*')
       .eq('user_id', campaign.user_id)
       .single();
 
-    if (!config) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Evolution API not configured' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // If user doesn't have config, fallback to admin config
+    if (!config?.evolution_base_url || !config?.evolution_api_key) {
+      console.log('User has no Evolution API config, trying admin fallback...');
+      
+      const { data: adminConfig } = await supabaseClient
+        .from('maturador_config')
+        .select('*')
+        .limit(1)
+        .single();
+      
+      if (adminConfig?.evolution_base_url && adminConfig?.evolution_api_key) {
+        config = adminConfig;
+        console.log('Using admin Evolution API config as fallback');
+      } else {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Evolution API not configured and no admin fallback available' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } else {
+      console.log('Using user Evolution API config');
     }
 
     // Fetch assigned instances
