@@ -3,9 +3,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { 
   Globe, Copy, Check, Loader2, Shield, Zap, Clock, 
-  Eye, EyeOff, RefreshCw, RotateCcw, Minus, Plus
+  Eye, EyeOff, RefreshCw, RotateCcw, Minus, Plus, ChevronDown, ChevronRight, Pencil
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -20,6 +21,7 @@ interface ProxyOrder {
   status: string;
   expires_at: string | null;
   created_at: string;
+  label?: string | null;
 }
 
 interface ProxiesTabProps {
@@ -38,6 +40,9 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
   const [quantity, setQuantity] = useState(1);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
+  const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
+  const [editingLabel, setEditingLabel] = useState<string | null>(null);
+  const [labelValue, setLabelValue] = useState("");
 
   useEffect(() => {
     if (user) {
@@ -210,6 +215,34 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
     }));
   };
 
+  const toggleExpanded = (orderId: string) => {
+    setExpandedOrders(prev => ({
+      ...prev,
+      [orderId]: !prev[orderId]
+    }));
+  };
+
+  const startEditingLabel = (order: ProxyOrder, index: number) => {
+    setEditingLabel(order.id);
+    setLabelValue(order.label || `Proxy WhatsApp ${index + 1}`);
+  };
+
+  const saveLabel = async (orderId: string) => {
+    try {
+      // Save locally for now (we'll update DB structure if needed)
+      setOrders(prev => prev.map(o => 
+        o.id === orderId ? { ...o, label: labelValue } : o
+      ));
+      setEditingLabel(null);
+      toast({
+        title: "Nome atualizado!",
+        variant: "success"
+      });
+    } catch (err) {
+      console.error('Error saving label:', err);
+    }
+  };
+
   const getStatusBadge = (status: string, expiresAt: string | null) => {
     if (status === 'active' && expiresAt) {
       const isExpired = new Date(expiresAt) < new Date();
@@ -252,10 +285,10 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
             <div className="flex-1 space-y-4">
               <div>
                 <h2 className="text-2xl font-bold text-foreground">
-                  Proxy Residencial Premium
+                  Proxy Otimizada para WhatsApp
                 </h2>
                 <p className="text-muted-foreground mt-1">
-                  IP Residencial de Alta Qualidade
+                  IP de Alta Qualidade para WhatsApp
                 </p>
               </div>
 
@@ -275,10 +308,10 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
               </div>
 
               <ul className="text-sm text-muted-foreground space-y-1">
-                <li>✓ IP residencial de alta qualidade</li>
-                <li>✓ 1GB de tráfego mensal</li>
+                <li>✓ IP sem queda de alta qualidade</li>
                 <li>✓ Renovação disponível</li>
-                <li>✓ Suporte técnico incluso</li>
+                <li>✓ Reduz Bloqueio de Número</li>
+                <li>✓ Protocolo HTTP/HTTPS</li>
               </ul>
 
               <div className="flex flex-col gap-4 pt-4 border-t border-border">
@@ -370,190 +403,244 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4">
-            {orders.map((order) => (
-              <Card key={order.id} className="border-accent/20">
-                <CardContent className="p-4">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center">
-                        <Globe className="h-5 w-5 text-accent" />
-                      </div>
-                      <div>
-                        <p className="font-medium">Proxy WhatsApp</p>
-                        <p className="text-xs text-muted-foreground">
-                          Criado em {new Date(order.created_at).toLocaleDateString('pt-BR')}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {getStatusBadge(order.status, order.expires_at)}
-                      {order.expires_at && (
-                        <span className="text-xs text-muted-foreground">
-                          Expira: {new Date(order.expires_at).toLocaleDateString('pt-BR')}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {order.status === 'active' && order.host && (
-                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {/* Host */}
-                      <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                        <div>
-                          <p className="text-xs text-muted-foreground">Host</p>
-                          <p className="font-mono text-sm">{order.host}</p>
-                        </div>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => copyToClipboard(order.host!, `host-${order.id}`)}
-                        >
-                          {copiedField === `host-${order.id}` ? (
-                            <Check className="h-4 w-4 text-green-500" />
-                          ) : (
-                            <Copy className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-
-                      {/* Port */}
-                      <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                        <div>
-                          <p className="text-xs text-muted-foreground">Porta</p>
-                          <p className="font-mono text-sm">{order.port}</p>
-                        </div>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => copyToClipboard(order.port!, `port-${order.id}`)}
-                        >
-                          {copiedField === `port-${order.id}` ? (
-                            <Check className="h-4 w-4 text-green-500" />
-                          ) : (
-                            <Copy className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-
-                      {/* Username */}
-                      <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                        <div>
-                          <p className="text-xs text-muted-foreground">Usuário</p>
-                          <p className="font-mono text-sm">{order.username}</p>
-                        </div>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => copyToClipboard(order.username!, `user-${order.id}`)}
-                        >
-                          {copiedField === `user-${order.id}` ? (
-                            <Check className="h-4 w-4 text-green-500" />
-                          ) : (
-                            <Copy className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-
-                      {/* Password */}
-                      <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                        <div>
-                          <p className="text-xs text-muted-foreground">Senha</p>
-                          <p className="font-mono text-sm">
-                            {showPasswords[order.id] ? order.password : '••••••••'}
-                          </p>
-                        </div>
-                        <div className="flex gap-1">
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => togglePassword(order.id)}
-                          >
-                            {showPasswords[order.id] ? (
-                              <EyeOff className="h-4 w-4" />
-                            ) : (
-                              <Eye className="h-4 w-4" />
-                            )}
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => copyToClipboard(order.password!, `pass-${order.id}`)}
-                          >
-                            {copiedField === `pass-${order.id}` ? (
-                              <Check className="h-4 w-4 text-green-500" />
-                            ) : (
-                              <Copy className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {order.status === 'pending' && (
-                    <div className="mt-4 p-4 bg-yellow-500/10 rounded-lg flex items-center gap-3">
-                      <Loader2 className="h-5 w-5 animate-spin text-yellow-500" />
-                      <p className="text-sm text-yellow-500">
-                        Sua proxy está sendo provisionada. Isso pode levar até 30 segundos.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Renewal button for expired or expiring proxies */}
-                  {order.status === 'active' && order.expires_at && (
-                    (() => {
-                      const expiresDate = new Date(order.expires_at);
-                      const now = new Date();
-                      const daysUntilExpiry = Math.ceil((expiresDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                      const isExpired = daysUntilExpiry <= 0;
-                      const isExpiringSoon = daysUntilExpiry <= 7 && daysUntilExpiry > 0;
-
-                      if (isExpired || isExpiringSoon) {
-                        return (
-                          <div className={`mt-4 p-4 rounded-lg flex items-center justify-between gap-3 ${
-                            isExpired ? 'bg-red-500/10' : 'bg-yellow-500/10'
-                          }`}>
-                            <div>
-                              <p className={`text-sm font-medium ${isExpired ? 'text-red-400' : 'text-yellow-400'}`}>
-                                {isExpired 
-                                  ? 'Esta proxy expirou' 
-                                  : `Expira em ${daysUntilExpiry} dia${daysUntilExpiry > 1 ? 's' : ''}`}
-                              </p>
-                              {price && (
-                                <p className="text-xs text-muted-foreground">
-                                  Renovar por R$ {price.toFixed(2).replace('.', ',')}
-                                </p>
+          <div className="grid gap-3">
+            {orders.map((order, index) => {
+              const proxyName = order.label || `Proxy WhatsApp ${index + 1}`;
+              const isExpanded = expandedOrders[order.id] ?? false;
+              
+              return (
+                <Card key={order.id} className="border-accent/20">
+                  <Collapsible open={isExpanded} onOpenChange={() => toggleExpanded(order.id)}>
+                    <CardContent className="p-4">
+                      <CollapsibleTrigger asChild>
+                        <div className="flex items-center justify-between cursor-pointer hover:bg-muted/30 -m-4 p-4 rounded-lg transition-colors">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center">
+                              {isExpanded ? (
+                                <ChevronDown className="h-5 w-5 text-accent" />
+                              ) : (
+                                <ChevronRight className="h-5 w-5 text-accent" />
                               )}
                             </div>
-                            <Button
-                              onClick={() => handleRenew(order.id)}
-                              disabled={renewing === order.id || !price}
-                              size="sm"
-                              className="bg-accent hover:bg-accent/90"
-                            >
-                              {renewing === order.id ? (
-                                <>
-                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                  Renovando...
-                                </>
+                            <div className="flex items-center gap-2">
+                              {editingLabel === order.id ? (
+                                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                  <Input
+                                    value={labelValue}
+                                    onChange={(e) => setLabelValue(e.target.value)}
+                                    className="h-8 w-48"
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') saveLabel(order.id);
+                                      if (e.key === 'Escape') setEditingLabel(null);
+                                    }}
+                                  />
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost"
+                                    onClick={() => saveLabel(order.id)}
+                                  >
+                                    <Check className="h-4 w-4" />
+                                  </Button>
+                                </div>
                               ) : (
                                 <>
-                                  <RotateCcw className="h-4 w-4 mr-2" />
-                                  Renovar
+                                  <p className="font-medium">{proxyName}</p>
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost"
+                                    className="h-6 w-6 p-0 opacity-50 hover:opacity-100"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      startEditingLabel(order, index);
+                                    }}
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                  </Button>
                                 </>
                               )}
-                            </Button>
+                            </div>
                           </div>
-                        );
-                      }
-                      return null;
-                    })()
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+
+                          <div className="flex items-center gap-2">
+                            {getStatusBadge(order.status, order.expires_at)}
+                            {order.expires_at && (
+                              <span className="text-xs text-muted-foreground hidden sm:inline">
+                                Expira: {new Date(order.expires_at).toLocaleDateString('pt-BR')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </CollapsibleTrigger>
+
+                      <CollapsibleContent>
+                        <div className="pt-4 mt-4 border-t border-border">
+                          <p className="text-xs text-muted-foreground mb-3">
+                            Criado em {new Date(order.created_at).toLocaleDateString('pt-BR')}
+                            {order.expires_at && ` • Expira em ${new Date(order.expires_at).toLocaleDateString('pt-BR')}`}
+                          </p>
+
+                          {order.status === 'active' && order.host && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {/* Host */}
+                              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Host</p>
+                                  <p className="font-mono text-sm">{order.host}</p>
+                                </div>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => copyToClipboard(order.host!, `host-${order.id}`)}
+                                >
+                                  {copiedField === `host-${order.id}` ? (
+                                    <Check className="h-4 w-4 text-green-500" />
+                                  ) : (
+                                    <Copy className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              </div>
+
+                              {/* Port */}
+                              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Porta</p>
+                                  <p className="font-mono text-sm">{order.port}</p>
+                                </div>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => copyToClipboard(order.port!, `port-${order.id}`)}
+                                >
+                                  {copiedField === `port-${order.id}` ? (
+                                    <Check className="h-4 w-4 text-green-500" />
+                                  ) : (
+                                    <Copy className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              </div>
+
+                              {/* Username */}
+                              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Usuário</p>
+                                  <p className="font-mono text-sm">{order.username}</p>
+                                </div>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => copyToClipboard(order.username!, `user-${order.id}`)}
+                                >
+                                  {copiedField === `user-${order.id}` ? (
+                                    <Check className="h-4 w-4 text-green-500" />
+                                  ) : (
+                                    <Copy className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              </div>
+
+                              {/* Password */}
+                              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Senha</p>
+                                  <p className="font-mono text-sm">
+                                    {showPasswords[order.id] ? order.password : '••••••••'}
+                                  </p>
+                                </div>
+                                <div className="flex gap-1">
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    onClick={() => togglePassword(order.id)}
+                                  >
+                                    {showPasswords[order.id] ? (
+                                      <EyeOff className="h-4 w-4" />
+                                    ) : (
+                                      <Eye className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    onClick={() => copyToClipboard(order.password!, `pass-${order.id}`)}
+                                  >
+                                    {copiedField === `pass-${order.id}` ? (
+                                      <Check className="h-4 w-4 text-green-500" />
+                                    ) : (
+                                      <Copy className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {order.status === 'pending' && (
+                            <div className="p-4 bg-yellow-500/10 rounded-lg flex items-center gap-3">
+                              <Loader2 className="h-5 w-5 animate-spin text-yellow-500" />
+                              <p className="text-sm text-yellow-500">
+                                Sua proxy está sendo provisionada. Isso pode levar até 30 segundos.
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Renewal button for expired or expiring proxies */}
+                          {order.status === 'active' && order.expires_at && (
+                            (() => {
+                              const expiresDate = new Date(order.expires_at);
+                              const now = new Date();
+                              const daysUntilExpiry = Math.ceil((expiresDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                              const isExpired = daysUntilExpiry <= 0;
+                              const isExpiringSoon = daysUntilExpiry <= 7 && daysUntilExpiry > 0;
+
+                              if (isExpired || isExpiringSoon) {
+                                return (
+                                  <div className={`mt-4 p-4 rounded-lg flex items-center justify-between gap-3 ${
+                                    isExpired ? 'bg-red-500/10' : 'bg-yellow-500/10'
+                                  }`}>
+                                    <div>
+                                      <p className={`text-sm font-medium ${isExpired ? 'text-red-400' : 'text-yellow-400'}`}>
+                                        {isExpired 
+                                          ? 'Esta proxy expirou' 
+                                          : `Expira em ${daysUntilExpiry} dia${daysUntilExpiry > 1 ? 's' : ''}`}
+                                      </p>
+                                      {price && (
+                                        <p className="text-xs text-muted-foreground">
+                                          Renovar por R$ {price.toFixed(2).replace('.', ',')}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <Button
+                                      onClick={() => handleRenew(order.id)}
+                                      disabled={renewing === order.id || !price}
+                                      size="sm"
+                                      className="bg-accent hover:bg-accent/90"
+                                    >
+                                      {renewing === order.id ? (
+                                        <>
+                                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                          Renovando...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <RotateCcw className="h-4 w-4 mr-2" />
+                                          Renovar
+                                        </>
+                                      )}
+                                    </Button>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()
+                          )}
+                        </div>
+                      </CollapsibleContent>
+                    </CardContent>
+                  </Collapsible>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>

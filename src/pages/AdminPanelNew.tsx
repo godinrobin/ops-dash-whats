@@ -1631,21 +1631,20 @@ const AdminPanelNew = () => {
 
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label className="text-base font-semibold">Proxies Residenciais</Label>
+                  <Label className="text-base font-semibold">Proxy WhatsApp (Preço Final)</Label>
                   <div className="flex items-center gap-2">
+                    <span className="text-lg font-bold text-muted-foreground">R$</span>
                     <Input
                       type="number"
-                      step="1"
+                      step="0.01"
                       min="0"
-                      max="300"
                       value={proxyMargin}
                       onChange={(e) => setProxyMargin(e.target.value)}
-                      placeholder="50"
+                      placeholder="9.99"
                       className="flex-1"
                     />
-                    <span className="text-lg font-bold text-accent">%</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">Custo base: $0.60 × R$5.50. Este valor define seu lucro.</p>
+                  <p className="text-xs text-muted-foreground">Este é o valor em reais que será cobrado do usuário. O custo do fornecedor é independente.</p>
                 </div>
               </div>
 
@@ -1665,7 +1664,10 @@ const AdminPanelNew = () => {
 
               <div className="p-4 bg-muted/50 rounded-lg">
                 <p className="text-sm text-muted-foreground">
-                  <strong>Fórmula:</strong> Preço USD × R$5.50 × (1 + margem%)
+                  <strong>SMS/SMM:</strong> Preço USD × R$5.50 × (1 + margem%)
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  <strong>Proxy:</strong> Valor fixo em reais definido acima
                 </p>
               </div>
             </CardContent>
