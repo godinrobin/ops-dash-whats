@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.78.0";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.78.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,6 +9,72 @@ const corsHeaders = {
 // Default password for new users
 const DEFAULT_PASSWORD = "123456";
 
+// Helper function to wait
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Helper to update profile with retries
+async function updateProfileWithRetry(
+  supabase: SupabaseClient,
+  userId: string,
+  username: string,
+  maxRetries = 3
+): Promise<{ success: boolean; error?: string }> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    console.log(`[Profile Update] Attempt ${attempt}/${maxRetries} for user ${userId}`);
+    
+    // First check if profile exists
+    const { data: existingProfile, error: checkError } = await supabase
+      .from("profiles")
+      .select("id, is_full_member")
+      .eq("id", userId)
+      .maybeSingle();
+    
+    if (checkError) {
+      console.error(`[Profile Update] Error checking profile:`, checkError);
+    }
+    
+    if (existingProfile) {
+      console.log(`[Profile Update] Profile exists, updating is_full_member to true`);
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ is_full_member: true })
+        .eq("id", userId);
+      
+      if (updateError) {
+        console.error(`[Profile Update] Error updating profile:`, updateError);
+        return { success: false, error: updateError.message };
+      }
+      
+      console.log(`[Profile Update] Successfully updated profile to full member`);
+      return { success: true };
+    }
+    
+    // Profile doesn't exist yet, try upsert
+    console.log(`[Profile Update] Profile not found, attempting upsert`);
+    const { error: upsertError } = await supabase
+      .from("profiles")
+      .upsert({
+        id: userId,
+        username: username,
+        is_full_member: true
+      }, { onConflict: 'id' });
+    
+    if (!upsertError) {
+      console.log(`[Profile Update] Successfully upserted profile as full member`);
+      return { success: true };
+    }
+    
+    console.error(`[Profile Update] Upsert failed on attempt ${attempt}:`, upsertError);
+    
+    if (attempt < maxRetries) {
+      console.log(`[Profile Update] Waiting 1 second before retry...`);
+      await delay(1000);
+    }
+  }
+  
+  return { success: false, error: "Max retries reached" };
+}
+
 serve(async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -16,20 +82,6 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   try {
-    // Validate Hubla security token
-    const hublaToken = Deno.env.get("HUBLA_WEBHOOK_TOKEN");
-    const requestToken = req.headers.get("x-hubla-token");
-
-    if (!hublaToken || requestToken !== hublaToken) {
-      console.error("Invalid or missing x-hubla-token");
-      return new Response(
-        JSON.stringify({ error: "Unauthorized - invalid token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log("Token validated successfully");
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     
@@ -40,8 +92,84 @@ serve(async (req: Request): Promise<Response> => {
       },
     });
 
+    // Check for test action (admin only)
+    const url = new URL(req.url);
+    const action = url.searchParams.get("action");
+    
+    if (action === "test") {
+      const testEmail = url.searchParams.get("email");
+      if (!testEmail) {
+        return new Response(
+          JSON.stringify({ error: "Email required for test action" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      console.log(`[TEST] Simulating sale for email: ${testEmail}`);
+      
+      // Check if user exists
+      const { data: existingUsers } = await supabase.auth.admin.listUsers();
+      const existingUser = existingUsers?.users?.find(u => u.email?.toLowerCase() === testEmail.toLowerCase());
+      
+      if (existingUser) {
+        console.log(`[TEST] User exists with ID: ${existingUser.id}`);
+        
+        // Check profile
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", existingUser.id)
+          .maybeSingle();
+        
+        console.log(`[TEST] Profile data:`, profile);
+        console.log(`[TEST] Profile error:`, profileError);
+        
+        // Try to update
+        const result = await updateProfileWithRetry(supabase, existingUser.id, existingUser.email?.split("@")[0] || "user");
+        
+        return new Response(
+          JSON.stringify({ 
+            test: true,
+            user_exists: true,
+            user_id: existingUser.id,
+            profile_before: profile,
+            update_result: result
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      return new Response(
+        JSON.stringify({ 
+          test: true,
+          user_exists: false,
+          message: "User not found, would create new user in real scenario"
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate Hubla security token
+    const hublaToken = Deno.env.get("HUBLA_WEBHOOK_TOKEN");
+    const requestToken = req.headers.get("x-hubla-token");
+
+    console.log(`[Webhook] Received request`);
+    console.log(`[Webhook] Has HUBLA_WEBHOOK_TOKEN env: ${!!hublaToken}`);
+    console.log(`[Webhook] Has x-hubla-token header: ${!!requestToken}`);
+    console.log(`[Webhook] Tokens match: ${hublaToken === requestToken}`);
+
+    if (!hublaToken || requestToken !== hublaToken) {
+      console.error("[Webhook] Invalid or missing x-hubla-token");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized - invalid token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log("[Webhook] Token validated successfully");
+
     const body = await req.json();
-    console.log("Webhook received:", JSON.stringify(body));
+    console.log("[Webhook] Payload received:", JSON.stringify(body, null, 2));
 
     // Extract email from different possible formats
     let email: string | null = null;
@@ -50,58 +178,78 @@ serve(async (req: Request): Promise<Response> => {
     // Handle array format (some platforms send as array)
     const payload = Array.isArray(body) ? body[0]?.body || body[0] : body;
 
+    console.log("[Webhook] Parsed payload:", JSON.stringify(payload, null, 2));
+
     // Hubla format: body.event.userEmail
     if (payload.event?.userEmail) {
       email = payload.event.userEmail;
       name = payload.event.userName || payload.event.userEmail.split("@")[0];
+      console.log("[Webhook] Extracted from Hubla format");
     }
     // Standard format
     else if (payload.email) {
       email = payload.email;
       name = payload.name || payload.email.split("@")[0];
+      console.log("[Webhook] Extracted from standard format");
     }
     // Kiwify format
     else if (payload.Customer?.email) {
       email = payload.Customer.email;
       name = payload.Customer.full_name || payload.Customer.email.split("@")[0];
+      console.log("[Webhook] Extracted from Kiwify format");
     }
     // Hotmart format
     else if (payload.data?.buyer?.email) {
       email = payload.data.buyer.email;
       name = payload.data.buyer.name || payload.data.buyer.email.split("@")[0];
+      console.log("[Webhook] Extracted from Hotmart format");
     }
 
     if (!email) {
-      console.error("Email not found in request body");
+      console.error("[Webhook] Email not found in request body");
+      console.error("[Webhook] Available keys:", Object.keys(payload));
       return new Response(
-        JSON.stringify({ error: "Email não encontrado no payload" }),
+        JSON.stringify({ error: "Email não encontrado no payload", payload_keys: Object.keys(payload) }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     // Normalize email
     email = email.toLowerCase().trim();
-    console.log(`Processing webhook for email: ${email}, name: ${name}`);
+    console.log(`[Webhook] Processing for email: ${email}, name: ${name}`);
 
     // Check if user already exists
-    const { data: existingUsers } = await supabase.auth.admin.listUsers();
+    const { data: existingUsers, error: listError } = await supabase.auth.admin.listUsers();
+    
+    if (listError) {
+      console.error("[Webhook] Error listing users:", listError);
+      return new Response(
+        JSON.stringify({ error: "Failed to check existing users" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
     const existingUser = existingUsers?.users?.find(u => u.email?.toLowerCase() === email);
 
     if (existingUser) {
-      console.log(`User ${email} already exists, upgrading to full member`);
+      console.log(`[Webhook] User ${email} already exists with ID: ${existingUser.id}`);
       
-      // Update the existing user's profile to be a full member
-      const { error: updateError } = await supabase
-        .from("profiles")
-        .update({ is_full_member: true })
-        .eq("id", existingUser.id);
+      // Update the existing user's profile to be a full member with retry
+      const result = await updateProfileWithRetry(supabase, existingUser.id, name || email.split("@")[0]);
 
-      if (updateError) {
-        console.error("Error updating profile:", updateError);
-        // Even if profile update fails, return success since user exists
-      } else {
-        console.log(`Successfully upgraded user ${email} to full member`);
+      if (!result.success) {
+        console.error("[Webhook] Failed to update profile after retries:", result.error);
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: "Failed to update profile",
+            details: result.error
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
+
+      console.log(`[Webhook] Successfully upgraded user ${email} to full member`);
 
       return new Response(
         JSON.stringify({ 
@@ -115,6 +263,7 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     // Create new user with full membership
+    console.log(`[Webhook] Creating new user for ${email}`);
     const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
       email: email,
       password: DEFAULT_PASSWORD,
@@ -125,27 +274,39 @@ serve(async (req: Request): Promise<Response> => {
     });
 
     if (createError) {
-      console.error("Error creating user:", createError);
+      console.error("[Webhook] Error creating user:", createError);
       return new Response(
         JSON.stringify({ error: createError.message }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`User created successfully: ${newUser.user.id}`);
+    console.log(`[Webhook] User created successfully: ${newUser.user.id}`);
 
-    // Set the new user as a full member
-    const { error: profileError } = await supabase
-      .from("profiles")
-      .update({ is_full_member: true })
-      .eq("id", newUser.user.id);
+    // Wait a bit for the trigger to create the profile, then update with retry
+    console.log("[Webhook] Waiting 1.5 seconds for trigger to execute...");
+    await delay(1500);
 
-    if (profileError) {
-      console.error("Error setting full member status:", profileError);
-      // Continue anyway, the trigger might handle profile creation
-    } else {
-      console.log(`User ${email} set as full member`);
+    // Set the new user as a full member with retry logic
+    const result = await updateProfileWithRetry(supabase, newUser.user.id, name || email.split("@")[0]);
+
+    if (!result.success) {
+      console.error("[Webhook] Failed to set full member status after retries:", result.error);
+      // Don't fail the whole request - user was created, just profile update failed
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          warning: "User created but profile update may have failed",
+          message: "Usuário criado, mas pode precisar de atualização manual",
+          user_id: newUser.user.id,
+          is_full_member: false,
+          profile_error: result.error
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
+
+    console.log(`[Webhook] User ${email} set as full member successfully`);
 
     return new Response(
       JSON.stringify({ 
@@ -158,7 +319,7 @@ serve(async (req: Request): Promise<Response> => {
     );
 
   } catch (error: unknown) {
-    console.error("Webhook error:", error);
+    console.error("[Webhook] Unexpected error:", error);
     const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
     return new Response(
       JSON.stringify({ error: errorMessage }),
