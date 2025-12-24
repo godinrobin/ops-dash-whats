@@ -35,19 +35,17 @@ Deno.serve(async (req) => {
 
     // get-price is public - no auth required
     if (action === 'get-price') {
+      // Now margin_percent is actually the fixed price in BRL
       const { data: marginData } = await supabaseAdmin
         .from('platform_margins')
         .select('margin_percent')
         .eq('system_name', 'proxy')
         .single();
 
-      const marginPercent = marginData?.margin_percent || 50;
-      const baseCostUSD = 0.60;
-      const exchangeRate = 5.5;
-      const baseCostBRL = baseCostUSD * exchangeRate;
-      const finalPrice = baseCostBRL * (1 + marginPercent / 100);
+      // margin_percent now stores the fixed price in BRL (e.g., 9.99)
+      const finalPrice = marginData?.margin_percent || 9.99;
 
-      console.log('Price calculated:', finalPrice);
+      console.log('Price (fixed BRL):', finalPrice);
       return new Response(
         JSON.stringify({ success: true, price: finalPrice }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -96,21 +94,15 @@ Deno.serve(async (req) => {
     };
 
     if (action === 'purchase') {
-      // Get product price and margin
+      // Get product price (fixed BRL)
       const { data: marginData } = await supabaseAdmin
         .from('platform_margins')
         .select('margin_percent')
         .eq('system_name', 'proxy')
         .single();
 
-      const marginPercent = marginData?.margin_percent || 50;
-      
-      // Base cost: ~$0.4-0.8 per GB, we use 1 GB
-      // Let's use $0.60 as base cost (average)
-      const baseCostUSD = 0.60;
-      const exchangeRate = 5.5; // BRL/USD approximate
-      const baseCostBRL = baseCostUSD * exchangeRate;
-      const finalPrice = baseCostBRL * (1 + marginPercent / 100);
+      // margin_percent now stores the fixed price in BRL
+      const finalPrice = marginData?.margin_percent || 9.99;
 
       // Check user balance
       const { data: wallet, error: walletError } = await supabaseAdmin
@@ -516,18 +508,15 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Get price
+      // Get price (fixed BRL)
       const { data: renewMarginData } = await supabaseAdmin
         .from('platform_margins')
         .select('margin_percent')
         .eq('system_name', 'proxy')
         .single();
 
-      const renewMarginPercent = renewMarginData?.margin_percent || 50;
-      const renewBaseCostUSD = 0.60;
-      const renewExchangeRate = 5.5;
-      const renewBaseCostBRL = renewBaseCostUSD * renewExchangeRate;
-      const renewFinalPrice = renewBaseCostBRL * (1 + renewMarginPercent / 100);
+      // margin_percent now stores the fixed price in BRL
+      const renewFinalPrice = renewMarginData?.margin_percent || 9.99;
 
       // Check balance
       const { data: renewWallet, error: renewWalletError } = await supabaseAdmin
