@@ -61,6 +61,64 @@ async function isTransactionProcessed(
   return false;
 }
 
+// Helper to find user by email in profiles table
+async function findUserByEmail(
+  supabase: SupabaseClient,
+  email: string
+): Promise<{ id: string; username: string; is_full_member: boolean } | null> {
+  console.log(`[Find User] Searching for user by email in profiles: ${email}`);
+  
+  // First, try to find by username (which stores email)
+  const { data: profileByUsername, error: usernameError } = await supabase
+    .from("profiles")
+    .select("id, username, is_full_member")
+    .eq("username", email)
+    .maybeSingle();
+
+  if (usernameError) {
+    console.error(`[Find User] Error searching by username:`, usernameError);
+  }
+
+  if (profileByUsername) {
+    console.log(`[Find User] Found user by username: ${profileByUsername.id}`);
+    return profileByUsername;
+  }
+
+  // If not found by username, try using auth.admin.listUsers as fallback
+  console.log(`[Find User] Not found by username, trying auth.admin.listUsers...`);
+  const { data: authUsers, error: listError } = await supabase.auth.admin.listUsers();
+  
+  if (listError) {
+    console.error(`[Find User] Error listing auth users:`, listError);
+    return null;
+  }
+
+  const authUser = authUsers?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase());
+  
+  if (authUser) {
+    console.log(`[Find User] Found user in auth.users: ${authUser.id}`);
+    
+    // Check if profile exists for this user
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id, username, is_full_member")
+      .eq("id", authUser.id)
+      .maybeSingle();
+    
+    if (profile) {
+      console.log(`[Find User] Profile exists for auth user: ${profile.id}, is_full_member: ${profile.is_full_member}`);
+      return profile;
+    }
+    
+    // Profile doesn't exist but user does - return the user ID
+    console.log(`[Find User] Auth user exists but no profile yet, returning user ID`);
+    return { id: authUser.id, username: email, is_full_member: false };
+  }
+
+  console.log(`[Find User] User not found anywhere for email: ${email}`);
+  return null;
+}
+
 // Helper to update profile with retries
 async function updateProfileWithRetry(
   supabase: SupabaseClient,
@@ -83,7 +141,7 @@ async function updateProfileWithRetry(
     }
     
     if (existingProfile) {
-      console.log(`[Profile Update] Profile exists, updating is_full_member to true`);
+      console.log(`[Profile Update] Profile exists, current is_full_member: ${existingProfile.is_full_member}, updating to true`);
       const { error: updateError } = await supabase
         .from("profiles")
         .update({ is_full_member: true })
@@ -91,6 +149,11 @@ async function updateProfileWithRetry(
       
       if (updateError) {
         console.error(`[Profile Update] Error updating profile:`, updateError);
+        if (attempt < maxRetries) {
+          console.log(`[Profile Update] Waiting 1 second before retry...`);
+          await delay(1000);
+          continue;
+        }
         return { success: false, error: updateError.message };
       }
       
@@ -99,7 +162,7 @@ async function updateProfileWithRetry(
     }
     
     // Profile doesn't exist yet, try upsert
-    console.log(`[Profile Update] Profile not found, attempting upsert`);
+    console.log(`[Profile Update] Profile not found, attempting upsert with id=${userId}, username=${username}`);
     const { error: upsertError } = await supabase
       .from("profiles")
       .upsert({
@@ -156,32 +219,21 @@ serve(async (req: Request): Promise<Response> => {
       
       console.log(`[TEST] Simulating sale for email: ${testEmail}`);
       
-      // Check if user exists
-      const { data: existingUsers } = await supabase.auth.admin.listUsers();
-      const existingUser = existingUsers?.users?.find(u => u.email?.toLowerCase() === testEmail.toLowerCase());
+      // Use the new findUserByEmail function
+      const existingUser = await findUserByEmail(supabase, testEmail.toLowerCase());
       
       if (existingUser) {
-        console.log(`[TEST] User exists with ID: ${existingUser.id}`);
-        
-        // Check profile
-        const { data: profile, error: profileError } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", existingUser.id)
-          .maybeSingle();
-        
-        console.log(`[TEST] Profile data:`, profile);
-        console.log(`[TEST] Profile error:`, profileError);
+        console.log(`[TEST] User exists with ID: ${existingUser.id}, is_full_member: ${existingUser.is_full_member}`);
         
         // Try to update
-        const result = await updateProfileWithRetry(supabase, existingUser.id, existingUser.email?.split("@")[0] || "user");
+        const result = await updateProfileWithRetry(supabase, existingUser.id, testEmail.split("@")[0]);
         
         return new Response(
           JSON.stringify({ 
             test: true,
             user_exists: true,
             user_id: existingUser.id,
-            profile_before: profile,
+            was_full_member: existingUser.is_full_member,
             update_result: result
           }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -290,22 +342,12 @@ serve(async (req: Request): Promise<Response> => {
       }
     }
 
-    // Check if user already exists
-    const { data: existingUsers, error: listError } = await supabase.auth.admin.listUsers();
-    
-    if (listError) {
-      console.error("[Webhook] Error listing users:", listError);
-      await logWebhookHistory(supabase, transactionId, email, payload, "error", undefined, `Failed to list users: ${listError.message}`);
-      return new Response(
-        JSON.stringify({ error: "Failed to check existing users" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    
-    const existingUser = existingUsers?.users?.find(u => u.email?.toLowerCase() === email);
+    // ===== NEW LOGIC: Check for existing user using our helper function =====
+    console.log(`[Webhook] Checking if user already exists for email: ${email}`);
+    const existingUser = await findUserByEmail(supabase, email);
 
     if (existingUser) {
-      console.log(`[Webhook] User ${email} already exists with ID: ${existingUser.id}`);
+      console.log(`[Webhook] User ${email} already exists with ID: ${existingUser.id}, current is_full_member: ${existingUser.is_full_member}`);
       
       // Update the existing user's profile to be a full member with retry
       const result = await updateProfileWithRetry(supabase, existingUser.id, name || email.split("@")[0]);
@@ -331,14 +373,15 @@ serve(async (req: Request): Promise<Response> => {
           success: true, 
           message: "Usuário existente atualizado para membro completo",
           user_id: existingUser.id,
+          was_full_member: existingUser.is_full_member,
           upgraded: true
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Create new user with full membership
-    console.log(`[Webhook] Creating new user for ${email}`);
+    // ===== User does not exist - Create new user =====
+    console.log(`[Webhook] User not found, creating new user for ${email}`);
     const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
       email: email,
       password: DEFAULT_PASSWORD,
@@ -351,29 +394,32 @@ serve(async (req: Request): Promise<Response> => {
     if (createError) {
       // Check if it's a duplicate key error (race condition - user was created by another webhook)
       if (createError.message?.includes("duplicate key") || createError.message?.includes("already registered")) {
-        console.log(`[Webhook] User creation race condition - fetching existing user`);
+        console.log(`[Webhook] User creation race condition detected for ${email}`);
         
-        // Refetch users to get the one that was just created
-        const { data: refreshedUsers } = await supabase.auth.admin.listUsers();
-        const justCreatedUser = refreshedUsers?.users?.find(u => u.email?.toLowerCase() === email);
+        // Wait a moment and try to find the user again
+        await delay(500);
         
-        if (justCreatedUser) {
-          console.log(`[Webhook] Found user after race condition: ${justCreatedUser.id}`);
-          const result = await updateProfileWithRetry(supabase, justCreatedUser.id, name || email.split("@")[0]);
+        const raceUser = await findUserByEmail(supabase, email);
+        
+        if (raceUser) {
+          console.log(`[Webhook] Found user after race condition: ${raceUser.id}`);
+          const result = await updateProfileWithRetry(supabase, raceUser.id, name || email.split("@")[0]);
           
-          await logWebhookHistory(supabase, transactionId, email, payload, result.success ? "success" : "partial", justCreatedUser.id, 
+          await logWebhookHistory(supabase, transactionId, email, payload, result.success ? "success" : "partial", raceUser.id, 
             result.success ? undefined : `Profile update after race: ${result.error}`);
           
           return new Response(
             JSON.stringify({ 
               success: true, 
               message: "Usuário atualizado (race condition resolvida)",
-              user_id: justCreatedUser.id,
+              user_id: raceUser.id,
               is_full_member: result.success
             }),
             { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
+        
+        console.error(`[Webhook] Could not find user after race condition for ${email}`);
       }
       
       console.error("[Webhook] Error creating user:", createError);
