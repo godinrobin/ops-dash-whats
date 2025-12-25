@@ -32,15 +32,22 @@ interface ProxyOrder {
 
 interface ProxyTestResult {
   gateway_valid: boolean;
+  gateway_from_api?: string;
   pyproxy_user_valid: boolean;
   pyproxy_has_flow: boolean;
+  pyproxy_auth_ok?: boolean;
   http_test_result: string;
   external_ip?: string;
   latency_ms?: number;
   error?: string;
   details?: {
     remaining_flow_gb?: number;
+    limit_flow_gb?: number;
+    used_flow_gb?: number;
     test_command?: string;
+    proxy_ip?: string;
+    http_latency_ms?: number;
+    note?: string;
     [key: string]: unknown;
   };
 }
@@ -749,24 +756,49 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                             <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
                               <PlayCircle className="h-4 w-4" />
                               Resultado do Teste
+                              {testResults[order.id].http_test_result === 'http_ok' && (
+                                <Badge className="bg-green-500/20 text-green-400 text-xs">HTTP OK</Badge>
+                              )}
                             </h4>
                             <div className="grid gap-2 text-sm">
+                              {/* API Auth Status */}
+                              {testResults[order.id].pyproxy_auth_ok !== undefined && (
+                                <div className="flex items-center gap-2">
+                                  {testResults[order.id].pyproxy_auth_ok ? (
+                                    <CheckCircle className="h-4 w-4 text-green-500" />
+                                  ) : (
+                                    <XCircle className="h-4 w-4 text-red-500" />
+                                  )}
+                                  <span>API Auth: {testResults[order.id].pyproxy_auth_ok ? 'OK' : 'Falhou'}</span>
+                                </div>
+                              )}
+                              
+                              {/* Gateway from API */}
+                              {testResults[order.id].gateway_from_api && (
+                                <div className="flex items-center gap-2 text-muted-foreground">
+                                  <Server className="h-4 w-4" />
+                                  <span>Gateway API: {testResults[order.id].gateway_from_api}</span>
+                                </div>
+                              )}
+                              
                               <div className="flex items-center gap-2">
                                 {testResults[order.id].gateway_valid ? (
                                   <CheckCircle className="h-4 w-4 text-green-500" />
                                 ) : (
                                   <XCircle className="h-4 w-4 text-red-500" />
                                 )}
-                                <span>Gateway: {testResults[order.id].gateway_valid ? 'Válido' : 'Inválido'}</span>
+                                <span>Gateway Configurado: {testResults[order.id].gateway_valid ? 'Válido' : 'Inválido'}</span>
                               </div>
+                              
                               <div className="flex items-center gap-2">
                                 {testResults[order.id].pyproxy_user_valid ? (
                                   <CheckCircle className="h-4 w-4 text-green-500" />
                                 ) : (
                                   <XCircle className="h-4 w-4 text-red-500" />
                                 )}
-                                <span>Usuário PYPROXY: {testResults[order.id].pyproxy_user_valid ? 'Válido' : 'Inválido'}</span>
+                                <span>Usuário PYPROXY: {testResults[order.id].pyproxy_user_valid ? 'Encontrado' : 'Não encontrado'}</span>
                               </div>
+                              
                               <div className="flex items-center gap-2">
                                 {testResults[order.id].pyproxy_has_flow ? (
                                   <CheckCircle className="h-4 w-4 text-green-500" />
@@ -774,20 +806,65 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                                   <AlertCircle className="h-4 w-4 text-yellow-500" />
                                 )}
                                 <span>Tráfego: {testResults[order.id].pyproxy_has_flow 
-                                  ? `${testResults[order.id].details?.remaining_flow_gb || '?'}GB disponível` 
-                                  : 'Sem tráfego'}</span>
+                                  ? `${typeof testResults[order.id].details?.remaining_flow_gb === 'number' 
+                                      ? testResults[order.id].details?.remaining_flow_gb.toFixed(2) 
+                                      : testResults[order.id].details?.remaining_flow_gb || '?'}GB disponível` 
+                                  : 'Esgotado'}</span>
+                                {testResults[order.id].details?.limit_flow_gb !== undefined && (
+                                  <span className="text-muted-foreground text-xs">
+                                    ({testResults[order.id].details?.used_flow_gb?.toFixed(2) || 0}GB usado de {testResults[order.id].details?.limit_flow_gb?.toFixed(2)}GB)
+                                  </span>
+                                )}
                               </div>
+
+                              {/* HTTP Test Result */}
+                              {testResults[order.id].http_test_result && testResults[order.id].http_test_result !== 'pending' && (
+                                <div className="flex items-center gap-2">
+                                  {testResults[order.id].http_test_result === 'http_ok' ? (
+                                    <CheckCircle className="h-4 w-4 text-green-500" />
+                                  ) : testResults[order.id].http_test_result === 'credentials_valid' ? (
+                                    <CheckCircle className="h-4 w-4 text-blue-500" />
+                                  ) : (
+                                    <AlertCircle className="h-4 w-4 text-yellow-500" />
+                                  )}
+                                  <span>
+                                    Teste HTTP: {
+                                      testResults[order.id].http_test_result === 'http_ok' ? 'Passou' :
+                                      testResults[order.id].http_test_result === 'credentials_valid' ? 'Credenciais OK' :
+                                      testResults[order.id].http_test_result === 'http_failed' ? 'Falhou' :
+                                      testResults[order.id].http_test_result
+                                    }
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* External IP */}
+                              {testResults[order.id].external_ip && testResults[order.id].external_ip !== 'resolved' && (
+                                <div className="flex items-center gap-2 text-green-400">
+                                  <Globe className="h-4 w-4" />
+                                  <span>IP do Proxy: {testResults[order.id].external_ip}</span>
+                                </div>
+                              )}
+                              
                               {testResults[order.id].latency_ms && (
                                 <div className="flex items-center gap-2 text-muted-foreground">
                                   <Clock className="h-4 w-4" />
-                                  <span>Latência: {testResults[order.id].latency_ms}ms</span>
+                                  <span>Tempo total: {testResults[order.id].latency_ms}ms</span>
                                 </div>
                               )}
+                              
                               {testResults[order.id].error && (
                                 <div className="mt-2 p-2 bg-red-500/10 rounded text-red-400 text-xs">
                                   {testResults[order.id].error}
                                 </div>
                               )}
+
+                              {testResults[order.id].details?.note && (
+                                <div className="mt-2 p-2 bg-blue-500/10 rounded text-blue-400 text-xs">
+                                  {testResults[order.id].details?.note}
+                                </div>
+                              )}
+                              
                               {testResults[order.id].details?.test_command && (
                                 <div className="mt-2 space-y-1">
                                   <label className="text-xs text-muted-foreground">Comando para teste manual:</label>
