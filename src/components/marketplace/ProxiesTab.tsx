@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   Globe, Copy, Check, Loader2, Shield, Zap, Clock, 
   Eye, EyeOff, RefreshCw, RotateCcw, Minus, Plus, ChevronDown, ChevronRight, Pencil,
-  Server, Wifi, Building2
+  Server, Wifi, Building2, PlayCircle, CheckCircle, XCircle, AlertCircle
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -27,6 +27,22 @@ interface ProxyOrder {
   plan_type?: string | null;
   gateway_used?: string | null;
   test_result?: string | null;
+  test_ip?: string | null;
+}
+
+interface ProxyTestResult {
+  gateway_valid: boolean;
+  pyproxy_user_valid: boolean;
+  pyproxy_has_flow: boolean;
+  http_test_result: string;
+  external_ip?: string;
+  latency_ms?: number;
+  error?: string;
+  details?: {
+    remaining_flow_gb?: number;
+    test_command?: string;
+    [key: string]: unknown;
+  };
 }
 
 interface ProxiesTabProps {
@@ -63,6 +79,8 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
   const [renewing, setRenewing] = useState<string | null>(null);
+  const [testing, setTesting] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, ProxyTestResult>>({});
   const [orders, setOrders] = useState<ProxyOrder[]>([]);
   const [price, setPrice] = useState<number | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -223,6 +241,62 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
       });
     } finally {
       setRenewing(null);
+    }
+  };
+
+  const handleTestProxy = async (orderId: string) => {
+    if (!user) return;
+
+    setTesting(orderId);
+    try {
+      const { data, error } = await supabase.functions.invoke('pyproxy-purchase', {
+        body: { action: 'test-proxy', orderId }
+      });
+
+      if (error) {
+        const body = (error as any)?.context?.body;
+        const message = body?.error || body?.message || error.message;
+        throw new Error(message);
+      }
+
+      if (data?.test_results) {
+        setTestResults(prev => ({
+          ...prev,
+          [orderId]: data.test_results
+        }));
+
+        // Update local order state with test result
+        setOrders(prev => prev.map(o => 
+          o.id === orderId ? { 
+            ...o, 
+            test_result: data.test_results.http_test_result,
+            test_ip: data.test_results.external_ip 
+          } : o
+        ));
+
+        const success = data.test_results.gateway_valid && 
+                        data.test_results.pyproxy_user_valid && 
+                        data.test_results.pyproxy_has_flow;
+
+        toast({
+          title: success ? "Proxy OK!" : "Atenção",
+          description: success 
+            ? `Proxy funcionando. Tráfego: ${data.test_results.details?.remaining_flow_gb || '?'}GB`
+            : data.test_results.error || "Verifique os detalhes do teste",
+          variant: success ? "success" : "default"
+        });
+      } else {
+        throw new Error(data?.error || 'Erro ao testar proxy');
+      }
+    } catch (err: any) {
+      console.error('Error testing proxy:', err);
+      toast({
+        title: "Erro no teste",
+        description: err.message || "Erro ao testar proxy",
+        variant: "error"
+      });
+    } finally {
+      setTesting(null);
     }
   };
 
@@ -669,6 +743,80 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                           </div>
                         )}
 
+                        {/* Test Results */}
+                        {testResults[order.id] && (
+                          <div className="mt-4 p-4 bg-muted/30 rounded-lg border border-border">
+                            <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                              <PlayCircle className="h-4 w-4" />
+                              Resultado do Teste
+                            </h4>
+                            <div className="grid gap-2 text-sm">
+                              <div className="flex items-center gap-2">
+                                {testResults[order.id].gateway_valid ? (
+                                  <CheckCircle className="h-4 w-4 text-green-500" />
+                                ) : (
+                                  <XCircle className="h-4 w-4 text-red-500" />
+                                )}
+                                <span>Gateway: {testResults[order.id].gateway_valid ? 'Válido' : 'Inválido'}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {testResults[order.id].pyproxy_user_valid ? (
+                                  <CheckCircle className="h-4 w-4 text-green-500" />
+                                ) : (
+                                  <XCircle className="h-4 w-4 text-red-500" />
+                                )}
+                                <span>Usuário PYPROXY: {testResults[order.id].pyproxy_user_valid ? 'Válido' : 'Inválido'}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {testResults[order.id].pyproxy_has_flow ? (
+                                  <CheckCircle className="h-4 w-4 text-green-500" />
+                                ) : (
+                                  <AlertCircle className="h-4 w-4 text-yellow-500" />
+                                )}
+                                <span>Tráfego: {testResults[order.id].pyproxy_has_flow 
+                                  ? `${testResults[order.id].details?.remaining_flow_gb || '?'}GB disponível` 
+                                  : 'Sem tráfego'}</span>
+                              </div>
+                              {testResults[order.id].latency_ms && (
+                                <div className="flex items-center gap-2 text-muted-foreground">
+                                  <Clock className="h-4 w-4" />
+                                  <span>Latência: {testResults[order.id].latency_ms}ms</span>
+                                </div>
+                              )}
+                              {testResults[order.id].error && (
+                                <div className="mt-2 p-2 bg-red-500/10 rounded text-red-400 text-xs">
+                                  {testResults[order.id].error}
+                                </div>
+                              )}
+                              {testResults[order.id].details?.test_command && (
+                                <div className="mt-2 space-y-1">
+                                  <label className="text-xs text-muted-foreground">Comando para teste manual:</label>
+                                  <div className="flex items-center gap-2">
+                                    <code className="flex-1 bg-muted px-2 py-1 rounded text-xs font-mono truncate">
+                                      {testResults[order.id].details?.test_command}
+                                    </code>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-6 w-6 p-0"
+                                      onClick={() => copyToClipboard(
+                                        testResults[order.id].details?.test_command as string,
+                                        `cmd-${order.id}`
+                                      )}
+                                    >
+                                      {copiedField === `cmd-${order.id}` ? (
+                                        <Check className="h-3 w-3 text-green-500" />
+                                      ) : (
+                                        <Copy className="h-3 w-3" />
+                                      )}
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
                         {/* Full Proxy String */}
                         <div className="mt-4 space-y-1">
                           <label className="text-xs text-muted-foreground">String Completa (host:port:user:pass)</label>
@@ -693,8 +841,26 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                           </div>
                         </div>
 
-                        {/* Renew Button */}
-                        <div className="mt-4 flex justify-end">
+                        {/* Action Buttons */}
+                        <div className="mt-4 flex justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleTestProxy(order.id)}
+                            disabled={testing === order.id || order.status !== 'active'}
+                          >
+                            {testing === order.id ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Testando...
+                              </>
+                            ) : (
+                              <>
+                                <PlayCircle className="h-4 w-4 mr-2" />
+                                Testar Proxy
+                              </>
+                            )}
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"
@@ -709,7 +875,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                             ) : (
                               <>
                                 <RotateCcw className="h-4 w-4 mr-2" />
-                                Renovar por R$ {price?.toFixed(2).replace('.', ',')}
+                                Renovar R$ {price?.toFixed(2).replace('.', ',')}
                               </>
                             )}
                           </Button>
