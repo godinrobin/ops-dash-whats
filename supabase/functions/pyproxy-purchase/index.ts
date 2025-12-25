@@ -64,7 +64,8 @@ async function getPyProxyUserList(accessToken: string, username?: string): Promi
   form.append('page', '1');
   form.append('page_size', '100');
   if (username) {
-    form.append('username', username);
+    // Try account filter first (as per API docs)
+    form.append('account', username);
   }
 
   try {
@@ -74,11 +75,29 @@ async function getPyProxyUserList(accessToken: string, username?: string): Promi
       body: form,
     });
     const data = await res.json();
-    console.log('[PYPROXY] get_user_list response:', JSON.stringify(data).slice(0, 500));
+    console.log('[PYPROXY] get_user_list response:', JSON.stringify(data).slice(0, 800));
     
     if (data?.ret === 0 && data?.code === 1) {
-      const users = data?.ret_data?.data || [];
-      const foundUser = username ? users.find((u: any) => u.username === username) : null;
+      // API returns ret_data.list (not ret_data.data)
+      const users = data?.ret_data?.list || data?.ret_data?.data || [];
+      console.log('[PYPROXY] Users found:', users.length);
+      
+      // Find user by 'account' field (primary) or fallback to 'username'
+      const foundUser = username ? users.find((u: any) => 
+        u.account === username || u.username === username
+      ) : null;
+      
+      if (foundUser) {
+        console.log('[PYPROXY] User match found:', { 
+          account: foundUser.account, 
+          state: foundUser.state,
+          limit_flow: foundUser.limit_flow,
+          consumed_flow: foundUser.consumed_flow 
+        });
+      } else if (username) {
+        console.log('[PYPROXY] No user match for:', username, '| Available accounts:', users.map((u: any) => u.account || u.username).slice(0, 5));
+      }
+      
       return { success: true, users, user: foundUser };
     }
     return { success: false, error: data?.msg || 'Failed to get user list' };
@@ -89,9 +108,12 @@ async function getPyProxyUserList(accessToken: string, username?: string): Promi
 }
 
 // Get dynamic proxy host from PYPROXY API
-async function getPyProxyHost(accessToken: string): Promise<{ host?: string; port?: string; error?: string }> {
+// proxy_type: 'resi' for residential, 'isp' for ISP, 'dc' for datacenter
+async function getPyProxyHost(accessToken: string, proxyType: string = 'resi'): Promise<{ host?: string; port?: string; error?: string }> {
   const form = new FormData();
   form.append('access_token', accessToken);
+  // REQUIRED: proxy_type parameter (resi, isp, dc)
+  form.append('proxy_type', proxyType);
 
   try {
     const res = await fetch('https://api.pyproxy.com/g/open/get_user_proxy_host', {
@@ -100,7 +122,7 @@ async function getPyProxyHost(accessToken: string): Promise<{ host?: string; por
       body: form,
     });
     const data = await res.json();
-    console.log('[PYPROXY] get_user_proxy_host response:', JSON.stringify(data));
+    console.log('[PYPROXY] get_user_proxy_host response (type=' + proxyType + '):', JSON.stringify(data));
     
     if (data?.ret === 0 && data?.code === 1 && data?.ret_data) {
       // Response can have different formats - handle both
@@ -1260,7 +1282,14 @@ Deno.serve(async (req) => {
 
       // Step 2: Get dynamic gateway from API (optional verification)
       console.log('[TEST] Step 2: Checking dynamic gateway from API...');
-      const dynamicGateway = await getPyProxyHost(testAccessToken);
+      // Map plan_type to PYPROXY proxy_type: residential->resi, isp->isp, datacenter->dc
+      const proxyTypeMap: Record<string, string> = {
+        'residential': 'resi',
+        'isp': 'isp', 
+        'datacenter': 'dc'
+      };
+      const pyproxyType = proxyTypeMap[proxyOrder.plan_type || 'residential'] || 'resi';
+      const dynamicGateway = await getPyProxyHost(testAccessToken, pyproxyType);
       if (dynamicGateway.host) {
         testResults.gateway_from_api = `${dynamicGateway.host}:${dynamicGateway.port}`;
         console.log('[TEST] ✓ Dynamic gateway:', testResults.gateway_from_api);
@@ -1296,26 +1325,27 @@ Deno.serve(async (req) => {
         const userInfo = userListResult.user;
         
         // Check if user has flow (traffic)
-        // PYPROXY uses limit_flow for total allocated, and may have used_flow
+        // PYPROXY uses: limit_flow (total), consumed_flow (used), state (status)
         const limitFlow = parseFloat(userInfo.limit_flow) || 0;
-        const usedFlow = parseFloat(userInfo.used_flow) || 0;
-        const remainingFlow = limitFlow - usedFlow;
+        const consumedFlow = parseFloat(userInfo.consumed_flow || userInfo.used_flow) || 0;
+        const remainingFlow = limitFlow - consumedFlow;
+        const userState = userInfo.state ?? userInfo.status ?? 'unknown';
         
         testResults.pyproxy_has_flow = remainingFlow > 0;
         testResults.details = {
-          username: proxyOrder.username,
-          status: userInfo.status,
+          account: userInfo.account || proxyOrder.username,
+          state: userState,
           limit_flow_gb: limitFlow,
-          used_flow_gb: usedFlow,
+          consumed_flow_gb: consumedFlow,
           remaining_flow_gb: remainingFlow,
           created_at: userInfo.created_at
         };
 
-        console.log('[TEST] ✓ User found:', { limitFlow, usedFlow, remainingFlow, status: userInfo.status });
+        console.log('[TEST] ✓ User found:', { limitFlow, consumedFlow, remainingFlow, state: userState });
 
         if (!testResults.pyproxy_has_flow) {
           testResults.http_test_result = 'insufficient_flow';
-          testResults.error = `Sem tráfego disponível (usado: ${usedFlow.toFixed(2)}GB de ${limitFlow.toFixed(2)}GB)`;
+          testResults.error = `Sem tráfego disponível (usado: ${consumedFlow.toFixed(2)}GB de ${limitFlow.toFixed(2)}GB)`;
         }
       } else {
         console.log('[TEST] ✗ User not found in user list');

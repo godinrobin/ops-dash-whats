@@ -800,19 +800,25 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                               </div>
                               
                               <div className="flex items-center gap-2">
-                                {testResults[order.id].pyproxy_has_flow ? (
+                                {!testResults[order.id].pyproxy_user_valid ? (
+                                  <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                                ) : testResults[order.id].pyproxy_has_flow ? (
                                   <CheckCircle className="h-4 w-4 text-green-500" />
                                 ) : (
                                   <AlertCircle className="h-4 w-4 text-yellow-500" />
                                 )}
-                                <span>Tráfego: {testResults[order.id].pyproxy_has_flow 
-                                  ? `${typeof testResults[order.id].details?.remaining_flow_gb === 'number' 
-                                      ? testResults[order.id].details?.remaining_flow_gb.toFixed(2) 
-                                      : testResults[order.id].details?.remaining_flow_gb || '?'}GB disponível` 
-                                  : 'Esgotado'}</span>
-                                {testResults[order.id].details?.limit_flow_gb !== undefined && (
+                                <span>Tráfego: {
+                                  !testResults[order.id].pyproxy_user_valid 
+                                    ? 'Não verificado' 
+                                    : testResults[order.id].pyproxy_has_flow 
+                                      ? `${typeof testResults[order.id].details?.remaining_flow_gb === 'number' 
+                                          ? testResults[order.id].details?.remaining_flow_gb.toFixed(2) 
+                                          : testResults[order.id].details?.remaining_flow_gb || '?'}GB disponível` 
+                                      : 'Esgotado'
+                                }</span>
+                                {testResults[order.id].pyproxy_user_valid && testResults[order.id].details?.limit_flow_gb !== undefined && (
                                   <span className="text-muted-foreground text-xs">
-                                    ({testResults[order.id].details?.used_flow_gb?.toFixed(2) || 0}GB usado de {testResults[order.id].details?.limit_flow_gb?.toFixed(2)}GB)
+                                    ({Number(testResults[order.id].details?.consumed_flow_gb ?? testResults[order.id].details?.used_flow_gb ?? 0).toFixed(2)}GB usado de {Number(testResults[order.id].details?.limit_flow_gb ?? 0).toFixed(2)}GB)
                                   </span>
                                 )}
                               </div>
