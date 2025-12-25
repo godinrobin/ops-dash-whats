@@ -1380,13 +1380,24 @@ Deno.serve(async (req) => {
       }
 
       // Step 5: Real HTTP test via Apify (if user is valid and has flow)
+      // IMPORTANT: For rotating proxies, username format must be: {username}-zone-{type}
+      // Zone types: residential->resi, isp->isp, datacenter->dc
+      const zoneMap: Record<string, string> = {
+        'residential': 'resi',
+        'isp': 'isp',
+        'datacenter': 'dc'
+      };
+      const zoneSuffix = zoneMap[proxyOrder.plan_type || 'residential'] || 'resi';
+      const formattedUsername = `${proxyOrder.username}-zone-${zoneSuffix}`;
+      console.log('[TEST] Formatted username for HTTP test:', formattedUsername);
+
       if (testResults.pyproxy_user_valid && testResults.pyproxy_has_flow) {
         console.log('[TEST] Step 5: Testing real HTTP connectivity via Apify...');
         
         const apifyResult = await testProxyViaApify(
           proxyOrder.host,
           proxyOrder.port,
-          proxyOrder.username,
+          formattedUsername, // Use formatted username with zone
           proxyOrder.password
         );
 
@@ -1396,7 +1407,9 @@ Deno.serve(async (req) => {
           testResults.details = {
             ...testResults.details,
             proxy_ip: apifyResult.ip,
-            http_latency_ms: apifyResult.latency
+            http_latency_ms: apifyResult.latency,
+            formatted_username: formattedUsername,
+            zone_type: zoneSuffix
           };
           console.log('[TEST] ✓ HTTP test passed, IP:', apifyResult.ip);
         } else if (apifyResult.error === 'APIFY not configured' || apifyResult.error === 'Apify unavailable') {
@@ -1405,8 +1418,10 @@ Deno.serve(async (req) => {
           testResults.details = {
             ...testResults.details,
             proxy_url: `${proxyOrder.host}:${proxyOrder.port}`,
-            test_command: `curl -x http://${proxyOrder.username}:${proxyOrder.password}@${proxyOrder.host}:${proxyOrder.port} http://ip-api.com/json`,
-            note: 'Credenciais verificadas via API. Use o comando curl para testar manualmente.'
+            formatted_username: formattedUsername,
+            zone_type: zoneSuffix,
+            test_command: `curl -x http://${formattedUsername}:${proxyOrder.password}@${proxyOrder.host}:${proxyOrder.port} http://ip-api.com/json`,
+            note: `Credenciais verificadas via API. Use o username formatado: ${formattedUsername}`
           };
           console.log('[TEST] ⚠ Apify not available, falling back to credentials validation');
         } else {
@@ -1415,12 +1430,22 @@ Deno.serve(async (req) => {
           testResults.details = {
             ...testResults.details,
             proxy_url: `${proxyOrder.host}:${proxyOrder.port}`,
-            test_command: `curl -x http://${proxyOrder.username}:${proxyOrder.password}@${proxyOrder.host}:${proxyOrder.port} http://ip-api.com/json`,
+            formatted_username: formattedUsername,
+            zone_type: zoneSuffix,
+            test_command: `curl -x http://${formattedUsername}:${proxyOrder.password}@${proxyOrder.host}:${proxyOrder.port} http://ip-api.com/json`,
             http_test_error: apifyResult.error,
-            note: 'Credenciais verificadas via API. Teste HTTP externo indisponível - use o comando curl para testar manualmente.'
+            note: `Credenciais verificadas via API. Use o username formatado: ${formattedUsername}`
           };
           console.log('[TEST] ⚠ HTTP test failed but credentials valid:', apifyResult.error);
         }
+      } else {
+        // Even without flow, provide the formatted username info
+        testResults.details = {
+          ...testResults.details,
+          formatted_username: formattedUsername,
+          zone_type: zoneSuffix,
+          test_command: `curl -x http://${formattedUsername}:${proxyOrder.password}@${proxyOrder.host}:${proxyOrder.port} http://ip-api.com/json`
+        };
       }
 
       testResults.latency_ms = Date.now() - startTime;
