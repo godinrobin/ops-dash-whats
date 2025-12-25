@@ -676,18 +676,29 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                             </div>
                           </div>
 
-                          {/* Username */}
+                          {/* Username - Show formatted with zone */}
                           <div className="space-y-1">
-                            <label className="text-xs text-muted-foreground">Usuário</label>
+                            <label className="text-xs text-muted-foreground">
+                              Usuário <span className="text-accent">(use este formato)</span>
+                            </label>
                             <div className="flex items-center gap-2">
                               <code className="flex-1 bg-muted px-3 py-2 rounded text-sm font-mono truncate">
-                                {order.username || '-'}
+                                {order.username ? `${order.username}-zone-${
+                                  order.plan_type === 'isp' ? 'isp' : 
+                                  order.plan_type === 'datacenter' ? 'dc' : 'resi'
+                                }` : '-'}
                               </code>
                               {order.username && (
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() => copyToClipboard(order.username!, `user-${order.id}`)}
+                                  onClick={() => copyToClipboard(
+                                    `${order.username}-zone-${
+                                      order.plan_type === 'isp' ? 'isp' : 
+                                      order.plan_type === 'datacenter' ? 'dc' : 'resi'
+                                    }`, 
+                                    `user-${order.id}`
+                                  )}
                                 >
                                   {copiedField === `user-${order.id}` ? (
                                     <Check className="h-4 w-4 text-green-500" />
@@ -900,18 +911,26 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                           </div>
                         )}
 
-                        {/* Full Proxy String */}
+                        {/* Full Proxy String - With formatted username */}
                         <div className="mt-4 space-y-1">
-                          <label className="text-xs text-muted-foreground">String Completa (host:port:user:pass)</label>
+                          <label className="text-xs text-muted-foreground">
+                            String Completa (host:port:user:pass)
+                          </label>
                           <div className="flex items-center gap-2">
                             <code className="flex-1 bg-muted px-3 py-2 rounded text-sm font-mono truncate">
-                              {order.host}:{order.port}:{order.username}:{showPasswords[order.id] ? order.password : '••••'}
+                              {order.host}:{order.port}:{order.username}-zone-{
+                                order.plan_type === 'isp' ? 'isp' : 
+                                order.plan_type === 'datacenter' ? 'dc' : 'resi'
+                              }:{showPasswords[order.id] ? order.password : '••••'}
                             </code>
                             <Button
                               size="sm"
                               variant="ghost"
                               onClick={() => copyToClipboard(
-                                `${order.host}:${order.port}:${order.username}:${order.password}`,
+                                `${order.host}:${order.port}:${order.username}-zone-${
+                                  order.plan_type === 'isp' ? 'isp' : 
+                                  order.plan_type === 'datacenter' ? 'dc' : 'resi'
+                                }:${order.password}`,
                                 `full-${order.id}`
                               )}
                             >
