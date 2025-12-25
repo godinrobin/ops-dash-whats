@@ -28,6 +28,7 @@ interface ProxyOrder {
   gateway_used?: string | null;
   test_result?: string | null;
   test_ip?: string | null;
+  country?: string | null;
 }
 
 interface ProxyTestResult {
@@ -81,6 +82,17 @@ const PLAN_CONFIG: Record<PlanType, { label: string; icon: React.ReactNode; desc
   }
 };
 
+const COUNTRY_OPTIONS = [
+  { code: 'br', label: 'Brasil', flag: '🇧🇷' },
+  { code: 'us', label: 'EUA', flag: '🇺🇸' },
+  { code: 'jp', label: 'Japão', flag: '🇯🇵' },
+  { code: 'kr', label: 'Coreia do Sul', flag: '🇰🇷' },
+  { code: 'ru', label: 'Rússia', flag: '🇷🇺' },
+  { code: 'in', label: 'Índia', flag: '🇮🇳' },
+  { code: 'de', label: 'Alemanha', flag: '🇩🇪' },
+  { code: 'gb', label: 'Reino Unido', flag: '🇬🇧' },
+];
+
 export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabProps) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -92,6 +104,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
   const [price, setPrice] = useState<number | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [planType, setPlanType] = useState<PlanType>('residential');
+  const [country, setCountry] = useState('br');
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
@@ -154,7 +167,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
 
       for (let i = 0; i < quantity; i++) {
         const { data, error } = await supabase.functions.invoke('pyproxy-purchase', {
-          body: { action: 'purchase', planType }
+          body: { action: 'purchase', planType, country }
         });
 
         if (error) {
@@ -393,6 +406,18 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
     );
   };
 
+  const getCountryInfo = (countryCode: string | null | undefined) => {
+    const opt = COUNTRY_OPTIONS.find(c => c.code === countryCode);
+    return opt || { code: 'br', label: 'Brasil', flag: '🇧🇷' };
+  };
+
+  const formatUsername = (order: ProxyOrder) => {
+    if (!order.username) return '-';
+    const zoneType = order.plan_type === 'isp' ? 'isp' : order.plan_type === 'datacenter' ? 'dc' : 'resi';
+    const region = order.country || 'br';
+    return `${order.username}-zone-${zoneType}-region-${region}`;
+  };
+
   const activeOrders = orders.filter(o => o.status === 'active' && o.expires_at && new Date(o.expires_at) > new Date());
 
   if (loading) {
@@ -462,6 +487,26 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                             {config.icon}
                             <span>{config.label}</span>
                             <span className="text-muted-foreground text-xs">- {config.description}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Country Selector */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">País do IP</label>
+                  <Select value={country} onValueChange={setCountry}>
+                    <SelectTrigger className="w-full md:w-64">
+                      <SelectValue placeholder="Selecione o país" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COUNTRY_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.code} value={opt.code}>
+                          <div className="flex items-center gap-2">
+                            <span>{opt.flag}</span>
+                            <span>{opt.label}</span>
                           </div>
                         </SelectItem>
                       ))}
@@ -617,6 +662,9 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                           </div>
 
                           <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs">
+                              {getCountryInfo(order.country).flag} {getCountryInfo(order.country).label}
+                            </Badge>
                             {getPlanTypeBadge(order.plan_type)}
                             {getStatusBadge(order.status, order.expires_at)}
                             {order.expires_at && (
@@ -676,29 +724,20 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                             </div>
                           </div>
 
-                          {/* Username - Show formatted with zone */}
+                          {/* Username - Show formatted with zone and region */}
                           <div className="space-y-1">
                             <label className="text-xs text-muted-foreground">
                               Usuário <span className="text-accent">(use este formato)</span>
                             </label>
                             <div className="flex items-center gap-2">
                               <code className="flex-1 bg-muted px-3 py-2 rounded text-sm font-mono truncate">
-                                {order.username ? `${order.username}-zone-${
-                                  order.plan_type === 'isp' ? 'isp' : 
-                                  order.plan_type === 'datacenter' ? 'dc' : 'resi'
-                                }` : '-'}
+                                {formatUsername(order)}
                               </code>
                               {order.username && (
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() => copyToClipboard(
-                                    `${order.username}-zone-${
-                                      order.plan_type === 'isp' ? 'isp' : 
-                                      order.plan_type === 'datacenter' ? 'dc' : 'resi'
-                                    }`, 
-                                    `user-${order.id}`
-                                  )}
+                                  onClick={() => copyToClipboard(formatUsername(order), `user-${order.id}`)}
                                 >
                                   {copiedField === `user-${order.id}` ? (
                                     <Check className="h-4 w-4 text-green-500" />
@@ -918,19 +957,13 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                           </label>
                           <div className="flex items-center gap-2">
                             <code className="flex-1 bg-muted px-3 py-2 rounded text-sm font-mono truncate">
-                              {order.host}:{order.port}:{order.username}-zone-{
-                                order.plan_type === 'isp' ? 'isp' : 
-                                order.plan_type === 'datacenter' ? 'dc' : 'resi'
-                              }:{showPasswords[order.id] ? order.password : '••••'}
+                              {order.host}:{order.port}:{formatUsername(order)}:{showPasswords[order.id] ? order.password : '••••'}
                             </code>
                             <Button
                               size="sm"
                               variant="ghost"
                               onClick={() => copyToClipboard(
-                                `${order.host}:${order.port}:${order.username}-zone-${
-                                  order.plan_type === 'isp' ? 'isp' : 
-                                  order.plan_type === 'datacenter' ? 'dc' : 'resi'
-                                }:${order.password}`,
+                                `${order.host}:${order.port}:${formatUsername(order)}:${order.password}`,
                                 `full-${order.id}`
                               )}
                             >

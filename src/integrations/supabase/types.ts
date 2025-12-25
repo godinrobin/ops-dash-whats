@@ -1456,6 +1456,7 @@ export type Database = {
       }
       proxy_orders: {
         Row: {
+          country: string | null
           created_at: string
           expires_at: string | null
           gateway_used: string | null
@@ -1474,6 +1475,7 @@ export type Database = {
           username: string | null
         }
         Insert: {
+          country?: string | null
           created_at?: string
           expires_at?: string | null
           gateway_used?: string | null
@@ -1492,6 +1494,7 @@ export type Database = {
           username?: string | null
         }
         Update: {
+          country?: string | null
           created_at?: string
           expires_at?: string | null
           gateway_used?: string | null
