@@ -1380,6 +1380,39 @@ export type Database = {
         }
         Relationships: []
       }
+      proxy_gateway_config: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          gateway_host: string
+          gateway_pattern: string
+          gateway_port: string
+          id: string
+          plan_type: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          gateway_host: string
+          gateway_pattern: string
+          gateway_port?: string
+          id?: string
+          plan_type: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          gateway_host?: string
+          gateway_pattern?: string
+          gateway_port?: string
+          id?: string
+          plan_type?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       proxy_logs: {
         Row: {
           action: string
@@ -1425,13 +1458,17 @@ export type Database = {
         Row: {
           created_at: string
           expires_at: string | null
+          gateway_used: string | null
           host: string | null
           id: string
           label: string | null
           password: string | null
+          plan_type: string | null
           port: string | null
           pyproxy_subuser_id: string | null
           status: string
+          test_ip: string | null
+          test_result: string | null
           updated_at: string
           user_id: string
           username: string | null
@@ -1439,13 +1476,17 @@ export type Database = {
         Insert: {
           created_at?: string
           expires_at?: string | null
+          gateway_used?: string | null
           host?: string | null
           id?: string
           label?: string | null
           password?: string | null
+          plan_type?: string | null
           port?: string | null
           pyproxy_subuser_id?: string | null
           status?: string
+          test_ip?: string | null
+          test_result?: string | null
           updated_at?: string
           user_id: string
           username?: string | null
@@ -1453,13 +1494,17 @@ export type Database = {
         Update: {
           created_at?: string
           expires_at?: string | null
+          gateway_used?: string | null
           host?: string | null
           id?: string
           label?: string | null
           password?: string | null
+          plan_type?: string | null
           port?: string | null
           pyproxy_subuser_id?: string | null
           status?: string
+          test_ip?: string | null
+          test_result?: string | null
           updated_at?: string
           user_id?: string
           username?: string | null

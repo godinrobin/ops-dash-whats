@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Globe, Copy, Check, Loader2, Shield, Zap, Clock, 
-  Eye, EyeOff, RefreshCw, RotateCcw, Minus, Plus, ChevronDown, ChevronRight, Pencil
+  Eye, EyeOff, RefreshCw, RotateCcw, Minus, Plus, ChevronDown, ChevronRight, Pencil,
+  Server, Wifi, Building2
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,6 +24,9 @@ interface ProxyOrder {
   expires_at: string | null;
   created_at: string;
   label?: string | null;
+  plan_type?: string | null;
+  gateway_used?: string | null;
+  test_result?: string | null;
 }
 
 interface ProxiesTabProps {
@@ -29,6 +34,29 @@ interface ProxiesTabProps {
   onRecharge: () => void;
   onBalanceChange: (newBalance: number) => void;
 }
+
+type PlanType = 'residential' | 'isp' | 'datacenter';
+
+const PLAN_CONFIG: Record<PlanType, { label: string; icon: React.ReactNode; description: string; color: string }> = {
+  residential: {
+    label: 'Residential',
+    icon: <Wifi className="h-4 w-4" />,
+    description: 'IPs residenciais rotativos',
+    color: 'bg-green-500/20 text-green-400 border-green-500/30'
+  },
+  isp: {
+    label: 'ISP',
+    icon: <Server className="h-4 w-4" />,
+    description: 'IPs de provedores de internet',
+    color: 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+  },
+  datacenter: {
+    label: 'Datacenter',
+    icon: <Building2 className="h-4 w-4" />,
+    description: 'IPs de datacenter',
+    color: 'bg-purple-500/20 text-purple-400 border-purple-500/30'
+  }
+};
 
 export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabProps) {
   const { user } = useAuth();
@@ -38,6 +66,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
   const [orders, setOrders] = useState<ProxyOrder[]>([]);
   const [price, setPrice] = useState<number | null>(null);
   const [quantity, setQuantity] = useState(1);
+  const [planType, setPlanType] = useState<PlanType>('residential');
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
@@ -100,7 +129,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
 
       for (let i = 0; i < quantity; i++) {
         const { data, error } = await supabase.functions.invoke('pyproxy-purchase', {
-          body: { action: 'purchase' }
+          body: { action: 'purchase', planType }
         });
 
         if (error) {
@@ -120,7 +149,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
         toast({
           title: successCount === quantity ? "Proxies adquiridas!" : `${successCount}/${quantity} proxies adquiridas`,
           description: successCount === quantity 
-            ? `${quantity} proxy(s) pronta(s) para uso.`
+            ? `${quantity} proxy(s) ${PLAN_CONFIG[planType].label} pronta(s) para uso.`
             : `Algumas compras falharam: ${lastError}`,
           variant: successCount === quantity ? "success" : "default"
         });
@@ -272,6 +301,17 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
     return <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/30">{status}</Badge>;
   };
 
+  const getPlanTypeBadge = (planType: string | null | undefined) => {
+    const type = (planType || 'residential') as PlanType;
+    const config = PLAN_CONFIG[type] || PLAN_CONFIG.residential;
+    return (
+      <Badge className={config.color}>
+        {config.icon}
+        <span className="ml-1">{config.label}</span>
+      </Badge>
+    );
+  };
+
   const activeOrders = orders.filter(o => o.status === 'active' && o.expires_at && new Date(o.expires_at) > new Date());
 
   if (loading) {
@@ -327,6 +367,27 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
               </ul>
 
               <div className="flex flex-col gap-4 pt-4 border-t border-border">
+                {/* Plan Type Selector */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Tipo de Proxy</label>
+                  <Select value={planType} onValueChange={(v) => setPlanType(v as PlanType)}>
+                    <SelectTrigger className="w-full md:w-64">
+                      <SelectValue placeholder="Selecione o tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(PLAN_CONFIG).map(([key, config]) => (
+                        <SelectItem key={key} value={key}>
+                          <div className="flex items-center gap-2">
+                            {config.icon}
+                            <span>{config.label}</span>
+                            <span className="text-muted-foreground text-xs">- {config.description}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div className="flex items-center justify-between">
                   <div>
                     {price !== null && (
@@ -475,6 +536,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                           </div>
 
                           <div className="flex items-center gap-2">
+                            {getPlanTypeBadge(order.plan_type)}
                             {getStatusBadge(order.status, order.expires_at)}
                             {order.expires_at && (
                               <span className="text-xs text-muted-foreground hidden sm:inline">
@@ -485,24 +547,19 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                         </div>
                       </CollapsibleTrigger>
 
-                      <CollapsibleContent>
-                        <div className="pt-4 mt-4 border-t border-border">
-                          <p className="text-xs text-muted-foreground mb-3">
-                            Criado em {new Date(order.created_at).toLocaleDateString('pt-BR')}
-                            {order.expires_at && ` • Expira em ${new Date(order.expires_at).toLocaleDateString('pt-BR')}`}
-                          </p>
-
-                          {order.status === 'active' && order.host && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              {/* Host */}
-                              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Host</p>
-                                  <p className="font-mono text-sm">{order.host}</p>
-                                </div>
-                                <Button 
-                                  variant="ghost" 
+                      <CollapsibleContent className="pt-4 mt-4 border-t border-border">
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          {/* Host */}
+                          <div className="space-y-1">
+                            <label className="text-xs text-muted-foreground">Host</label>
+                            <div className="flex items-center gap-2">
+                              <code className="flex-1 bg-muted px-3 py-2 rounded text-sm font-mono truncate">
+                                {order.host || '-'}
+                              </code>
+                              {order.host && (
+                                <Button
                                   size="sm"
+                                  variant="ghost"
                                   onClick={() => copyToClipboard(order.host!, `host-${order.id}`)}
                                 >
                                   {copiedField === `host-${order.id}` ? (
@@ -511,17 +568,21 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                                     <Copy className="h-4 w-4" />
                                   )}
                                 </Button>
-                              </div>
+                              )}
+                            </div>
+                          </div>
 
-                              {/* Port */}
-                              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Porta</p>
-                                  <p className="font-mono text-sm">{order.port}</p>
-                                </div>
-                                <Button 
-                                  variant="ghost" 
+                          {/* Port */}
+                          <div className="space-y-1">
+                            <label className="text-xs text-muted-foreground">Porta</label>
+                            <div className="flex items-center gap-2">
+                              <code className="flex-1 bg-muted px-3 py-2 rounded text-sm font-mono">
+                                {order.port || '-'}
+                              </code>
+                              {order.port && (
+                                <Button
                                   size="sm"
+                                  variant="ghost"
                                   onClick={() => copyToClipboard(order.port!, `port-${order.id}`)}
                                 >
                                   {copiedField === `port-${order.id}` ? (
@@ -530,17 +591,21 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                                     <Copy className="h-4 w-4" />
                                   )}
                                 </Button>
-                              </div>
+                              )}
+                            </div>
+                          </div>
 
-                              {/* Username */}
-                              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Usuário</p>
-                                  <p className="font-mono text-sm">{order.username}</p>
-                                </div>
-                                <Button 
-                                  variant="ghost" 
+                          {/* Username */}
+                          <div className="space-y-1">
+                            <label className="text-xs text-muted-foreground">Usuário</label>
+                            <div className="flex items-center gap-2">
+                              <code className="flex-1 bg-muted px-3 py-2 rounded text-sm font-mono truncate">
+                                {order.username || '-'}
+                              </code>
+                              {order.username && (
+                                <Button
                                   size="sm"
+                                  variant="ghost"
                                   onClick={() => copyToClipboard(order.username!, `user-${order.id}`)}
                                 >
                                   {copiedField === `user-${order.id}` ? (
@@ -549,103 +614,105 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                                     <Copy className="h-4 w-4" />
                                   )}
                                 </Button>
-                              </div>
-
-                              {/* Password */}
-                              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Senha</p>
-                                  <p className="font-mono text-sm">
-                                    {showPasswords[order.id] ? order.password : '••••••••'}
-                                  </p>
-                                </div>
-                                <div className="flex gap-1">
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm"
-                                    onClick={() => togglePassword(order.id)}
-                                  >
-                                    {showPasswords[order.id] ? (
-                                      <EyeOff className="h-4 w-4" />
-                                    ) : (
-                                      <Eye className="h-4 w-4" />
-                                    )}
-                                  </Button>
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm"
-                                    onClick={() => copyToClipboard(order.password!, `pass-${order.id}`)}
-                                  >
-                                    {copiedField === `pass-${order.id}` ? (
-                                      <Check className="h-4 w-4 text-green-500" />
-                                    ) : (
-                                      <Copy className="h-4 w-4" />
-                                    )}
-                                  </Button>
-                                </div>
-                              </div>
+                              )}
                             </div>
-                          )}
+                          </div>
 
-                          {order.status === 'pending' && (
-                            <div className="p-4 bg-yellow-500/10 rounded-lg flex items-center gap-3">
-                              <Loader2 className="h-5 w-5 animate-spin text-yellow-500" />
-                              <p className="text-sm text-yellow-500">
-                                Sua proxy está sendo provisionada. Isso pode levar até 30 segundos.
-                              </p>
+                          {/* Password */}
+                          <div className="space-y-1">
+                            <label className="text-xs text-muted-foreground">Senha</label>
+                            <div className="flex items-center gap-2">
+                              <code className="flex-1 bg-muted px-3 py-2 rounded text-sm font-mono">
+                                {showPasswords[order.id] ? order.password : '••••••••'}
+                              </code>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => togglePassword(order.id)}
+                              >
+                                {showPasswords[order.id] ? (
+                                  <EyeOff className="h-4 w-4" />
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                              </Button>
+                              {order.password && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => copyToClipboard(order.password!, `pass-${order.id}`)}
+                                >
+                                  {copiedField === `pass-${order.id}` ? (
+                                    <Check className="h-4 w-4 text-green-500" />
+                                  ) : (
+                                    <Copy className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              )}
                             </div>
-                          )}
+                          </div>
+                        </div>
 
-                          {/* Renewal button for expired or expiring proxies */}
-                          {order.status === 'active' && order.expires_at && (
-                            (() => {
-                              const expiresDate = new Date(order.expires_at);
-                              const now = new Date();
-                              const daysUntilExpiry = Math.ceil((expiresDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                              const isExpired = daysUntilExpiry <= 0;
-                              const isExpiringSoon = daysUntilExpiry <= 7 && daysUntilExpiry > 0;
+                        {/* Gateway Info */}
+                        {order.gateway_used && (
+                          <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Server className="h-3 w-3" />
+                              <span>Gateway: {order.gateway_used}</span>
+                              {order.test_result && (
+                                <>
+                                  <span className="mx-2">•</span>
+                                  <span>Teste: {order.test_result}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )}
 
-                              if (isExpired || isExpiringSoon) {
-                                return (
-                                  <div className={`mt-4 p-4 rounded-lg flex items-center justify-between gap-3 ${
-                                    isExpired ? 'bg-red-500/10' : 'bg-yellow-500/10'
-                                  }`}>
-                                    <div>
-                                      <p className={`text-sm font-medium ${isExpired ? 'text-red-400' : 'text-yellow-400'}`}>
-                                        {isExpired 
-                                          ? 'Esta proxy expirou' 
-                                          : `Expira em ${daysUntilExpiry} dia${daysUntilExpiry > 1 ? 's' : ''}`}
-                                      </p>
-                                      {price && (
-                                        <p className="text-xs text-muted-foreground">
-                                          Renovar por R$ {price.toFixed(2).replace('.', ',')}
-                                        </p>
-                                      )}
-                                    </div>
-                                    <Button
-                                      onClick={() => handleRenew(order.id)}
-                                      disabled={renewing === order.id || !price}
-                                      size="sm"
-                                      className="bg-accent hover:bg-accent/90"
-                                    >
-                                      {renewing === order.id ? (
-                                        <>
-                                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                          Renovando...
-                                        </>
-                                      ) : (
-                                        <>
-                                          <RotateCcw className="h-4 w-4 mr-2" />
-                                          Renovar
-                                        </>
-                                      )}
-                                    </Button>
-                                  </div>
-                                );
-                              }
-                              return null;
-                            })()
-                          )}
+                        {/* Full Proxy String */}
+                        <div className="mt-4 space-y-1">
+                          <label className="text-xs text-muted-foreground">String Completa (host:port:user:pass)</label>
+                          <div className="flex items-center gap-2">
+                            <code className="flex-1 bg-muted px-3 py-2 rounded text-sm font-mono truncate">
+                              {order.host}:{order.port}:{order.username}:{showPasswords[order.id] ? order.password : '••••'}
+                            </code>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => copyToClipboard(
+                                `${order.host}:${order.port}:${order.username}:${order.password}`,
+                                `full-${order.id}`
+                              )}
+                            >
+                              {copiedField === `full-${order.id}` ? (
+                                <Check className="h-4 w-4 text-green-500" />
+                              ) : (
+                                <Copy className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Renew Button */}
+                        <div className="mt-4 flex justify-end">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleRenew(order.id)}
+                            disabled={renewing === order.id || !price}
+                          >
+                            {renewing === order.id ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Renovando...
+                              </>
+                            ) : (
+                              <>
+                                <RotateCcw className="h-4 w-4 mr-2" />
+                                Renovar por R$ {price?.toFixed(2).replace('.', ',')}
+                              </>
+                            )}
+                          </Button>
                         </div>
                       </CollapsibleContent>
                     </CardContent>

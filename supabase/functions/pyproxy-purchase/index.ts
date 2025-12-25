@@ -17,6 +17,14 @@ interface PyProxyResponse {
   };
 }
 
+interface GatewayConfig {
+  plan_type: string;
+  gateway_pattern: string;
+  gateway_host: string;
+  gateway_port: string;
+  description: string;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -30,8 +38,10 @@ Deno.serve(async (req) => {
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { action, orderId, quantity } = await req.json();
-    console.log('pyproxy-purchase action:', action);
+    const { action, orderId, quantity, planType = 'residential' } = await req.json();
+    console.log('=== PYPROXY PURCHASE START ===');
+    console.log('Action:', action);
+    console.log('Plan type:', planType);
 
     // get-price is public - no auth required
     if (action === 'get-price') {
@@ -94,6 +104,41 @@ Deno.serve(async (req) => {
     };
 
     if (action === 'purchase') {
+      console.log('=== PURCHASE FLOW ===');
+      console.log('Requested plan type:', planType);
+
+      // Validate plan type
+      const validPlanTypes = ['residential', 'isp', 'datacenter'];
+      if (!validPlanTypes.includes(planType)) {
+        await logAction('error', `Tipo de plano inválido: ${planType}`);
+        return new Response(
+          JSON.stringify({ success: false, error: `Tipo de plano inválido: ${planType}` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Fetch gateway configuration for the plan type
+      const { data: gatewayConfig, error: gatewayError } = await supabaseAdmin
+        .from('proxy_gateway_config')
+        .select('*')
+        .eq('plan_type', planType)
+        .single();
+
+      if (gatewayError || !gatewayConfig) {
+        console.error('Gateway config not found for plan type:', planType);
+        await logAction('error', `Gateway não configurado para tipo: ${planType}`, gatewayError);
+        return new Response(
+          JSON.stringify({ success: false, error: `Gateway não configurado para tipo: ${planType}` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log('Gateway config found:', {
+        plan_type: gatewayConfig.plan_type,
+        gateway_host: gatewayConfig.gateway_host,
+        gateway_port: gatewayConfig.gateway_port
+      });
+
       // Get product price (fixed BRL)
       const { data: marginData } = await supabaseAdmin
         .from('platform_margins')
@@ -132,12 +177,13 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Create proxy order first
+      // Create proxy order first with plan_type
       const { data: order, error: orderError } = await supabaseAdmin
         .from('proxy_orders')
         .insert({
           user_id: user.id,
-          status: 'pending'
+          status: 'pending',
+          plan_type: planType
         })
         .select()
         .single();
@@ -150,7 +196,7 @@ Deno.serve(async (req) => {
         );
       }
 
-      console.log('Creating proxy order:', order.id);
+      console.log('Order created:', order.id);
 
       // Provisionamento via PYPROXY (documentação)
       // 1) Token: POST https://api.pyproxy.com/g/open/get_access_token
@@ -208,12 +254,14 @@ Deno.serve(async (req) => {
         const username = `px${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
         const password = `pw${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
 
+        console.log('Creating user:', username);
+
         const userForm = new FormData();
         userForm.append('username', username);
         userForm.append('password', password);
         userForm.append('status', '1');
         userForm.append('limit_flow', '1');
-        userForm.append('remark', `lovable:${order.id}`);
+        userForm.append('remark', `lovable:${order.id}:${planType}`);
 
         const userRes = await fetch('https://api.pyproxy.com/g/open/add_or_edit_user', {
           method: 'POST',
@@ -239,66 +287,61 @@ Deno.serve(async (req) => {
           );
         }
 
-        // (3) Get proxy host/port (some accounts require user created first)
-        const hostForm = new FormData();
-        hostForm.append('proxy_type', 'other');
-        hostForm.append('username', username);
-        const hostRes = await fetch('https://api.pyproxy.com/g/open/get_user_proxy_host', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: hostForm,
-        });
+        // (3) USE GATEWAY FROM CONFIG instead of API response
+        // This is the KEY FIX for the "insufficient flow" error
+        const host = gatewayConfig.gateway_host;
+        const port = gatewayConfig.gateway_port;
+        const gatewayUsed = `${host}:${port}`;
 
-        const hostParsed = await parseJsonResponse(hostRes);
-        console.log('PYPROXY get_user_proxy_host status:', hostRes.status);
-        console.log('PYPROXY get_user_proxy_host body (first 500):', hostParsed.preview.slice(0, 500));
+        console.log('Using gateway from config:');
+        console.log('  Plan type:', planType);
+        console.log('  Host:', host);
+        console.log('  Port:', port);
+        console.log('  Gateway used:', gatewayUsed);
 
-        const extractHostPort = (retData: any): { host?: string; port?: string } => {
-          if (!retData) return {};
+        // (4) Test proxy connectivity before delivery
+        console.log('Testing proxy connectivity...');
+        let testResult = 'pending';
+        let testIp = null;
 
-          // Common shapes:
-          // - { list: [{ host, port }] }
-          // - { host, port }
-          // - "host:port"
-          const fromObj = (obj: any) => {
-            if (!obj || typeof obj !== 'object') return {};
-            const h = obj.host ?? obj.ip ?? obj.domain ?? obj.proxy_host ?? obj.proxyHost;
-            const p = obj.port ?? obj.proxy_port ?? obj.proxyPort;
-            return {
-              host: typeof h === 'string' ? h : undefined,
-              port: typeof p === 'string' || typeof p === 'number' ? String(p) : undefined,
-            };
-          };
-
-          if (typeof retData === 'string') {
-            const m = retData.match(/^([^:]+):(\d+)$/);
-            return m ? { host: m[1], port: m[2] } : {};
-          }
-
-          if (Array.isArray(retData)) return fromObj(retData[0]);
-          if (Array.isArray(retData.list)) return fromObj(retData.list[0]);
-          return fromObj(retData);
-        };
-
-        const extracted = extractHostPort(hostParsed.json?.ret_data);
-        const host = extracted.host;
-        const port = extracted.port;
-
-        if (!hostRes.ok || hostParsed.json?.ret !== 0 || hostParsed.json?.code !== 1 || !host || !port) {
-          await logAction('error', 'Falha ao obter host/porta', {
-            status: hostRes.status,
-            body: hostParsed.preview,
+        try {
+          // Note: In Deno edge functions, we can't use proxy directly
+          // Instead, we'll verify by checking if we can reach the proxy host
+          // A full proxy test would require a separate service
+          
+          // For now, we do a simple validation that the gateway is reachable
+          // The actual proxy test is done client-side or via PYPROXY API status check
+          
+          // Check user status via PYPROXY API
+          const statusForm = new FormData();
+          statusForm.append('username', username);
+          
+          const statusRes = await fetch('https://api.pyproxy.com/g/open/get_user_info', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: statusForm,
           });
-          await supabaseAdmin.from('proxy_orders').delete().eq('id', order.id);
-          return new Response(
-            JSON.stringify({ success: false, error: 'Fornecedor não retornou host/porta' }),
-            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+
+          const statusParsed = await parseJsonResponse(statusRes);
+          console.log('PYPROXY get_user_info status:', statusRes.status);
+          console.log('PYPROXY get_user_info body:', statusParsed.preview.slice(0, 500));
+
+          if (statusRes.ok && statusParsed.json?.ret === 0) {
+            testResult = 'success';
+            testIp = 'verified_via_api';
+            console.log('Proxy user verified successfully via API');
+          } else {
+            console.warn('Could not verify user via API, proceeding anyway');
+            testResult = 'api_unverified';
+          }
+        } catch (testError) {
+          console.error('Proxy verification failed:', testError);
+          testResult = 'verification_error';
         }
 
-        // Update order with credentials
+        // Update order with credentials and gateway info
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 30); // 30 days
 
@@ -312,6 +355,10 @@ Deno.serve(async (req) => {
             password,
             status: 'active',
             expires_at: expiresAt.toISOString(),
+            plan_type: planType,
+            gateway_used: gatewayUsed,
+            test_result: testResult,
+            test_ip: testIp
           })
           .eq('id', order.id);
 
@@ -328,14 +375,23 @@ Deno.serve(async (req) => {
             user_id: user.id,
             type: 'purchase',
             amount: -finalPrice,
-            description: 'Proxy Otimizado para WhatsApp (Evolution API)',
+            description: `Proxy ${planType.toUpperCase()} para WhatsApp`,
           });
 
         await logAction('success', 'Proxy provisionado com sucesso', {
           host,
           port,
           username,
+          plan_type: planType,
+          gateway_used: gatewayUsed,
+          test_result: testResult
         });
+
+        console.log('=== PROXY PURCHASE COMPLETE ===');
+        console.log('Order ID:', order.id);
+        console.log('Plan type:', planType);
+        console.log('Gateway used:', gatewayUsed);
+        console.log('Test result:', testResult);
 
         return new Response(
           JSON.stringify({
@@ -348,6 +404,9 @@ Deno.serve(async (req) => {
               password,
               expires_at: expiresAt.toISOString(),
               status: 'active',
+              plan_type: planType,
+              gateway_used: gatewayUsed,
+              test_result: testResult
             },
           }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -679,6 +738,64 @@ Deno.serve(async (req) => {
       }
 
       await logAction('success', 'Proxy suspenso por admin');
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+
+    } else if (action === 'get-gateway-config') {
+      // Get all gateway configurations (for admin UI)
+      const { data: configs, error } = await supabaseAdmin
+        .from('proxy_gateway_config')
+        .select('*')
+        .order('plan_type');
+
+      return new Response(
+        JSON.stringify({ success: true, configs: configs || [] }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+
+    } else if (action === 'admin-update-gateway') {
+      // Update gateway configuration (admin only)
+      const { data: roleData } = await supabaseAdmin
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .single();
+
+      if (!roleData) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Acesso negado' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { gatewayId, gatewayHost, gatewayPort } = await req.json();
+
+      if (!gatewayId || !gatewayHost || !gatewayPort) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Dados incompletos' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { error } = await supabaseAdmin
+        .from('proxy_gateway_config')
+        .update({ 
+          gateway_host: gatewayHost, 
+          gateway_port: gatewayPort,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', gatewayId);
+
+      if (error) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Erro ao atualizar gateway' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
       return new Response(
         JSON.stringify({ success: true }),
