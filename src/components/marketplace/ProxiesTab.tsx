@@ -103,7 +103,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
   const [orders, setOrders] = useState<ProxyOrder[]>([]);
   const [price, setPrice] = useState<number | null>(null);
   const [quantity, setQuantity] = useState(1);
-  const [planType, setPlanType] = useState<PlanType>('residential');
+  const [planType] = useState<PlanType>('isp'); // Always ISP for WhatsApp optimization
   const [country, setCountry] = useState('br');
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
@@ -395,15 +395,21 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
     return <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/30">{status}</Badge>;
   };
 
-  const getPlanTypeBadge = (planType: string | null | undefined) => {
-    const type = (planType || 'residential') as PlanType;
-    const config = PLAN_CONFIG[type] || PLAN_CONFIG.residential;
+  const getPlanTypeBadge = () => {
     return (
-      <Badge className={config.color}>
-        {config.icon}
-        <span className="ml-1">{config.label}</span>
+      <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+        <Zap className="h-3 w-3" />
+        <span className="ml-1">Otimizada para WhatsApp</span>
       </Badge>
     );
+  };
+
+  const canRenew = (expiresAt: string | null) => {
+    if (!expiresAt) return false;
+    const expiry = new Date(expiresAt);
+    const now = new Date();
+    const daysUntilExpiry = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    return daysUntilExpiry <= 3;
   };
 
   const getCountryInfo = (countryCode: string | null | undefined) => {
@@ -473,25 +479,16 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
               </ul>
 
               <div className="flex flex-col gap-4 pt-4 border-t border-border">
-                {/* Plan Type Selector */}
+                {/* Proxy Type - Fixed */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-foreground">Tipo de Proxy</label>
-                  <Select value={planType} onValueChange={(v) => setPlanType(v as PlanType)}>
-                    <SelectTrigger className="w-full md:w-64">
-                      <SelectValue placeholder="Selecione o tipo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(PLAN_CONFIG).map(([key, config]) => (
-                        <SelectItem key={key} value={key}>
-                          <div className="flex items-center gap-2">
-                            {config.icon}
-                            <span>{config.label}</span>
-                            <span className="text-muted-foreground text-xs">- {config.description}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-md border border-border">
+                    <Zap className="h-4 w-4 text-green-400" />
+                    <span className="text-foreground">Otimizada para WhatsApp</span>
+                    <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs ml-auto">
+                      Recomendado
+                    </Badge>
+                  </div>
                 </div>
 
                 {/* Country Selector */}
@@ -665,7 +662,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                             <Badge variant="outline" className="text-xs">
                               {getCountryInfo(order.country).flag} {getCountryInfo(order.country).label}
                             </Badge>
-                            {getPlanTypeBadge(order.plan_type)}
+                            {getPlanTypeBadge()}
                             {getStatusBadge(order.status, order.expires_at)}
                             {order.expires_at && (
                               <span className="text-xs text-muted-foreground hidden sm:inline">
@@ -832,21 +829,12 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                               )}
                               
                               <div className="flex items-center gap-2">
-                                {testResults[order.id].gateway_valid ? (
-                                  <CheckCircle className="h-4 w-4 text-green-500" />
-                                ) : (
-                                  <XCircle className="h-4 w-4 text-red-500" />
-                                )}
-                                <span>Gateway Configurado: {testResults[order.id].gateway_valid ? 'Válido' : 'Inválido'}</span>
-                              </div>
-                              
-                              <div className="flex items-center gap-2">
                                 {testResults[order.id].pyproxy_user_valid ? (
                                   <CheckCircle className="h-4 w-4 text-green-500" />
                                 ) : (
                                   <XCircle className="h-4 w-4 text-red-500" />
                                 )}
-                                <span>Usuário PYPROXY: {testResults[order.id].pyproxy_user_valid ? 'Encontrado' : 'Não encontrado'}</span>
+                                <span>Usuário: {testResults[order.id].pyproxy_user_valid ? 'Encontrado' : 'Não encontrado'}</span>
                               </div>
                               
                               <div className="flex items-center gap-2">
@@ -866,11 +854,6 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                                           : testResults[order.id].details?.remaining_flow_gb || '?'}GB disponível` 
                                       : 'Esgotado'
                                 }</span>
-                                {testResults[order.id].pyproxy_user_valid && testResults[order.id].details?.limit_flow_gb !== undefined && (
-                                  <span className="text-muted-foreground text-xs">
-                                    ({Number(testResults[order.id].details?.consumed_flow_gb ?? testResults[order.id].details?.used_flow_gb ?? 0).toFixed(2)}GB usado de {Number(testResults[order.id].details?.limit_flow_gb ?? 0).toFixed(2)}GB)
-                                  </span>
-                                )}
                               </div>
 
                               {/* HTTP Test Result */}
@@ -891,14 +874,6 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                                       testResults[order.id].http_test_result
                                     }
                                   </span>
-                                </div>
-                              )}
-
-                              {/* External IP */}
-                              {testResults[order.id].external_ip && testResults[order.id].external_ip !== 'resolved' && (
-                                <div className="flex items-center gap-2 text-green-400">
-                                  <Globe className="h-4 w-4" />
-                                  <span>IP do Proxy: {testResults[order.id].external_ip}</span>
                                 </div>
                               )}
                               
@@ -1000,7 +975,8 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                             variant="outline"
                             size="sm"
                             onClick={() => handleRenew(order.id)}
-                            disabled={renewing === order.id || !price}
+                            disabled={renewing === order.id || !price || !canRenew(order.expires_at)}
+                            title={!canRenew(order.expires_at) ? 'Disponível quando faltar 3 dias para expirar' : ''}
                           >
                             {renewing === order.id ? (
                               <>
