@@ -1117,8 +1117,12 @@ Deno.serve(async (req) => {
 
         if (testAccessToken) {
           // Get user info from PYPROXY
+          // Note: PYPROXY API requires access_token in form body, not just header
           const userInfoForm = new FormData();
+          userInfoForm.append('access_token', testAccessToken);
           userInfoForm.append('username', proxyOrder.username);
+
+          console.log('[TEST] Checking user with username:', proxyOrder.username);
 
           const userInfoRes = await fetch('https://api.pyproxy.com/g/open/get_user_info', {
             method: 'POST',
@@ -1129,7 +1133,8 @@ Deno.serve(async (req) => {
           const userInfoData = await userInfoRes.json();
           console.log('[TEST] PYPROXY user info response:', JSON.stringify(userInfoData));
 
-          if (userInfoRes.ok && (userInfoData?.ret === 0 || userInfoData?.code === 1)) {
+          // PYPROXY returns ret=0 and code=1 on success
+          if (userInfoRes.ok && userInfoData?.ret === 0 && userInfoData?.code === 1) {
             testResults.pyproxy_user_valid = true;
             const userInfo = userInfoData?.ret_data;
             
