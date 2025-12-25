@@ -360,10 +360,11 @@ Deno.serve(async (req) => {
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { action, orderId, quantity, planType = 'residential' } = await req.json();
+    const { action, orderId, quantity, planType = 'residential', country = 'br' } = await req.json();
     console.log('=== PYPROXY PURCHASE START ===');
     console.log('Action:', action);
     console.log('Plan type:', planType);
+    console.log('Country:', country);
     console.log('Timestamp:', new Date().toISOString());
 
     // get-price is public - no auth required
@@ -552,7 +553,8 @@ Deno.serve(async (req) => {
           user_id: user.id,
           status: 'pending',
           plan_type: planType,
-          gateway_used: `${gatewayConfig.gateway_host}:${gatewayConfig.gateway_port}`
+          gateway_used: `${gatewayConfig.gateway_host}:${gatewayConfig.gateway_port}`,
+          country: country
         })
         .select()
         .single();
@@ -1380,7 +1382,7 @@ Deno.serve(async (req) => {
       }
 
       // Step 5: Real HTTP test via Apify (if user is valid and has flow)
-      // IMPORTANT: For rotating proxies, username format must be: {username}-zone-{type}
+      // IMPORTANT: For rotating proxies, username format must be: {username}-zone-{type}-region-{country}
       // Zone types: residential->resi, isp->isp, datacenter->dc
       const zoneMap: Record<string, string> = {
         'residential': 'resi',
@@ -1388,7 +1390,8 @@ Deno.serve(async (req) => {
         'datacenter': 'dc'
       };
       const zoneSuffix = zoneMap[proxyOrder.plan_type || 'residential'] || 'resi';
-      const formattedUsername = `${proxyOrder.username}-zone-${zoneSuffix}`;
+      const countryCode = proxyOrder.country || 'br';
+      const formattedUsername = `${proxyOrder.username}-zone-${zoneSuffix}-region-${countryCode}`;
       console.log('[TEST] Formatted username for HTTP test:', formattedUsername);
 
       if (testResults.pyproxy_user_valid && testResults.pyproxy_has_flow) {
