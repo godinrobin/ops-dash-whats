@@ -26,60 +26,226 @@ interface GatewayConfig {
   description: string;
 }
 
+// ============= PYPROXY API HELPERS =============
+
+// Get access token from PYPROXY API
+async function getPyProxyAccessToken(apiKey: string, apiSecret: string): Promise<string | null> {
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const bytes = new TextEncoder().encode(`${apiKey}${apiSecret}${timestamp}`);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
+  const sign = Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, '0')).join('');
+
+  const tokenForm = new FormData();
+  tokenForm.append('access_key', apiKey);
+  tokenForm.append('sign', sign);
+  tokenForm.append('timestamp', timestamp);
+
+  try {
+    const res = await fetch('https://api.pyproxy.com/g/open/get_access_token', {
+      method: 'POST',
+      body: tokenForm,
+    });
+    const data = await res.json();
+    if (data?.ret === 0 && data?.code === 1) {
+      return data?.ret_data?.access_token || null;
+    }
+    console.error('[PYPROXY] get_access_token failed:', data);
+    return null;
+  } catch (err) {
+    console.error('[PYPROXY] get_access_token error:', err);
+    return null;
+  }
+}
+
+// Get user list from PYPROXY API (use this instead of get_user_info which has auth issues)
+async function getPyProxyUserList(accessToken: string, username?: string): Promise<{ success: boolean; users?: any[]; user?: any; error?: string }> {
+  const form = new FormData();
+  form.append('access_token', accessToken);
+  form.append('page', '1');
+  form.append('page_size', '100');
+  if (username) {
+    form.append('username', username);
+  }
+
+  try {
+    const res = await fetch('https://api.pyproxy.com/g/open/get_user_list', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: form,
+    });
+    const data = await res.json();
+    console.log('[PYPROXY] get_user_list response:', JSON.stringify(data).slice(0, 500));
+    
+    if (data?.ret === 0 && data?.code === 1) {
+      const users = data?.ret_data?.data || [];
+      const foundUser = username ? users.find((u: any) => u.username === username) : null;
+      return { success: true, users, user: foundUser };
+    }
+    return { success: false, error: data?.msg || 'Failed to get user list' };
+  } catch (err) {
+    console.error('[PYPROXY] get_user_list error:', err);
+    return { success: false, error: String(err) };
+  }
+}
+
+// Get dynamic proxy host from PYPROXY API
+async function getPyProxyHost(accessToken: string): Promise<{ host?: string; port?: string; error?: string }> {
+  const form = new FormData();
+  form.append('access_token', accessToken);
+
+  try {
+    const res = await fetch('https://api.pyproxy.com/g/open/get_user_proxy_host', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: form,
+    });
+    const data = await res.json();
+    console.log('[PYPROXY] get_user_proxy_host response:', JSON.stringify(data));
+    
+    if (data?.ret === 0 && data?.code === 1 && data?.ret_data) {
+      // Response can have different formats - handle both
+      const hostData = data.ret_data;
+      const host = hostData.proxy_host || hostData.host || hostData.address;
+      const port = String(hostData.proxy_port || hostData.port || '16666');
+      if (host) {
+        return { host, port };
+      }
+    }
+    return { error: data?.msg || 'No proxy host returned' };
+  } catch (err) {
+    console.error('[PYPROXY] get_user_proxy_host error:', err);
+    return { error: String(err) };
+  }
+}
+
 // ============= GATEWAY VALIDATION HELPER =============
-// Validates that a gateway hostname is reachable via HTTP
-// Note: Deno.resolveDns in edge functions has issues with AWS internal DNS suffixes
-// So we use HTTP-based validation instead
 async function validateGateway(hostname: string, port: string): Promise<{ valid: boolean; ip?: string; error?: string }> {
   console.log(`[GATEWAY] Validating gateway: ${hostname}:${port}`);
   
-  // Known valid PYPROXY gateways - if hostname matches, consider it valid
-  // This is a whitelist approach since DNS resolution in edge functions is unreliable
+  // Known valid PYPROXY gateways
   const knownGateways = [
-    'pr.pyproxy.com',
-    'isp.pyproxy.com', 
-    'dc.pyproxy.com',
-    'us.pyproxy.io',
-    'eu.pyproxy.io',
-    'asia.pyproxy.io'
+    'pr.pyproxy.com', 'isp.pyproxy.com', 'dc.pyproxy.com',
+    'pr.pyproxy.io', 'isp.pyproxy.io', 'dc.pyproxy.io',
+    'pr-na.pyproxy.io', 'pr-eu.pyproxy.io', 'pr-asia.pyproxy.io'
   ];
   
-  // Check if it's a known gateway
   if (knownGateways.some(gw => hostname.includes(gw.split('.')[0]))) {
     console.log(`[GATEWAY] ✓ ${hostname} is a known PYPROXY gateway`);
     return { valid: true, ip: 'known_gateway' };
   }
   
-  // For unknown gateways, try an HTTP connectivity test
+  // Resolve via Google DNS
   try {
-    // Use a public DNS API to resolve the hostname
     const dnsApiUrl = `https://dns.google/resolve?name=${encodeURIComponent(hostname)}&type=A`;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-    
     const response = await fetch(dnsApiUrl, { 
-      signal: controller.signal,
+      signal: AbortSignal.timeout(5000),
       headers: { 'Accept': 'application/json' }
     });
-    clearTimeout(timeoutId);
     
     if (response.ok) {
       const data = await response.json();
       if (data.Answer && data.Answer.length > 0) {
         const ip = data.Answer.find((a: any) => a.type === 1)?.data;
-        console.log(`[GATEWAY] ✓ Resolved ${hostname} via Google DNS to ${ip || 'found'}`);
+        console.log(`[GATEWAY] ✓ Resolved ${hostname} to ${ip || 'found'}`);
         return { valid: true, ip: ip || 'resolved' };
       }
     }
-    
-    console.log(`[GATEWAY] ⚠ Could not resolve ${hostname} via Google DNS, but proceeding (may work)`);
     return { valid: true, ip: 'unverified' };
-    
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.warn(`[GATEWAY] ⚠ DNS check failed for ${hostname}:`, errorMessage);
-    // Don't block on DNS failures - the gateway might still work
+    console.warn(`[GATEWAY] DNS check failed for ${hostname}:`, error);
     return { valid: true, ip: 'dns_check_skipped' };
+  }
+}
+
+// ============= APIFY PROXY TEST HELPER =============
+async function testProxyViaApify(
+  host: string, 
+  port: string, 
+  username: string, 
+  password: string
+): Promise<{ success: boolean; ip?: string; latency?: number; error?: string }> {
+  const apifyToken = Deno.env.get('APIFY_API_TOKEN');
+  if (!apifyToken) {
+    console.warn('[PROXY TEST] APIFY_API_TOKEN not configured, skipping real HTTP test');
+    return { success: false, error: 'APIFY not configured' };
+  }
+
+  const proxyUrl = `http://${username}:${password}@${host}:${port}`;
+  const startTime = Date.now();
+
+  try {
+    // Use Apify's actor to make a request through the proxy
+    const actorInput = {
+      url: 'http://ip-api.com/json',
+      proxyUrl: proxyUrl,
+      timeout: 30000
+    };
+
+    console.log('[PROXY TEST] Calling Apify proxy tester...');
+    
+    // Run a simple HTTP request actor
+    const response = await fetch('https://api.apify.com/v2/acts/apify~http-request/runs?token=' + apifyToken, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...actorInput,
+        memory: 128,
+        timeout: 60
+      }),
+      signal: AbortSignal.timeout(45000)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[PROXY TEST] Apify error:', errorText);
+      return { success: false, error: 'Apify request failed', latency: Date.now() - startTime };
+    }
+
+    const runData = await response.json();
+    const runId = runData?.data?.id;
+    
+    if (!runId) {
+      return { success: false, error: 'No run ID returned', latency: Date.now() - startTime };
+    }
+
+    // Wait for completion (poll for up to 30 seconds)
+    for (let i = 0; i < 15; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      
+      const statusRes = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${apifyToken}`);
+      const statusData = await statusRes.json();
+      
+      if (statusData?.data?.status === 'SUCCEEDED') {
+        // Get the result
+        const resultRes = await fetch(`https://api.apify.com/v2/actor-runs/${runId}/dataset/items?token=${apifyToken}`);
+        const resultData = await resultRes.json();
+        
+        const item = resultData?.[0];
+        if (item?.body) {
+          try {
+            const ipData = typeof item.body === 'string' ? JSON.parse(item.body) : item.body;
+            return { 
+              success: true, 
+              ip: ipData?.query || ipData?.ip || 'unknown',
+              latency: Date.now() - startTime 
+            };
+          } catch {
+            return { success: true, ip: 'parsed_error', latency: Date.now() - startTime };
+          }
+        }
+        return { success: true, ip: 'no_body', latency: Date.now() - startTime };
+      }
+      
+      if (statusData?.data?.status === 'FAILED' || statusData?.data?.status === 'ABORTED') {
+        return { success: false, error: 'Proxy test failed', latency: Date.now() - startTime };
+      }
+    }
+
+    return { success: false, error: 'Timeout waiting for result', latency: Date.now() - startTime };
+
+  } catch (err) {
+    console.error('[PROXY TEST] Error:', err);
+    return { success: false, error: String(err), latency: Date.now() - startTime };
   }
 }
 
@@ -1021,7 +1187,7 @@ Deno.serve(async (req) => {
       );
 
     } else if (action === 'test-proxy') {
-      // ============= REAL HTTP PROXY TEST =============
+      // ============= IMPROVED PROXY TEST =============
       console.log('=== TEST-PROXY START ===');
       
       if (!orderId) {
@@ -1055,8 +1221,10 @@ Deno.serve(async (req) => {
 
       const testResults: {
         gateway_valid: boolean;
+        gateway_from_api?: string;
         pyproxy_user_valid: boolean;
         pyproxy_has_flow: boolean;
+        pyproxy_auth_ok: boolean;
         http_test_result: string;
         external_ip?: string;
         latency_ms?: number;
@@ -1066,13 +1234,42 @@ Deno.serve(async (req) => {
         gateway_valid: false,
         pyproxy_user_valid: false,
         pyproxy_has_flow: false,
+        pyproxy_auth_ok: false,
         http_test_result: 'pending'
       };
 
       const startTime = Date.now();
 
-      // Step 1: Validate gateway
-      console.log('[TEST] Step 1: Validating gateway:', proxyOrder.host);
+      // Step 1: Get access token
+      console.log('[TEST] Step 1: Getting PYPROXY access token...');
+      const testAccessToken = await getPyProxyAccessToken(pyproxyApiKey!, pyproxyApiSecret!);
+      
+      if (!testAccessToken) {
+        testResults.http_test_result = 'auth_failed';
+        testResults.error = 'Falha ao autenticar na API PYPROXY';
+        await logAction('test_failed', 'Teste de proxy falhou - autenticação API', null, {
+          error_code: 'API_AUTH_FAILED'
+        });
+        return new Response(
+          JSON.stringify({ success: false, test_results: testResults }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      testResults.pyproxy_auth_ok = true;
+      console.log('[TEST] ✓ PYPROXY auth successful');
+
+      // Step 2: Get dynamic gateway from API (optional verification)
+      console.log('[TEST] Step 2: Checking dynamic gateway from API...');
+      const dynamicGateway = await getPyProxyHost(testAccessToken);
+      if (dynamicGateway.host) {
+        testResults.gateway_from_api = `${dynamicGateway.host}:${dynamicGateway.port}`;
+        console.log('[TEST] ✓ Dynamic gateway:', testResults.gateway_from_api);
+      } else {
+        console.log('[TEST] ⚠ Could not get dynamic gateway:', dynamicGateway.error);
+      }
+
+      // Step 3: Validate configured gateway
+      console.log('[TEST] Step 3: Validating configured gateway:', proxyOrder.host);
       const gatewayTest = await validateGateway(proxyOrder.host, proxyOrder.port);
       testResults.gateway_valid = gatewayTest.valid;
       
@@ -1088,131 +1285,83 @@ Deno.serve(async (req) => {
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+      console.log('[TEST] ✓ Gateway valid:', proxyOrder.host);
 
-      // Step 2: Verify user via PYPROXY API
-      console.log('[TEST] Step 2: Verifying PYPROXY user:', proxyOrder.username);
-      try {
-        const testTimestamp = Math.floor(Date.now() / 1000).toString();
-        const testSha256Hex = async (input: string) => {
-          const bytes = new TextEncoder().encode(input);
-          const hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
-          return Array.from(new Uint8Array(hashBuffer))
-            .map((b) => b.toString(16).padStart(2, '0'))
-            .join('');
+      // Step 4: Verify user using get_user_list (NOT get_user_info which has auth issues)
+      console.log('[TEST] Step 4: Verifying PYPROXY user via get_user_list:', proxyOrder.username);
+      const userListResult = await getPyProxyUserList(testAccessToken, proxyOrder.username);
+      
+      if (userListResult.success && userListResult.user) {
+        testResults.pyproxy_user_valid = true;
+        const userInfo = userListResult.user;
+        
+        // Check if user has flow (traffic)
+        // PYPROXY uses limit_flow for total allocated, and may have used_flow
+        const limitFlow = parseFloat(userInfo.limit_flow) || 0;
+        const usedFlow = parseFloat(userInfo.used_flow) || 0;
+        const remainingFlow = limitFlow - usedFlow;
+        
+        testResults.pyproxy_has_flow = remainingFlow > 0;
+        testResults.details = {
+          username: proxyOrder.username,
+          status: userInfo.status,
+          limit_flow_gb: limitFlow,
+          used_flow_gb: usedFlow,
+          remaining_flow_gb: remainingFlow,
+          created_at: userInfo.created_at
         };
 
-        const testSign = await testSha256Hex(`${pyproxyApiKey}${pyproxyApiSecret}${testTimestamp}`);
-        const testTokenForm = new FormData();
-        testTokenForm.append('access_key', pyproxyApiKey);
-        testTokenForm.append('sign', testSign);
-        testTokenForm.append('timestamp', testTimestamp);
+        console.log('[TEST] ✓ User found:', { limitFlow, usedFlow, remainingFlow, status: userInfo.status });
 
-        const testTokenRes = await fetch('https://api.pyproxy.com/g/open/get_access_token', {
-          method: 'POST',
-          body: testTokenForm,
-        });
-
-        const testTokenData = await testTokenRes.json();
-        const testAccessToken = testTokenData?.ret_data?.access_token;
-
-        if (testAccessToken) {
-          // Get user info from PYPROXY
-          // Note: PYPROXY API requires access_token in form body, not just header
-          const userInfoForm = new FormData();
-          userInfoForm.append('access_token', testAccessToken);
-          userInfoForm.append('username', proxyOrder.username);
-
-          console.log('[TEST] Checking user with username:', proxyOrder.username);
-
-          const userInfoRes = await fetch('https://api.pyproxy.com/g/open/get_user_info', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${testAccessToken}` },
-            body: userInfoForm,
-          });
-
-          const userInfoData = await userInfoRes.json();
-          console.log('[TEST] PYPROXY user info response:', JSON.stringify(userInfoData));
-
-          // PYPROXY returns ret=0 and code=1 on success
-          if (userInfoRes.ok && userInfoData?.ret === 0 && userInfoData?.code === 1) {
-            testResults.pyproxy_user_valid = true;
-            const userInfo = userInfoData?.ret_data;
-            
-            // Check if user has flow (traffic)
-            const remainingFlow = userInfo?.limit_flow || userInfo?.remaining_flow || 0;
-            testResults.pyproxy_has_flow = remainingFlow > 0;
-            testResults.details = {
-              username: proxyOrder.username,
-              status: userInfo?.status,
-              remaining_flow_gb: remainingFlow,
-              created_at: userInfo?.created_at
-            };
-
-            if (!testResults.pyproxy_has_flow) {
-              testResults.http_test_result = 'insufficient_flow';
-              testResults.error = 'Usuário PYPROXY sem tráfego disponível';
-            }
-          } else {
-            testResults.error = 'Usuário não encontrado na PYPROXY';
-            testResults.http_test_result = 'user_not_found';
-          }
+        if (!testResults.pyproxy_has_flow) {
+          testResults.http_test_result = 'insufficient_flow';
+          testResults.error = `Sem tráfego disponível (usado: ${usedFlow.toFixed(2)}GB de ${limitFlow.toFixed(2)}GB)`;
         }
-      } catch (apiError) {
-        console.error('[TEST] PYPROXY API error:', apiError);
-        testResults.error = 'Erro ao verificar usuário na PYPROXY';
+      } else {
+        console.log('[TEST] ✗ User not found in user list');
+        testResults.error = 'Usuário não encontrado na conta PYPROXY';
+        testResults.http_test_result = 'user_not_found';
       }
 
-      // Step 3: Perform HTTP test via external service
-      console.log('[TEST] Step 3: Testing HTTP connectivity...');
+      // Step 5: Real HTTP test via Apify (if user is valid and has flow)
       if (testResults.pyproxy_user_valid && testResults.pyproxy_has_flow) {
-        try {
-          // Use a proxy testing service that accepts credentials
-          // Option 1: Test gateway reachability with DNS
-          const dnsApiUrl = `https://dns.google/resolve?name=${encodeURIComponent(proxyOrder.host)}&type=A`;
-          const dnsRes = await fetch(dnsApiUrl, {
-            headers: { 'Accept': 'application/json' },
-            signal: AbortSignal.timeout(5000)
-          });
-          
-          if (dnsRes.ok) {
-            const dnsData = await dnsRes.json();
-            if (dnsData.Answer && dnsData.Answer.length > 0) {
-              const resolvedIp = dnsData.Answer.find((a: { type: number; data: string }) => a.type === 1)?.data;
-              testResults.external_ip = resolvedIp || 'resolved';
-              testResults.http_test_result = 'dns_resolved';
-            }
-          }
+        console.log('[TEST] Step 5: Testing real HTTP connectivity via Apify...');
+        
+        const apifyResult = await testProxyViaApify(
+          proxyOrder.host,
+          proxyOrder.port,
+          proxyOrder.username,
+          proxyOrder.password
+        );
 
-          // Option 2: Try to make a request through a proxy tester service
-          // Using a simple connectivity check
-          const proxyCredentials = `${proxyOrder.username}:${proxyOrder.password}`;
-          const proxyString = `http://${proxyCredentials}@${proxyOrder.host}:${proxyOrder.port}`;
-          
-          // Test using an external proxy verification endpoint
-          // Note: This is a basic test since Deno doesn't support native proxy
-          try {
-            const proxyCheckUrl = `https://api.ipify.org?format=json`;
-            // We can't actually route through proxy in Deno, so we verify credentials format
-            const credentialsValid = proxyOrder.username && proxyOrder.password && 
-                                     proxyOrder.host && proxyOrder.port;
-            
-            if (credentialsValid && testResults.pyproxy_has_flow) {
-              testResults.http_test_result = 'credentials_valid';
-              // Provide proxy string for client-side testing
-              testResults.details = {
-                ...testResults.details,
-                proxy_string: proxyString,
-                proxy_url: `${proxyOrder.host}:${proxyOrder.port}`,
-                test_command: `curl -x http://${proxyOrder.username}:${proxyOrder.password}@${proxyOrder.host}:${proxyOrder.port} http://ip-api.com/json`
-              };
-            }
-          } catch (proxyTestError) {
-            console.warn('[TEST] Proxy verification warning:', proxyTestError);
-          }
-
-        } catch (httpError) {
-          console.error('[TEST] HTTP test error:', httpError);
-          testResults.http_test_result = 'http_test_failed';
+        if (apifyResult.success) {
+          testResults.http_test_result = 'http_ok';
+          testResults.external_ip = apifyResult.ip;
+          testResults.details = {
+            ...testResults.details,
+            proxy_ip: apifyResult.ip,
+            http_latency_ms: apifyResult.latency
+          };
+          console.log('[TEST] ✓ HTTP test passed, IP:', apifyResult.ip);
+        } else if (apifyResult.error === 'APIFY not configured') {
+          // Fallback to credentials validation if Apify not available
+          testResults.http_test_result = 'credentials_valid';
+          testResults.details = {
+            ...testResults.details,
+            proxy_url: `${proxyOrder.host}:${proxyOrder.port}`,
+            test_command: `curl -x http://${proxyOrder.username}:${proxyOrder.password}@${proxyOrder.host}:${proxyOrder.port} http://ip-api.com/json`,
+            note: 'Teste HTTP real não disponível, credenciais verificadas via API'
+          };
+          console.log('[TEST] ⚠ Apify not configured, falling back to credentials validation');
+        } else {
+          testResults.http_test_result = 'http_failed';
+          testResults.error = apifyResult.error || 'Falha no teste HTTP real';
+          testResults.details = {
+            ...testResults.details,
+            http_error: apifyResult.error,
+            http_latency_ms: apifyResult.latency
+          };
+          console.log('[TEST] ✗ HTTP test failed:', apifyResult.error);
         }
       }
 
@@ -1251,7 +1400,8 @@ Deno.serve(async (req) => {
             host: proxyOrder.host,
             port: proxyOrder.port,
             username: proxyOrder.username,
-            plan_type: proxyOrder.plan_type
+            plan_type: proxyOrder.plan_type,
+            gateway_from_api: testResults.gateway_from_api
           }
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
