@@ -360,6 +360,10 @@ const FlowEditorPage = () => {
                   <Switch
                     checked={pauseOnMedia}
                     onCheckedChange={setPauseOnMedia}
+                    className={pauseOnMedia 
+                      ? "data-[state=checked]:bg-green-500" 
+                      : "data-[state=unchecked]:bg-red-500"
+                    }
                   />
                 </div>
 
