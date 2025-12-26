@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { Badge } from '@/components/ui/badge';
-import { Shield, ShieldCheck, ShieldOff, Loader2, Copy, Check } from 'lucide-react';
+import { Shield, ShieldCheck, ShieldOff, Loader2, Copy, Check, Smartphone, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -196,6 +196,29 @@ export const AdminMFA = () => {
             <p className="text-sm text-muted-foreground">
               Sua conta está protegida com autenticação de dois fatores.
             </p>
+            
+            {/* Trusted Devices Section */}
+            <div className="bg-muted/50 p-4 rounded-lg space-y-3">
+              <div className="flex items-center gap-2">
+                <Smartphone className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Dispositivos Confiáveis</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Dispositivos marcados como "confiáveis" não precisam inserir o código 2FA ao fazer login.
+              </p>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  localStorage.removeItem('mfa_trusted_devices');
+                  toast.success('Todos os dispositivos confiáveis foram removidos');
+                }}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Remover todos os dispositivos confiáveis
+              </Button>
+            </div>
+            
             <Button variant="destructive" onClick={disableMFA}>
               <ShieldOff className="h-4 w-4 mr-2" />
               Desativar 2FA
