@@ -119,6 +119,39 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_role_audit_log: {
+        Row: {
+          action: string
+          created_at: string | null
+          error_message: string | null
+          id: string
+          performed_by: string | null
+          role_affected: string
+          success: boolean
+          target_user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          performed_by?: string | null
+          role_affected: string
+          success?: boolean
+          target_user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          performed_by?: string | null
+          role_affected?: string
+          success?: boolean
+          target_user_id?: string
+        }
+        Relationships: []
+      }
       admin_user_rankings: {
         Row: {
           id: string
