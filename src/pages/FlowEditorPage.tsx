@@ -51,6 +51,7 @@ const FlowEditorPage = () => {
   const [triggerType, setTriggerType] = useState<'keyword' | 'all' | 'schedule'>('keyword');
   const [triggerKeywords, setTriggerKeywords] = useState('');
   const [isActive, setIsActive] = useState(false);
+  const [pauseOnMedia, setPauseOnMedia] = useState(false);
   const [instances, setInstances] = useState<Instance[]>([]);
   const [assignedInstances, setAssignedInstances] = useState<string[]>([]);
 
@@ -136,6 +137,7 @@ const FlowEditorPage = () => {
         setTriggerType(data.trigger_type as 'keyword' | 'all' | 'schedule');
         setTriggerKeywords(data.trigger_keywords?.join(', ') || '');
         setIsActive(data.is_active);
+        setPauseOnMedia(data.pause_on_media || false);
         setAssignedInstances(data.assigned_instances || []);
       } catch (error: unknown) {
         console.error('Error fetching flow:', error);
@@ -165,6 +167,7 @@ const FlowEditorPage = () => {
           trigger_keywords: triggerKeywords.split(',').map(k => k.trim()).filter(Boolean),
           assigned_instances: assignedInstances,
           is_active: isActive,
+          pause_on_media: pauseOnMedia,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)
@@ -345,6 +348,19 @@ const FlowEditorPage = () => {
                       })}
                     </div>
                   )}
+                </div>
+
+                <div className="flex items-center justify-between py-2">
+                  <div>
+                    <Label>Pausar ao receber imagem/PDF</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Pausa automaticamente o fluxo quando o contato enviar uma imagem ou documento
+                    </p>
+                  </div>
+                  <Switch
+                    checked={pauseOnMedia}
+                    onCheckedChange={setPauseOnMedia}
+                  />
                 </div>
 
                 <div className="flex items-center justify-between py-2">

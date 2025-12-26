@@ -43,6 +43,7 @@ export interface InboxFlow {
   assigned_instances: string[];
   is_active: boolean;
   priority: number;
+  pause_on_media?: boolean;
   created_at: string;
   updated_at: string;
 }

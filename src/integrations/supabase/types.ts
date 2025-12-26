@@ -688,6 +688,7 @@ export type Database = {
           is_active: boolean
           name: string
           nodes: Json
+          pause_on_media: boolean | null
           priority: number
           trigger_keywords: string[] | null
           trigger_type: string
@@ -703,6 +704,7 @@ export type Database = {
           is_active?: boolean
           name: string
           nodes?: Json
+          pause_on_media?: boolean | null
           priority?: number
           trigger_keywords?: string[] | null
           trigger_type?: string
@@ -718,6 +720,7 @@ export type Database = {
           is_active?: boolean
           name?: string
           nodes?: Json
+          pause_on_media?: boolean | null
           priority?: number
           trigger_keywords?: string[] | null
           trigger_type?: string
