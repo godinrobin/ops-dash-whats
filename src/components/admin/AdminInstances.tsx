@@ -85,7 +85,8 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
 
   // Filter and sort instances
   const filteredInstances = useMemo(() => {
-    let result = [...instances];
+    const safeInstances = instances || [];
+    let result = [...safeInstances];
 
     // Apply filters
     if (searchQuery) {
