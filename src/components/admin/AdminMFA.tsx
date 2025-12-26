@@ -36,12 +36,22 @@ export const AdminMFA = () => {
         setFactorId(verifiedFactor.id);
       } else {
         setMfaEnabled(false);
-        // If there's an unverified factor, clean it up
-        const unverifiedFactor = totpFactors.find(f => (f as any).status === 'unverified');
-        if (unverifiedFactor) {
-          await supabase.auth.mfa.unenroll({ factorId: unverifiedFactor.id });
+        setFactorId(null);
+        // Clean up ALL unverified factors to prevent QR code regeneration errors
+        const unverifiedFactors = totpFactors.filter(f => (f as any).status === 'unverified');
+        for (const factor of unverifiedFactors) {
+          try {
+            await supabase.auth.mfa.unenroll({ factorId: factor.id });
+          } catch (e) {
+            console.log('Error cleaning up unverified factor:', e);
+          }
         }
       }
+      // Reset enrollment state on check
+      setEnrolling(false);
+      setQrCode(null);
+      setSecret(null);
+      setVerifyCode('');
     } catch (error) {
       console.error('Error checking MFA status:', error);
     } finally {

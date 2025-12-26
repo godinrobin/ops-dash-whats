@@ -5,9 +5,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { splashedToast } from "@/hooks/useSplashedToast";
 import { motion, useMotionValue, useTransform } from "framer-motion";
-import { Mail, Lock, Eye, EyeClosed, ArrowRight } from "lucide-react";
+import { Mail, Lock, Eye, EyeClosed, ArrowRight, Shield, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
+import { supabase } from "@/integrations/supabase/client";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { Button } from "@/components/ui/button";
 const Auth = () => {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -20,6 +29,13 @@ const Auth = () => {
   const [activeTab, setActiveTab] = useState<"login" | "signup">("login");
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const [isDesktop, setIsDesktop] = useState(false);
+  
+  // 2FA states
+  const [showMfaDialog, setShowMfaDialog] = useState(false);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
+  const [verifyingMfa, setVerifyingMfa] = useState(false);
+  
   const { signIn, signUp, user } = useAuth();
   const navigate = useNavigate();
 
@@ -66,14 +82,75 @@ const Auth = () => {
 
     setLoading(true);
     const { error } = await signIn(loginEmail, loginPassword);
-    setLoading(false);
 
     if (error) {
+      setLoading(false);
       splashedToast.error("Erro ao fazer login", error.message);
-    } else {
+      return;
+    }
+
+    // Check if MFA is required
+    try {
+      const { data: factorsData } = await supabase.auth.mfa.listFactors();
+      const totpFactors = factorsData?.totp || [];
+      const verifiedFactor = totpFactors.find(f => (f as any).status === 'verified');
+
+      if (verifiedFactor) {
+        // MFA is enabled, show the dialog
+        setMfaFactorId(verifiedFactor.id);
+        setShowMfaDialog(true);
+        setLoading(false);
+        return;
+      }
+    } catch (mfaError) {
+      console.log('No MFA configured:', mfaError);
+    }
+
+    setLoading(false);
+    splashedToast.success("Sucesso", "Login realizado com sucesso!");
+    navigate("/");
+  };
+
+  const handleMfaVerify = async () => {
+    if (!mfaFactorId || mfaCode.length !== 6) return;
+
+    setVerifyingMfa(true);
+    try {
+      // Create a challenge
+      const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({
+        factorId: mfaFactorId,
+      });
+
+      if (challengeError) throw challengeError;
+
+      // Verify the challenge
+      const { error: verifyError } = await supabase.auth.mfa.verify({
+        factorId: mfaFactorId,
+        challengeId: challengeData.id,
+        code: mfaCode,
+      });
+
+      if (verifyError) throw verifyError;
+
+      setShowMfaDialog(false);
+      setMfaCode("");
       splashedToast.success("Sucesso", "Login realizado com sucesso!");
       navigate("/");
+    } catch (error: any) {
+      console.error('MFA verification error:', error);
+      splashedToast.error("Código inválido", "O código 2FA está incorreto. Tente novamente.");
+      setMfaCode("");
+    } finally {
+      setVerifyingMfa(false);
     }
+  };
+
+  const handleMfaDialogClose = async () => {
+    // Sign out the user if they cancel MFA
+    await supabase.auth.signOut();
+    setShowMfaDialog(false);
+    setMfaCode("");
+    setMfaFactorId(null);
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -449,6 +526,61 @@ const Auth = () => {
           </div>
         </motion.div>
       </div>
+
+      {/* 2FA Verification Dialog */}
+      <Dialog open={showMfaDialog} onOpenChange={(open) => !open && handleMfaDialogClose()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-accent" />
+              Autenticação de Dois Fatores
+            </DialogTitle>
+            <DialogDescription>
+              Digite o código de 6 dígitos do seu aplicativo autenticador para continuar.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 py-4">
+            <div className="flex justify-center">
+              <InputOTP 
+                maxLength={6} 
+                value={mfaCode} 
+                onChange={setMfaCode}
+                autoFocus
+                inputMode="numeric"
+                pattern="[0-9]*"
+              >
+                <InputOTPGroup className="gap-2">
+                  <InputOTPSlot index={0} className="w-12 h-12 text-lg border-2" />
+                  <InputOTPSlot index={1} className="w-12 h-12 text-lg border-2" />
+                  <InputOTPSlot index={2} className="w-12 h-12 text-lg border-2" />
+                  <InputOTPSlot index={3} className="w-12 h-12 text-lg border-2" />
+                  <InputOTPSlot index={4} className="w-12 h-12 text-lg border-2" />
+                  <InputOTPSlot index={5} className="w-12 h-12 text-lg border-2" />
+                </InputOTPGroup>
+              </InputOTP>
+            </div>
+            <div className="flex gap-3">
+              <Button 
+                onClick={handleMfaVerify} 
+                disabled={mfaCode.length !== 6 || verifyingMfa}
+                className="flex-1"
+              >
+                {verifyingMfa ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Verificando...
+                  </>
+                ) : (
+                  "Verificar"
+                )}
+              </Button>
+              <Button variant="outline" onClick={handleMfaDialogClose}>
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
