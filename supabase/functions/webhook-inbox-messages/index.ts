@@ -268,6 +268,14 @@ serve(async (req) => {
         });
       }
 
+      // Check if flow is paused for this contact - skip all flow processing
+      if (contact.flow_paused === true) {
+        console.log(`Flow is paused for contact ${contact.id}, skipping all flow processing`);
+        return new Response(JSON.stringify({ success: true, flowPaused: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       // === FLOW SESSION HANDLING ===
       // First, check for active flow sessions waiting for input (waitInput or menu)
       const { data: activeSession } = await supabaseClient
@@ -448,6 +456,25 @@ serve(async (req) => {
           }
 
           if (shouldTrigger) {
+            // Check if this is a media message and flow has pause_on_media enabled
+            // Only pause for image or document (PDF), NOT for video or audio
+            if ((messageType === 'image' || messageType === 'document') && flow.pause_on_media === true) {
+              console.log(`Media message (${messageType}) received and flow ${flow.name} has pause_on_media enabled`);
+              
+              // Pause the flow for this contact
+              await supabaseClient
+                .from('inbox_contacts')
+                .update({ flow_paused: true })
+                .eq('id', contact.id);
+              
+              console.log(`Flow paused for contact ${contact.id} due to media message`);
+              
+              // Don't trigger the flow, just pause
+              return new Response(JSON.stringify({ success: true, flowPausedByMedia: true }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              });
+            }
+            
             console.log(`Triggering flow ${flow.name} for contact ${contact.id}`);
             
             // Use upsert with ON CONFLICT to prevent duplicate active sessions

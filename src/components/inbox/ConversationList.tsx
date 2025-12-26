@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Plus, Smartphone, Filter } from 'lucide-react';
+import { Search, Plus, Smartphone, Filter, PauseCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -269,6 +269,14 @@ export const ConversationList = ({
                         {getInitials(contact.name, contact.phone)}
                       </AvatarFallback>
                     </Avatar>
+                    {(contact as any).flow_paused && (
+                      <div 
+                        className="absolute -bottom-0.5 -right-0.5 h-4 w-4 bg-orange-500 rounded-full flex items-center justify-center"
+                        title="Funil pausado"
+                      >
+                        <PauseCircle className="h-3 w-3 text-white" />
+                      </div>
+                    )}
                     {contact.unread_count > 0 && (
                       <Badge 
                         className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px]"
