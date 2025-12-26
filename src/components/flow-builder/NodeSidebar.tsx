@@ -10,7 +10,8 @@ import {
   Bot,
   Tag,
   Play,
-  FileText
+  FileText,
+  Shuffle
 } from 'lucide-react';
 
 const nodeCategories = [
@@ -36,6 +37,7 @@ const nodeCategories = [
       { type: 'delay', label: 'Delay', icon: Clock, color: 'bg-yellow-500' },
       { type: 'waitInput', label: 'Aguardar Resposta', icon: MessageCircle, color: 'bg-cyan-500' },
       { type: 'condition', label: 'Condição', icon: GitBranch, color: 'bg-red-500' },
+      { type: 'randomizer', label: 'Randomizador', icon: Shuffle, color: 'bg-violet-500' },
     ],
   },
   {

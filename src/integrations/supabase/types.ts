@@ -1006,10 +1006,12 @@ export type Database = {
       }
       maturador_instances: {
         Row: {
+          conversation_count: number | null
           created_at: string
           id: string
           instance_name: string
           label: string | null
+          last_conversation_sync: string | null
           last_seen: string | null
           persona_id: string | null
           phone_number: string | null
@@ -1019,10 +1021,12 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          conversation_count?: number | null
           created_at?: string
           id?: string
           instance_name: string
           label?: string | null
+          last_conversation_sync?: string | null
           last_seen?: string | null
           persona_id?: string | null
           phone_number?: string | null
@@ -1032,10 +1036,12 @@ export type Database = {
           user_id: string
         }
         Update: {
+          conversation_count?: number | null
           created_at?: string
           id?: string
           instance_name?: string
           label?: string | null
+          last_conversation_sync?: string | null
           last_seen?: string | null
           persona_id?: string | null
           phone_number?: string | null

@@ -137,3 +137,6 @@ verify_jwt = false
 
 [functions.pyproxy-purchase]
 verify_jwt = false
+
+[functions.admin-sync-conversations]
+verify_jwt = true

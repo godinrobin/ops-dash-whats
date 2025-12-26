@@ -705,6 +705,47 @@ serve(async (req) => {
             }
             break;
 
+          case 'randomizer':
+            // Randomizer node - select a split based on percentages
+            const randSplits = currentNode.data.splits as Array<{
+              id: string;
+              name: string;
+              percentage: number;
+            }> || [
+              { id: 'A', name: 'A', percentage: 50 },
+              { id: 'B', name: 'B', percentage: 50 },
+            ];
+
+            // Generate random number between 0-100
+            const randomValue = Math.random() * 100;
+            let cumulativePercentage = 0;
+            let selectedSplitId = randSplits[0]?.id || 'A';
+
+            for (const split of randSplits) {
+              cumulativePercentage += split.percentage;
+              if (randomValue <= cumulativePercentage) {
+                selectedSplitId = split.id;
+                break;
+              }
+            }
+
+            console.log(`Randomizer: random=${randomValue.toFixed(2)}, selected split=${selectedSplitId}`);
+            processedActions.push(`Randomizer: Split ${selectedSplitId}`);
+
+            // Find the edge for the selected split
+            const randEdge = edges.find(e => 
+              e.source === currentNodeId && 
+              e.sourceHandle === `split-${selectedSplitId}`
+            );
+            
+            if (randEdge) {
+              currentNodeId = randEdge.target;
+            } else {
+              console.log(`No edge found for split ${selectedSplitId}`);
+              continueProcessing = false;
+            }
+            break;
+
           default:
             console.log(`Unknown node type: ${currentNode.type}`);
             const defaultEdge = edges.find(e => e.source === currentNodeId);
