@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trash2, Save, Settings } from 'lucide-react';
+import { Trash2, Save, Settings, Copy, Plus, Minus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ConditionEditor } from './ConditionEditor';
 import { supabase } from '@/integrations/supabase/client';
@@ -16,6 +16,7 @@ interface PropertiesPanelProps {
   selectedNode: Node | null;
   onUpdateNode: (nodeId: string, data: Record<string, unknown>) => void;
   onDeleteNode: (nodeId: string) => void;
+  onDuplicateNode: (nodeId: string) => void;
   onSave: () => void;
   triggerType?: 'keyword' | 'all' | 'schedule';
   triggerKeywords?: string[];
@@ -66,6 +67,7 @@ export const PropertiesPanel = ({
   selectedNode,
   onUpdateNode,
   onDeleteNode,
+  onDuplicateNode,
   onSave,
   triggerType = 'keyword',
   triggerKeywords = [],
@@ -733,6 +735,110 @@ export const PropertiesPanel = ({
           </div>
         );
 
+      case 'randomizer':
+        interface Split {
+          id: string;
+          name: string;
+          percentage: number;
+        }
+        
+        const splits: Split[] = (nodeData.splits as Split[]) || [
+          { id: 'A', name: 'A', percentage: 50 },
+          { id: 'B', name: 'B', percentage: 50 },
+        ];
+        
+        const totalPercentage = splits.reduce((sum, s) => sum + s.percentage, 0);
+        const isValid = totalPercentage === 100;
+
+        const addSplit = () => {
+          const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+          const nextLetter = letters[splits.length] || `S${splits.length + 1}`;
+          const newSplits = [...splits, { id: nextLetter, name: nextLetter, percentage: 0 }];
+          onUpdateNode(selectedNode.id, { splits: newSplits });
+        };
+
+        const removeSplit = (index: number) => {
+          if (splits.length <= 2) {
+            toast.error('Mínimo de 2 splits');
+            return;
+          }
+          const newSplits = splits.filter((_, i) => i !== index);
+          onUpdateNode(selectedNode.id, { splits: newSplits });
+        };
+
+        const updateSplit = (index: number, field: 'name' | 'percentage', value: string | number) => {
+          const newSplits = splits.map((s, i) => 
+            i === index ? { ...s, [field]: field === 'percentage' ? Number(value) : value } : s
+          );
+          onUpdateNode(selectedNode.id, { splits: newSplits });
+        };
+
+        const distributeEvenly = () => {
+          const evenPercentage = Math.floor(100 / splits.length);
+          const remainder = 100 - (evenPercentage * splits.length);
+          const newSplits = splits.map((s, i) => ({
+            ...s,
+            percentage: evenPercentage + (i === 0 ? remainder : 0),
+          }));
+          onUpdateNode(selectedNode.id, { splits: newSplits });
+        };
+
+        return (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Divide o fluxo aleatoriamente entre os splits com base nas porcentagens.
+            </p>
+
+            <div className="space-y-3">
+              {splits.map((split, index) => (
+                <div key={split.id} className="flex items-center gap-2">
+                  <Input
+                    value={split.name}
+                    onChange={(e) => updateSplit(index, 'name', e.target.value)}
+                    className="w-16 text-center"
+                    placeholder="Nome"
+                  />
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={split.percentage}
+                    onChange={(e) => updateSplit(index, 'percentage', e.target.value)}
+                    className="w-20 text-center"
+                  />
+                  <span className="text-sm text-muted-foreground">%</span>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8"
+                    onClick={() => removeSplit(index)}
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={addSplit} className="flex-1">
+                <Plus className="h-4 w-4 mr-1" />
+                Adicionar Split
+              </Button>
+              <Button size="sm" variant="outline" onClick={distributeEvenly}>
+                Distribuir
+              </Button>
+            </div>
+
+            <div className={`p-2 rounded text-sm text-center ${
+              isValid 
+                ? 'bg-green-500/20 text-green-500 border border-green-500/30' 
+                : 'bg-red-500/20 text-red-500 border border-red-500/30'
+            }`}>
+              Total: {totalPercentage}% {isValid ? '✓' : '(deve ser 100%)'}
+            </div>
+          </div>
+        );
+
       default:
         return null;
     }
@@ -763,15 +869,26 @@ export const PropertiesPanel = ({
       </div>
 
       {selectedNode.type !== 'start' && (
-        <Button
-          variant="destructive"
-          size="sm"
-          className="mt-4"
-          onClick={() => onDeleteNode(selectedNode.id)}
-        >
-          <Trash2 className="h-4 w-4 mr-1" />
-          Excluir Nó
-        </Button>
+        <div className="flex gap-2 mt-4">
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={() => onDuplicateNode(selectedNode.id)}
+          >
+            <Copy className="h-4 w-4 mr-1" />
+            Duplicar
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            className="flex-1"
+            onClick={() => onDeleteNode(selectedNode.id)}
+          >
+            <Trash2 className="h-4 w-4 mr-1" />
+            Excluir
+          </Button>
+        </div>
       )}
     </div>
   );

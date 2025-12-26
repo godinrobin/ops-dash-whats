@@ -31,6 +31,7 @@ import { WebhookNode } from './nodes/WebhookNode';
 import { SetVariableNode } from './nodes/SetVariableNode';
 import { TagNode } from './nodes/TagNode';
 import { EndNode } from './nodes/EndNode';
+import { RandomizerNode } from './nodes/RandomizerNode';
 import { NodeSidebar } from './NodeSidebar';
 import { PropertiesPanel } from './PropertiesPanel';
 import { useFlowValidation } from './hooks/useFlowValidation';
@@ -52,6 +53,7 @@ const nodeTypes = {
   setVariable: SetVariableNode,
   tag: TagNode,
   end: EndNode,
+  randomizer: RandomizerNode,
 };
 
 interface FlowCanvasProps {
@@ -210,9 +212,28 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
       setVariable: 'Definir Variável',
       tag: 'Adicionar Tag',
       end: 'Fim',
+      randomizer: 'Randomizador',
     };
     return labels[type] || type;
   };
+
+  const handleDuplicateNode = useCallback((nodeId: string) => {
+    const nodeToDuplicate = nodes.find(n => n.id === nodeId);
+    if (!nodeToDuplicate || nodeToDuplicate.type === 'start') return;
+
+    const newNode: Node = {
+      id: `${nodeToDuplicate.type}-${Date.now()}`,
+      type: nodeToDuplicate.type,
+      position: {
+        x: nodeToDuplicate.position.x + 50,
+        y: nodeToDuplicate.position.y + 50,
+      },
+      data: JSON.parse(JSON.stringify(nodeToDuplicate.data)),
+    };
+
+    setNodes((nds) => [...nds, newNode]);
+    setSelectedNode(newNode);
+  }, [nodes, setNodes]);
 
   const handleUpdateNode = (nodeId: string, data: Record<string, unknown>) => {
     setNodes((nds) =>
@@ -308,6 +329,7 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
         selectedNode={selectedNode}
         onUpdateNode={handleUpdateNode}
         onDeleteNode={handleDeleteNode}
+        onDuplicateNode={handleDuplicateNode}
         onSave={handleSave}
         triggerType={triggerType}
         triggerKeywords={triggerKeywords}

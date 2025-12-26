@@ -107,4 +107,5 @@ export type NodeType =
   | 'webhook'
   | 'setVariable'
   | 'tag'
+  | 'randomizer'
   | 'end';

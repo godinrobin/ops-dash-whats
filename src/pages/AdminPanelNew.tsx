@@ -14,12 +14,15 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X, Key, Loader2, 
   UserPlus, Activity, Megaphone, Eye, MousePointer, Trash2, Image, Clock, Settings, Users, 
-  BarChart3, Phone, FileText, Wallet, History, Percent, Menu, ShoppingBag, Package, Globe, RefreshCw
+  BarChart3, Phone, FileText, Wallet, History, Percent, Menu, ShoppingBag, Package, Globe, RefreshCw,
+  Smartphone, Shield
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { MarketplaceProductModal } from "@/components/MarketplaceProductModal";
+import { AdminMFA } from "@/components/admin/AdminMFA";
+import { AdminInstances } from "@/components/admin/AdminInstances";
 
 // Product image imports for admin
 import bmVerificadaImg from "@/assets/bm-verificada.png";
@@ -71,8 +74,6 @@ const SYSTEMS = [
   { id: "numeros-virtuais", name: "Números Virtuais", emoji: "📞" },
 ];
 
-import { Shield } from "lucide-react";
-
 // Sidebar menu structure
 const SIDEBAR_MENU = [
   {
@@ -84,6 +85,13 @@ const SIDEBAR_MENU = [
       { id: "offers", label: "Ofertas", icon: FileText },
       { id: "activities", label: "Atividades", icon: Activity },
       { id: "user-access", label: "Acesso", icon: Shield },
+    ]
+  },
+  {
+    category: "Instâncias",
+    icon: Smartphone,
+    items: [
+      { id: "instances", label: "Números WhatsApp", icon: Smartphone },
     ]
   },
   {
@@ -113,6 +121,7 @@ const SIDEBAR_MENU = [
       { id: "passwords", label: "Senhas", icon: Key },
       { id: "create-user", label: "Criar Usuário", icon: UserPlus },
       { id: "announcements", label: "Avisos", icon: Megaphone },
+      { id: "security", label: "Segurança 2FA", icon: Shield },
     ]
   },
 ];
@@ -2380,6 +2389,16 @@ const AdminPanelNew = () => {
             </CardContent>
           </Card>
         );
+
+      case 'instances':
+        return (
+          <AdminInstances 
+            users={users.map(u => ({ id: u.id, email: u.email, username: u.username }))}
+          />
+        );
+
+      case 'security':
+        return <AdminMFA />;
 
       default:
         return null;
