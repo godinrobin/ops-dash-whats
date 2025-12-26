@@ -231,8 +231,32 @@ Deno.serve(async (req) => {
       }
     }) || []
 
+    // Buscar instâncias do maturador (todas, com service role ignora RLS)
+    const { data: instancesData } = await supabaseClient
+      .from('maturador_instances')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    const instances = instancesData?.map(inst => {
+      const authUser = authUsers.users.find(u => u.id === inst.user_id)
+      const profile = profiles?.find(p => p.id === inst.user_id)
+      return {
+        id: inst.id,
+        user_id: inst.user_id,
+        user_email: authUser?.email || 'N/A',
+        username: profile?.username || 'N/A',
+        instance_name: inst.instance_name,
+        phone_number: inst.phone_number,
+        label: inst.label,
+        status: inst.status,
+        conversation_count: inst.conversation_count || 0,
+        last_conversation_sync: inst.last_conversation_sync,
+        created_at: inst.created_at,
+      }
+    }) || []
+
     return new Response(
-      JSON.stringify({ users, numbers, products, offers, metrics, activities }),
+      JSON.stringify({ users, numbers, products, offers, metrics, activities, instances }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (error) {
