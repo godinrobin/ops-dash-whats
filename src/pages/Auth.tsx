@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/dialog";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+
 const Auth = () => {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -35,6 +37,8 @@ const Auth = () => {
   const [mfaCode, setMfaCode] = useState("");
   const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
   const [verifyingMfa, setVerifyingMfa] = useState(false);
+  const [rememberDevice, setRememberDevice] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   
   const { signIn, signUp, user } = useAuth();
   const navigate = useNavigate();
@@ -81,13 +85,16 @@ const Auth = () => {
     }
 
     setLoading(true);
-    const { error } = await signIn(loginEmail, loginPassword);
+    const { error, data } = await signIn(loginEmail, loginPassword);
 
     if (error) {
       setLoading(false);
       splashedToast.error("Erro ao fazer login", error.message);
       return;
     }
+
+    const userId = data?.user?.id;
+    setCurrentUserId(userId || null);
 
     // Check if MFA is required
     try {
@@ -96,7 +103,19 @@ const Auth = () => {
       const verifiedFactor = totpFactors.find(f => (f as any).status === 'verified');
 
       if (verifiedFactor) {
-        // MFA is enabled, show the dialog
+        // Check if this device is trusted
+        const trustedDevices = JSON.parse(localStorage.getItem('mfa_trusted_devices') || '{}');
+        const deviceToken = trustedDevices[userId || ''];
+        
+        if (deviceToken) {
+          // Device is trusted, skip MFA
+          setLoading(false);
+          splashedToast.success("Sucesso", "Login realizado com sucesso!");
+          navigate("/");
+          return;
+        }
+
+        // MFA is enabled and device not trusted, show the dialog
         setMfaFactorId(verifiedFactor.id);
         setShowMfaDialog(true);
         setLoading(false);
@@ -132,8 +151,17 @@ const Auth = () => {
 
       if (verifyError) throw verifyError;
 
+      // If "remember device" is checked, save this device as trusted
+      if (rememberDevice && currentUserId) {
+        const trustedDevices = JSON.parse(localStorage.getItem('mfa_trusted_devices') || '{}');
+        // Generate a simple device token (timestamp-based)
+        trustedDevices[currentUserId] = Date.now().toString();
+        localStorage.setItem('mfa_trusted_devices', JSON.stringify(trustedDevices));
+      }
+
       setShowMfaDialog(false);
       setMfaCode("");
+      setRememberDevice(false);
       splashedToast.success("Sucesso", "Login realizado com sucesso!");
       navigate("/");
     } catch (error: any) {
@@ -151,6 +179,7 @@ const Auth = () => {
     setShowMfaDialog(false);
     setMfaCode("");
     setMfaFactorId(null);
+    setRememberDevice(false);
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -559,6 +588,18 @@ const Auth = () => {
                 </InputOTPGroup>
               </InputOTP>
             </div>
+            
+            <div className="flex items-center gap-2">
+              <Checkbox 
+                id="remember-device" 
+                checked={rememberDevice}
+                onCheckedChange={(checked) => setRememberDevice(checked as boolean)}
+              />
+              <Label htmlFor="remember-device" className="text-sm cursor-pointer">
+                Lembrar este dispositivo por 30 dias
+              </Label>
+            </div>
+            
             <div className="flex gap-3">
               <Button 
                 onClick={handleMfaVerify} 

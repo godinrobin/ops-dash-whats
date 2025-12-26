@@ -5,8 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 interface AuthContextType {
   user: User | null;
   session: Session | null;
-  signUp: (username: string, password: string) => Promise<{ error: any }>;
-  signIn: (username: string, password: string) => Promise<{ error: any }>;
+  signUp: (username: string, password: string) => Promise<{ error: any; data?: any }>;
+  signIn: (username: string, password: string) => Promise<{ error: any; data?: any }>;
   signOut: () => Promise<void>;
   loading: boolean;
 }
@@ -99,18 +99,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const isEmail = username.includes('@') && username.includes('.');
       const email = isEmail ? username.toLowerCase().trim() : `${username.toLowerCase().trim()}@metricas.local`;
       
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) {
-        return { error: { message: "Usuário ou senha incorretos" } };
+        return { error: { message: "Usuário ou senha incorretos" }, data: null };
       }
 
-      return { error: null };
+      return { error: null, data };
     } catch (error: any) {
-      return { error };
+      return { error, data: null };
     }
   };
 
