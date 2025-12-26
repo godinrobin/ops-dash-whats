@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Smartphone, Search, RefreshCw, Loader2, MessageSquare, 
-  TrendingUp, Filter, ArrowUpDown, Trophy, Medal
+  TrendingUp, Trophy, Medal
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -22,7 +22,6 @@ interface InstanceData {
   phone_number: string | null;
   label: string | null;
   status: string;
-  source: 'maturador' | 'dispara_zap' | 'automati_zap';
   conversation_count: number;
   last_conversation_sync: string | null;
   created_at: string;
@@ -30,65 +29,21 @@ interface InstanceData {
 
 interface AdminInstancesProps {
   users: Array<{ id: string; email: string; username: string }>;
+  instances: InstanceData[];
+  onRefresh: () => void;
 }
 
-export const AdminInstances = ({ users }: AdminInstancesProps) => {
-  const [instances, setInstances] = useState<InstanceData[]>([]);
-  const [loading, setLoading] = useState(true);
+export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesProps) => {
   const [syncing, setSyncing] = useState<string | null>(null);
   const [syncingAll, setSyncingAll] = useState(false);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<string>('all');
-  const [selectedSource, setSelectedSource] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [minConversations, setMinConversations] = useState<string>('');
   const [sortBy, setSortBy] = useState<'conversations' | 'recent'>('conversations');
   const [rankingPeriod, setRankingPeriod] = useState<'3' | '7' | '15' | '30'>('7');
-
-  useEffect(() => {
-    loadInstances();
-  }, [users]);
-
-  const loadInstances = async () => {
-    setLoading(true);
-    try {
-      // Load all maturador instances
-      const { data: instancesData, error } = await supabase
-        .from('maturador_instances')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      // Map instances with user info
-      const mappedInstances: InstanceData[] = (instancesData || []).map(inst => {
-        const user = users.find(u => u.id === inst.user_id);
-        return {
-          id: inst.id,
-          user_id: inst.user_id,
-          user_email: user?.email || 'N/A',
-          username: user?.username || 'N/A',
-          instance_name: inst.instance_name,
-          phone_number: inst.phone_number,
-          label: inst.label,
-          status: inst.status,
-          source: 'maturador' as const,
-          conversation_count: (inst as any).conversation_count || 0,
-          last_conversation_sync: (inst as any).last_conversation_sync || null,
-          created_at: inst.created_at,
-        };
-      });
-
-      setInstances(mappedInstances);
-    } catch (error) {
-      console.error('Error loading instances:', error);
-      toast.error('Erro ao carregar instâncias');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const syncInstanceConversations = async (instanceId: string) => {
     setSyncing(instanceId);
@@ -100,13 +55,7 @@ export const AdminInstances = ({ users }: AdminInstancesProps) => {
       if (error) throw error;
 
       toast.success(`Conversas atualizadas: ${data.count || 0}`);
-      
-      // Update local state
-      setInstances(prev => prev.map(inst => 
-        inst.id === instanceId 
-          ? { ...inst, conversation_count: data.count || 0, last_conversation_sync: new Date().toISOString() }
-          : inst
-      ));
+      onRefresh();
     } catch (error: any) {
       console.error('Error syncing conversations:', error);
       toast.error(error.message || 'Erro ao sincronizar conversas');
@@ -125,7 +74,7 @@ export const AdminInstances = ({ users }: AdminInstancesProps) => {
       if (error) throw error;
 
       toast.success(`Todas as instâncias atualizadas!`);
-      await loadInstances();
+      onRefresh();
     } catch (error: any) {
       console.error('Error syncing all:', error);
       toast.error(error.message || 'Erro ao sincronizar todas');
@@ -153,10 +102,6 @@ export const AdminInstances = ({ users }: AdminInstancesProps) => {
       result = result.filter(inst => inst.user_id === selectedUser);
     }
 
-    if (selectedSource !== 'all') {
-      result = result.filter(inst => inst.source === selectedSource);
-    }
-
     if (selectedStatus !== 'all') {
       result = result.filter(inst => inst.status === selectedStatus);
     }
@@ -174,7 +119,7 @@ export const AdminInstances = ({ users }: AdminInstancesProps) => {
     }
 
     return result;
-  }, [instances, searchQuery, selectedUser, selectedSource, selectedStatus, minConversations, sortBy]);
+  }, [instances, searchQuery, selectedUser, selectedStatus, minConversations, sortBy]);
 
   // Top instances for ranking
   const topInstances = useMemo(() => {
@@ -210,7 +155,7 @@ export const AdminInstances = ({ users }: AdminInstancesProps) => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Smartphone className="h-5 w-5" />
-            Números WhatsApp
+            Números WhatsApp ({instances.length} total)
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -335,83 +280,77 @@ export const AdminInstances = ({ users }: AdminInstancesProps) => {
       {/* Instances Table */}
       <Card>
         <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>#</TableHead>
-                  <TableHead>Usuário</TableHead>
-                  <TableHead>Número</TableHead>
-                  <TableHead>Label</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Conversas</TableHead>
-                  <TableHead>Última Sync</TableHead>
-                  <TableHead>Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredInstances.map((inst, index) => (
-                  <TableRow key={inst.id}>
-                    <TableCell>
-                      <div className="w-6 h-6 flex items-center justify-center">
-                        {getRankBadge(index)}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{inst.username}</p>
-                        <p className="text-xs text-muted-foreground">{inst.user_email}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <code className="text-sm">{inst.phone_number || '-'}</code>
-                    </TableCell>
-                    <TableCell>{inst.label || inst.instance_name}</TableCell>
-                    <TableCell>{getStatusBadge(inst.status)}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="font-mono">
-                        {inst.conversation_count}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {inst.last_conversation_sync ? (
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(inst.last_conversation_sync).toLocaleString('pt-BR')}
-                        </span>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>#</TableHead>
+                <TableHead>Usuário</TableHead>
+                <TableHead>Número</TableHead>
+                <TableHead>Label</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Conversas</TableHead>
+                <TableHead>Última Sync</TableHead>
+                <TableHead>Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredInstances.map((inst, index) => (
+                <TableRow key={inst.id}>
+                  <TableCell>
+                    <div className="w-6 h-6 flex items-center justify-center">
+                      {getRankBadge(index)}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div>
+                      <p className="font-medium">{inst.username}</p>
+                      <p className="text-xs text-muted-foreground">{inst.user_email}</p>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <code className="text-sm">{inst.phone_number || '-'}</code>
+                  </TableCell>
+                  <TableCell>{inst.label || inst.instance_name}</TableCell>
+                  <TableCell>{getStatusBadge(inst.status)}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="font-mono">
+                      {inst.conversation_count}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {inst.last_conversation_sync ? (
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(inst.last_conversation_sync).toLocaleString('pt-BR')}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => syncInstanceConversations(inst.id)}
+                      disabled={syncing === inst.id}
+                    >
+                      {syncing === inst.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
-                        <span className="text-xs text-muted-foreground">-</span>
+                        <RefreshCw className="h-4 w-4" />
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => syncInstanceConversations(inst.id)}
-                        disabled={syncing === inst.id}
-                      >
-                        {syncing === inst.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {filteredInstances.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                      Nenhuma instância encontrada
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          )}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {filteredInstances.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    Nenhuma instância encontrada
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </div>

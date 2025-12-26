@@ -248,6 +248,20 @@ interface MarketplaceOrderData {
   created_at: string;
 }
 
+interface InstanceData {
+  id: string;
+  user_id: string;
+  user_email: string;
+  username: string;
+  instance_name: string;
+  phone_number: string | null;
+  label: string | null;
+  status: string;
+  conversation_count: number;
+  last_conversation_sync: string | null;
+  created_at: string;
+}
+
 const AdminPanelNew = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -257,6 +271,7 @@ const AdminPanelNew = () => {
   const [metrics, setMetrics] = useState<MetricData[]>([]);
   const [offers, setOffers] = useState<OfferData[]>([]);
   const [activities, setActivities] = useState<ActivityData[]>([]);
+  const [instances, setInstances] = useState<InstanceData[]>([]);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [wallets, setWallets] = useState<WalletData[]>([]);
   const [transactions, setTransactions] = useState<TransactionData[]>([]);
@@ -381,6 +396,7 @@ const AdminPanelNew = () => {
       setProducts(data.products || []);
       setOffers(data.offers || []);
       setActivities(data.activities || []);
+      setInstances(data.instances || []);
     } catch (err) {
       console.error("Error loading admin data:", err);
       toast.error("Erro ao carregar dados administrativos");
@@ -2394,6 +2410,8 @@ const AdminPanelNew = () => {
         return (
           <AdminInstances 
             users={users.map(u => ({ id: u.id, email: u.email, username: u.username }))}
+            instances={instances}
+            onRefresh={loadAllData}
           />
         );
 
