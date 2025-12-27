@@ -112,9 +112,31 @@ export default function InboxDashboard() {
     }
   };
 
+  // Verify and configure webhooks for connected instances in the background
+  const verifyWebhooks = async () => {
+    try {
+      console.log('[VERIFY-WEBHOOKS] Starting background webhook verification');
+      const { data, error } = await supabase.functions.invoke('verify-webhooks', {});
+      if (error) {
+        console.error('[VERIFY-WEBHOOKS] Error:', error);
+      } else {
+        console.log('[VERIFY-WEBHOOKS] Result:', data);
+      }
+    } catch (error) {
+      console.error('[VERIFY-WEBHOOKS] Error:', error);
+    }
+  };
+
   useEffect(() => {
     fetchData();
   }, [user]);
+
+  // Verify webhooks after data is loaded
+  useEffect(() => {
+    if (instances.length > 0 && !loading) {
+      verifyWebhooks();
+    }
+  }, [instances, loading]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
