@@ -3,16 +3,18 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { LogOut, ArrowLeft, User, Shield, Settings, LayoutGrid, ShoppingBag } from "lucide-react";
+import { LogOut, ArrowLeft, User, Shield, Settings, LayoutGrid, ShoppingBag, Megaphone } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ProfileModal } from "./ProfileModal";
 import Dock from "@/components/ui/dock";
 import { AnimatedText } from "@/components/ui/animated-shiny-text";
 import { motion } from "framer-motion";
 
+export type AppMode = "sistemas" | "marketplace" | "ads";
+
 interface HeaderProps {
-  mode?: "sistemas" | "marketplace";
-  onModeChange?: (mode: "sistemas" | "marketplace") => void;
+  mode?: AppMode;
+  onModeChange?: (mode: AppMode) => void;
 }
 
 export const Header = ({ mode, onModeChange }: HeaderProps) => {
@@ -107,6 +109,21 @@ export const Header = ({ mode, onModeChange }: HeaderProps) => {
                 >
                   <ShoppingBag className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">Marketplace</span>
+                </motion.button>
+                <motion.button
+                  onClick={() => onModeChange("ads")}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className={`
+                    flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all
+                    ${mode === "ads" 
+                      ? "bg-purple-500/20 text-purple-400 border border-purple-500/50" 
+                      : "text-muted-foreground hover:text-foreground"
+                    }
+                  `}
+                >
+                  <Megaphone className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">ADS</span>
                 </motion.button>
               </div>
             )}
