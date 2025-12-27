@@ -34,6 +34,80 @@ serve(async (req) => {
     const { action } = body;
     console.log("Facebook campaigns action:", action, "for user:", user.id);
 
+    // Helper function to extract metrics from insights
+    const extractMetrics = (insights: any) => {
+      const insightsData = insights?.data?.[0] || {};
+      const actions = insightsData.actions || [];
+      const costPerAction = insightsData.cost_per_action_type || [];
+      const actionValues = insightsData.action_values || [];
+
+      // Extract messaging conversations
+      const conversationActionTypePrimary = "onsite_conversion.messaging_conversation_started_7d";
+      const conversationActionTypeFallback = "messaging_conversation_started_7d";
+
+      const conversationAction =
+        actions.find((a: any) => a.action_type === conversationActionTypePrimary) ||
+        actions.find((a: any) => a.action_type === conversationActionTypeFallback);
+
+      const messagingConversations = conversationAction ? parseInt(conversationAction.value || 0) : 0;
+      const chosenConversationActionType = conversationAction?.action_type ?? "n/a";
+
+      const costPerConversationAction = costPerAction.find(
+        (a: any) => a.action_type === chosenConversationActionType
+      );
+
+      const costPerConversationFromApi = costPerConversationAction
+        ? parseFloat(costPerConversationAction.value || 0)
+        : 0;
+
+      const costPerMessageValue =
+        costPerConversationFromApi ||
+        (messagingConversations > 0
+          ? parseFloat(insightsData.spend || 0) / messagingConversations
+          : 0);
+
+      // Extract purchases
+      const purchaseActionTypesPriority = [
+        "omni_purchase",
+        "purchase",
+        "offsite_conversion.fb_pixel_purchase",
+      ];
+
+      const purchaseAction = purchaseActionTypesPriority
+        .map((t) =>
+          actions.find(
+            (a: any) => a.action_type === t || String(a.action_type || "").includes(t)
+          )
+        )
+        .find(Boolean) as any;
+
+      const purchases = purchaseAction ? parseInt(purchaseAction.value || 0) : 0;
+
+      const purchaseValueAction = purchaseActionTypesPriority
+        .map((t) =>
+          actionValues.find(
+            (a: any) => a.action_type === t || String(a.action_type || "").includes(t)
+          )
+        )
+        .find(Boolean) as any;
+
+      const conversionValue = purchaseValueAction ? parseFloat(purchaseValueAction.value || 0) : 0;
+
+      return {
+        spend: parseFloat(insightsData.spend || 0),
+        impressions: parseInt(insightsData.impressions || 0),
+        clicks: parseInt(insightsData.clicks || 0),
+        reach: parseInt(insightsData.reach || 0),
+        cpm: parseFloat(insightsData.cpm || 0),
+        ctr: parseFloat(insightsData.ctr || 0),
+        cpc: parseFloat(insightsData.cost_per_inline_link_click || 0),
+        cost_per_message: costPerMessageValue,
+        messaging_conversations_started: messagingConversations,
+        meta_conversions: purchases,
+        conversion_value: conversionValue,
+      };
+    };
+
     // Sync campaigns from all selected ad accounts
     if (action === "sync_campaigns") {
       const { adAccountId, datePreset = "last_7d" } = body;
@@ -69,7 +143,6 @@ serve(async (req) => {
           continue;
         }
 
-        // Map date preset from frontend to Facebook API format
         const datePresetInput = datePreset || 'last_7d';
         const datePresetMap: Record<string, string> = {
           'today': 'today',
@@ -82,7 +155,6 @@ serve(async (req) => {
         
         console.log('Using date_preset:', mappedDatePreset);
 
-        // Build insights fields - valid fields only (no messaging_first_reply or cost_per_messaging_reply)
         const insightsFields = [
           'spend', 'impressions', 'clicks', 'reach', 'cpm', 'ctr',
           'inline_link_click_ctr', 'cost_per_inline_link_click',
@@ -92,7 +164,7 @@ serve(async (req) => {
         // Fetch campaigns with insights
         const campaignsUrl = `https://graph.facebook.com/v18.0/act_${adAccount.ad_account_id}/campaigns?fields=id,name,status,objective,daily_budget,lifetime_budget,insights.date_preset(${mappedDatePreset}){${insightsFields}}&access_token=${accessToken}`;
         
-        console.log(`Fetching campaigns for account ${adAccount.ad_account_id} with date_preset ${mappedDatePreset}...`);
+        console.log(`Fetching campaigns for account ${adAccount.ad_account_id}...`);
         const campaignsResponse = await fetch(campaignsUrl);
         const campaignsData = await campaignsResponse.json();
 
@@ -102,79 +174,11 @@ serve(async (req) => {
         }
 
         const campaigns = campaignsData.data || [];
-        console.log(`Found ${campaigns.length} campaigns for account ${adAccount.ad_account_id}`);
+        console.log(`Found ${campaigns.length} campaigns`);
         totalCampaigns += campaigns.length;
 
-        // Sync campaigns to database
         for (const campaign of campaigns) {
-          const insights = campaign.insights?.data?.[0] || {};
-          const actions = insights.actions || [];
-          const costPerAction = insights.cost_per_action_type || [];
-          const actionValues = insights.action_values || [];
-          
-          console.log(`Campaign ${campaign.name} actions:`, JSON.stringify(actions).substring(0, 800));
-          
-          // Extract messaging conversations (match Ads Manager: "Conversas por mensagem" / "Custo por conversa")
-          // The Ads Manager column uses the 7-day attribution action_type in most accounts.
-          const conversationActionTypePrimary = "onsite_conversion.messaging_conversation_started_7d";
-          const conversationActionTypeFallback = "messaging_conversation_started_7d";
-
-          const conversationAction =
-            actions.find((a: any) => a.action_type === conversationActionTypePrimary) ||
-            actions.find((a: any) => a.action_type === conversationActionTypeFallback);
-
-          const messagingConversations = conversationAction ? parseInt(conversationAction.value || 0) : 0;
-          const chosenConversationActionType = conversationAction?.action_type ?? "n/a";
-
-          // Cost per conversation: prefer API's cost_per_action_type for the exact same action_type.
-          // If it's missing, fallback to spend / conversations.
-          const costPerConversationAction = costPerAction.find(
-            (a: any) => a.action_type === chosenConversationActionType
-          );
-
-          const costPerConversationFromApi = costPerConversationAction
-            ? parseFloat(costPerConversationAction.value || 0)
-            : 0;
-
-          const costPerMessageValue =
-            costPerConversationFromApi ||
-            (messagingConversations > 0
-              ? parseFloat(insights.spend || 0) / messagingConversations
-              : 0);
-
-          // Extract conversions + conversion value (match Ads Manager “Compras na Meta”)
-          // We intentionally focus on purchases to avoid mismatches with other conversion types.
-          const purchaseActionTypesPriority = [
-            "omni_purchase",
-            "purchase",
-            "offsite_conversion.fb_pixel_purchase",
-          ];
-
-          const purchaseAction = purchaseActionTypesPriority
-            .map((t) =>
-              actions.find(
-                (a: any) => a.action_type === t || String(a.action_type || "").includes(t)
-              )
-            )
-            .find(Boolean) as any;
-
-          const purchases = purchaseAction ? parseInt(purchaseAction.value || 0) : 0;
-
-          const purchaseValueAction = purchaseActionTypesPriority
-            .map((t) =>
-              actionValues.find(
-                (a: any) => a.action_type === t || String(a.action_type || "").includes(t)
-              )
-            )
-            .find(Boolean) as any;
-
-          const conversionValue = purchaseValueAction ? parseFloat(purchaseValueAction.value || 0) : 0;
-
-          console.log(
-            `Campaign ${campaign.name} - reach: ${insights.reach}, conversations: ${messagingConversations} (${chosenConversationActionType}), costPerConversation: ${costPerMessageValue}, purchases: ${purchases}, purchaseValue: ${conversionValue}`
-          );
-
-          
+          const metrics = extractMetrics(campaign.insights);
 
           const campaignData = {
             campaign_id: campaign.id,
@@ -183,18 +187,8 @@ serve(async (req) => {
             objective: campaign.objective,
             daily_budget: campaign.daily_budget ? parseFloat(campaign.daily_budget) / 100 : null,
             lifetime_budget: campaign.lifetime_budget ? parseFloat(campaign.lifetime_budget) / 100 : null,
-            spend: parseFloat(insights.spend || 0),
-            impressions: parseInt(insights.impressions || 0),
-            clicks: parseInt(insights.clicks || 0),
-            reach: parseInt(insights.reach || 0),
-            cpm: parseFloat(insights.cpm || 0),
-            ctr: parseFloat(insights.ctr || 0),
-            cpc: parseFloat(insights.cost_per_inline_link_click || 0),
-            cost_per_message: costPerMessageValue,
-            messaging_conversations_started: parseInt(String(messagingConversations)),
-            meta_conversions: purchases,
-            conversion_value: conversionValue,
-            cost_per_result: parseFloat(insights.cost_per_conversion || 0),
+            ...metrics,
+            cost_per_result: 0,
             last_synced_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           };
@@ -227,11 +221,207 @@ serve(async (req) => {
       );
     }
 
+    // Sync ad sets
+    if (action === "sync_adsets") {
+      const { datePreset = "last_7d" } = body;
+
+      const { data: adAccounts } = await supabaseClient
+        .from("ads_ad_accounts")
+        .select("*, ads_facebook_accounts(*)")
+        .eq("user_id", user.id)
+        .eq("is_selected", true);
+
+      if (!adAccounts?.length) {
+        return new Response(
+          JSON.stringify({ success: true, message: "No ad accounts to sync", count: 0 }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      let totalAdsets = 0;
+
+      for (const adAccount of adAccounts) {
+        const accessToken = adAccount.ads_facebook_accounts?.access_token;
+        if (!accessToken) continue;
+
+        const datePresetMap: Record<string, string> = {
+          'today': 'today',
+          'yesterday': 'yesterday',
+          'last_7d': 'last_7d',
+          'last_30d': 'last_30d',
+          'this_month': 'this_month'
+        };
+        const mappedDatePreset = datePresetMap[datePreset] || 'last_7d';
+
+        const insightsFields = [
+          'spend', 'impressions', 'clicks', 'reach', 'cpm', 'ctr',
+          'inline_link_click_ctr', 'cost_per_inline_link_click',
+          'actions', 'cost_per_action_type', 'action_values'
+        ].join(',');
+
+        const adsetsUrl = `https://graph.facebook.com/v18.0/act_${adAccount.ad_account_id}/adsets?fields=id,name,status,campaign_id,daily_budget,lifetime_budget,insights.date_preset(${mappedDatePreset}){${insightsFields}}&limit=500&access_token=${accessToken}`;
+        
+        console.log(`Fetching adsets for account ${adAccount.ad_account_id}...`);
+        const adsetsResponse = await fetch(adsetsUrl);
+        const adsetsData = await adsetsResponse.json();
+
+        if (adsetsData.error) {
+          console.error("Adsets error:", adsetsData.error);
+          continue;
+        }
+
+        const adsets = adsetsData.data || [];
+        console.log(`Found ${adsets.length} adsets`);
+        totalAdsets += adsets.length;
+
+        for (const adset of adsets) {
+          const metrics = extractMetrics(adset.insights);
+
+          const adsetData = {
+            adset_id: adset.id,
+            campaign_id: adset.campaign_id,
+            name: adset.name,
+            status: adset.status,
+            daily_budget: adset.daily_budget ? parseFloat(adset.daily_budget) / 100 : null,
+            lifetime_budget: adset.lifetime_budget ? parseFloat(adset.lifetime_budget) / 100 : null,
+            ...metrics,
+            cost_per_result: 0,
+            results: 0,
+            last_synced_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+
+          const { data: existing } = await supabaseClient
+            .from("ads_adsets")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("adset_id", adset.id)
+            .maybeSingle();
+
+          if (existing) {
+            await supabaseClient
+              .from("ads_adsets")
+              .update(adsetData)
+              .eq("id", existing.id);
+          } else {
+            await supabaseClient.from("ads_adsets").insert({
+              user_id: user.id,
+              ad_account_id: adAccount.id,
+              ...adsetData,
+            });
+          }
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, count: totalAdsets }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Sync ads
+    if (action === "sync_ads") {
+      const { datePreset = "last_7d" } = body;
+
+      const { data: adAccounts } = await supabaseClient
+        .from("ads_ad_accounts")
+        .select("*, ads_facebook_accounts(*)")
+        .eq("user_id", user.id)
+        .eq("is_selected", true);
+
+      if (!adAccounts?.length) {
+        return new Response(
+          JSON.stringify({ success: true, message: "No ad accounts to sync", count: 0 }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      let totalAds = 0;
+
+      for (const adAccount of adAccounts) {
+        const accessToken = adAccount.ads_facebook_accounts?.access_token;
+        if (!accessToken) continue;
+
+        const datePresetMap: Record<string, string> = {
+          'today': 'today',
+          'yesterday': 'yesterday',
+          'last_7d': 'last_7d',
+          'last_30d': 'last_30d',
+          'this_month': 'this_month'
+        };
+        const mappedDatePreset = datePresetMap[datePreset] || 'last_7d';
+
+        const insightsFields = [
+          'spend', 'impressions', 'clicks', 'reach', 'cpm', 'ctr',
+          'inline_link_click_ctr', 'cost_per_inline_link_click',
+          'actions', 'cost_per_action_type', 'action_values'
+        ].join(',');
+
+        const adsUrl = `https://graph.facebook.com/v18.0/act_${adAccount.ad_account_id}/ads?fields=id,name,status,adset_id,campaign_id,creative{thumbnail_url},insights.date_preset(${mappedDatePreset}){${insightsFields}}&limit=500&access_token=${accessToken}`;
+        
+        console.log(`Fetching ads for account ${adAccount.ad_account_id}...`);
+        const adsResponse = await fetch(adsUrl);
+        const adsData = await adsResponse.json();
+
+        if (adsData.error) {
+          console.error("Ads error:", adsData.error);
+          continue;
+        }
+
+        const ads = adsData.data || [];
+        console.log(`Found ${ads.length} ads`);
+        totalAds += ads.length;
+
+        for (const ad of ads) {
+          const metrics = extractMetrics(ad.insights);
+
+          const adData = {
+            ad_id: ad.id,
+            adset_id: ad.adset_id,
+            campaign_id: ad.campaign_id,
+            name: ad.name,
+            status: ad.status,
+            creative_id: ad.creative?.id || null,
+            thumbnail_url: ad.creative?.thumbnail_url || null,
+            ...metrics,
+            cost_per_result: 0,
+            results: 0,
+            last_synced_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+
+          const { data: existing } = await supabaseClient
+            .from("ads_ads")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("ad_id", ad.id)
+            .maybeSingle();
+
+          if (existing) {
+            await supabaseClient
+              .from("ads_ads")
+              .update(adData)
+              .eq("id", existing.id);
+          } else {
+            await supabaseClient.from("ads_ads").insert({
+              user_id: user.id,
+              ad_account_id: adAccount.id,
+              ...adData,
+            });
+          }
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, count: totalAds }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Update campaign status (pause/activate)
     if (action === "update_campaign_status") {
       const { campaignId, adAccountId, status } = body;
 
-      // Get the ad account with Facebook account
       const { data: adAccount, error: adAccountError } = await supabaseClient
         .from("ads_ad_accounts")
         .select("*, ads_facebook_accounts(*)")
@@ -254,7 +444,6 @@ serve(async (req) => {
         });
       }
 
-      // Update campaign status on Facebook
       const updateUrl = `https://graph.facebook.com/v18.0/${campaignId}`;
       const updateResponse = await fetch(updateUrl, {
         method: "POST",
@@ -275,7 +464,6 @@ serve(async (req) => {
         });
       }
 
-      // Update local database
       await supabaseClient
         .from("ads_campaigns")
         .update({ status, updated_at: new Date().toISOString() })
@@ -288,11 +476,108 @@ serve(async (req) => {
       );
     }
 
+    // Update adset status
+    if (action === "update_adset_status") {
+      const { adsetId, adAccountId, status } = body;
+
+      const { data: adAccount } = await supabaseClient
+        .from("ads_ad_accounts")
+        .select("*, ads_facebook_accounts(*)")
+        .eq("id", adAccountId)
+        .eq("user_id", user.id)
+        .single();
+
+      if (!adAccount?.ads_facebook_accounts?.access_token) {
+        return new Response(JSON.stringify({ error: "No access token found" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const updateUrl = `https://graph.facebook.com/v18.0/${adsetId}`;
+      const updateResponse = await fetch(updateUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status,
+          access_token: adAccount.ads_facebook_accounts.access_token,
+        }),
+      });
+
+      const updateData = await updateResponse.json();
+
+      if (updateData.error) {
+        return new Response(JSON.stringify({ error: updateData.error.message }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      await supabaseClient
+        .from("ads_adsets")
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq("adset_id", adsetId)
+        .eq("user_id", user.id);
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Update ad status
+    if (action === "update_ad_status") {
+      const { adId, adAccountId, status } = body;
+
+      const { data: adAccount } = await supabaseClient
+        .from("ads_ad_accounts")
+        .select("*, ads_facebook_accounts(*)")
+        .eq("id", adAccountId)
+        .eq("user_id", user.id)
+        .single();
+
+      if (!adAccount?.ads_facebook_accounts?.access_token) {
+        return new Response(JSON.stringify({ error: "No access token found" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const updateUrl = `https://graph.facebook.com/v18.0/${adId}`;
+      const updateResponse = await fetch(updateUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status,
+          access_token: adAccount.ads_facebook_accounts.access_token,
+        }),
+      });
+
+      const updateData = await updateResponse.json();
+
+      if (updateData.error) {
+        return new Response(JSON.stringify({ error: updateData.error.message }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      await supabaseClient
+        .from("ads_ads")
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq("ad_id", adId)
+        .eq("user_id", user.id);
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Update campaign budget
     if (action === "update_campaign_budget") {
       const { campaignId, adAccountId, daily_budget } = body;
 
-      // Get the ad account with Facebook account
       const { data: adAccount, error: adAccountError } = await supabaseClient
         .from("ads_ad_accounts")
         .select("*, ads_facebook_accounts(*)")
@@ -315,13 +600,12 @@ serve(async (req) => {
         });
       }
 
-      // Update campaign budget on Facebook
       const updateUrl = `https://graph.facebook.com/v18.0/${campaignId}`;
       const updateResponse = await fetch(updateUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          daily_budget: Math.round(daily_budget), // Already in cents
+          daily_budget: Math.round(daily_budget),
           access_token: accessToken,
         }),
       });
@@ -336,7 +620,6 @@ serve(async (req) => {
         });
       }
 
-      // Update local database
       await supabaseClient
         .from("ads_campaigns")
         .update({ 
@@ -344,6 +627,58 @@ serve(async (req) => {
           updated_at: new Date().toISOString() 
         })
         .eq("campaign_id", campaignId)
+        .eq("user_id", user.id);
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Update adset budget
+    if (action === "update_adset_budget") {
+      const { adsetId, adAccountId, daily_budget } = body;
+
+      const { data: adAccount } = await supabaseClient
+        .from("ads_ad_accounts")
+        .select("*, ads_facebook_accounts(*)")
+        .eq("id", adAccountId)
+        .eq("user_id", user.id)
+        .single();
+
+      if (!adAccount?.ads_facebook_accounts?.access_token) {
+        return new Response(JSON.stringify({ error: "No access token found" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const updateUrl = `https://graph.facebook.com/v18.0/${adsetId}`;
+      const updateResponse = await fetch(updateUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          daily_budget: Math.round(daily_budget),
+          access_token: adAccount.ads_facebook_accounts.access_token,
+        }),
+      });
+
+      const updateData = await updateResponse.json();
+
+      if (updateData.error) {
+        return new Response(JSON.stringify({ error: updateData.error.message }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      await supabaseClient
+        .from("ads_adsets")
+        .update({ 
+          daily_budget: daily_budget / 100, 
+          updated_at: new Date().toISOString() 
+        })
+        .eq("adset_id", adsetId)
         .eq("user_id", user.id);
 
       return new Response(
@@ -366,7 +701,6 @@ serve(async (req) => {
       const results = [];
 
       for (const accountId of ad_account_ids) {
-        // Get the ad account with Facebook account
         const { data: adAccount, error: adAccountError } = await supabaseClient
           .from("ads_ad_accounts")
           .select("*, ads_facebook_accounts(*)")
@@ -385,7 +719,6 @@ serve(async (req) => {
           continue;
         }
 
-        // Create campaign on Facebook
         const createUrl = `https://graph.facebook.com/v18.0/act_${adAccount.ad_account_id}/campaigns`;
         const createResponse = await fetch(createUrl, {
           method: "POST",
@@ -408,7 +741,6 @@ serve(async (req) => {
           continue;
         }
 
-        // Save to database
         await supabaseClient.from("ads_campaigns").insert({
           user_id: user.id,
           ad_account_id: accountId,
