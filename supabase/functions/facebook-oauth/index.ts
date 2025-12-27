@@ -40,9 +40,15 @@ serve(async (req) => {
 
     // Generate Facebook OAuth login URL
     if (action === "get_login_url") {
-      const baseUrl = Deno.env.get("SUPABASE_URL")?.replace("/functions/v1", "") || "";
-      // Redirect back to the ads settings page
-      const redirectUri = `${baseUrl.replace("https://", "https://").replace(".supabase.co", ".lovable.dev")}/ads/settings`;
+      const { redirect_uri } = body;
+      
+      if (!redirect_uri) {
+        console.error("redirect_uri is required");
+        return new Response(JSON.stringify({ error: "redirect_uri is required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       
       const scopes = [
         "ads_management",
@@ -52,25 +58,29 @@ serve(async (req) => {
         "pages_show_list"
       ].join(",");
 
-      const loginUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${FACEBOOK_APP_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes}&response_type=code`;
+      const loginUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${FACEBOOK_APP_ID}&redirect_uri=${encodeURIComponent(redirect_uri)}&scope=${scopes}&response_type=code`;
 
-      console.log("Generated login URL with redirect:", redirectUri);
+      console.log("Generated login URL with redirect:", redirect_uri);
 
       return new Response(
-        JSON.stringify({ login_url: loginUrl, redirect_uri: redirectUri }),
+        JSON.stringify({ login_url: loginUrl, redirect_uri: redirect_uri }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     // Exchange authorization code for access token
     if (action === "exchange_code") {
-      const { code } = body;
+      const { code, redirect_uri } = body;
       
-      // Get the redirect URI from referer or construct it
-      const referer = req.headers.get("referer") || "";
-      const redirectUri = referer.split("?")[0] || `${Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", ".lovable.dev").replace("/functions/v1", "")}/ads/settings`;
+      if (!redirect_uri) {
+        console.error("redirect_uri is required for exchange_code");
+        return new Response(JSON.stringify({ error: "redirect_uri is required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
 
-      const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token?client_id=${FACEBOOK_APP_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${FACEBOOK_APP_SECRET}&code=${code}`;
+      const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token?client_id=${FACEBOOK_APP_ID}&redirect_uri=${encodeURIComponent(redirect_uri)}&client_secret=${FACEBOOK_APP_SECRET}&code=${code}`;
 
       console.log("Exchanging code for token...");
       const tokenResponse = await fetch(tokenUrl);

@@ -97,8 +97,11 @@ export default function AdsSettings() {
   const handleConnectFacebook = async () => {
     setConnecting(true);
     try {
+      // Pass the correct redirect_uri based on the current URL
+      const redirectUri = `${window.location.origin}${window.location.pathname}${window.location.hash.split("?")[0]}`;
+      
       const { data, error } = await supabase.functions.invoke("facebook-oauth", {
-        body: { action: "get_login_url" }
+        body: { action: "get_login_url", redirect_uri: redirectUri }
       });
 
       if (error) throw error;
@@ -115,8 +118,11 @@ export default function AdsSettings() {
   const handleOAuthCallback = async (code: string) => {
     setConnecting(true);
     try {
+      // Use the same redirect_uri for token exchange
+      const redirectUri = `${window.location.origin}${window.location.pathname}${window.location.hash.split("?")[0]}`;
+      
       const { data, error } = await supabase.functions.invoke("facebook-oauth", {
-        body: { action: "exchange_code", code }
+        body: { action: "exchange_code", code, redirect_uri: redirectUri }
       });
 
       if (error) throw error;
