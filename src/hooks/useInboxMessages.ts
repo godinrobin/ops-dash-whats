@@ -261,21 +261,25 @@ export const useInboxMessages = (contactId: string | null) => {
           .update({ status: 'failed' })
           .eq('id', message.id);
         
-        // Parse the error for user-friendly message
+        // Parse the error for user-friendly message and error code
         let errorMsg = 'Erro ao enviar mensagem';
+        let errorCode = 'SEND_FAILED';
         try {
           const errorBody = (sendError as any)?.context?.body;
           if (typeof errorBody === 'string') {
             const parsed = JSON.parse(errorBody);
             errorMsg = parsed.error || errorMsg;
+            errorCode = parsed.errorCode || errorCode;
           } else if (errorBody?.error) {
             errorMsg = errorBody.error;
+            errorCode = errorBody.errorCode || errorCode;
           }
         } catch {
           // Keep default error message
         }
         
-        throw new Error(errorMsg);
+        // Return error with code instead of throwing
+        return { error: errorMsg, errorCode };
       }
 
       // Update contact's last_message_at
@@ -287,7 +291,7 @@ export const useInboxMessages = (contactId: string | null) => {
       return { data: message };
     } catch (err: any) {
       console.error('sendMessage error:', err);
-      return { error: err.message };
+      return { error: err.message, errorCode: 'UNKNOWN_ERROR' };
     }
   }, [user, contactId]);
 
