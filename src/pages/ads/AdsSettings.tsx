@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { 
   Facebook, 
   Plus, 
@@ -14,7 +15,9 @@ import {
   RefreshCcw,
   ExternalLink,
   Building2,
-  LogOut
+  LogOut,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -48,6 +51,7 @@ export default function AdsSettings() {
   const [connecting, setConnecting] = useState(false);
   const [facebookAccounts, setFacebookAccounts] = useState<FacebookAccount[]>([]);
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
+  const [expandedAccounts, setExpandedAccounts] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (user) {
@@ -301,42 +305,70 @@ export default function AdsSettings() {
                     </div>
                   </div>
 
-                  {/* Ad Accounts */}
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-medium flex items-center gap-2">
-                      <Building2 className="h-4 w-4" />
-                      Contas de Anúncio
-                    </h4>
-                    {adAccounts
-                      .filter(a => a.facebook_account_id === account.id)
-                      .map(adAccount => (
-                        <div 
-                          key={adAccount.id}
-                          className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
-                        >
-                          <div className="flex items-center gap-3">
-                            <Switch
-                              checked={adAccount.is_selected}
-                              onCheckedChange={(checked) => handleToggleAdAccount(adAccount.id, checked)}
-                            />
-                            <div>
-                              <p className="text-sm font-medium">
-                                {adAccount.name || adAccount.ad_account_id}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                ID: {adAccount.ad_account_id} • {adAccount.currency}
-                              </p>
+                  {/* Ad Accounts - Collapsible */}
+                  <Collapsible 
+                    open={expandedAccounts.has(account.id)} 
+                    onOpenChange={(isOpen) => {
+                      setExpandedAccounts(prev => {
+                        const newSet = new Set(prev);
+                        if (isOpen) {
+                          newSet.add(account.id);
+                        } else {
+                          newSet.delete(account.id);
+                        }
+                        return newSet;
+                      });
+                    }}
+                  >
+                    <CollapsibleTrigger asChild>
+                      <Button variant="ghost" className="w-full justify-between p-2 h-auto">
+                        <h4 className="text-sm font-medium flex items-center gap-2">
+                          <Building2 className="h-4 w-4" />
+                          Contas de Anúncio ({adAccounts.filter(a => a.facebook_account_id === account.id).length})
+                        </h4>
+                        {expandedAccounts.has(account.id) ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="space-y-2 mt-2">
+                      {adAccounts
+                        .filter(a => a.facebook_account_id === account.id)
+                        .map(adAccount => (
+                          <div 
+                            key={adAccount.id}
+                            className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                          >
+                            <div className="flex items-center gap-3">
+                              <Switch
+                                checked={adAccount.is_selected}
+                                onCheckedChange={(checked) => handleToggleAdAccount(adAccount.id, checked)}
+                                className={cn(
+                                  "data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500",
+                                  "[&>span]:bg-white"
+                                )}
+                              />
+                              <div>
+                                <p className="text-sm font-medium">
+                                  {adAccount.name || adAccount.ad_account_id}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  ID: {adAccount.ad_account_id} • {adAccount.currency}
+                                </p>
+                              </div>
                             </div>
+                            {getAccountStatusBadge(adAccount.account_status)}
                           </div>
-                          {getAccountStatusBadge(adAccount.account_status)}
-                        </div>
-                      ))}
-                    {adAccounts.filter(a => a.facebook_account_id === account.id).length === 0 && (
-                      <p className="text-sm text-muted-foreground text-center py-4">
-                        Clique em "Sincronizar Contas" para buscar suas contas de anúncio
-                      </p>
-                    )}
-                  </div>
+                        ))}
+                      {adAccounts.filter(a => a.facebook_account_id === account.id).length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          Clique em "Sincronizar Contas" para buscar suas contas de anúncio
+                        </p>
+                      )}
+                    </CollapsibleContent>
+                  </Collapsible>
                 </motion.div>
               ))}
             </div>

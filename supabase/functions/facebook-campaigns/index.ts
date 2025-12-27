@@ -82,7 +82,7 @@ serve(async (req) => {
         
         console.log('Using date_preset:', mappedDatePreset);
 
-        // Build insights fields - more comprehensive list
+        // Build insights fields - valid fields only (no messaging_first_reply or cost_per_messaging_reply)
         const insightsFields = [
           'spend', 'impressions', 'clicks', 'reach', 'cpm', 'ctr',
           'inline_link_click_ctr', 'cost_per_inline_link_click',
@@ -110,25 +110,26 @@ serve(async (req) => {
           const insights = campaign.insights?.data?.[0] || {};
           const actions = insights.actions || [];
           const costPerAction = insights.cost_per_action_type || [];
+          const actionValues = insights.action_values || [];
           
-          console.log(`Campaign ${campaign.name} insights:`, JSON.stringify(insights).substring(0, 500));
-          console.log(`Campaign ${campaign.name} actions:`, JSON.stringify(actions));
+          console.log(`Campaign ${campaign.name} actions:`, JSON.stringify(actions).substring(0, 800));
           
           // Extract messaging conversations from actions - check multiple action types
           const messagingActionTypes = [
             'onsite_conversion.messaging_conversation_started_7d',
             'onsite_conversion.messaging_first_reply',
             'messaging_conversation_started_7d',
-            'messaging_first_reply'
+            'messaging_first_reply',
+            'onsite_conversion.total_messaging_connection'
           ];
           const messagingAction = actions.find((a: any) => messagingActionTypes.includes(a.action_type));
           const messagingConversations = messagingAction ? parseInt(messagingAction.value || 0) : 0;
           
-          // Extract cost per message
+          // Extract cost per message from cost_per_action_type
           const costPerMessageAction = costPerAction.find((a: any) => messagingActionTypes.includes(a.action_type));
           const costPerMessageValue = costPerMessageAction ? parseFloat(costPerMessageAction.value || 0) : 0;
           
-          // Extract Meta conversions (purchases, leads, etc.) - expanded list
+          // Extract Meta conversions (purchases, leads, etc.)
           const conversionActionTypes = [
             'purchase',
             'omni_purchase', 
@@ -143,7 +144,12 @@ serve(async (req) => {
             .filter((a: any) => conversionActionTypes.some(type => a.action_type.includes(type) || a.action_type === type))
             .reduce((sum: number, a: any) => sum + parseInt(a.value || 0), 0);
           
-          console.log(`Campaign ${campaign.name} - reach: ${insights.reach}, messaging: ${messagingConversations}, conversions: ${metaConversions}`);
+          // Extract conversion value from action_values
+          const conversionValue = actionValues
+            .filter((a: any) => conversionActionTypes.some(type => a.action_type.includes(type) || a.action_type === type))
+            .reduce((sum: number, a: any) => sum + parseFloat(a.value || 0), 0);
+          
+          console.log(`Campaign ${campaign.name} - reach: ${insights.reach}, messaging: ${messagingConversations}, conversions: ${metaConversions}, conversionValue: ${conversionValue}`);
 
           const campaignData = {
             campaign_id: campaign.id,
