@@ -74,45 +74,77 @@ serve(async (req) => {
       });
     }
 
-    // Get user's Evolution API config
-    let { data: config } = await supabaseClient
+    // Get Evolution API config with multiple fallback strategies
+    let evolutionBaseUrl: string | undefined;
+    let evolutionApiKey: string | undefined;
+    let configSource = 'none';
+
+    // Strategy 1: User's own maturador_config
+    const { data: userConfig } = await supabaseClient
       .from('maturador_config')
-      .select('*')
+      .select('evolution_base_url, evolution_api_key')
       .eq('user_id', user.id)
       .single();
 
-    // If user doesn't have config, try to use admin config as fallback
-    if (!config) {
-      console.log('User has no Evolution API config, trying admin fallback');
-      
-      // Use service role client to access admin config
+    if (userConfig?.evolution_base_url && userConfig?.evolution_api_key) {
+      evolutionBaseUrl = userConfig.evolution_base_url;
+      evolutionApiKey = userConfig.evolution_api_key;
+      configSource = 'user_config';
+      console.log('Using user Evolution API config');
+    }
+
+    // Strategy 2: Admin config from database (fallback)
+    if (!evolutionBaseUrl || !evolutionApiKey) {
       const serviceClient = createClient(
         Deno.env.get('SUPABASE_URL') ?? '',
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
       );
 
-      // Get the first admin user's config
-      const { data: adminConfig } = await serviceClient
+      const { data: adminConfig, error: adminConfigError } = await serviceClient
         .from('maturador_config')
-        .select('*')
+        .select('evolution_base_url, evolution_api_key')
         .limit(1)
         .single();
 
-      if (adminConfig) {
+      if (adminConfigError) {
+        console.log('Admin config lookup error:', adminConfigError.message);
+      }
+
+      if (adminConfig?.evolution_base_url && adminConfig?.evolution_api_key) {
+        evolutionBaseUrl = adminConfig.evolution_base_url;
+        evolutionApiKey = adminConfig.evolution_api_key;
+        configSource = 'admin_config';
         console.log('Using admin Evolution API config as fallback');
-        config = adminConfig;
       }
     }
 
-    if (!config) {
-      return new Response(JSON.stringify({ error: 'Evolution API not configured. Please ask an admin to set up the Evolution API.' }), {
+    // Strategy 3: Global secrets (final fallback)
+    if (!evolutionBaseUrl || !evolutionApiKey) {
+      const globalBaseUrl = Deno.env.get('EVOLUTION_BASE_URL');
+      const globalApiKey = Deno.env.get('EVOLUTION_API_KEY');
+
+      if (globalBaseUrl && globalApiKey) {
+        evolutionBaseUrl = globalBaseUrl;
+        evolutionApiKey = globalApiKey;
+        configSource = 'global_secrets';
+        console.log('Using global Evolution API secrets');
+      }
+    }
+
+    if (!evolutionBaseUrl || !evolutionApiKey) {
+      console.error('Evolution API not configured. Tried: user_config, admin_config, global_secrets');
+      return new Response(JSON.stringify({ 
+        error: 'Evolution API not configured',
+        details: 'No valid Evolution API configuration found. Please configure EVOLUTION_BASE_URL and EVOLUTION_API_KEY.'
+      }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const EVOLUTION_BASE_URL = config.evolution_base_url.replace(/\/$/, '');
-    const EVOLUTION_API_KEY = config.evolution_api_key;
+    console.log('Config source:', configSource);
+    const EVOLUTION_BASE_URL = evolutionBaseUrl.replace(/\/$/, '');
+    const EVOLUTION_API_KEY = evolutionApiKey;
     const instanceName = instance.instance_name;
 
     console.log(`Fetching chats from ${EVOLUTION_BASE_URL} for instance ${instanceName}`);

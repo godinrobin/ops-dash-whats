@@ -133,11 +133,12 @@ export const ConversationList = ({
   };
 
   const formatPhoneDisplay = (phone: string): string => {
+    const cleaned = phone.replace(/\D/g, '');
+    
     // Format as +55 (11) 99999-9999 for Brazilian numbers
-    // Always add digit 9 if the local number has 8 digits (old format)
-    if (phone.length >= 10 && phone.startsWith('55')) {
-      const ddd = phone.slice(2, 4);
-      let localNumber = phone.slice(4);
+    if (cleaned.startsWith('55') && cleaned.length >= 12 && cleaned.length <= 13) {
+      const ddd = cleaned.slice(2, 4);
+      let localNumber = cleaned.slice(4);
       
       // If local number has 8 digits, add 9 at the beginning
       if (localNumber.length === 8) {
@@ -156,6 +157,18 @@ export const ConversationList = ({
       const part2 = localNumber.slice(-4);
       return `+55 (${ddd}) ${part1}-${part2}`;
     }
+    
+    // For international numbers or other formats, add + prefix and group digits
+    if (cleaned.length >= 10) {
+      // Format as +XX XXX XXX XXXX for readability
+      return `+${cleaned.replace(/(\d{2})(\d{3})(\d{3})(\d+)/, '$1 $2 $3 $4')}`;
+    }
+    
+    // Fallback: just add + prefix for shorter numbers
+    if (cleaned.length > 0) {
+      return `+${cleaned}`;
+    }
+    
     return phone;
   };
 
