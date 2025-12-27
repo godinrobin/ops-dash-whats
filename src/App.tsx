@@ -43,6 +43,7 @@ import FlowEditorPage from "./pages/FlowEditorPage";
 import InboxDashboard from "./pages/InboxDashboard";
 import MessageBlaster from "./pages/MessageBlaster";
 import SiteCloner from "./pages/SiteCloner";
+import AdsLayout from "./pages/ads/AdsLayout";
 
 const queryClient = new QueryClient();
 
@@ -105,6 +106,9 @@ const App = () => {
               <Route path="/disparazap/fluxos/novo" element={<MemberRoute featureName="DisparaZap"><FlowEditorPage /></MemberRoute>} />
               <Route path="/disparazap/fluxos/:id" element={<MemberRoute featureName="DisparaZap"><FlowEditorPage /></MemberRoute>} />
               <Route path="/clonador" element={<MemberRoute featureName="Clonador de Entregável"><SiteCloner /></MemberRoute>} />
+              
+              {/* ADS MODULE */}
+              <Route path="/ads/*" element={<MemberRoute featureName="ADS Tracker"><AdsLayout /></MemberRoute>} />
               
               {/* ADMIN ROUTES */}
               <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />
