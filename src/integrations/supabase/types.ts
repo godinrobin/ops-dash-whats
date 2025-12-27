@@ -298,7 +298,9 @@ export type Database = {
           campaign_id: string
           clicks: number | null
           conversions: number | null
+          cost_per_message: number | null
           cost_per_result: number | null
+          cpc: number | null
           cpm: number | null
           created_at: string
           ctr: number | null
@@ -307,8 +309,11 @@ export type Database = {
           impressions: number | null
           last_synced_at: string | null
           lifetime_budget: number | null
+          messaging_conversations_started: number | null
+          meta_conversions: number | null
           name: string | null
           objective: string | null
+          reach: number | null
           results: number | null
           spend: number | null
           status: string | null
@@ -320,7 +325,9 @@ export type Database = {
           campaign_id: string
           clicks?: number | null
           conversions?: number | null
+          cost_per_message?: number | null
           cost_per_result?: number | null
+          cpc?: number | null
           cpm?: number | null
           created_at?: string
           ctr?: number | null
@@ -329,8 +336,11 @@ export type Database = {
           impressions?: number | null
           last_synced_at?: string | null
           lifetime_budget?: number | null
+          messaging_conversations_started?: number | null
+          meta_conversions?: number | null
           name?: string | null
           objective?: string | null
+          reach?: number | null
           results?: number | null
           spend?: number | null
           status?: string | null
@@ -342,7 +352,9 @@ export type Database = {
           campaign_id?: string
           clicks?: number | null
           conversions?: number | null
+          cost_per_message?: number | null
           cost_per_result?: number | null
+          cpc?: number | null
           cpm?: number | null
           created_at?: string
           ctr?: number | null
@@ -351,8 +363,11 @@ export type Database = {
           impressions?: number | null
           last_synced_at?: string | null
           lifetime_budget?: number | null
+          messaging_conversations_started?: number | null
+          meta_conversions?: number | null
           name?: string | null
           objective?: string | null
+          reach?: number | null
           results?: number | null
           spend?: number | null
           status?: string | null

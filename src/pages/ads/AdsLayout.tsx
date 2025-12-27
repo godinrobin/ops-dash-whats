@@ -71,18 +71,21 @@ export default function AdsLayout() {
                   className={cn(
                     "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all",
                     isActive
-                      ? "bg-primary/10 text-primary border border-primary/20"
+                      ? "bg-orange-500/10 text-orange-400 border border-orange-500/30"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                 >
-                  <item.icon className="h-5 w-5 shrink-0" />
+                  <item.icon className={cn("h-5 w-5 shrink-0", isActive && "text-orange-400")} />
                   <AnimatePresence mode="wait">
                     {!collapsed && (
                       <motion.span
                         initial={{ opacity: 0, width: 0 }}
                         animate={{ opacity: 1, width: "auto" }}
                         exit={{ opacity: 0, width: 0 }}
-                        className="text-sm font-medium whitespace-nowrap overflow-hidden"
+                        className={cn(
+                          "text-sm font-medium whitespace-nowrap overflow-hidden",
+                          isActive && "text-orange-400"
+                        )}
                       >
                         {item.label}
                       </motion.span>

@@ -69,8 +69,8 @@ serve(async (req) => {
           continue;
         }
 
-        // Fetch campaigns with insights
-        const campaignsUrl = `https://graph.facebook.com/v18.0/act_${adAccount.ad_account_id}/campaigns?fields=id,name,status,objective,daily_budget,lifetime_budget,insights.date_preset(${datePreset}){spend,impressions,clicks,conversions,cpm,ctr,cost_per_conversion}&access_token=${accessToken}`;
+        // Fetch campaigns with expanded insights including reach, cpc, messaging metrics
+        const campaignsUrl = `https://graph.facebook.com/v18.0/act_${adAccount.ad_account_id}/campaigns?fields=id,name,status,objective,daily_budget,lifetime_budget,insights.date_preset(${datePreset}){spend,impressions,clicks,reach,cpm,ctr,cpc,cost_per_inline_link_click,messaging_first_reply,cost_per_messaging_reply,actions}&access_token=${accessToken}`;
         
         console.log(`Fetching campaigns for account ${adAccount.ad_account_id}...`);
         const campaignsResponse = await fetch(campaignsUrl);
@@ -88,6 +88,18 @@ serve(async (req) => {
         // Sync campaigns to database
         for (const campaign of campaigns) {
           const insights = campaign.insights?.data?.[0] || {};
+          
+          // Extract messaging conversations from actions
+          const actions = insights.actions || [];
+          const messagingConversations = actions.find((a: any) => 
+            a.action_type === 'onsite_conversion.messaging_conversation_started_7d' ||
+            a.action_type === 'onsite_conversion.messaging_first_reply'
+          )?.value || 0;
+          
+          // Extract Meta conversions (purchase, complete_registration, lead, etc.)
+          const metaConversions = actions.filter((a: any) => 
+            ['purchase', 'omni_purchase', 'complete_registration', 'lead', 'submit_application'].includes(a.action_type)
+          ).reduce((sum: number, a: any) => sum + parseInt(a.value || 0), 0);
 
           const campaignData = {
             campaign_id: campaign.id,
@@ -99,9 +111,13 @@ serve(async (req) => {
             spend: parseFloat(insights.spend || 0),
             impressions: parseInt(insights.impressions || 0),
             clicks: parseInt(insights.clicks || 0),
-            conversions: parseInt(insights.conversions || 0),
+            reach: parseInt(insights.reach || 0),
             cpm: parseFloat(insights.cpm || 0),
             ctr: parseFloat(insights.ctr || 0),
+            cpc: parseFloat(insights.cost_per_inline_link_click || insights.cpc || 0),
+            cost_per_message: parseFloat(insights.cost_per_messaging_reply || 0),
+            messaging_conversations_started: parseInt(messagingConversations),
+            meta_conversions: metaConversions,
             cost_per_result: parseFloat(insights.cost_per_conversion || 0),
             last_synced_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
