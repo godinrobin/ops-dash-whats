@@ -53,6 +53,7 @@ export const InboxMenu = ({ open, onOpenChange }: InboxMenuProps) => {
   const [labeledContacts, setLabeledContacts] = useState<{ id: string; name: string | null; phone: string; tags: string[] }[]>([]);
   const [newLabelName, setNewLabelName] = useState('');
   const [loading, setLoading] = useState(true);
+  const [reprocessing, setReprocessing] = useState(false);
 
   useEffect(() => {
     if (!user || !open) return;
@@ -164,6 +165,31 @@ export const InboxMenu = ({ open, onOpenChange }: InboxMenuProps) => {
         .filter(c => c.tags.length > 0)
     );
     toast.success('Etiqueta removida de todos os contatos');
+  };
+
+  const handleReprocessContacts = async () => {
+    setReprocessing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('reprocess-inbox-contacts', {
+        body: {},
+      });
+
+      if (error) {
+        console.error('Error reprocessing contacts:', error);
+        toast.error('Erro ao reprocessar contatos');
+        return;
+      }
+
+      toast.success(`Reprocessado: ${data.phonesNormalized} telefones normalizados, ${data.namesCleaned} nomes corrigidos`);
+      
+      // Refresh data
+      await fetchData();
+    } catch (err) {
+      console.error('Error reprocessing contacts:', err);
+      toast.error('Erro ao reprocessar contatos');
+    } finally {
+      setReprocessing(false);
+    }
   };
 
   const allLabels = [...predefinedLabels.map(l => l.name), ...customLabels];
@@ -375,7 +401,16 @@ export const InboxMenu = ({ open, onOpenChange }: InboxMenuProps) => {
           </TabsContent>
         </Tabs>
 
-        <div className="absolute bottom-4 left-4 right-4">
+        <div className="absolute bottom-4 left-4 right-4 space-y-2">
+          <Button 
+            variant="secondary" 
+            className="w-full"
+            onClick={handleReprocessContacts}
+            disabled={reprocessing}
+          >
+            <RefreshCw className={cn("h-4 w-4 mr-2", reprocessing && "animate-spin")} />
+            {reprocessing ? 'Reprocessando...' : 'Reprocessar Contatos'}
+          </Button>
           <Button 
             variant="outline" 
             className="w-full"

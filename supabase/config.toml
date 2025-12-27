@@ -146,3 +146,6 @@ verify_jwt = true
 
 [functions.sync-inbox-messages]
 verify_jwt = true
+
+[functions.reprocess-inbox-contacts]
+verify_jwt = true

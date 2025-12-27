@@ -171,10 +171,10 @@ serve(async (req) => {
 
       console.log(`Processing message from ${phone}: ${messageType} - ${content?.substring(0, 50)}`);
 
-      // Find the instance in our database
+      // Find the instance in our database (including label and phone for pushName validation)
       const { data: instanceData, error: instanceError } = await supabaseClient
         .from('maturador_instances')
-        .select('id, user_id')
+        .select('id, user_id, label, instance_name, phone_number')
         .eq('instance_name', instance)
         .single();
 
@@ -187,6 +187,29 @@ serve(async (req) => {
 
       const userId = instanceData.user_id;
       const instanceId = instanceData.id;
+      
+      // Get instance identifiers to check for suspicious pushName
+      const instanceLabel = instanceData.label?.toLowerCase()?.trim() || '';
+      const instanceNameLower = instanceData.instance_name?.toLowerCase()?.trim() || '';
+      
+      // Function to check if pushName is suspicious (matches instance name/label)
+      const isSuspiciousPushName = (name: string | null): boolean => {
+        if (!name) return true;
+        const nameLower = name.toLowerCase().trim();
+        // Check if pushName matches or contains instance label/name
+        if (instanceLabel && (nameLower === instanceLabel || nameLower.includes(instanceLabel) || instanceLabel.includes(nameLower))) {
+          console.log(`Suspicious pushName detected: "${name}" matches instance label "${instanceLabel}"`);
+          return true;
+        }
+        if (instanceNameLower && (nameLower === instanceNameLower || nameLower.includes(instanceNameLower) || instanceNameLower.includes(nameLower))) {
+          console.log(`Suspicious pushName detected: "${name}" matches instance name "${instanceNameLower}"`);
+          return true;
+        }
+        return false;
+      };
+      
+      // Validate pushName - only use it if it's not suspicious
+      const validPushName = pushName && !isSuspiciousPushName(pushName) ? pushName : null;
 
       // Find or create contact - search by user_id + instance_id + phone
       // This allows SEPARATE chats per instance for the same phone number
@@ -214,7 +237,7 @@ serve(async (req) => {
             user_id: userId,
             instance_id: instanceId,
             phone,
-            name: pushName,
+            name: validPushName,
             status: 'active',
             unread_count: 1,
             last_message_at: new Date().toISOString(),
@@ -261,10 +284,10 @@ serve(async (req) => {
           updates.unread_count = (contact.unread_count || 0) + 1;
         }
         
-        // Only update name if we have a valid pushName and contact doesn't have a name yet
+        // Only update name if we have a valid (non-suspicious) pushName and contact doesn't have a name yet
         // or if the new pushName is different and valid
-        if (pushName && pushName.trim() && (!contact.name || contact.name !== pushName)) {
-          updates.name = pushName;
+        if (validPushName && validPushName.trim() && (!contact.name || contact.name !== validPushName)) {
+          updates.name = validPushName;
         }
 
         // Update remote_jid if not already set

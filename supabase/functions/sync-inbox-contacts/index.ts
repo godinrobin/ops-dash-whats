@@ -256,6 +256,26 @@ serve(async (req) => {
     const EVOLUTION_BASE_URL = evolutionBaseUrl.replace(/\/$/, '');
     const EVOLUTION_API_KEY = evolutionApiKey;
     const instanceName = instance.instance_name;
+    
+    // Get instance identifiers for pushName validation
+    const instanceLabel = instance.label?.toLowerCase()?.trim() || '';
+    const instanceNameLower = instanceName?.toLowerCase()?.trim() || '';
+    
+    // Function to check if pushName is suspicious (matches instance name/label)
+    const isSuspiciousPushName = (name: string | null): boolean => {
+      if (!name) return true;
+      const nameLower = name.toLowerCase().trim();
+      // Check if pushName matches or contains instance label/name
+      if (instanceLabel && (nameLower === instanceLabel || nameLower.includes(instanceLabel) || instanceLabel.includes(nameLower))) {
+        console.log(`Suspicious pushName detected: "${name}" matches instance label "${instanceLabel}"`);
+        return true;
+      }
+      if (instanceNameLower && (nameLower === instanceNameLower || nameLower.includes(instanceNameLower) || instanceNameLower.includes(nameLower))) {
+        console.log(`Suspicious pushName detected: "${name}" matches instance name "${instanceNameLower}"`);
+        return true;
+      }
+      return false;
+    };
 
     console.log(`Fetching chats from ${EVOLUTION_BASE_URL} for instance ${instanceName}`);
 
@@ -362,12 +382,17 @@ serve(async (req) => {
           // Use the robust coercion function
           const messagesArr = coerceMessagesArray(messagesData);
           
-          // Find pushName from incoming messages ONLY (not fromMe)
+          // Find pushName from incoming messages ONLY (not fromMe) and validate it
           for (const msg of messagesArr) {
             if (msg?.key && !msg.key.fromMe && msg.pushName) {
-              contactName = msg.pushName;
-              console.log(`Found pushName from inbound message for ${phone}: ${contactName}`);
-              break;
+              // Only use pushName if it's not suspicious
+              if (!isSuspiciousPushName(msg.pushName)) {
+                contactName = msg.pushName;
+                console.log(`Found valid pushName from inbound message for ${phone}: ${contactName}`);
+                break;
+              } else {
+                console.log(`Skipping suspicious pushName for ${phone}: ${msg.pushName}`);
+              }
             }
           }
         }
@@ -414,8 +439,8 @@ serve(async (req) => {
           updated_at: new Date().toISOString(),
         };
 
-        // Update name if we have a new one from pushName and it's different from stored
-        if (contactName && contactName !== existingContact.name) {
+        // Update name if we have a new valid one from pushName and it's different from stored
+        if (contactName && !isSuspiciousPushName(contactName) && contactName !== existingContact.name) {
           updates.name = contactName;
         }
         
