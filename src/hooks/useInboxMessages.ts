@@ -260,7 +260,22 @@ export const useInboxMessages = (contactId: string | null) => {
           .from('inbox_messages')
           .update({ status: 'failed' })
           .eq('id', message.id);
-        throw sendError;
+        
+        // Parse the error for user-friendly message
+        let errorMsg = 'Erro ao enviar mensagem';
+        try {
+          const errorBody = (sendError as any)?.context?.body;
+          if (typeof errorBody === 'string') {
+            const parsed = JSON.parse(errorBody);
+            errorMsg = parsed.error || errorMsg;
+          } else if (errorBody?.error) {
+            errorMsg = errorBody.error;
+          }
+        } catch {
+          // Keep default error message
+        }
+        
+        throw new Error(errorMsg);
       }
 
       // Update contact's last_message_at

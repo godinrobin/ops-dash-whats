@@ -78,6 +78,50 @@ serve(async (req) => {
     let evolutionEndpoint = '';
     let evolutionBody: Record<string, unknown> = {};
 
+    // First, verify if the number exists on WhatsApp
+    console.log('Checking if number exists on WhatsApp...');
+    try {
+      const checkResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/whatsappNumbers/${instanceName}`, {
+        method: 'POST',
+        headers: {
+          'apikey': EVOLUTION_API_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ numbers: [formattedPhone] }),
+      });
+
+      const checkResult = await checkResponse.json();
+      console.log('WhatsApp number check result:', JSON.stringify(checkResult, null, 2));
+
+      // Check if the number exists on WhatsApp
+      const numberInfo = checkResult?.[0] || checkResult;
+      const exists = numberInfo?.exists === true || numberInfo?.numberExists === true;
+      
+      if (!exists && checkResponse.ok) {
+        console.log('Number does not exist on WhatsApp');
+        
+        // Update message status to failed if we have messageId
+        if (messageId) {
+          await supabaseAdmin
+            .from('inbox_messages')
+            .update({ status: 'failed' })
+            .eq('id', messageId);
+        }
+        
+        return new Response(JSON.stringify({ 
+          error: 'Este número não possui WhatsApp',
+          errorCode: 'NUMBER_NOT_ON_WHATSAPP',
+          details: checkResult 
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    } catch (checkErr) {
+      // If the check fails, log and continue - the send might still work
+      console.warn('WhatsApp number check failed, continuing with send:', checkErr);
+    }
+
     switch (messageType) {
       case 'text':
         evolutionEndpoint = `/message/sendText/${instanceName}`;
@@ -158,11 +202,30 @@ serve(async (req) => {
           .eq('id', messageId);
       }
       
+      // Parse specific error messages for better user feedback
+      const errorMessage = evolutionResult?.message || evolutionResult?.response?.message;
+      const errorDetails = Array.isArray(errorMessage) ? errorMessage.join(', ') : errorMessage;
+      
+      let userFriendlyError = 'Falha ao enviar mensagem';
+      let errorCode = 'SEND_FAILED';
+      
+      if (errorDetails?.includes('Connection Closed') || errorDetails?.includes('connection closed')) {
+        userFriendlyError = 'Conexão fechada. O número pode não ter WhatsApp ou a instância perdeu conexão.';
+        errorCode = 'CONNECTION_CLOSED';
+      } else if (errorDetails?.includes('not registered') || errorDetails?.includes('not on whatsapp')) {
+        userFriendlyError = 'Este número não possui WhatsApp';
+        errorCode = 'NUMBER_NOT_ON_WHATSAPP';
+      } else if (errorDetails?.includes('disconnected') || errorDetails?.includes('logged out')) {
+        userFriendlyError = 'A instância do WhatsApp está desconectada. Reconecte e tente novamente.';
+        errorCode = 'INSTANCE_DISCONNECTED';
+      }
+      
       return new Response(JSON.stringify({ 
-        error: evolutionResult.message || 'Failed to send message',
+        error: userFriendlyError,
+        errorCode,
         details: evolutionResult 
       }), {
-        status: 500,
+        status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
