@@ -48,6 +48,16 @@ serve(async (req) => {
       });
     }
 
+    // Resolve instance id for status updates (best-effort)
+    const { data: instanceRow } = await supabaseAdmin
+      .from('maturador_instances')
+      .select('id')
+      .eq('instance_name', instanceName)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    const instanceId = instanceRow?.id ?? null;
+
     // Get user's Evolution API config, fallback to admin config
     let { data: config } = await supabaseClient
       .from('maturador_config')
@@ -219,6 +229,16 @@ serve(async (req) => {
         userFriendlyError = 'A instância do WhatsApp está desconectada. Reconecte e tente novamente.';
         errorCode = 'INSTANCE_DISCONNECTED';
       }
+
+      // Persist disconnected status so UI can warn even without sending
+      if (instanceId && (errorCode === 'CONNECTION_CLOSED' || errorCode === 'INSTANCE_DISCONNECTED')) {
+        const { error: statusErr } = await supabaseAdmin
+          .from('maturador_instances')
+          .update({ status: 'disconnected' })
+          .eq('id', instanceId);
+
+        if (statusErr) console.warn('Failed to mark instance as disconnected:', statusErr);
+      }
       
       return new Response(JSON.stringify({ 
         error: userFriendlyError,
@@ -232,6 +252,16 @@ serve(async (req) => {
 
     // Extract message ID from response
     const remoteMessageId = evolutionResult.key?.id || evolutionResult.messageId || evolutionResult.id || null;
+
+    // Mark instance connected (best-effort)
+    if (instanceId) {
+      const { error: statusErr } = await supabaseAdmin
+        .from('maturador_instances')
+        .update({ status: 'connected' })
+        .eq('id', instanceId);
+
+      if (statusErr) console.warn('Failed to mark instance as connected:', statusErr);
+    }
 
     // Update message status to 'sent' and save remote_message_id
     if (messageId) {
