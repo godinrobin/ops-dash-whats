@@ -402,7 +402,7 @@ serve(async (req) => {
       // Check if contact already exists for this user and instance
       const { data: existingContact } = await supabaseClient
         .from('inbox_contacts')
-        .select('id, name, profile_pic_url')
+        .select('id, name, profile_pic_url, remote_jid')
         .eq('user_id', user.id)
         .eq('phone', phone)
         .eq('instance_id', instanceId)
@@ -424,18 +424,24 @@ serve(async (req) => {
           updates.profile_pic_url = profilePicUrl;
         }
 
+        // Update remote_jid if not already set
+        if (!existingContact.remote_jid && remoteJid) {
+          updates.remote_jid = remoteJid;
+          console.log(`Updating contact ${phone} with remote_jid: ${remoteJid}`);
+        }
+
         if (Object.keys(updates).length > 1) {
           await supabaseClient
             .from('inbox_contacts')
             .update(updates)
             .eq('id', existingContact.id);
-          console.log(`Updated contact ${phone} with new data: name=${updates.name || 'unchanged'}, pic=${updates.profile_pic_url ? 'updated' : 'unchanged'}`);
+          console.log(`Updated contact ${phone} with new data: name=${updates.name || 'unchanged'}, pic=${updates.profile_pic_url ? 'updated' : 'unchanged'}, jid=${updates.remote_jid || 'unchanged'}`);
         }
         updated++;
         continue;
       }
 
-      // Create new contact
+      // Create new contact with remote_jid
       const { data: newContact, error: insertError } = await supabaseClient
         .from('inbox_contacts')
         .insert({
@@ -449,6 +455,7 @@ serve(async (req) => {
           last_message_at: chat.lastMsgTimestamp 
             ? new Date(chat.lastMsgTimestamp * 1000).toISOString() 
             : new Date().toISOString(),
+          remote_jid: remoteJid, // Save the JID for reliable message syncing
         })
         .select()
         .single();

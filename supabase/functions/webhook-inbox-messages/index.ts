@@ -170,6 +170,14 @@ serve(async (req) => {
         .maybeSingle();
 
       if (!contact) {
+        // Determine the best remote_jid to store (prefer remoteJidAlt if it's a valid @s.whatsapp.net)
+        let remoteJidToStore = remoteJid;
+        if (remoteJidAlt && remoteJidAlt.includes('@s.whatsapp.net')) {
+          remoteJidToStore = remoteJidAlt;
+        } else if (!remoteJid.includes('@s.whatsapp.net') && remoteJidAlt) {
+          remoteJidToStore = remoteJidAlt;
+        }
+
         // Create new contact using upsert to handle race conditions
         const { data: newContact, error: insertError } = await supabaseClient
           .from('inbox_contacts')
@@ -181,6 +189,7 @@ serve(async (req) => {
             status: 'active',
             unread_count: 1,
             last_message_at: new Date().toISOString(),
+            remote_jid: remoteJidToStore,
           }, {
             onConflict: 'user_id,instance_id,phone',
             ignoreDuplicates: false,
@@ -209,6 +218,7 @@ serve(async (req) => {
           }
         } else {
           contact = newContact;
+          console.log(`Created contact with remote_jid: ${remoteJidToStore}`);
         }
       } else {
         // Update existing contact
@@ -226,6 +236,20 @@ serve(async (req) => {
         // or if the new pushName is different and valid
         if (pushName && pushName.trim() && (!contact.name || contact.name !== pushName)) {
           updates.name = pushName;
+        }
+
+        // Update remote_jid if not already set
+        if (!contact.remote_jid) {
+          let remoteJidToStore = remoteJid;
+          if (remoteJidAlt && remoteJidAlt.includes('@s.whatsapp.net')) {
+            remoteJidToStore = remoteJidAlt;
+          } else if (!remoteJid.includes('@s.whatsapp.net') && remoteJidAlt) {
+            remoteJidToStore = remoteJidAlt;
+          }
+          if (remoteJidToStore) {
+            updates.remote_jid = remoteJidToStore;
+            console.log(`Updating contact ${contact.id} with remote_jid: ${remoteJidToStore}`);
+          }
         }
         
         await supabaseClient

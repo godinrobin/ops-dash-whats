@@ -119,7 +119,7 @@ serve(async (req) => {
 
     const { data: contact, error: contactError } = await supabaseClient
       .from("inbox_contacts")
-      .select("id, phone, instance_id, user_id")
+      .select("id, phone, instance_id, user_id, remote_jid")
       .eq("id", contactId)
       .eq("user_id", user.id)
       .single();
@@ -219,48 +219,128 @@ serve(async (req) => {
     const EVOLUTION_BASE_URL = evolutionBaseUrl.replace(/\/$/, "");
     const EVOLUTION_API_KEY = evolutionApiKey;
 
-    // Find remoteJid for this phone (more reliable than guessing @c.us vs @s.whatsapp.net)
-    let chats: any[] = [];
-    let remoteJid: string | null = null;
+    // Find remoteJid for this phone - use saved JID or try multiple formats
+    let remoteJid: string | null = (contact as any).remote_jid || null;
     const cleanPhone = String(contact.phone || "").replace(/\D/g, "");
+    let jidSource = "none";
+    let shouldSaveJid = false;
 
-    try {
-      const chatsRes = await fetch(`${EVOLUTION_BASE_URL}/chat/findChats/${instanceName}`, {
-        method: "POST",
-        headers: {
-          apikey: EVOLUTION_API_KEY,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({}),
-      });
-
-      if (chatsRes.ok) {
-        chats = await chatsRes.json();
-        const matchedChat = (Array.isArray(chats) ? chats : []).find((c: any) => {
-          const jid = c?.id || c?.remoteJid || "";
-          return extractPhoneFromJid(jid) === cleanPhone;
-        });
-        remoteJid = matchedChat?.id || matchedChat?.remoteJid || null;
-      } else {
-        // Evolution API can fail with internal errors on some corrupted chats
-        // Fall back to constructing the JID manually
-        console.warn("findChats failed, falling back to manual JID construction");
-      }
-    } catch (chatError) {
-      console.warn("findChats error, falling back to manual JID construction:", chatError);
+    // If we have a saved JID, use it directly
+    if (remoteJid) {
+      jidSource = "saved";
+      console.log("Using saved remote_jid:", remoteJid);
     }
 
-    // If we couldn't get remoteJid from findChats, try to construct it manually
+    // Try to find the correct JID from Evolution API chats
+    if (!remoteJid) {
+      try {
+        const chatsRes = await fetch(`${EVOLUTION_BASE_URL}/chat/findChats/${instanceName}`, {
+          method: "POST",
+          headers: {
+            apikey: EVOLUTION_API_KEY,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({}),
+        });
+
+        if (chatsRes.ok) {
+          const chats = await chatsRes.json();
+          const matchedChat = (Array.isArray(chats) ? chats : []).find((c: any) => {
+            const jid = c?.id || c?.remoteJid || "";
+            return extractPhoneFromJid(jid) === cleanPhone;
+          });
+          if (matchedChat) {
+            remoteJid = matchedChat.id || matchedChat.remoteJid;
+            jidSource = "findChats";
+            shouldSaveJid = true;
+            console.log("Found JID from findChats:", remoteJid);
+          }
+        } else {
+          console.warn("findChats failed, will try multiple JID formats");
+        }
+      } catch (chatError) {
+        console.warn("findChats error:", chatError);
+      }
+    }
+
+    // If still no JID, try multiple formats and see which one returns messages
+    const jidFormatsToTry = [
+      `${cleanPhone}@s.whatsapp.net`,
+      `${cleanPhone}@c.us`,
+    ];
+
+    // Helper function to try fetching messages with a specific JID
+    const tryFetchMessages = async (jid: string): Promise<{ success: boolean; data: any }> => {
+      try {
+        const res = await fetch(`${EVOLUTION_BASE_URL}/chat/findMessages/${instanceName}`, {
+          method: "POST",
+          headers: {
+            apikey: EVOLUTION_API_KEY,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            where: { key: { remoteJid: jid } },
+            limit: 5, // Just check if there are any messages
+          }),
+        });
+        if (!res.ok) return { success: false, data: null };
+        const data = await res.json();
+        
+        // Check if we got any messages
+        const hasMessages = (arr: any): boolean => {
+          if (Array.isArray(arr) && arr.length > 0) return true;
+          if (arr?.messages?.records?.length > 0) return true;
+          if (Array.isArray(arr?.messages) && arr.messages.length > 0) return true;
+          if (Array.isArray(arr?.records) && arr.records.length > 0) return true;
+          if (Array.isArray(arr?.data) && arr.data.length > 0) return true;
+          return false;
+        };
+        
+        return { success: hasMessages(data), data };
+      } catch {
+        return { success: false, data: null };
+      }
+    };
+
+    // If we don't have a JID yet, try each format
     if (!remoteJid && cleanPhone) {
-      // Try the standard WhatsApp JID format
-      remoteJid = `${cleanPhone}@s.whatsapp.net`;
-      console.log("Using manually constructed JID:", remoteJid);
+      console.log("Trying multiple JID formats for phone:", cleanPhone);
+      
+      for (const jidFormat of jidFormatsToTry) {
+        console.log("Trying JID format:", jidFormat);
+        const result = await tryFetchMessages(jidFormat);
+        if (result.success) {
+          remoteJid = jidFormat;
+          jidSource = "format_probe";
+          shouldSaveJid = true;
+          console.log("Found working JID format:", jidFormat);
+          break;
+        }
+      }
+      
+      // If no format worked, use the default
+      if (!remoteJid) {
+        remoteJid = jidFormatsToTry[0];
+        jidSource = "fallback";
+        console.log("No working JID found, using fallback:", remoteJid);
+      }
     }
 
     if (!remoteJid) {
       return new Response(JSON.stringify({ inserted: 0, reason: "Chat not found for phone" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    console.log(`Using JID: ${remoteJid} (source: ${jidSource})`);
+
+    // Save the JID if we found a working one
+    if (shouldSaveJid && remoteJid) {
+      await supabaseAdmin
+        .from("inbox_contacts")
+        .update({ remote_jid: remoteJid })
+        .eq("id", contact.id);
+      console.log("Saved remote_jid to contact:", remoteJid);
     }
 
     const msgsRes = await fetch(`${EVOLUTION_BASE_URL}/chat/findMessages/${instanceName}`, {
