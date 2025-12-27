@@ -100,11 +100,12 @@ export default function AdsDashboard() {
 
       const { data: campaigns } = await query;
 
-      // Calculate metrics
+      // Calculate metrics - use meta_conversions for conversions
       const totalSpend = campaigns?.reduce((sum, c) => sum + (c.spend || 0), 0) || 0;
       const totalImpressions = campaigns?.reduce((sum, c) => sum + (c.impressions || 0), 0) || 0;
       const totalClicks = campaigns?.reduce((sum, c) => sum + (c.clicks || 0), 0) || 0;
-      const totalConversions = campaigns?.reduce((sum, c) => sum + (c.conversions || 0), 0) || 0;
+      // Use meta_conversions instead of conversions for accurate Meta conversion tracking
+      const totalConversions = campaigns?.reduce((sum, c) => sum + ((c as any).meta_conversions || 0), 0) || 0;
 
       // Get leads data for funnel
       const { data: leads } = await supabase
