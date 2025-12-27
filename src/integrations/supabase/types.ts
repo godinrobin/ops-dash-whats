@@ -504,6 +504,7 @@ export type Database = {
           notes: string | null
           phone: string
           profile_pic_url: string | null
+          remote_jid: string | null
           status: string
           tags: Json | null
           unread_count: number
@@ -521,6 +522,7 @@ export type Database = {
           notes?: string | null
           phone: string
           profile_pic_url?: string | null
+          remote_jid?: string | null
           status?: string
           tags?: Json | null
           unread_count?: number
@@ -538,6 +540,7 @@ export type Database = {
           notes?: string | null
           phone?: string
           profile_pic_url?: string | null
+          remote_jid?: string | null
           status?: string
           tags?: Json | null
           unread_count?: number
