@@ -261,6 +261,22 @@ serve(async (req) => {
       // Determine message direction based on fromMe flag
       const direction = isFromMe ? 'outbound' : 'inbound';
       
+      // For outbound messages (isFromMe), check if this message was already saved by the flow processor
+      if (isFromMe && messageId) {
+        const { data: existingFlowMessage } = await supabaseClient
+          .from('inbox_messages')
+          .select('id')
+          .eq('remote_message_id', messageId)
+          .maybeSingle();
+        
+        if (existingFlowMessage) {
+          console.log('Skipping duplicate outbound message (already saved by flow):', messageId);
+          return new Response(JSON.stringify({ success: true, skipped: true, reason: 'already_exists' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+      
       // Save the message
       const { error: messageError } = await supabaseClient
         .from('inbox_messages')

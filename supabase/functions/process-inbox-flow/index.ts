@@ -218,8 +218,8 @@ serve(async (req) => {
             // Send text message
             const message = replaceVariables(currentNode.data.message as string || '', variables);
             if (instanceName && phone && message) {
-              await sendMessage(instanceName, phone, message, 'text');
-              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, message, 'text', flow.id);
+              const sendResult = await sendMessage(instanceName, phone, message, 'text');
+              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, message, 'text', flow.id, undefined, sendResult.remoteMessageId);
               processedActions.push(`Sent text: ${message.substring(0, 50)}`);
             }
             
@@ -252,9 +252,9 @@ serve(async (req) => {
               // For images/videos, send caption. For documents, send fileName.
               // DO NOT send fileName as caption for image/video - that causes the filename to appear to the user
               const contentToSend = currentNode.type === 'document' ? fileName : caption;
-              await sendMessage(instanceName, phone, contentToSend, currentNode.type, mediaUrl, fileName);
+              const mediaSendResult = await sendMessage(instanceName, phone, contentToSend, currentNode.type, mediaUrl, fileName);
               // Save the caption (not filename) as content for display purposes
-              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, caption || '', currentNode.type, flow.id, mediaUrl);
+              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, caption || '', currentNode.type, flow.id, mediaUrl, mediaSendResult.remoteMessageId);
               processedActions.push(`Sent ${currentNode.type}: ${caption || fileName || 'media'}`);
               console.log(`${currentNode.type} sent successfully`);
             } else {
@@ -798,6 +798,12 @@ function replaceVariables(text: string, variables: Record<string, unknown>): str
   return text.replace(/\{\{(\w+)\}\}/g, (_, key) => String(variables[key] || ''));
 }
 
+interface SendMessageResult {
+  ok: boolean;
+  remoteMessageId: string | null;
+  errorDetails: string | null;
+}
+
 async function sendMessage(
   instanceName: string, 
   phone: string, 
@@ -805,7 +811,7 @@ async function sendMessage(
   messageType: string, 
   mediaUrl?: string,
   fileName?: string
-) {
+): Promise<SendMessageResult> {
   const formattedPhone = phone.replace(/\D/g, '');
   
   let endpoint = '';
@@ -839,7 +845,7 @@ async function sendMessage(
       break;
     default:
       console.log(`Unknown message type: ${messageType}`);
-      return;
+      return { ok: false, remoteMessageId: null, errorDetails: `Unknown message type: ${messageType}` };
   }
 
   console.log(`Sending ${messageType} to ${formattedPhone} via ${endpoint}`);
@@ -860,9 +866,24 @@ async function sendMessage(
     
     if (!response.ok) {
       console.error(`Failed to send ${messageType}:`, responseText);
+      return { ok: false, remoteMessageId: null, errorDetails: responseText };
     }
+    
+    // Parse response to extract message ID
+    let remoteMessageId: string | null = null;
+    try {
+      const responseData = JSON.parse(responseText);
+      // Evolution API returns the message ID in different formats
+      remoteMessageId = responseData?.key?.id || responseData?.id || responseData?.messageId || null;
+      console.log(`Extracted remoteMessageId: ${remoteMessageId}`);
+    } catch (parseErr) {
+      console.log('Could not parse Evolution response for message ID:', parseErr);
+    }
+    
+    return { ok: true, remoteMessageId, errorDetails: null };
   } catch (error) {
     console.error(`Error sending ${messageType}:`, error);
+    return { ok: false, remoteMessageId: null, errorDetails: String(error) };
   }
 }
 
@@ -874,8 +895,23 @@ async function saveOutboundMessage(
   content: string,
   messageType: string,
   flowId: string,
-  mediaUrl?: string
+  mediaUrl?: string,
+  remoteMessageId?: string | null
 ) {
+  // If we have a remoteMessageId, check if message already exists (to prevent duplicates)
+  if (remoteMessageId) {
+    const { data: existing } = await supabaseClient
+      .from('inbox_messages')
+      .select('id')
+      .eq('remote_message_id', remoteMessageId)
+      .maybeSingle();
+    
+    if (existing) {
+      console.log(`Message with remoteMessageId ${remoteMessageId} already exists, skipping insert`);
+      return;
+    }
+  }
+
   const { error } = await supabaseClient
     .from('inbox_messages')
     .insert({
@@ -889,6 +925,7 @@ async function saveOutboundMessage(
       status: 'sent',
       is_from_flow: true,
       flow_id: flowId,
+      remote_message_id: remoteMessageId || null,
     });
 
   if (error) {
