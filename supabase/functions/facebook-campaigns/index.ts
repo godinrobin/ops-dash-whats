@@ -114,42 +114,64 @@ serve(async (req) => {
           
           console.log(`Campaign ${campaign.name} actions:`, JSON.stringify(actions).substring(0, 800));
           
-          // Extract messaging conversations from actions - check multiple action types
-          const messagingActionTypes = [
-            'onsite_conversion.messaging_conversation_started_7d',
-            'onsite_conversion.messaging_first_reply',
-            'messaging_conversation_started_7d',
-            'messaging_first_reply',
-            'onsite_conversion.total_messaging_connection'
+          // Extract messaging conversations
+          // Prefer the same action_type the Ads Manager uses (usually *_7d). If multiple are present,
+          // we take the maximum to avoid double-counting across overlapping attribution windows.
+          const messagingActionTypesPriority = [
+            "onsite_conversion.messaging_conversation_started_7d",
+            "messaging_conversation_started_7d",
+            "onsite_conversion.messaging_conversation_started",
+            "messaging_conversation_started",
+            "onsite_conversion.total_messaging_connection",
           ];
-          const messagingAction = actions.find((a: any) => messagingActionTypes.includes(a.action_type));
-          const messagingConversations = messagingAction ? parseInt(messagingAction.value || 0) : 0;
-          
-          // Extract cost per message from cost_per_action_type
-          const costPerMessageAction = costPerAction.find((a: any) => messagingActionTypes.includes(a.action_type));
-          const costPerMessageValue = costPerMessageAction ? parseFloat(costPerMessageAction.value || 0) : 0;
-          
-          // Extract Meta conversions (purchases, leads, etc.)
-          const conversionActionTypes = [
-            'purchase',
-            'omni_purchase', 
-            'offsite_conversion.fb_pixel_purchase',
-            'offsite_conversion.fb_pixel_complete_registration',
-            'offsite_conversion.fb_pixel_lead',
-            'complete_registration',
-            'lead',
-            'submit_application'
+
+          const messagingValues = messagingActionTypesPriority
+            .map((t) => {
+              const a = actions.find((x: any) => x.action_type === t);
+              return a ? { action_type: t, value: parseInt(a.value || 0) } : null;
+            })
+            .filter(Boolean) as Array<{ action_type: string; value: number }>;
+
+          const messagingBest = messagingValues.reduce(
+            (best, cur) => (!best || cur.value > best.value ? cur : best),
+            null as { action_type: string; value: number } | null
+          );
+
+          const messagingConversations = messagingBest?.value ?? 0;
+
+          // Cost per message: prefer official cost_per_action_type for the same action_type; fallback to spend / conversations
+          const costPerMessageAction = messagingBest
+            ? costPerAction.find((a: any) => a.action_type === messagingBest.action_type)
+            : null;
+          const costPerMessageValueFromApi = costPerMessageAction
+            ? parseFloat(costPerMessageAction.value || 0)
+            : 0;
+          const costPerMessageValue = costPerMessageValueFromApi || (messagingConversations > 0 ? parseFloat(insights.spend || 0) / messagingConversations : 0);
+
+          // Extract conversions + conversion value (match Ads Manager “Compras na Meta”)
+          // We intentionally do NOT sum leads/registrations here, because that skews comparisons.
+          const purchaseActionTypesPriority = [
+            "omni_purchase",
+            "purchase",
+            "offsite_conversion.fb_pixel_purchase",
           ];
-          const metaConversions = actions
-            .filter((a: any) => conversionActionTypes.some(type => a.action_type.includes(type) || a.action_type === type))
-            .reduce((sum: number, a: any) => sum + parseInt(a.value || 0), 0);
+
+          const purchaseAction = purchaseActionTypesPriority
+            .map((t) => actions.find((a: any) => a.action_type === t || String(a.action_type || "").includes(t)))
+            .find(Boolean) as any;
+
+          const purchases = purchaseAction ? parseInt(purchaseAction.value || 0) : 0;
+
+          const purchaseValueAction = purchaseActionTypesPriority
+            .map((t) => actionValues.find((a: any) => a.action_type === t || String(a.action_type || "").includes(t)))
+            .find(Boolean) as any;
+
+          const conversionValue = purchaseValueAction ? parseFloat(purchaseValueAction.value || 0) : 0;
+
+          console.log(
+            `Campaign ${campaign.name} - reach: ${insights.reach}, messaging: ${messagingConversations} (${messagingBest?.action_type ?? "n/a"}), purchases: ${purchases}, purchaseValue: ${conversionValue}`
+          );
           
-          // Extract conversion value from action_values
-          const conversionValue = actionValues
-            .filter((a: any) => conversionActionTypes.some(type => a.action_type.includes(type) || a.action_type === type))
-            .reduce((sum: number, a: any) => sum + parseFloat(a.value || 0), 0);
-          
-          console.log(`Campaign ${campaign.name} - reach: ${insights.reach}, messaging: ${messagingConversations}, conversions: ${metaConversions}, conversionValue: ${conversionValue}`);
 
           const campaignData = {
             campaign_id: campaign.id,
@@ -167,7 +189,7 @@ serve(async (req) => {
             cpc: parseFloat(insights.cost_per_inline_link_click || 0),
             cost_per_message: costPerMessageValue,
             messaging_conversations_started: parseInt(String(messagingConversations)),
-            meta_conversions: metaConversions,
+            meta_conversions: purchases,
             conversion_value: conversionValue,
             cost_per_result: parseFloat(insights.cost_per_conversion || 0),
             last_synced_at: new Date().toISOString(),
