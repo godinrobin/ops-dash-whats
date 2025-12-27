@@ -124,7 +124,7 @@ export default function AdsCampaigns() {
   const [dateFilter, setDateFilter] = useState<DateFilter>("7days");
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [columns, setColumns] = useState<ColumnConfig[]>(defaultColumns);
-  const [resizingColumn, setResizingColumn] = useState<string | null>(null);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [viewLevel, setViewLevel] = useState<ViewLevel>('campaign');
 
   const datePresetMap: Record<DateFilter, string> = {
@@ -377,10 +377,15 @@ export default function AdsCampaigns() {
     ));
   };
 
-  const handleColumnResize = (columnKey: string, delta: number) => {
-    setColumns(prev => prev.map(col => 
-      col.key === columnKey ? { ...col, width: Math.max(60, col.width + delta) } : col
-    ));
+  const handleColumnResize = (columnKey: string, newWidth: number) => {
+    setColumnWidths(prev => ({
+      ...prev,
+      [columnKey]: Math.max(60, newWidth)
+    }));
+  };
+
+  const getColumnWidth = (col: ColumnConfig) => {
+    return columnWidths[col.key] ?? col.width;
   };
 
   const sortedCampaigns = [...campaigns].sort((a, b) => {
@@ -778,7 +783,7 @@ export default function AdsCampaigns() {
               className={cn(
                 "flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors",
                 viewLevel === tab.value
-                  ? "border-primary text-primary bg-primary/5"
+                  ? "border-orange-500 text-orange-400 bg-orange-500/5"
                   : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
               )}
             >
@@ -797,18 +802,13 @@ export default function AdsCampaigns() {
               <Skeleton key={i} className="h-12" />
             ))}
           </div>
-        ) : viewLevel !== 'campaign' ? (
-          <div className="py-12 text-center">
-            <p className="text-muted-foreground">
-              {viewLevel === 'adset' ? 'Conjuntos de anúncios' : 'Anúncios'} - Em desenvolvimento
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              Esta visualização estará disponível em breve
-            </p>
-          </div>
         ) : filteredCampaigns.length === 0 ? (
           <div className="py-12 text-center">
-            <p className="text-muted-foreground">Nenhuma campanha encontrada</p>
+            <p className="text-muted-foreground">
+              {viewLevel === 'campaign' ? 'Nenhuma campanha encontrada' : 
+               viewLevel === 'adset' ? 'Nenhum conjunto de anúncios encontrado' : 
+               'Nenhum anúncio encontrado'}
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -819,46 +819,58 @@ export default function AdsCampaigns() {
                     <Checkbox
                       checked={selectedCampaigns.size === filteredCampaigns.length && filteredCampaigns.length > 0}
                       onCheckedChange={toggleAllCampaigns}
+                      className="border-orange-500 data-[state=checked]:bg-orange-500 data-[state=checked]:text-white"
                     />
                   </TableHead>
                   <TableHead className="w-[60px] border-r border-border/30">On/Off</TableHead>
-                  {visibleColumns.map((col, colIndex) => (
-                    <TableHead 
-                      key={col.key}
-                      className={cn(
-                        "cursor-pointer hover:text-foreground relative group border-r border-border/30",
-                        col.key !== 'name' && "text-right"
-                      )}
-                      style={{ minWidth: col.width, width: col.width }}
-                      onClick={() => handleSort(col.key as SortField)}
-                    >
-                      <div className={cn("flex items-center", col.key !== 'name' && "justify-end")}>
-                        {col.label} <SortIcon field={col.key as SortField} />
-                      </div>
-                      {/* Resize handle */}
-                      <div 
-                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize bg-border/50 hover:bg-primary/50"
-                        onMouseDown={(e) => {
-                          e.stopPropagation();
-                          const startX = e.clientX;
-                          const startWidth = col.width;
-                          
-                          const handleMouseMove = (moveE: MouseEvent) => {
-                            const delta = moveE.clientX - startX;
-                            handleColumnResize(col.key, delta);
-                          };
-                          
-                          const handleMouseUp = () => {
-                            document.removeEventListener('mousemove', handleMouseMove);
-                            document.removeEventListener('mouseup', handleMouseUp);
-                          };
-                          
-                          document.addEventListener('mousemove', handleMouseMove);
-                          document.addEventListener('mouseup', handleMouseUp);
-                        }}
-                      />
-                    </TableHead>
-                  ))}
+                  {visibleColumns.map((col) => {
+                    const width = getColumnWidth(col);
+                    return (
+                      <TableHead 
+                        key={col.key}
+                        className={cn(
+                          "cursor-pointer hover:text-foreground relative group border-r border-border/30 transition-all duration-150",
+                          col.key !== 'name' && "text-right"
+                        )}
+                        style={{ minWidth: width, width: width }}
+                        onClick={() => handleSort(col.key as SortField)}
+                      >
+                        <div className={cn("flex items-center", col.key !== 'name' && "justify-end")}>
+                          {col.label} <SortIcon field={col.key as SortField} />
+                        </div>
+                        {/* Resize handle - more precise and smooth */}
+                        <div 
+                          className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize bg-transparent hover:bg-orange-500/50 transition-colors"
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            const startX = e.clientX;
+                            const startWidth = width;
+                            
+                            const handleMouseMove = (moveE: MouseEvent) => {
+                              moveE.preventDefault();
+                              const delta = moveE.clientX - startX;
+                              // Apply smoothing factor for more precise control
+                              const newWidth = startWidth + delta * 0.5;
+                              handleColumnResize(col.key, newWidth);
+                            };
+                            
+                            const handleMouseUp = () => {
+                              document.removeEventListener('mousemove', handleMouseMove);
+                              document.removeEventListener('mouseup', handleMouseUp);
+                              document.body.style.cursor = '';
+                              document.body.style.userSelect = '';
+                            };
+                            
+                            document.body.style.cursor = 'col-resize';
+                            document.body.style.userSelect = 'none';
+                            document.addEventListener('mousemove', handleMouseMove);
+                            document.addEventListener('mouseup', handleMouseUp);
+                          }}
+                        />
+                      </TableHead>
+                    );
+                  })}
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -875,13 +887,14 @@ export default function AdsCampaigns() {
                         style={{ animationDelay: `${index * 0.04}s` }}
                         className={cn(
                           "border-b border-border/20 hover:bg-muted/20 transition-colors",
-                          selectedCampaigns.has(campaign.id) && "bg-primary/5"
+                          selectedCampaigns.has(campaign.id) && "bg-orange-500/5"
                         )}
                       >
                         <TableCell className="border-r border-border/20">
                           <Checkbox
                             checked={selectedCampaigns.has(campaign.id)}
                             onCheckedChange={() => toggleCampaignSelection(campaign.id)}
+                            className="border-orange-500 data-[state=checked]:bg-orange-500 data-[state=checked]:text-white"
                           />
                         </TableCell>
                         <TableCell className="border-r border-border/20">
@@ -894,18 +907,21 @@ export default function AdsCampaigns() {
                             )}
                           />
                         </TableCell>
-                        {visibleColumns.map((col) => (
-                          <TableCell 
-                            key={col.key} 
-                            className={cn(
-                              "border-r border-border/20",
-                              col.key !== 'name' && "text-right"
-                            )}
-                            style={{ minWidth: col.width, width: col.width }}
-                          >
-                            {renderCellContent(campaign, col.key)}
-                          </TableCell>
-                        ))}
+                        {visibleColumns.map((col) => {
+                          const width = getColumnWidth(col);
+                          return (
+                            <TableCell 
+                              key={col.key} 
+                              className={cn(
+                                "border-r border-border/20 transition-all duration-150",
+                                col.key !== 'name' && "text-right"
+                              )}
+                              style={{ minWidth: width, width: width }}
+                            >
+                              {renderCellContent(campaign, col.key)}
+                            </TableCell>
+                          );
+                        })}
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
