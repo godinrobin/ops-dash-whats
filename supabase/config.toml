@@ -140,3 +140,9 @@ verify_jwt = false
 
 [functions.admin-sync-conversations]
 verify_jwt = true
+
+[functions.verify-webhooks]
+verify_jwt = true
+
+[functions.sync-inbox-messages]
+verify_jwt = true

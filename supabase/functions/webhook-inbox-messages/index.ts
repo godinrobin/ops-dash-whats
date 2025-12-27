@@ -669,6 +669,81 @@ serve(async (req) => {
         .update({ status: newStatus })
         .eq('instance_name', instance);
 
+      // AUTO-CONFIGURE WEBHOOK when instance connects
+      if (state === 'open') {
+        console.log(`[AUTO-WEBHOOK] Instance ${instance} connected, ensuring webhook is configured`);
+        
+        try {
+          // Get instance and user info
+          const { data: instanceData } = await supabaseClient
+            .from('maturador_instances')
+            .select('user_id')
+            .eq('instance_name', instance)
+            .single();
+
+          if (instanceData) {
+            // Get user's Evolution API config
+            const { data: config } = await supabaseClient
+              .from('maturador_config')
+              .select('*')
+              .eq('user_id', instanceData.user_id)
+              .maybeSingle();
+
+            if (config) {
+              const EVOLUTION_BASE_URL = config.evolution_base_url.replace(/\/$/, '');
+              const EVOLUTION_API_KEY = config.evolution_api_key;
+              const webhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/webhook-inbox-messages`;
+
+              // Configure webhook with multiple payload formats
+              const payloads = [
+                {
+                  url: webhookUrl,
+                  enabled: true,
+                  webhookByEvents: false,
+                  webhookBase64: false,
+                  events: ["MESSAGES_UPSERT", "MESSAGES_UPDATE", "MESSAGES_DELETE", "CONNECTION_UPDATE", "SEND_MESSAGE"]
+                },
+                {
+                  webhook: {
+                    url: webhookUrl,
+                    enabled: true,
+                    webhookByEvents: false,
+                    events: ["messages.upsert", "messages.update", "connection.update", "send.message"]
+                  }
+                },
+                {
+                  url: webhookUrl,
+                  enabled: true,
+                  events: ["MESSAGES_UPSERT", "MESSAGES_UPDATE", "CONNECTION_UPDATE", "SEND_MESSAGE"]
+                }
+              ];
+
+              for (const payload of payloads) {
+                try {
+                  const setRes = await fetch(`${EVOLUTION_BASE_URL}/webhook/set/${instance}`, {
+                    method: 'POST',
+                    headers: {
+                      apikey: EVOLUTION_API_KEY,
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload),
+                  });
+
+                  if (setRes.ok) {
+                    console.log(`[AUTO-WEBHOOK] Webhook configured successfully for ${instance}`);
+                    break;
+                  }
+                } catch (webhookError) {
+                  console.log(`[AUTO-WEBHOOK] Payload attempt failed for ${instance}:`, webhookError);
+                }
+              }
+            }
+          }
+        } catch (autoWebhookError) {
+          console.error(`[AUTO-WEBHOOK] Error configuring webhook for ${instance}:`, autoWebhookError);
+        }
+      }
+
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
