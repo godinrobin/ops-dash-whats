@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Zap, Edit2, Trash2, Copy, ArrowLeft, Smartphone } from 'lucide-react';
+import { Plus, Zap, Edit2, Trash2, Copy, ArrowLeft, Smartphone, AlertTriangle } from 'lucide-react';
 import { useInboxFlows } from '@/hooks/useInboxFlows';
 import { toast } from 'sonner';
 import { Label } from '@/components/ui/label';
@@ -54,9 +54,11 @@ const FlowListPage = () => {
   };
 
   // Cleanup disconnected instances from flows automatically
+  // IMPORTANT: Only run when instances are loaded (length > 0) to avoid race condition
   useEffect(() => {
     const cleanupDisconnectedInstances = async () => {
-      if (!flows.length || loading) return;
+      // Guard: Don't run if instances haven't loaded yet or are empty
+      if (!flows.length || loading || instances.length === 0) return;
       
       const connectedInstanceIds = new Set(instances.map(i => i.id));
       
@@ -68,7 +70,7 @@ const FlowListPage = () => {
           
           // If some instances were removed, update the flow
           if (validInstances.length !== flow.assigned_instances.length) {
-            console.log(`Cleaning up disconnected instances from flow ${flow.name}`);
+            console.log(`Cleaning up disconnected instances from flow ${flow.name}: ${flow.assigned_instances.length} -> ${validInstances.length}`);
             await updateFlow(flow.id, { assigned_instances: validInstances });
           }
         }
@@ -150,10 +152,13 @@ const FlowListPage = () => {
   const handleSaveInstances = async () => {
     if (!selectedFlowId) return;
     
+    console.log(`Saving instances for flow ${selectedFlowId}:`, selectedInstances);
     const result = await updateFlow(selectedFlowId, { assigned_instances: selectedInstances });
     if (result.error) {
+      console.error('Error saving instances:', result.error);
       toast.error('Erro ao atualizar números: ' + result.error);
     } else {
+      console.log('Instances saved successfully');
       toast.success('Números atualizados com sucesso');
       setShowInstancesDialog(false);
     }
@@ -337,17 +342,26 @@ const FlowListPage = () => {
                     </Badge>
                   </div>
 
-                  {/* Show keywords */}
-                  {flow.trigger_type === 'keyword' && flow.trigger_keywords && flow.trigger_keywords.length > 0 && (
+                  {/* Show keywords or warning */}
+                  {flow.trigger_type === 'keyword' && (
                     <div className="flex flex-wrap gap-1 mb-4">
-                      {flow.trigger_keywords.slice(0, 5).map((keyword, idx) => (
-                        <Badge key={idx} variant="secondary" className="text-xs">
-                          {keyword}
-                        </Badge>
-                      ))}
-                      {flow.trigger_keywords.length > 5 && (
-                        <Badge variant="secondary" className="text-xs">
-                          +{flow.trigger_keywords.length - 5}
+                      {flow.trigger_keywords && flow.trigger_keywords.length > 0 ? (
+                        <>
+                          {flow.trigger_keywords.slice(0, 5).map((keyword, idx) => (
+                            <Badge key={idx} variant="secondary" className="text-xs">
+                              {keyword}
+                            </Badge>
+                          ))}
+                          {flow.trigger_keywords.length > 5 && (
+                            <Badge variant="secondary" className="text-xs">
+                              +{flow.trigger_keywords.length - 5}
+                            </Badge>
+                          )}
+                        </>
+                      ) : (
+                        <Badge variant="destructive" className="text-xs flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          Sem palavras-chave
                         </Badge>
                       )}
                     </div>
