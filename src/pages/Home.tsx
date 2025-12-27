@@ -294,6 +294,12 @@ const Home = () => {
     setRestrictedModalOpen(true);
   };
 
+  useEffect(() => {
+    if (mode === "ads") {
+      navigate("/ads");
+    }
+  }, [mode, navigate]);
+
   if (mode === "marketplace") {
     return <Marketplace onModeChange={setMode} currentMode={mode} />;
   }
