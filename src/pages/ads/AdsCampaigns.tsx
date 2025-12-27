@@ -27,7 +27,8 @@ import {
   Columns3,
   Power,
   DollarSign,
-  Check
+  Check,
+  Target
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -193,6 +194,9 @@ export default function AdsCampaigns() {
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [viewLevel, setViewLevel] = useState<ViewLevel>('campaign');
   const [accountFilterOpen, setAccountFilterOpen] = useState(false);
+  // Hierarchy selection state
+  const [selectedCampaignIds, setSelectedCampaignIds] = useState<Set<string>>(new Set());
+  const [selectedAdsetIds, setSelectedAdsetIds] = useState<Set<string>>(new Set());
 
   const datePresetMap: Record<DateFilter, string> = {
     today: "today",
@@ -209,6 +213,11 @@ export default function AdsCampaigns() {
     daily_budget: "",
     selected_accounts: [] as string[]
   });
+
+  // Filter to only show active (is_selected) ad accounts
+  const activeAdAccounts = useMemo(() => {
+    return adAccounts.filter(acc => acc.is_selected === true);
+  }, [adAccounts]);
 
   useEffect(() => {
     if (user) {
@@ -618,12 +627,33 @@ export default function AdsCampaigns() {
     });
   };
 
-  // Get current data based on view level
+  // Filter adsets and ads based on hierarchy selection
+  const filteredAdsetsByHierarchy = useMemo(() => {
+    if (selectedCampaignIds.size === 0) return adsets;
+    return adsets.filter(adset => selectedCampaignIds.has(adset.campaign_id));
+  }, [adsets, selectedCampaignIds]);
+
+  const filteredAdsByHierarchy = useMemo(() => {
+    if (selectedAdsetIds.size > 0) {
+      return ads.filter(ad => selectedAdsetIds.has(ad.adset_id));
+    }
+    if (selectedCampaignIds.size > 0) {
+      return ads.filter(ad => selectedCampaignIds.has(ad.campaign_id));
+    }
+    return ads;
+  }, [ads, selectedAdsetIds, selectedCampaignIds]);
+
+  // Get current data based on view level with hierarchy filtering
   const currentData = useMemo(() => {
     if (viewLevel === 'campaign') return campaigns;
-    if (viewLevel === 'adset') return adsets;
-    return ads;
-  }, [viewLevel, campaigns, adsets, ads]);
+    if (viewLevel === 'adset') return filteredAdsetsByHierarchy;
+    return filteredAdsByHierarchy;
+  }, [viewLevel, campaigns, filteredAdsetsByHierarchy, filteredAdsByHierarchy]);
+
+  // Counts for tabs - based on hierarchy
+  const campaignCount = campaigns.length;
+  const adsetCount = filteredAdsetsByHierarchy.length;
+  const adCount = filteredAdsByHierarchy.length;
 
   const sortedData = useMemo(() => {
     const data = [...currentData];
@@ -677,10 +707,44 @@ export default function AdsCampaigns() {
     }
   };
 
-  // Reset selection when view level changes
+  // Reset selection when view level changes (but keep hierarchy selection)
   useEffect(() => {
     setSelectedItems(new Set());
   }, [viewLevel]);
+
+  // Toggle campaign selection for hierarchy filtering
+  const toggleCampaignHierarchySelection = (campaignId: string) => {
+    setSelectedCampaignIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(campaignId)) {
+        newSet.delete(campaignId);
+      } else {
+        newSet.add(campaignId);
+      }
+      return newSet;
+    });
+    // Clear adset selection when campaign selection changes
+    setSelectedAdsetIds(new Set());
+  };
+
+  // Toggle adset selection for hierarchy filtering
+  const toggleAdsetHierarchySelection = (adsetId: string) => {
+    setSelectedAdsetIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(adsetId)) {
+        newSet.delete(adsetId);
+      } else {
+        newSet.add(adsetId);
+      }
+      return newSet;
+    });
+  };
+
+  // Clear all hierarchy selections
+  const clearHierarchySelection = () => {
+    setSelectedCampaignIds(new Set());
+    setSelectedAdsetIds(new Set());
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -728,9 +792,37 @@ export default function AdsCampaigns() {
           <div className="w-12 h-12 bg-muted rounded flex items-center justify-center text-muted-foreground text-xs">N/A</div>
         );
       case 'name':
+        const isSelectedForHierarchy = viewLevel === 'campaign' 
+          ? selectedCampaignIds.has(item.campaign_id)
+          : viewLevel === 'adset' 
+            ? selectedAdsetIds.has(item.adset_id)
+            : false;
         return (
           <div className="flex flex-col gap-1">
-            <span className="font-medium truncate max-w-[200px]">{item.name}</span>
+            <div className="flex items-center gap-2">
+              <span className="font-medium truncate max-w-[200px]">{item.name}</span>
+              {viewLevel !== 'ad' && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-5 w-5 shrink-0",
+                    isSelectedForHierarchy && "bg-orange-500/20 text-orange-400"
+                  )}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (viewLevel === 'campaign') {
+                      toggleCampaignHierarchySelection(item.campaign_id);
+                    } else if (viewLevel === 'adset') {
+                      toggleAdsetHierarchySelection(item.adset_id);
+                    }
+                  }}
+                  title={viewLevel === 'campaign' ? 'Filtrar conjuntos e anúncios desta campanha' : 'Filtrar anúncios deste conjunto'}
+                >
+                  <Target className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
             {getStatusBadge(item.status)}
           </div>
         );
@@ -976,7 +1068,7 @@ export default function AdsCampaigns() {
                 <span className={selectedAccounts.length === 0 ? "" : "ml-6"}>Todas as contas</span>
               </button>
               <div className="border-t border-border my-2" />
-              {adAccounts.map((acc) => (
+              {activeAdAccounts.map((acc) => (
                 <button
                   key={acc.id}
                   onClick={() => toggleAccountSelection(acc.id)}
@@ -1076,27 +1168,47 @@ export default function AdsCampaigns() {
         )}
       </AnimatePresence>
 
-      {/* View Level Tabs - Facebook Style */}
+      {/* View Level Tabs with hierarchy selection info */}
       <div className="border-b border-border">
-        <div className="flex gap-0">
-          {viewLevelTabs.map((tab) => (
-            <button
-              key={tab.value}
-              onClick={() => setViewLevel(tab.value)}
-              className={cn(
-                "flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors",
-                viewLevel === tab.value
-                  ? "border-orange-500 text-orange-400 bg-orange-500/5"
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
-              )}
-            >
-              <span>{tab.icon}</span>
-              <span>{tab.label}</span>
-              <Badge variant="secondary" className="ml-1 text-xs">
-                {tab.value === 'campaign' ? campaigns.length : tab.value === 'adset' ? adsets.length : ads.length}
-              </Badge>
-            </button>
-          ))}
+        <div className="flex justify-between items-center">
+          <div className="flex gap-0">
+            {viewLevelTabs.map((tab) => (
+              <button
+                key={tab.value}
+                onClick={() => setViewLevel(tab.value)}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors",
+                  viewLevel === tab.value
+                    ? "border-orange-500 text-orange-400 bg-orange-500/5"
+                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                )}
+              >
+                <span>{tab.icon}</span>
+                <span>{tab.label}</span>
+                <Badge variant="secondary" className="ml-1 text-xs">
+                  {tab.value === 'campaign' ? campaignCount : tab.value === 'adset' ? adsetCount : adCount}
+                </Badge>
+              </button>
+            ))}
+          </div>
+          
+          {/* Hierarchy selection indicator */}
+          {(selectedCampaignIds.size > 0 || selectedAdsetIds.size > 0) && (
+            <div className="flex items-center gap-2 pr-4">
+              <span className="text-xs text-muted-foreground">
+                Filtro: {selectedCampaignIds.size > 0 && `${selectedCampaignIds.size} campanha(s)`}
+                {selectedAdsetIds.size > 0 && ` → ${selectedAdsetIds.size} conjunto(s)`}
+              </span>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={clearHierarchySelection}
+                className="h-6 text-xs"
+              >
+                Limpar
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
