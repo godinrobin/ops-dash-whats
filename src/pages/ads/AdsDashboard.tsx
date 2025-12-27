@@ -138,10 +138,22 @@ export default function AdsDashboard() {
     }
   };
 
+  const datePresetMap: Record<DateFilter, string> = {
+    today: "today",
+    yesterday: "yesterday",
+    "7days": "last_7d",
+    "30days": "last_30d"
+  };
+
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const { error } = await supabase.functions.invoke("facebook-campaigns", { body: { action: "sync_campaigns" } });
+      const { error } = await supabase.functions.invoke("facebook-campaigns", { 
+        body: { 
+          action: "sync_campaigns",
+          datePreset: datePresetMap[dateFilter]
+        } 
+      });
       if (error) throw error;
       splashedToast.success("Dados sincronizados com sucesso!");
       await loadData();
@@ -152,6 +164,13 @@ export default function AdsDashboard() {
       setSyncing(false);
     }
   };
+
+  // Re-sync when date filter changes
+  useEffect(() => {
+    if (user && !loading && hasAccounts) {
+      handleSync();
+    }
+  }, [dateFilter]);
 
   const metricCards: MetricCard[] = [
     { title: "Investido", value: `R$ ${metrics.spend.toFixed(2)}`, icon: DollarSign, color: "text-red-400" },

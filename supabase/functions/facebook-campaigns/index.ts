@@ -69,10 +69,30 @@ serve(async (req) => {
           continue;
         }
 
-        // Fetch campaigns with expanded insights including reach, cpc, messaging metrics
-        const campaignsUrl = `https://graph.facebook.com/v18.0/act_${adAccount.ad_account_id}/campaigns?fields=id,name,status,objective,daily_budget,lifetime_budget,insights.date_preset(${datePreset}){spend,impressions,clicks,reach,cpm,ctr,cpc,cost_per_inline_link_click,messaging_first_reply,cost_per_messaging_reply,actions}&access_token=${accessToken}`;
+        // Map date preset from frontend to Facebook API format
+        const datePresetInput = datePreset || 'last_7d';
+        const datePresetMap: Record<string, string> = {
+          'today': 'today',
+          'yesterday': 'yesterday',
+          'last_7d': 'last_7d',
+          'last_30d': 'last_30d',
+          'this_month': 'this_month'
+        };
+        const mappedDatePreset = datePresetMap[datePresetInput] || 'last_7d';
         
-        console.log(`Fetching campaigns for account ${adAccount.ad_account_id}...`);
+        console.log('Using date_preset:', mappedDatePreset);
+
+        // Build insights fields - more comprehensive list
+        const insightsFields = [
+          'spend', 'impressions', 'clicks', 'reach', 'cpm', 'ctr',
+          'inline_link_click_ctr', 'cost_per_inline_link_click',
+          'actions', 'cost_per_action_type', 'action_values'
+        ].join(',');
+
+        // Fetch campaigns with insights
+        const campaignsUrl = `https://graph.facebook.com/v18.0/act_${adAccount.ad_account_id}/campaigns?fields=id,name,status,objective,daily_budget,lifetime_budget,insights.date_preset(${mappedDatePreset}){${insightsFields}}&access_token=${accessToken}`;
+        
+        console.log(`Fetching campaigns for account ${adAccount.ad_account_id} with date_preset ${mappedDatePreset}...`);
         const campaignsResponse = await fetch(campaignsUrl);
         const campaignsData = await campaignsResponse.json();
 
@@ -88,18 +108,42 @@ serve(async (req) => {
         // Sync campaigns to database
         for (const campaign of campaigns) {
           const insights = campaign.insights?.data?.[0] || {};
-          
-          // Extract messaging conversations from actions
           const actions = insights.actions || [];
-          const messagingConversations = actions.find((a: any) => 
-            a.action_type === 'onsite_conversion.messaging_conversation_started_7d' ||
-            a.action_type === 'onsite_conversion.messaging_first_reply'
-          )?.value || 0;
+          const costPerAction = insights.cost_per_action_type || [];
           
-          // Extract Meta conversions (purchase, complete_registration, lead, etc.)
-          const metaConversions = actions.filter((a: any) => 
-            ['purchase', 'omni_purchase', 'complete_registration', 'lead', 'submit_application'].includes(a.action_type)
-          ).reduce((sum: number, a: any) => sum + parseInt(a.value || 0), 0);
+          console.log(`Campaign ${campaign.name} insights:`, JSON.stringify(insights).substring(0, 500));
+          console.log(`Campaign ${campaign.name} actions:`, JSON.stringify(actions));
+          
+          // Extract messaging conversations from actions - check multiple action types
+          const messagingActionTypes = [
+            'onsite_conversion.messaging_conversation_started_7d',
+            'onsite_conversion.messaging_first_reply',
+            'messaging_conversation_started_7d',
+            'messaging_first_reply'
+          ];
+          const messagingAction = actions.find((a: any) => messagingActionTypes.includes(a.action_type));
+          const messagingConversations = messagingAction ? parseInt(messagingAction.value || 0) : 0;
+          
+          // Extract cost per message
+          const costPerMessageAction = costPerAction.find((a: any) => messagingActionTypes.includes(a.action_type));
+          const costPerMessageValue = costPerMessageAction ? parseFloat(costPerMessageAction.value || 0) : 0;
+          
+          // Extract Meta conversions (purchases, leads, etc.) - expanded list
+          const conversionActionTypes = [
+            'purchase',
+            'omni_purchase', 
+            'offsite_conversion.fb_pixel_purchase',
+            'offsite_conversion.fb_pixel_complete_registration',
+            'offsite_conversion.fb_pixel_lead',
+            'complete_registration',
+            'lead',
+            'submit_application'
+          ];
+          const metaConversions = actions
+            .filter((a: any) => conversionActionTypes.some(type => a.action_type.includes(type) || a.action_type === type))
+            .reduce((sum: number, a: any) => sum + parseInt(a.value || 0), 0);
+          
+          console.log(`Campaign ${campaign.name} - reach: ${insights.reach}, messaging: ${messagingConversations}, conversions: ${metaConversions}`);
 
           const campaignData = {
             campaign_id: campaign.id,
@@ -114,9 +158,9 @@ serve(async (req) => {
             reach: parseInt(insights.reach || 0),
             cpm: parseFloat(insights.cpm || 0),
             ctr: parseFloat(insights.ctr || 0),
-            cpc: parseFloat(insights.cost_per_inline_link_click || insights.cpc || 0),
-            cost_per_message: parseFloat(insights.cost_per_messaging_reply || 0),
-            messaging_conversations_started: parseInt(messagingConversations),
+            cpc: parseFloat(insights.cost_per_inline_link_click || 0),
+            cost_per_message: costPerMessageValue,
+            messaging_conversations_started: parseInt(String(messagingConversations)),
             meta_conversions: metaConversions,
             cost_per_result: parseFloat(insights.cost_per_conversion || 0),
             last_synced_at: new Date().toISOString(),
