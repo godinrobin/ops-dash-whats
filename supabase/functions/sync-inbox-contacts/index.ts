@@ -30,6 +30,116 @@ const extractPhoneFromJid = (jid: string): string | null => {
   return cleaned;
 };
 
+// Robust message parser - matches sync-inbox-messages logic
+type EvolutionMessage = {
+  key?: {
+    id?: string;
+    fromMe?: boolean;
+    remoteJid?: string;
+  };
+  pushName?: string;
+  messageTimestamp?: number | string;
+  message?: any;
+  messageType?: string; // Some responses have this at root level
+};
+
+const parseEvolutionContent = (msg: EvolutionMessage): { content: string | null; messageType: string; mediaUrl: string | null } => {
+  const m = msg.message || {};
+
+  // Handle messageType at root level (some Evolution API versions)
+  if (msg.messageType && !msg.message) {
+    return { messageType: msg.messageType, content: null, mediaUrl: null };
+  }
+
+  if (m?.conversation) {
+    return { messageType: "text", content: m.conversation, mediaUrl: null };
+  }
+  if (m?.extendedTextMessage?.text) {
+    return { messageType: "text", content: m.extendedTextMessage.text, mediaUrl: null };
+  }
+  if (m?.imageMessage) {
+    return {
+      messageType: "image",
+      content: m.imageMessage.caption || "",
+      mediaUrl: m.imageMessage.url || null,
+    };
+  }
+  if (m?.audioMessage) {
+    return { messageType: "audio", content: null, mediaUrl: m.audioMessage.url || null };
+  }
+  if (m?.videoMessage) {
+    return {
+      messageType: "video",
+      content: m.videoMessage.caption || "",
+      mediaUrl: m.videoMessage.url || null,
+    };
+  }
+  if (m?.documentMessage) {
+    return {
+      messageType: "document",
+      content: m.documentMessage.fileName || "",
+      mediaUrl: m.documentMessage.url || null,
+    };
+  }
+  if (m?.stickerMessage) {
+    return { messageType: "sticker", content: null, mediaUrl: m.stickerMessage.url || null };
+  }
+  if (m?.protocolMessage) {
+    // Protocol messages (read receipts, etc) - skip these
+    return { messageType: "protocol", content: null, mediaUrl: null };
+  }
+  if (m?.reactionMessage) {
+    return { messageType: "reaction", content: m.reactionMessage.text || "👍", mediaUrl: null };
+  }
+
+  return { messageType: "text", content: null, mediaUrl: null };
+};
+
+// Coerce different Evolution API response formats to array
+const coerceMessagesArray = (val: any): EvolutionMessage[] => {
+  if (Array.isArray(val)) {
+    return val as EvolutionMessage[];
+  }
+
+  if (val && typeof val === "object") {
+    // Evolution API v2 format: { messages: { records: [...] } }
+    if (val.messages?.records && Array.isArray(val.messages.records)) {
+      return val.messages.records as EvolutionMessage[];
+    }
+    
+    // { messages: [...] }
+    if (Array.isArray(val.messages)) {
+      return val.messages as EvolutionMessage[];
+    }
+    
+    // { records: [...] }
+    if (Array.isArray(val.records)) {
+      return val.records as EvolutionMessage[];
+    }
+    
+    // { data: [...] }
+    if (Array.isArray(val.data)) {
+      return val.data as EvolutionMessage[];
+    }
+
+    // { messages: { "0": {...}, "1": {...} } }
+    if (val.messages && typeof val.messages === "object" && !Array.isArray(val.messages)) {
+      const msgKeys = Object.keys(val.messages);
+      if (msgKeys.length > 0 && msgKeys.every((k) => !isNaN(Number(k)))) {
+        return Object.values(val.messages) as EvolutionMessage[];
+      }
+    }
+
+    // { "0": {...}, "1": {...} }
+    const keys = Object.keys(val);
+    if (keys.length > 0 && keys.every((k) => !isNaN(Number(k)))) {
+      return Object.values(val) as EvolutionMessage[];
+    }
+  }
+
+  return [];
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -248,19 +358,9 @@ serve(async (req) => {
 
         if (messagesResponse.ok) {
           const messagesData = await messagesResponse.json();
-          let messagesArr: any[] = [];
           
-          // Handle different response formats
-          if (Array.isArray(messagesData)) {
-            messagesArr = messagesData;
-          } else if (messagesData?.messages?.records && Array.isArray(messagesData.messages.records)) {
-            // Evolution API v2 format: { messages: { records: [...] } }
-            messagesArr = messagesData.messages.records;
-          } else if (Array.isArray(messagesData?.messages)) {
-            messagesArr = messagesData.messages;
-          } else if (messagesData?.messages && typeof messagesData.messages === 'object') {
-            messagesArr = Object.values(messagesData.messages);
-          }
+          // Use the robust coercion function
+          const messagesArr = coerceMessagesArray(messagesData);
           
           // Find pushName from incoming messages ONLY (not fromMe)
           for (const msg of messagesArr) {
@@ -383,24 +483,13 @@ serve(async (req) => {
           if (messagesResponse.ok) {
             const messagesData = await messagesResponse.json();
             
-            // Handle different response formats
-            let messagesArr: any[] = [];
-            if (Array.isArray(messagesData)) {
-              messagesArr = messagesData;
-            } else if (messagesData?.messages?.records && Array.isArray(messagesData.messages.records)) {
-              // Evolution API v2 format: { messages: { records: [...] } }
-              messagesArr = messagesData.messages.records;
-            } else if (Array.isArray(messagesData?.messages)) {
-              messagesArr = messagesData.messages;
-            } else if (messagesData?.messages && typeof messagesData.messages === 'object') {
-              messagesArr = Object.values(messagesData.messages);
-            } else if (Array.isArray(messagesData?.records)) {
-              messagesArr = messagesData.records;
-            }
+            // Use the robust coercion function
+            const messagesArr = coerceMessagesArray(messagesData);
             
             console.log(`Fetched ${messagesArr.length} messages for ${phone}`);
 
             let messagesImported = 0;
+            let messagesSkipped = 0;
             let foundPushName = null;
             
             for (const msg of messagesArr.slice(0, 100)) {
@@ -412,33 +501,23 @@ serve(async (req) => {
                 foundPushName = msg.pushName;
               }
               
-              let content = '';
-              let messageType = 'text';
-              let mediaUrl = null;
-
-              if (msg.message?.conversation) {
-                content = msg.message.conversation;
-              } else if (msg.message?.extendedTextMessage?.text) {
-                content = msg.message.extendedTextMessage.text;
-              } else if (msg.message?.imageMessage) {
-                messageType = 'image';
-                content = msg.message.imageMessage.caption || '';
-                mediaUrl = msg.message.imageMessage.url || null;
-              } else if (msg.message?.audioMessage) {
-                messageType = 'audio';
-                mediaUrl = msg.message.audioMessage.url || null;
-              } else if (msg.message?.videoMessage) {
-                messageType = 'video';
-                content = msg.message.videoMessage.caption || '';
-                mediaUrl = msg.message.videoMessage.url || null;
-              } else if (msg.message?.documentMessage) {
-                messageType = 'document';
-                content = msg.message.documentMessage.fileName || '';
-                mediaUrl = msg.message.documentMessage.url || null;
+              // Use the robust parser
+              const { content, messageType, mediaUrl } = parseEvolutionContent(msg);
+              
+              // Skip protocol messages (read receipts, etc)
+              if (messageType === 'protocol') {
+                messagesSkipped++;
+                continue;
               }
 
-              // Skip empty messages
-              if (!content && !mediaUrl) continue;
+              // Skip empty messages but log for debugging
+              if (!content && !mediaUrl) {
+                messagesSkipped++;
+                continue;
+              }
+
+              const ts = msg.messageTimestamp ? Number(msg.messageTimestamp) : 0;
+              const createdAt = ts > 0 ? new Date(ts * 1000).toISOString() : new Date().toISOString();
 
               const { error: msgError } = await supabaseClient
                 .from('inbox_messages')
@@ -451,11 +530,9 @@ serve(async (req) => {
                   content,
                   media_url: mediaUrl,
                   remote_message_id: key.id,
-                  status: 'delivered',
+                  status: direction === 'outbound' ? 'sent' : 'delivered',
                   is_from_flow: false,
-                  created_at: msg.messageTimestamp 
-                    ? new Date(msg.messageTimestamp * 1000).toISOString()
-                    : new Date().toISOString(),
+                  created_at: createdAt,
                 });
 
               if (!msgError) {
@@ -472,7 +549,7 @@ serve(async (req) => {
               console.log(`Updated contact ${phone} with pushName from messages: ${foundPushName}`);
             }
             
-            console.log(`Imported ${messagesImported} messages for ${phone}`);
+            console.log(`Imported ${messagesImported} messages for ${phone}, skipped ${messagesSkipped}`);
           }
         } catch (msgError) {
           console.error(`Error fetching messages for ${phone}:`, msgError);
