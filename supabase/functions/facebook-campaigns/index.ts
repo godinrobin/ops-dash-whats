@@ -168,6 +168,7 @@ serve(async (req) => {
             cost_per_message: costPerMessageValue,
             messaging_conversations_started: parseInt(String(messagingConversations)),
             meta_conversions: metaConversions,
+            conversion_value: conversionValue,
             cost_per_result: parseFloat(insights.cost_per_conversion || 0),
             last_synced_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),

@@ -56,9 +56,10 @@ interface Campaign {
   cost_per_message: number;
   messaging_conversations_started: number;
   meta_conversions: number;
+  conversion_value: number;
 }
 
-type SortField = 'name' | 'status' | 'daily_budget' | 'spend' | 'impressions' | 'reach' | 'cpm' | 'cpc' | 'ctr' | 'cost_per_message' | 'messaging_conversations_started' | 'meta_conversions';
+type SortField = 'name' | 'status' | 'daily_budget' | 'spend' | 'impressions' | 'reach' | 'cpm' | 'cpc' | 'ctr' | 'cost_per_message' | 'messaging_conversations_started' | 'meta_conversions' | 'conversion_value' | 'profit';
 type SortOrder = 'asc' | 'desc';
 type DateFilter = "today" | "yesterday" | "7days" | "30days" | "month";
 
@@ -255,8 +256,17 @@ export default function AdsCampaigns() {
   };
 
   const sortedCampaigns = [...campaigns].sort((a, b) => {
-    const aValue = a[sortField] || 0;
-    const bValue = b[sortField] || 0;
+    // Handle the calculated 'profit' field
+    let aValue: string | number;
+    let bValue: string | number;
+    
+    if (sortField === 'profit') {
+      aValue = (a.conversion_value || 0) - (a.spend || 0);
+      bValue = (b.conversion_value || 0) - (b.spend || 0);
+    } else {
+      aValue = a[sortField] || 0;
+      bValue = b[sortField] || 0;
+    }
     
     if (typeof aValue === 'string' && typeof bValue === 'string') {
       return sortOrder === 'asc' 
@@ -595,18 +605,36 @@ export default function AdsCampaigns() {
                       Conversão <SortIcon field="meta_conversions" />
                     </div>
                   </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:text-foreground text-right"
+                    onClick={() => handleSort('conversion_value')}
+                  >
+                    <div className="flex items-center justify-end">
+                      Valor Conv. <SortIcon field="conversion_value" />
+                    </div>
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:text-foreground text-right"
+                    onClick={() => handleSort('profit')}
+                  >
+                    <div className="flex items-center justify-end">
+                      Lucro <SortIcon field="profit" />
+                    </div>
+                  </TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredCampaigns.map((campaign) => (
-                  <TableRow 
-                    key={campaign.id}
-                    className={cn(
-                      "hover:bg-muted/50",
-                      selectedCampaigns.has(campaign.id) && "bg-primary/5"
-                    )}
-                  >
+                {filteredCampaigns.map((campaign) => {
+                  const profit = (campaign.conversion_value || 0) - (campaign.spend || 0);
+                  return (
+                    <TableRow 
+                      key={campaign.id}
+                      className={cn(
+                        "hover:bg-muted/50",
+                        selectedCampaigns.has(campaign.id) && "bg-primary/5"
+                      )}
+                    >
                     <TableCell>
                       <Checkbox
                         checked={selectedCampaigns.has(campaign.id)}
@@ -660,6 +688,15 @@ export default function AdsCampaigns() {
                     <TableCell className="text-right font-medium text-green-400">
                       {formatNumber(campaign.meta_conversions || 0)}
                     </TableCell>
+                    <TableCell className="text-right font-medium text-blue-400">
+                      {formatCurrency(campaign.conversion_value || 0)}
+                    </TableCell>
+                    <TableCell className={cn(
+                      "text-right font-medium",
+                      profit >= 0 ? "text-green-400" : "text-red-400"
+                    )}>
+                      {formatCurrency(profit)}
+                    </TableCell>
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -693,7 +730,8 @@ export default function AdsCampaigns() {
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

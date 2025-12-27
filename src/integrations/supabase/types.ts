@@ -297,6 +297,7 @@ export type Database = {
           ad_account_id: string | null
           campaign_id: string
           clicks: number | null
+          conversion_value: number | null
           conversions: number | null
           cost_per_message: number | null
           cost_per_result: number | null
@@ -324,6 +325,7 @@ export type Database = {
           ad_account_id?: string | null
           campaign_id: string
           clicks?: number | null
+          conversion_value?: number | null
           conversions?: number | null
           cost_per_message?: number | null
           cost_per_result?: number | null
@@ -351,6 +353,7 @@ export type Database = {
           ad_account_id?: string | null
           campaign_id?: string
           clicks?: number | null
+          conversion_value?: number | null
           conversions?: number | null
           cost_per_message?: number | null
           cost_per_result?: number | null
