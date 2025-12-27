@@ -169,33 +169,42 @@ serve(async (req) => {
     const EVOLUTION_API_KEY = config.evolution_api_key;
 
     // Find remoteJid for this phone (more reliable than guessing @c.us vs @s.whatsapp.net)
-    const chatsRes = await fetch(`${EVOLUTION_BASE_URL}/chat/findChats/${instanceName}`, {
-      method: "POST",
-      headers: {
-        apikey: EVOLUTION_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({}),
-    });
-
-    if (!chatsRes.ok) {
-      const errorText = await chatsRes.text();
-      console.error("findChats failed:", errorText);
-      return new Response(JSON.stringify({ error: "Failed to fetch chats", details: errorText }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const chats = await chatsRes.json();
+    let chats: any[] = [];
+    let remoteJid: string | null = null;
     const cleanPhone = String(contact.phone || "").replace(/\D/g, "");
 
-    const matchedChat = (Array.isArray(chats) ? chats : []).find((c: any) => {
-      const jid = c?.id || c?.remoteJid || "";
-      return extractPhoneFromJid(jid) === cleanPhone;
-    });
+    try {
+      const chatsRes = await fetch(`${EVOLUTION_BASE_URL}/chat/findChats/${instanceName}`, {
+        method: "POST",
+        headers: {
+          apikey: EVOLUTION_API_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      });
 
-    const remoteJid = matchedChat?.id || matchedChat?.remoteJid || null;
+      if (chatsRes.ok) {
+        chats = await chatsRes.json();
+        const matchedChat = (Array.isArray(chats) ? chats : []).find((c: any) => {
+          const jid = c?.id || c?.remoteJid || "";
+          return extractPhoneFromJid(jid) === cleanPhone;
+        });
+        remoteJid = matchedChat?.id || matchedChat?.remoteJid || null;
+      } else {
+        // Evolution API can fail with internal errors on some corrupted chats
+        // Fall back to constructing the JID manually
+        console.warn("findChats failed, falling back to manual JID construction");
+      }
+    } catch (chatError) {
+      console.warn("findChats error, falling back to manual JID construction:", chatError);
+    }
+
+    // If we couldn't get remoteJid from findChats, try to construct it manually
+    if (!remoteJid && cleanPhone) {
+      // Try the standard WhatsApp JID format
+      remoteJid = `${cleanPhone}@s.whatsapp.net`;
+      console.log("Using manually constructed JID:", remoteJid);
+    }
 
     if (!remoteJid) {
       return new Response(JSON.stringify({ inserted: 0, reason: "Chat not found for phone" }), {
@@ -367,7 +376,6 @@ serve(async (req) => {
       .from("inbox_contacts")
       .update({
         last_message_at: new Date().toISOString(),
-        unread_count: (matchedChat?.unreadCount ?? undefined),
       })
       .eq("id", contact.id);
 
