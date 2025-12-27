@@ -181,6 +181,16 @@ export const InboxLayout = () => {
           })
           .map(f => ({ id: f.id, name: f.name, is_active: f.is_active }))}
         onTriggerFlow={handleTriggerFlow}
+        onRefreshContact={refetchContacts}
+        onContactDeleted={() => {
+          setSelectedContact(null);
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete('contact');
+            return next;
+          });
+          refetchContacts();
+        }}
       />
 
       {/* Detalhes do Contato */}

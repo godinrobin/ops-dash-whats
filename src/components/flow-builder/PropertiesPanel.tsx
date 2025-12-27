@@ -294,6 +294,29 @@ export const PropertiesPanel = ({
           }
         };
         
+        // Video upload validation constants
+        const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+        const ALLOWED_VIDEO_FORMATS = ['mp4', 'mov', 'avi', 'webm', 'mkv', 'quicktime'];
+        const ALLOWED_IMAGE_FORMATS = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+        const ALLOWED_AUDIO_FORMATS = ['mp3', 'wav', 'ogg', 'm4a', 'aac'];
+        const ALLOWED_DOC_FORMATS = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'csv', 'ppt', 'pptx'];
+
+        const getAllowedFormats = () => {
+          switch (selectedNode.type) {
+            case 'video': return ALLOWED_VIDEO_FORMATS;
+            case 'image': return ALLOWED_IMAGE_FORMATS;
+            case 'audio': return ALLOWED_AUDIO_FORMATS;
+            case 'document': return ALLOWED_DOC_FORMATS;
+            default: return [];
+          }
+        };
+
+        const formatFileSize = (bytes: number) => {
+          if (bytes < 1024) return `${bytes} B`;
+          if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+          return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+        };
+
         return (
           <div className="space-y-4">
             <div className="space-y-2">
@@ -309,40 +332,75 @@ export const PropertiesPanel = ({
                       const file = e.target.files?.[0];
                       if (!file) return;
                       
+                      // Validate file size
+                      if (file.size > MAX_FILE_SIZE) {
+                        toast.error(`Arquivo muito grande (máximo 50MB). Seu arquivo: ${formatFileSize(file.size)}`);
+                        e.target.value = '';
+                        return;
+                      }
+                      
+                      // Validate file format
+                      const extension = file.name.split('.').pop()?.toLowerCase();
+                      const mimeType = file.type.split('/')[1]?.toLowerCase();
+                      const allowedFormats = getAllowedFormats();
+                      
+                      if (allowedFormats.length > 0 && !allowedFormats.includes(extension || '') && !allowedFormats.includes(mimeType || '')) {
+                        toast.error(`Formato não suportado. Use: ${allowedFormats.join(', ')}`);
+                        e.target.value = '';
+                        return;
+                      }
+                      
                       const { supabase } = await import('@/integrations/supabase/client');
                       const { data: { user } } = await supabase.auth.getUser();
                       if (!user) {
-                        const { toast } = await import('sonner');
                         toast.error('Você precisa estar logado');
                         return;
                       }
                       
-                      const { toast } = await import('sonner');
-                      toast.loading('Enviando arquivo...');
+                      const loadingToast = toast.loading(`Enviando ${getMediaLabel().toLowerCase()} (${formatFileSize(file.size)})...`);
                       
-                      const fileName = `${user.id}/flow-media/${Date.now()}-${file.name}`;
-                      const { error } = await supabase.storage.from('video-clips').upload(fileName, file);
-                      
-                      if (error) {
-                        toast.dismiss();
-                        toast.error('Erro ao enviar arquivo');
-                        console.error('Upload error:', error);
-                        return;
+                      try {
+                        const fileName = `${user.id}/flow-media/${Date.now()}-${file.name}`;
+                        const { error } = await supabase.storage.from('video-clips').upload(fileName, file, {
+                          cacheControl: '3600',
+                          upsert: false
+                        });
+                        
+                        if (error) {
+                          console.error('Upload error:', error);
+                          
+                          // Provide specific error messages
+                          if (error.message?.includes('exceeded')) {
+                            toast.error('Limite de armazenamento excedido', { id: loadingToast });
+                          } else if (error.message?.includes('network')) {
+                            toast.error('Erro de conexão. Verifique sua internet e tente novamente.', { id: loadingToast });
+                          } else {
+                            toast.error(`Erro ao enviar: ${error.message || 'Tente novamente'}`, { id: loadingToast });
+                          }
+                          return;
+                        }
+                        
+                        const { data: urlData } = supabase.storage.from('video-clips').getPublicUrl(fileName);
+                        onUpdateNode(selectedNode.id, { 
+                          mediaUrl: urlData.publicUrl,
+                          fileName: file.name 
+                        });
+                        toast.success('Arquivo enviado!', { id: loadingToast });
+                      } catch (err: any) {
+                        console.error('Upload exception:', err);
+                        toast.error(`Erro inesperado: ${err?.message || 'Tente novamente'}`, { id: loadingToast });
                       }
-                      
-                      const { data: urlData } = supabase.storage.from('video-clips').getPublicUrl(fileName);
-                      onUpdateNode(selectedNode.id, { 
-                        mediaUrl: urlData.publicUrl,
-                        fileName: file.name 
-                      });
-                      toast.dismiss();
-                      toast.success('Arquivo enviado!');
                     }}
                     className="cursor-pointer"
                   />
                   <p className="text-xs text-muted-foreground mt-2">
-                    Clique para selecionar um arquivo
+                    Clique para selecionar um arquivo (máx 50MB)
                   </p>
+                  {selectedNode.type === 'video' && (
+                    <p className="text-xs text-muted-foreground">
+                      Formatos: {ALLOWED_VIDEO_FORMATS.join(', ')}
+                    </p>
+                  )}
                 </div>
                 {(nodeData.mediaUrl as string) && (
                   <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-2 flex items-center gap-2">
