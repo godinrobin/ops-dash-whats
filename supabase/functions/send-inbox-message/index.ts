@@ -230,11 +230,14 @@ serve(async (req) => {
         errorCode = 'INSTANCE_DISCONNECTED';
       }
 
-      // Persist disconnected status so UI can warn even without sending
+      // Persist disconnected status AND last_error_at so UI can warn even without sending
       if (instanceId && (errorCode === 'CONNECTION_CLOSED' || errorCode === 'INSTANCE_DISCONNECTED')) {
         const { error: statusErr } = await supabaseAdmin
           .from('maturador_instances')
-          .update({ status: 'disconnected' })
+          .update({ 
+            status: 'disconnected',
+            last_error_at: new Date().toISOString()
+          })
           .eq('id', instanceId);
 
         if (statusErr) console.warn('Failed to mark instance as disconnected:', statusErr);
@@ -253,11 +256,14 @@ serve(async (req) => {
     // Extract message ID from response
     const remoteMessageId = evolutionResult.key?.id || evolutionResult.messageId || evolutionResult.id || null;
 
-    // Mark instance connected (best-effort)
+    // Mark instance connected AND clear last_error_at (best-effort)
     if (instanceId) {
       const { error: statusErr } = await supabaseAdmin
         .from('maturador_instances')
-        .update({ status: 'connected' })
+        .update({ 
+          status: 'connected',
+          last_error_at: null
+        })
         .eq('id', instanceId);
 
       if (statusErr) console.warn('Failed to mark instance as connected:', statusErr);
