@@ -67,6 +67,7 @@ interface Instance {
   instance_name: string;
   label: string | null;
   phone_number: string | null;
+  status: string | null;
 }
 
 export const ChatPanel = ({
@@ -106,18 +107,33 @@ export const ChatPanel = ({
     return predefined?.color || 'bg-gray-500';
   };
 
-  // Fetch all instances once
+  // Fetch all instances once and refresh when contact changes
   useEffect(() => {
     const fetchInstances = async () => {
       const { data } = await supabase
         .from('maturador_instances')
-        .select('id, instance_name, label, phone_number');
+        .select('id, instance_name, label, phone_number, status');
       if (data) {
         setInstances(data);
+        
+        // Check if current contact's instance is disconnected
+        if (contact?.instance_id) {
+          const contactInstance = data.find(i => i.id === contact.instance_id);
+          if (contactInstance && contactInstance.status !== 'connected') {
+            setConnectionError({
+              show: true,
+              errorCode: 'INSTANCE_DISCONNECTED',
+              instanceName: contactInstance.label || contactInstance.instance_name,
+            });
+          } else {
+            // Clear error if instance is now connected
+            setConnectionError(prev => prev.errorCode === 'INSTANCE_DISCONNECTED' ? { show: false } : prev);
+          }
+        }
       }
     };
     fetchInstances();
-  }, []);
+  }, [contact?.instance_id]);
 
   // Get instance color map
   const instanceColorMap = useMemo(() => {
