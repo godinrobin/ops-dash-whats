@@ -23,10 +23,18 @@ interface PropertiesPanelProps {
   onUpdateFlowSettings?: (settings: { triggerType?: string; triggerKeywords?: string[] }) => void;
   allNodes?: Node[];
 }
-
 // System variables that are always available (synchronized with backend)
 const SYSTEM_VARIABLES = ['nome', 'telefone', 'resposta', 'lastMessage', 'contactName', 'ultima_mensagem'];
 
+// Function to sanitize file names for upload (removes accents and special characters)
+const sanitizeFileName = (filename: string): string => {
+  // Remove accents/diacritics
+  const withoutAccents = filename.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  // Replace spaces and special characters with underscores, keep dots and hyphens
+  const sanitized = withoutAccents.replace(/[^a-zA-Z0-9.\-]/g, '_');
+  // Remove multiple consecutive underscores
+  return sanitized.replace(/_+/g, '_');
+};
 // Function to extract custom variables from all nodes in the flow
 const extractCustomVariablesFromNodes = (nodes: Node[]): string[] => {
   const customVariables = new Set<string>();
@@ -360,7 +368,8 @@ export const PropertiesPanel = ({
                       const loadingToast = toast.loading(`Enviando ${getMediaLabel().toLowerCase()} (${formatFileSize(file.size)})...`);
                       
                       try {
-                        const fileName = `${user.id}/flow-media/${Date.now()}-${file.name}`;
+                        const sanitizedName = sanitizeFileName(file.name);
+                        const fileName = `${user.id}/flow-media/${Date.now()}-${sanitizedName}`;
                         const { error } = await supabase.storage.from('video-clips').upload(fileName, file, {
                           cacheControl: '3600',
                           upsert: false
