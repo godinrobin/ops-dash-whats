@@ -114,42 +114,36 @@ serve(async (req) => {
           
           console.log(`Campaign ${campaign.name} actions:`, JSON.stringify(actions).substring(0, 800));
           
-          // Extract messaging conversations
-          // Prefer the same action_type the Ads Manager uses (usually *_7d). If multiple are present,
-          // we take the maximum to avoid double-counting across overlapping attribution windows.
-          const messagingActionTypesPriority = [
-            "onsite_conversion.messaging_conversation_started_7d",
-            "messaging_conversation_started_7d",
-            "onsite_conversion.messaging_conversation_started",
-            "messaging_conversation_started",
-            "onsite_conversion.total_messaging_connection",
-          ];
+          // Extract messaging conversations (match Ads Manager: "Conversas por mensagem" / "Custo por conversa")
+          // The Ads Manager column uses the 7-day attribution action_type in most accounts.
+          const conversationActionTypePrimary = "onsite_conversion.messaging_conversation_started_7d";
+          const conversationActionTypeFallback = "messaging_conversation_started_7d";
 
-          const messagingValues = messagingActionTypesPriority
-            .map((t) => {
-              const a = actions.find((x: any) => x.action_type === t);
-              return a ? { action_type: t, value: parseInt(a.value || 0) } : null;
-            })
-            .filter(Boolean) as Array<{ action_type: string; value: number }>;
+          const conversationAction =
+            actions.find((a: any) => a.action_type === conversationActionTypePrimary) ||
+            actions.find((a: any) => a.action_type === conversationActionTypeFallback);
 
-          const messagingBest = messagingValues.reduce(
-            (best, cur) => (!best || cur.value > best.value ? cur : best),
-            null as { action_type: string; value: number } | null
+          const messagingConversations = conversationAction ? parseInt(conversationAction.value || 0) : 0;
+          const chosenConversationActionType = conversationAction?.action_type ?? "n/a";
+
+          // Cost per conversation: prefer API's cost_per_action_type for the exact same action_type.
+          // If it's missing, fallback to spend / conversations.
+          const costPerConversationAction = costPerAction.find(
+            (a: any) => a.action_type === chosenConversationActionType
           );
 
-          const messagingConversations = messagingBest?.value ?? 0;
-
-          // Cost per message: prefer official cost_per_action_type for the same action_type; fallback to spend / conversations
-          const costPerMessageAction = messagingBest
-            ? costPerAction.find((a: any) => a.action_type === messagingBest.action_type)
-            : null;
-          const costPerMessageValueFromApi = costPerMessageAction
-            ? parseFloat(costPerMessageAction.value || 0)
+          const costPerConversationFromApi = costPerConversationAction
+            ? parseFloat(costPerConversationAction.value || 0)
             : 0;
-          const costPerMessageValue = costPerMessageValueFromApi || (messagingConversations > 0 ? parseFloat(insights.spend || 0) / messagingConversations : 0);
+
+          const costPerMessageValue =
+            costPerConversationFromApi ||
+            (messagingConversations > 0
+              ? parseFloat(insights.spend || 0) / messagingConversations
+              : 0);
 
           // Extract conversions + conversion value (match Ads Manager “Compras na Meta”)
-          // We intentionally do NOT sum leads/registrations here, because that skews comparisons.
+          // We intentionally focus on purchases to avoid mismatches with other conversion types.
           const purchaseActionTypesPriority = [
             "omni_purchase",
             "purchase",
@@ -157,20 +151,29 @@ serve(async (req) => {
           ];
 
           const purchaseAction = purchaseActionTypesPriority
-            .map((t) => actions.find((a: any) => a.action_type === t || String(a.action_type || "").includes(t)))
+            .map((t) =>
+              actions.find(
+                (a: any) => a.action_type === t || String(a.action_type || "").includes(t)
+              )
+            )
             .find(Boolean) as any;
 
           const purchases = purchaseAction ? parseInt(purchaseAction.value || 0) : 0;
 
           const purchaseValueAction = purchaseActionTypesPriority
-            .map((t) => actionValues.find((a: any) => a.action_type === t || String(a.action_type || "").includes(t)))
+            .map((t) =>
+              actionValues.find(
+                (a: any) => a.action_type === t || String(a.action_type || "").includes(t)
+              )
+            )
             .find(Boolean) as any;
 
           const conversionValue = purchaseValueAction ? parseFloat(purchaseValueAction.value || 0) : 0;
 
           console.log(
-            `Campaign ${campaign.name} - reach: ${insights.reach}, messaging: ${messagingConversations} (${messagingBest?.action_type ?? "n/a"}), purchases: ${purchases}, purchaseValue: ${conversionValue}`
+            `Campaign ${campaign.name} - reach: ${insights.reach}, conversations: ${messagingConversations} (${chosenConversationActionType}), costPerConversation: ${costPerMessageValue}, purchases: ${purchases}, purchaseValue: ${conversionValue}`
           );
+
           
 
           const campaignData = {
