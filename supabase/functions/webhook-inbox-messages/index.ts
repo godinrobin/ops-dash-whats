@@ -113,10 +113,24 @@ serve(async (req) => {
       
       console.log(`Phone extraction: jidForPhone=${jidForPhone}, extracted=${phone}`);
       
-      // Validate phone is 10-15 digits
-      if (!/^\d{10,15}$/.test(phone)) {
+      // Validate phone is 10-13 digits (Brazilian numbers are max 13: 55 + 2 DDD + 9 digits)
+      // International numbers are typically 10-13 digits
+      if (!/^\d{10,13}$/.test(phone)) {
         console.log(`Skipping message with invalid phone length: ${rawPhone} (${phone.length} digits)`);
         return new Response(JSON.stringify({ success: true, skipped: true, reason: 'invalid_phone_length' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      // Additional validation: reject numbers that don't start with valid country codes
+      // Most common: 55 (Brazil), 1 (US/Canada), 44 (UK), etc.
+      // Numbers starting with unusual patterns are likely internal IDs
+      const validCountryPrefixes = ['55', '1', '44', '49', '33', '34', '39', '351', '54', '52', '56', '57', '58', '51'];
+      const hasValidPrefix = validCountryPrefixes.some(prefix => phone.startsWith(prefix));
+      
+      if (!hasValidPrefix) {
+        console.log(`Skipping message with invalid country prefix: ${phone}`);
+        return new Response(JSON.stringify({ success: true, skipped: true, reason: 'invalid_country_prefix' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
