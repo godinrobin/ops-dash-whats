@@ -73,6 +73,7 @@ interface Campaign {
 type SortField = 'name' | 'status' | 'daily_budget' | 'spend' | 'impressions' | 'reach' | 'cpm' | 'cpc' | 'ctr' | 'cost_per_message' | 'messaging_conversations_started' | 'meta_conversions' | 'conversion_value' | 'profit';
 type SortOrder = 'asc' | 'desc';
 type DateFilter = "today" | "yesterday" | "7days" | "30days" | "month";
+type ViewLevel = 'campaign' | 'adset' | 'ad';
 
 interface ColumnConfig {
   key: string;
@@ -97,6 +98,12 @@ const defaultColumns: ColumnConfig[] = [
   { key: 'profit', label: 'Lucro', visible: true, width: 100 },
 ];
 
+const viewLevelTabs = [
+  { value: 'campaign' as ViewLevel, label: 'Campanhas', icon: '📊' },
+  { value: 'adset' as ViewLevel, label: 'Conjuntos de anúncios', icon: '📋' },
+  { value: 'ad' as ViewLevel, label: 'Anúncios', icon: '📄' },
+];
+
 export default function AdsCampaigns() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -118,6 +125,7 @@ export default function AdsCampaigns() {
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [columns, setColumns] = useState<ColumnConfig[]>(defaultColumns);
   const [resizingColumn, setResizingColumn] = useState<string | null>(null);
+  const [viewLevel, setViewLevel] = useState<ViewLevel>('campaign');
 
   const datePresetMap: Record<DateFilter, string> = {
     today: "today",
@@ -760,6 +768,27 @@ export default function AdsCampaigns() {
         )}
       </AnimatePresence>
 
+      {/* View Level Tabs - Facebook Style */}
+      <div className="border-b border-border">
+        <div className="flex gap-0">
+          {viewLevelTabs.map((tab) => (
+            <button
+              key={tab.value}
+              onClick={() => setViewLevel(tab.value)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors",
+                viewLevel === tab.value
+                  ? "border-primary text-primary bg-primary/5"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              )}
+            >
+              <span>{tab.icon}</span>
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Campaigns Table */}
       <div className="rounded-lg border border-border overflow-hidden bg-card/50 backdrop-blur">
         {loading ? (
@@ -767,6 +796,15 @@ export default function AdsCampaigns() {
             {Array.from({ length: 5 }).map((_, i) => (
               <Skeleton key={i} className="h-12" />
             ))}
+          </div>
+        ) : viewLevel !== 'campaign' ? (
+          <div className="py-12 text-center">
+            <p className="text-muted-foreground">
+              {viewLevel === 'adset' ? 'Conjuntos de anúncios' : 'Anúncios'} - Em desenvolvimento
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">
+              Esta visualização estará disponível em breve
+            </p>
           </div>
         ) : filteredCampaigns.length === 0 ? (
           <div className="py-12 text-center">
@@ -777,18 +815,18 @@ export default function AdsCampaigns() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/30 hover:bg-muted/30">
-                  <TableHead className="w-[40px]">
+                  <TableHead className="w-[40px] border-r border-border/30">
                     <Checkbox
                       checked={selectedCampaigns.size === filteredCampaigns.length && filteredCampaigns.length > 0}
                       onCheckedChange={toggleAllCampaigns}
                     />
                   </TableHead>
-                  <TableHead className="w-[60px]">On/Off</TableHead>
-                  {visibleColumns.map(col => (
+                  <TableHead className="w-[60px] border-r border-border/30">On/Off</TableHead>
+                  {visibleColumns.map((col, colIndex) => (
                     <TableHead 
                       key={col.key}
                       className={cn(
-                        "cursor-pointer hover:text-foreground relative group",
+                        "cursor-pointer hover:text-foreground relative group border-r border-border/30",
                         col.key !== 'name' && "text-right"
                       )}
                       style={{ minWidth: col.width, width: col.width }}
@@ -799,7 +837,7 @@ export default function AdsCampaigns() {
                       </div>
                       {/* Resize handle */}
                       <div 
-                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/50 opacity-0 group-hover:opacity-100"
+                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize bg-border/50 hover:bg-primary/50"
                         onMouseDown={(e) => {
                           e.stopPropagation();
                           const startX = e.clientX;
@@ -840,13 +878,13 @@ export default function AdsCampaigns() {
                           selectedCampaigns.has(campaign.id) && "bg-primary/5"
                         )}
                       >
-                        <TableCell>
+                        <TableCell className="border-r border-border/20">
                           <Checkbox
                             checked={selectedCampaigns.has(campaign.id)}
                             onCheckedChange={() => toggleCampaignSelection(campaign.id)}
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="border-r border-border/20">
                           <Switch
                             checked={campaign.status === "ACTIVE"}
                             onCheckedChange={() => handleToggleCampaign(campaign)}
@@ -856,10 +894,13 @@ export default function AdsCampaigns() {
                             )}
                           />
                         </TableCell>
-                        {visibleColumns.map(col => (
+                        {visibleColumns.map((col) => (
                           <TableCell 
                             key={col.key} 
-                            className={cn(col.key !== 'name' && "text-right")}
+                            className={cn(
+                              "border-r border-border/20",
+                              col.key !== 'name' && "text-right"
+                            )}
                             style={{ minWidth: col.width, width: col.width }}
                           >
                             {renderCellContent(campaign, col.key)}
