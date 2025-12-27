@@ -25,6 +25,9 @@ const extractPhoneFromJid = (jid: string): string => {
 
 const parseEvolutionContent = (msg: EvolutionMessage): { content: string | null; messageType: string; mediaUrl: string | null } => {
   const m = msg.message || {};
+  
+  // Some Evolution API versions return messageType at root with actual content in message
+  const rootMessageType = (msg as any).messageType;
 
   if (m?.conversation) {
     return { messageType: "text", content: m.conversation, mediaUrl: null };
@@ -40,7 +43,7 @@ const parseEvolutionContent = (msg: EvolutionMessage): { content: string | null;
     };
   }
   if (m?.audioMessage) {
-    return { messageType: "audio", content: null, mediaUrl: m.audioMessage.url || null };
+    return { messageType: "audio", content: "", mediaUrl: m.audioMessage.url || null };
   }
   if (m?.videoMessage) {
     return {
@@ -57,7 +60,19 @@ const parseEvolutionContent = (msg: EvolutionMessage): { content: string | null;
     };
   }
   if (m?.stickerMessage) {
-    return { messageType: "sticker", content: null, mediaUrl: m.stickerMessage.url || null };
+    return { messageType: "sticker", content: "", mediaUrl: m.stickerMessage.url || null };
+  }
+  if (m?.protocolMessage) {
+    // Protocol messages (read receipts, etc) - skip these
+    return { messageType: "protocol", content: null, mediaUrl: null };
+  }
+  if (m?.reactionMessage) {
+    return { messageType: "reaction", content: m.reactionMessage.text || "👍", mediaUrl: null };
+  }
+  
+  // If we have a root messageType, use it
+  if (rootMessageType) {
+    return { messageType: rootMessageType, content: null, mediaUrl: null };
   }
 
   return { messageType: "text", content: null, mediaUrl: null };
@@ -352,6 +367,18 @@ serve(async (req) => {
       "messagesArr isArray:",
       Array.isArray(messagesArr)
     );
+    
+    // Log first message structure for debugging parse issues
+    if (messagesArr.length > 0) {
+      const firstMsg = messagesArr[0];
+      const parsed = parseEvolutionContent(firstMsg);
+      console.log("First message parse test:", {
+        hasMessage: !!firstMsg.message,
+        messageKeys: firstMsg.message ? Object.keys(firstMsg.message).slice(0, 5) : [],
+        rootMessageType: (firstMsg as any).messageType,
+        parsedResult: parsed,
+      });
+    }
 
     // Include both inbound and outbound messages
     const allMessages = (Array.isArray(messagesArr) ? messagesArr : []).filter((m) => m && m?.key?.id);
@@ -360,6 +387,7 @@ serve(async (req) => {
     console.log("Total messages:", allMessages.length, "Remote IDs:", remoteIds.length);
 
     if (remoteIds.length === 0) {
+      console.log("No messages with valid key.id found");
       return new Response(JSON.stringify({ inserted: 0 }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -373,10 +401,19 @@ serve(async (req) => {
 
     const existing = new Set((existingRows || []).map((r: any) => r.remote_message_id).filter(Boolean));
 
+    let skippedExisting = 0;
+    let skippedEmpty = 0;
+    let skippedProtocol = 0;
+    
     const rowsToInsert = allMessages
       .filter((m) => {
         const id = m?.key?.id;
-        return id && !existing.has(id);
+        if (!id) return false;
+        if (existing.has(id)) {
+          skippedExisting++;
+          return false;
+        }
+        return true;
       })
       .map((m) => {
         const { content, messageType, mediaUrl } = parseEvolutionContent(m);
@@ -398,11 +435,26 @@ serve(async (req) => {
           created_at: createdAt,
         };
       })
-      // ignore empty messages
-      .filter((r) => (r.content && String(r.content).length > 0) || r.media_url);
+      // ignore protocol and empty messages
+      .filter((r) => {
+        if (r.message_type === "protocol") {
+          skippedProtocol++;
+          return false;
+        }
+        const hasContent = r.content && String(r.content).length > 0;
+        const hasMedia = !!r.media_url;
+        if (!hasContent && !hasMedia) {
+          skippedEmpty++;
+          return false;
+        }
+        return true;
+      });
+
+    console.log(`Filtering results: skippedExisting=${skippedExisting}, skippedProtocol=${skippedProtocol}, skippedEmpty=${skippedEmpty}, toInsert=${rowsToInsert.length}`);
 
     if (rowsToInsert.length === 0) {
-      return new Response(JSON.stringify({ inserted: 0 }), {
+      console.log("No new messages to insert after filtering");
+      return new Response(JSON.stringify({ inserted: 0, skippedExisting, skippedProtocol, skippedEmpty }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
