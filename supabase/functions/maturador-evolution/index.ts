@@ -399,7 +399,29 @@ Regras:
           });
         }
 
+        // First attempt to get QR code
         result = await callEvolution(`/instance/connect/${instanceName}`, 'GET');
+        
+        // If QR code not available, try logout and retry
+        if (!result.base64) {
+          console.log(`QR code not available for ${instanceName}, attempting logout and retry...`);
+          
+          try {
+            // Logout from Evolution API to clear old session
+            await callEvolution(`/instance/logout/${instanceName}`, 'DELETE');
+            console.log(`Logout successful for ${instanceName}`);
+            
+            // Wait 1.5 seconds for Evolution to process the logout
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            
+            // Retry getting QR code
+            result = await callEvolution(`/instance/connect/${instanceName}`, 'GET');
+            console.log(`Retry result for ${instanceName}:`, result.base64 ? 'QR available' : 'QR still not available');
+          } catch (logoutError) {
+            console.error(`Logout error for ${instanceName}:`, logoutError);
+            // Continue with original result even if logout failed
+          }
+        }
         
         // Update QR code in database
         if (result.base64) {
