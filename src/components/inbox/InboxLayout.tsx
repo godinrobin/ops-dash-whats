@@ -25,8 +25,22 @@ export const InboxLayout = () => {
   const [selectedLabel, setSelectedLabel] = useState('');
 
   const { contacts, loading: contactsLoading, refetch: refetchContacts } = useInboxConversations(selectedInstanceId);
-  const { messages, loading: messagesLoading, sendMessage, refetch: refetchMessages } = useInboxMessages(selectedContact?.id || null);
+  const { messages, loading: messagesLoading, error: messagesError, sendMessage, refetch: refetchMessages } = useInboxMessages(selectedContact?.id || null);
   const { flows } = useInboxFlows();
+
+  // Handle contact deleted/not found error from messages hook
+  useEffect(() => {
+    if (messagesError === 'Contact not found' && selectedContact) {
+      toast.info('Contato não encontrado. Pode ter sido removido.');
+      setSelectedContact(null);
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('contact');
+        return next;
+      });
+      refetchContacts();
+    }
+  }, [messagesError, selectedContact, setSearchParams, refetchContacts]);
 
   // Handle URL params for contact selection
   useEffect(() => {
