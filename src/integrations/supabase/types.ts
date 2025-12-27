@@ -1051,6 +1051,7 @@ export type Database = {
           instance_name: string
           label: string | null
           last_conversation_sync: string | null
+          last_error_at: string | null
           last_seen: string | null
           persona_id: string | null
           phone_number: string | null
@@ -1066,6 +1067,7 @@ export type Database = {
           instance_name: string
           label?: string | null
           last_conversation_sync?: string | null
+          last_error_at?: string | null
           last_seen?: string | null
           persona_id?: string | null
           phone_number?: string | null
@@ -1081,6 +1083,7 @@ export type Database = {
           instance_name?: string
           label?: string | null
           last_conversation_sync?: string | null
+          last_error_at?: string | null
           last_seen?: string | null
           persona_id?: string | null
           phone_number?: string | null

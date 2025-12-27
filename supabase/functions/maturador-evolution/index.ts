@@ -567,9 +567,29 @@ Regras:
           }
         }
 
+        // Fetch current instance data to check last_error_at
+        const { data: currentInstance } = await supabaseClient
+          .from('maturador_instances')
+          .select('last_error_at, status')
+          .eq('instance_name', instanceName)
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        // Check if there was a recent error (< 5 minutes)
+        let effectiveStatus = newStatus;
+        if (newStatus === 'connected' && currentInstance?.last_error_at) {
+          const lastErrorTime = new Date(currentInstance.last_error_at).getTime();
+          const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+          
+          if (lastErrorTime > fiveMinutesAgo) {
+            console.log(`Instance ${instanceName} has recent error at ${currentInstance.last_error_at}, keeping as disconnected`);
+            effectiveStatus = 'disconnected';
+          }
+        }
+
         const updateData: any = {
-          status: newStatus,
-          last_seen: newStatus === 'connected' ? new Date().toISOString() : null,
+          status: effectiveStatus,
+          last_seen: effectiveStatus === 'connected' ? new Date().toISOString() : null,
         };
 
         if (phoneNumber) {
