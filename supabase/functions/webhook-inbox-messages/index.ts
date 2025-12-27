@@ -189,25 +189,36 @@ serve(async (req) => {
       const instanceId = instanceData.id;
       
       // Get instance identifiers to check for suspicious pushName
-      const instanceLabel = instanceData.label?.toLowerCase()?.trim() || '';
-      const instanceNameLower = instanceData.instance_name?.toLowerCase()?.trim() || '';
-      
+      const normalizeComparable = (value: string): string => {
+        return value
+          .toLowerCase()
+          .trim()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z]/g, '');
+      };
+
+      const instanceLabelNorm = normalizeComparable(instanceData.label || '');
+      const instanceNameNorm = normalizeComparable(instanceData.instance_name || '');
+
       // Function to check if pushName is suspicious (matches instance name/label)
       const isSuspiciousPushName = (name: string | null): boolean => {
         if (!name) return true;
-        const nameLower = name.toLowerCase().trim();
-        // Check if pushName matches or contains instance label/name
-        if (instanceLabel && (nameLower === instanceLabel || nameLower.includes(instanceLabel) || instanceLabel.includes(nameLower))) {
-          console.log(`Suspicious pushName detected: "${name}" matches instance label "${instanceLabel}"`);
+        const nameNorm = normalizeComparable(name);
+        if (!nameNorm) return true;
+
+        // Check if pushName matches/contains instance label/name (normalized)
+        if (instanceLabelNorm && (nameNorm === instanceLabelNorm || nameNorm.includes(instanceLabelNorm) || instanceLabelNorm.includes(nameNorm))) {
+          console.log(`Suspicious pushName detected: "${name}" matches instance label "${instanceData.label}"`);
           return true;
         }
-        if (instanceNameLower && (nameLower === instanceNameLower || nameLower.includes(instanceNameLower) || instanceNameLower.includes(nameLower))) {
-          console.log(`Suspicious pushName detected: "${name}" matches instance name "${instanceNameLower}"`);
+        if (instanceNameNorm && (nameNorm === instanceNameNorm || nameNorm.includes(instanceNameNorm) || instanceNameNorm.includes(nameNorm))) {
+          console.log(`Suspicious pushName detected: "${name}" matches instance name "${instanceData.instance_name}"`);
           return true;
         }
         return false;
       };
-      
+
       // Validate pushName - only use it if it's not suspicious
       const validPushName = pushName && !isSuspiciousPushName(pushName) ? pushName : null;
 

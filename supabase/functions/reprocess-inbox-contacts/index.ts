@@ -40,12 +40,12 @@ const validBrazilianDDDs = [
 // Normalize phone number to always have +55 for Brazilian numbers
 const normalizePhone = (phone: string): string => {
   const cleaned = phone.replace(/\D/g, '');
-  
+
   // If already has 55 prefix (12-13 digits), it's correct
   if (cleaned.startsWith('55') && cleaned.length >= 12 && cleaned.length <= 13) {
     return cleaned;
   }
-  
+
   // If 10-11 digits and starts with valid Brazilian DDD, add 55
   if (cleaned.length >= 10 && cleaned.length <= 11) {
     const possibleDDD = cleaned.slice(0, 2);
@@ -53,9 +53,19 @@ const normalizePhone = (phone: string): string => {
       return '55' + cleaned;
     }
   }
-  
+
   // Return as-is for other cases
   return cleaned;
+};
+
+// Normalize strings to compare names safely (e.g. "mariacida1" ~ "Maria Cida")
+const normalizeComparable = (value: string): string => {
+  return value
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z]/g, '');
 };
 
 serve(async (req) => {
@@ -105,18 +115,26 @@ serve(async (req) => {
       });
     }
 
-    // Create a map of instance names/labels for checking suspicious pushNames
+    // Create a map of instance names/labels for checking suspicious names
     const instanceIdentifiers = new Set<string>();
     for (const inst of instances || []) {
-      if (inst.instance_name) instanceIdentifiers.add(inst.instance_name.toLowerCase().trim());
-      if (inst.label) instanceIdentifiers.add(inst.label.toLowerCase().trim());
+      if (inst.instance_name) {
+        const n = normalizeComparable(inst.instance_name);
+        if (n) instanceIdentifiers.add(n);
+      }
+      if (inst.label) {
+        const n = normalizeComparable(inst.label);
+        if (n) instanceIdentifiers.add(n);
+      }
     }
 
     const isSuspiciousName = (name: string | null): boolean => {
       if (!name) return false;
-      const nameLower = name.toLowerCase().trim();
+      const nameNorm = normalizeComparable(name);
+      if (!nameNorm) return false;
+
       for (const identifier of instanceIdentifiers) {
-        if (nameLower === identifier || nameLower.includes(identifier) || identifier.includes(nameLower)) {
+        if (nameNorm === identifier || nameNorm.includes(identifier) || identifier.includes(nameNorm)) {
           return true;
         }
       }
