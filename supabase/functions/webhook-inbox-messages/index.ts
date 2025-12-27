@@ -159,13 +159,13 @@ serve(async (req) => {
       const userId = instanceData.user_id;
       const instanceId = instanceData.id;
 
-      // Find or create contact - search by user_id + phone only (not instance_id)
-      // This prevents duplicate contacts when messages come from different instances
-      // Use upsert with ON CONFLICT to handle race conditions
+      // Find or create contact - search by user_id + instance_id + phone
+      // This allows SEPARATE chats per instance for the same phone number
       let { data: contact, error: contactError } = await supabaseClient
         .from('inbox_contacts')
         .select('*')
         .eq('user_id', userId)
+        .eq('instance_id', instanceId)
         .eq('phone', phone)
         .maybeSingle();
 
@@ -182,7 +182,7 @@ serve(async (req) => {
             unread_count: 1,
             last_message_at: new Date().toISOString(),
           }, {
-            onConflict: 'user_id,phone',
+            onConflict: 'user_id,instance_id,phone',
             ignoreDuplicates: false,
           })
           .select()
@@ -195,6 +195,7 @@ serve(async (req) => {
             .from('inbox_contacts')
             .select('*')
             .eq('user_id', userId)
+            .eq('instance_id', instanceId)
             .eq('phone', phone)
             .single();
           
@@ -207,13 +208,13 @@ serve(async (req) => {
             });
           }
         } else {
-        contact = newContact;
+          contact = newContact;
         }
       } else {
-        // Update existing contact based on message direction
+        // Update existing contact
         const updates: Record<string, any> = {
           last_message_at: new Date().toISOString(),
-          instance_id: instanceId, // Always update to the latest instance
+          // DO NOT update instance_id - it's now part of the unique key
         };
         
         // Only increment unread for inbound messages (not fromMe)
