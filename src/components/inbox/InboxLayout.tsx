@@ -45,7 +45,13 @@ export const InboxLayout = () => {
   // Handle URL params for contact selection
   useEffect(() => {
     const contactId = searchParams.get('contact');
-    if (!contactId) return;
+    if (!contactId) {
+      // No contact in URL, clear selection
+      if (selectedContact) {
+        setSelectedContact(null);
+      }
+      return;
+    }
     if (contactsLoading) return;
 
     const contact = contacts.find((c) => c.id === contactId);
@@ -55,13 +61,16 @@ export const InboxLayout = () => {
     }
 
     // URL points to a contact that no longer exists (e.g., cleaned up/deleted)
+    // Clear the selection and URL param
+    console.log('Contact from URL not found in list, clearing:', contactId);
+    toast.info('Contato não encontrado. Pode ter sido removido.');
     setSelectedContact(null);
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete('contact');
       return next;
     });
-  }, [searchParams, contacts, contactsLoading, setSearchParams]);
+  }, [searchParams, contacts, contactsLoading, setSearchParams, selectedContact]);
 
   const handleSelectContact = (contact: InboxContact) => {
     setSelectedContact(contact);
