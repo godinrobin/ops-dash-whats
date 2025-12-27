@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,21 +16,31 @@ import {
   ShoppingCart,
   RefreshCcw,
   AlertCircle,
-  Info
+  Info,
+  MessageCircle,
+  Settings2,
+  GripVertical,
+  EyeOff,
+  Plus,
+  X
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, Reorder } from "framer-motion";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { splashedToast } from "@/hooks/useSplashedToast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 interface MetricCard {
+  id: string;
   title: string;
   value: string;
-  change?: number;
   icon: React.ElementType;
   color: string;
+  visible: boolean;
 }
 
 interface FunnelStep {
@@ -41,6 +51,12 @@ interface FunnelStep {
 
 type DateFilter = "today" | "yesterday" | "7days" | "30days";
 
+const defaultCardOrder = [
+  'spend', 'impressions', 'clicks', 'conversions',
+  'cpm', 'ctr', 'cpc', 'roas',
+  'conversations', 'cost_per_conversation'
+];
+
 export default function AdsDashboard() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -49,6 +65,15 @@ export default function AdsDashboard() {
   const [selectedAccount, setSelectedAccount] = useState<string>("all");
   const [adAccounts, setAdAccounts] = useState<any[]>([]);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [cardOrder, setCardOrder] = useState<string[]>(() => {
+    const saved = localStorage.getItem('ads_dashboard_card_order');
+    return saved ? JSON.parse(saved) : defaultCardOrder;
+  });
+  const [hiddenCards, setHiddenCards] = useState<Set<string>>(() => {
+    const saved = localStorage.getItem('ads_dashboard_hidden_cards');
+    return saved ? new Set(JSON.parse(saved)) : new Set();
+  });
   const [metrics, setMetrics] = useState({
     spend: 0,
     impressions: 0,
@@ -62,15 +87,29 @@ export default function AdsDashboard() {
     profit: 0,
     totalMessages: 0,
     totalPurchases: 0,
-    conversionValue: 0
+    conversionValue: 0,
+    costPerConversation: 0
   });
   const [hasAccounts, setHasAccounts] = useState(false);
+
+  // Only show active ad accounts
+  const activeAdAccounts = adAccounts.filter(acc => acc.is_selected === true);
 
   useEffect(() => {
     if (user) {
       loadData();
     }
   }, [user, dateFilter, selectedAccount]);
+
+  // Save card order to localStorage
+  useEffect(() => {
+    localStorage.setItem('ads_dashboard_card_order', JSON.stringify(cardOrder));
+  }, [cardOrder]);
+
+  // Save hidden cards to localStorage
+  useEffect(() => {
+    localStorage.setItem('ads_dashboard_hidden_cards', JSON.stringify([...hiddenCards]));
+  }, [hiddenCards]);
 
   const loadData = async () => {
     if (!user) return;
@@ -91,7 +130,9 @@ export default function AdsDashboard() {
         return;
       }
 
-      // Get campaigns data
+      // Get campaigns data - only from active accounts
+      const activeAccountIds = accounts.filter(a => a.is_selected).map(a => a.id);
+      
       let query = supabase
         .from("ads_campaigns")
         .select("*")
@@ -99,6 +140,8 @@ export default function AdsDashboard() {
 
       if (selectedAccount !== "all") {
         query = query.eq("ad_account_id", selectedAccount);
+      } else if (activeAccountIds.length > 0) {
+        query = query.in("ad_account_id", activeAccountIds);
       }
 
       const { data: campaigns } = await query;
@@ -110,6 +153,7 @@ export default function AdsDashboard() {
       const totalConversions = campaigns?.reduce((sum, c) => sum + ((c as any).meta_conversions || 0), 0) || 0;
       const totalConversionValue = campaigns?.reduce((sum, c) => sum + ((c as any).conversion_value || 0), 0) || 0;
       const totalMessaging = campaigns?.reduce((sum, c) => sum + ((c as any).messaging_conversations_started || 0), 0) || 0;
+      const costPerConversation = totalMessaging > 0 ? totalSpend / totalMessaging : 0;
 
       // Get last synced time
       if (campaigns && campaigns.length > 0) {
@@ -144,7 +188,8 @@ export default function AdsDashboard() {
         profit: totalConversionValue - totalSpend,
         totalMessages: totalMessaging,
         totalPurchases: totalConversions,
-        conversionValue: totalConversionValue
+        conversionValue: totalConversionValue,
+        costPerConversation
       });
     } catch (error) {
       console.error("Error loading dashboard data:", error);
@@ -187,24 +232,51 @@ export default function AdsDashboard() {
     }
   }, [dateFilter]);
 
-  const metricCards: MetricCard[] = [
-    { title: "Investido", value: `R$ ${metrics.spend.toFixed(2)}`, icon: DollarSign, color: "text-red-400" },
-    { title: "Impressões", value: metrics.impressions.toLocaleString("pt-BR"), icon: Eye, color: "text-blue-400" },
-    { title: "Cliques", value: metrics.clicks.toLocaleString("pt-BR"), icon: MousePointerClick, color: "text-purple-400" },
-    { title: "Conversões", value: metrics.conversions.toString(), icon: Target, color: "text-green-400" },
-    { title: "CPM", value: `R$ ${metrics.cpm.toFixed(2)}`, icon: TrendingUp, color: "text-orange-400" },
-    { title: "CTR", value: `${metrics.ctr.toFixed(2)}%`, icon: TrendingUp, color: "text-cyan-400" },
-    { title: "CPC", value: `R$ ${metrics.cpc.toFixed(2)}`, icon: DollarSign, color: "text-yellow-400" },
-    { title: "ROAS", value: `${metrics.roas.toFixed(2)}x`, icon: TrendingUp, color: "text-emerald-400" },
-  ];
+  const toggleCardVisibility = (cardId: string) => {
+    setHiddenCards(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(cardId)) {
+        newSet.delete(cardId);
+      } else {
+        newSet.add(cardId);
+      }
+      return newSet;
+    });
+  };
+
+  const resetLayout = () => {
+    setCardOrder(defaultCardOrder);
+    setHiddenCards(new Set());
+    localStorage.removeItem('ads_dashboard_card_order');
+    localStorage.removeItem('ads_dashboard_hidden_cards');
+  };
+
+  const allMetricCards: Record<string, MetricCard> = {
+    spend: { id: 'spend', title: "Investido", value: `R$ ${metrics.spend.toFixed(2)}`, icon: DollarSign, color: "text-red-400", visible: true },
+    impressions: { id: 'impressions', title: "Impressões", value: metrics.impressions.toLocaleString("pt-BR"), icon: Eye, color: "text-blue-400", visible: true },
+    clicks: { id: 'clicks', title: "Cliques", value: metrics.clicks.toLocaleString("pt-BR"), icon: MousePointerClick, color: "text-purple-400", visible: true },
+    conversions: { id: 'conversions', title: "Conversões", value: metrics.conversions.toString(), icon: Target, color: "text-green-400", visible: true },
+    cpm: { id: 'cpm', title: "CPM", value: `R$ ${metrics.cpm.toFixed(2)}`, icon: TrendingUp, color: "text-orange-400", visible: true },
+    ctr: { id: 'ctr', title: "CTR", value: `${metrics.ctr.toFixed(2)}%`, icon: TrendingUp, color: "text-cyan-400", visible: true },
+    cpc: { id: 'cpc', title: "CPC", value: `R$ ${metrics.cpc.toFixed(2)}`, icon: DollarSign, color: "text-yellow-400", visible: true },
+    roas: { id: 'roas', title: "ROAS", value: `${metrics.roas.toFixed(2)}x`, icon: TrendingUp, color: "text-emerald-400", visible: true },
+    conversations: { id: 'conversations', title: "Conversas", value: metrics.totalMessages.toLocaleString("pt-BR"), icon: MessageCircle, color: "text-pink-400", visible: true },
+    cost_per_conversation: { id: 'cost_per_conversation', title: "Custo/Conversa", value: `R$ ${metrics.costPerConversation.toFixed(2)}`, icon: MessageCircle, color: "text-indigo-400", visible: true },
+  };
+
+  const visibleCards = cardOrder
+    .filter(id => !hiddenCards.has(id) && allMetricCards[id])
+    .map(id => allMetricCards[id]);
 
   const resultCards: MetricCard[] = [
-    { title: "Receita (Conversões)", value: `R$ ${metrics.conversionValue.toFixed(2)}`, icon: DollarSign, color: "text-green-400" },
+    { id: 'revenue', title: "Receita (Conversões)", value: `R$ ${metrics.conversionValue.toFixed(2)}`, icon: DollarSign, color: "text-green-400", visible: true },
     { 
+      id: 'profit',
       title: "Lucro", 
       value: `R$ ${metrics.profit.toFixed(2)}`, 
       icon: metrics.profit >= 0 ? TrendingUp : TrendingDown, 
-      color: metrics.profit >= 0 ? "text-green-400" : "text-red-400" 
+      color: metrics.profit >= 0 ? "text-green-400" : "text-red-400",
+      visible: true
     },
   ];
 
@@ -261,7 +333,7 @@ export default function AdsDashboard() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas as contas</SelectItem>
-              {adAccounts.map((acc) => (
+              {activeAdAccounts.map((acc) => (
                 <SelectItem key={acc.id} value={acc.id}>
                   {acc.name || acc.ad_account_id}
                 </SelectItem>
@@ -280,6 +352,47 @@ export default function AdsDashboard() {
               <SelectItem value="30days">30 dias</SelectItem>
             </SelectContent>
           </Select>
+
+          {/* Edit layout button */}
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="icon">
+                <Settings2 className="h-4 w-4" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Personalizar Dashboard</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <p className="text-sm text-muted-foreground">
+                  Escolha quais métricas exibir no dashboard
+                </p>
+                <div className="space-y-3">
+                  {Object.entries(allMetricCards).map(([id, card]) => (
+                    <div key={id} className="flex items-center justify-between">
+                      <Label htmlFor={`card-${id}`} className="flex items-center gap-2">
+                        <card.icon className={cn("h-4 w-4", card.color)} />
+                        {card.title}
+                      </Label>
+                      <Switch
+                        id={`card-${id}`}
+                        checked={!hiddenCards.has(id)}
+                        onCheckedChange={() => toggleCardVisibility(id)}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <Button 
+                  variant="outline" 
+                  className="w-full mt-4"
+                  onClick={resetLayout}
+                >
+                  Restaurar Padrão
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
 
           <div className="flex flex-col items-center">
             <Button 
@@ -300,32 +413,46 @@ export default function AdsDashboard() {
       </div>
 
       {/* Metrics Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        {metricCards.map((card, index) => (
-          <motion.div
-            key={card.title}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05 }}
+      <Reorder.Group 
+        axis="x" 
+        values={cardOrder} 
+        onReorder={setCardOrder}
+        className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4"
+      >
+        {visibleCards.map((card, index) => (
+          <Reorder.Item
+            key={card.id}
+            value={card.id}
+            className="cursor-grab active:cursor-grabbing"
           >
-            <Card className="bg-card/50 backdrop-blur border-border/50">
-              <CardContent className="p-4">
-                {loading ? (
-                  <Skeleton className="h-16" />
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-muted-foreground">{card.title}</span>
-                      <card.icon className={cn("h-4 w-4", card.color)} />
-                    </div>
-                    <p className="text-xl md:text-2xl font-bold">{card.value}</p>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
+            >
+              <Card className="bg-card/50 backdrop-blur border-border/50 relative group">
+                <CardContent className="p-4">
+                  {loading ? (
+                    <Skeleton className="h-16" />
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-muted-foreground">{card.title}</span>
+                        <card.icon className={cn("h-4 w-4", card.color)} />
+                      </div>
+                      <p className="text-xl md:text-2xl font-bold">{card.value}</p>
+                    </>
+                  )}
+                </CardContent>
+                {/* Drag handle indicator */}
+                <div className="absolute top-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-50 transition-opacity">
+                  <GripVertical className="h-3 w-3 text-muted-foreground" />
+                </div>
+              </Card>
+            </motion.div>
+          </Reorder.Item>
         ))}
-      </div>
+      </Reorder.Group>
 
       {/* Results Row */}
       <div className="grid grid-cols-2 gap-3 md:gap-4">
