@@ -34,13 +34,45 @@ serve(async (req) => {
       });
     }
 
-    const { action, code, redirectUri } = await req.json();
+    const body = await req.json();
+    const { action } = body;
     console.log("Facebook OAuth action:", action, "for user:", user.id);
 
+    // Generate Facebook OAuth login URL
+    if (action === "get_login_url") {
+      const baseUrl = Deno.env.get("SUPABASE_URL")?.replace("/functions/v1", "") || "";
+      // Redirect back to the ads settings page
+      const redirectUri = `${baseUrl.replace("https://", "https://").replace(".supabase.co", ".lovable.dev")}/ads/settings`;
+      
+      const scopes = [
+        "ads_management",
+        "ads_read",
+        "business_management",
+        "pages_read_engagement",
+        "pages_show_list"
+      ].join(",");
+
+      const loginUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${FACEBOOK_APP_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes}&response_type=code`;
+
+      console.log("Generated login URL with redirect:", redirectUri);
+
+      return new Response(
+        JSON.stringify({ login_url: loginUrl, redirect_uri: redirectUri }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Exchange authorization code for access token
     if (action === "exchange_code") {
-      // Exchange authorization code for access token
+      const { code } = body;
+      
+      // Get the redirect URI from referer or construct it
+      const referer = req.headers.get("referer") || "";
+      const redirectUri = referer.split("?")[0] || `${Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", ".lovable.dev").replace("/functions/v1", "")}/ads/settings`;
+
       const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token?client_id=${FACEBOOK_APP_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${FACEBOOK_APP_SECRET}&code=${code}`;
 
+      console.log("Exchanging code for token...");
       const tokenResponse = await fetch(tokenUrl);
       const tokenData = await tokenResponse.json();
 
@@ -87,7 +119,7 @@ serve(async (req) => {
         .select("id")
         .eq("user_id", user.id)
         .eq("facebook_user_id", userInfo.id)
-        .single();
+        .maybeSingle();
 
       if (existingAccount) {
         await supabaseClient
@@ -123,18 +155,20 @@ serve(async (req) => {
       );
     }
 
+    // Get and sync ad accounts from Facebook
     if (action === "get_ad_accounts") {
-      const { facebookAccountId } = await req.json();
+      const { facebook_account_id } = body;
 
       // Get the Facebook account
       const { data: fbAccount, error: fbError } = await supabaseClient
         .from("ads_facebook_accounts")
         .select("*")
-        .eq("id", facebookAccountId)
+        .eq("id", facebook_account_id)
         .eq("user_id", user.id)
         .single();
 
       if (fbError || !fbAccount) {
+        console.error("Facebook account not found:", fbError);
         return new Response(JSON.stringify({ error: "Facebook account not found" }), {
           status: 404,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -143,6 +177,7 @@ serve(async (req) => {
 
       // Fetch ad accounts from Facebook
       const adAccountsUrl = `https://graph.facebook.com/v18.0/me/adaccounts?fields=id,name,account_status,currency,timezone_name&access_token=${fbAccount.access_token}`;
+      console.log("Fetching ad accounts from Facebook...");
       const adAccountsResponse = await fetch(adAccountsUrl);
       const adAccountsData = await adAccountsResponse.json();
 
@@ -166,7 +201,7 @@ serve(async (req) => {
           .select("id")
           .eq("user_id", user.id)
           .eq("ad_account_id", adAccountId)
-          .single();
+          .maybeSingle();
 
         if (existing) {
           await supabaseClient
@@ -182,7 +217,7 @@ serve(async (req) => {
         } else {
           await supabaseClient.from("ads_ad_accounts").insert({
             user_id: user.id,
-            facebook_account_id: facebookAccountId,
+            facebook_account_id: facebook_account_id,
             ad_account_id: adAccountId,
             name: account.name,
             account_status: account.account_status,

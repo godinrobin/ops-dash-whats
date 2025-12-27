@@ -364,6 +364,78 @@ serve(async (req) => {
         });
       }
 
+      // === ADS LEAD TRACKING ===
+      // Check if this WhatsApp number is being monitored for ads leads
+      if (!isFromMe) {
+        try {
+          const { data: monitoredNumber } = await supabaseClient
+            .from('ads_whatsapp_numbers')
+            .select('id, user_id')
+            .eq('instance_id', instanceId)
+            .eq('is_active', true)
+            .maybeSingle();
+
+          if (monitoredNumber) {
+            console.log(`[ADS LEAD] Monitored number found for instance ${instanceId}`);
+            
+            // Extract ctwa_clid from message content (Click-to-WhatsApp tracking ID)
+            // Format: ctwa_clid=XXXXXXXX or referral data
+            let ctwaClid: string | null = null;
+            let fbclid: string | null = null;
+            
+            // Check for ctwa_clid in the message content
+            const ctwaMatch = content?.match(/ctwa_clid[=:]\s*([a-zA-Z0-9_-]+)/i);
+            if (ctwaMatch) {
+              ctwaClid = ctwaMatch[1];
+              console.log(`[ADS LEAD] Extracted ctwa_clid: ${ctwaClid}`);
+            }
+            
+            // Check for fbclid in the message content
+            const fbclidMatch = content?.match(/fbclid[=:]\s*([a-zA-Z0-9_-]+)/i);
+            if (fbclidMatch) {
+              fbclid = fbclidMatch[1];
+              console.log(`[ADS LEAD] Extracted fbclid: ${fbclid}`);
+            }
+            
+            // Check if lead already exists
+            const { data: existingLead } = await supabaseClient
+              .from('ads_whatsapp_leads')
+              .select('id')
+              .eq('phone', phone)
+              .eq('whatsapp_number_id', monitoredNumber.id)
+              .maybeSingle();
+
+            if (!existingLead) {
+              // Create new lead
+              const { error: leadError } = await supabaseClient
+                .from('ads_whatsapp_leads')
+                .insert({
+                  user_id: monitoredNumber.user_id,
+                  phone,
+                  name: validPushName,
+                  whatsapp_number_id: monitoredNumber.id,
+                  instance_id: instanceId,
+                  ctwa_clid: ctwaClid,
+                  fbclid: fbclid,
+                  first_message: content?.substring(0, 500),
+                  first_contact_at: new Date().toISOString(),
+                });
+
+              if (leadError) {
+                console.error('[ADS LEAD] Error creating lead:', leadError);
+              } else {
+                console.log(`[ADS LEAD] New lead created for phone ${phone}`);
+              }
+            } else {
+              console.log(`[ADS LEAD] Lead already exists for phone ${phone}`);
+            }
+          }
+        } catch (leadTrackingError) {
+          console.error('[ADS LEAD] Error in lead tracking:', leadTrackingError);
+          // Don't fail the whole webhook if lead tracking fails
+        }
+      }
+
       // Skip flow processing for outbound messages (sent from WhatsApp Web/Mobile)
       if (isFromMe) {
         console.log('Outbound message saved successfully (from WhatsApp Web/Mobile)');
