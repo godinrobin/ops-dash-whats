@@ -140,7 +140,7 @@ export default function AdsDashboard() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const { error } = await supabase.functions.invoke("ads-sync-campaigns");
+      const { error } = await supabase.functions.invoke("facebook-campaigns", { body: { action: "sync_campaigns" } });
       if (error) throw error;
       splashedToast.success("Dados sincronizados com sucesso!");
       await loadData();

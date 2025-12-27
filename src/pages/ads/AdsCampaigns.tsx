@@ -112,7 +112,7 @@ export default function AdsCampaigns() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const { error } = await supabase.functions.invoke("ads-sync-campaigns");
+      const { error } = await supabase.functions.invoke("facebook-campaigns", { body: { action: "sync_campaigns" } });
       if (error) throw error;
       splashedToast.success("Campanhas sincronizadas!");
       await loadData();
@@ -128,10 +128,11 @@ export default function AdsCampaigns() {
     const newStatus = campaign.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
     
     try {
-      const { error } = await supabase.functions.invoke("ads-update-campaign", {
+      const { error } = await supabase.functions.invoke("facebook-campaigns", {
         body: {
-          campaign_id: campaign.campaign_id,
-          ad_account_id: campaign.ad_account_id,
+          action: "update_campaign_status",
+          campaignId: campaign.campaign_id,
+          adAccountId: campaign.ad_account_id,
           status: newStatus
         }
       });
@@ -153,10 +154,11 @@ export default function AdsCampaigns() {
     if (!selectedCampaign || !newBudget) return;
 
     try {
-      const { error } = await supabase.functions.invoke("ads-update-campaign", {
+      const { error } = await supabase.functions.invoke("facebook-campaigns", {
         body: {
-          campaign_id: selectedCampaign.campaign_id,
-          ad_account_id: selectedCampaign.ad_account_id,
+          action: "update_campaign_budget",
+          campaignId: selectedCampaign.campaign_id,
+          adAccountId: selectedCampaign.ad_account_id,
           daily_budget: parseFloat(newBudget) * 100 // Convert to cents
         }
       });
@@ -184,8 +186,9 @@ export default function AdsCampaigns() {
     }
 
     try {
-      const { error } = await supabase.functions.invoke("ads-create-campaign", {
+      const { error } = await supabase.functions.invoke("facebook-campaigns", {
         body: {
+          action: "create_campaign",
           name: newCampaign.name,
           objective: newCampaign.objective,
           daily_budget: parseFloat(newCampaign.daily_budget) * 100,

@@ -97,7 +97,7 @@ export default function AdsSettings() {
   const handleConnectFacebook = async () => {
     setConnecting(true);
     try {
-      const { data, error } = await supabase.functions.invoke("ads-facebook-auth", {
+      const { data, error } = await supabase.functions.invoke("facebook-oauth", {
         body: { action: "get_login_url" }
       });
 
@@ -115,7 +115,7 @@ export default function AdsSettings() {
   const handleOAuthCallback = async (code: string) => {
     setConnecting(true);
     try {
-      const { data, error } = await supabase.functions.invoke("ads-facebook-auth", {
+      const { data, error } = await supabase.functions.invoke("facebook-oauth", {
         body: { action: "exchange_code", code }
       });
 
@@ -172,8 +172,8 @@ export default function AdsSettings() {
 
   const handleSyncAdAccounts = async (facebookAccountId: string) => {
     try {
-      const { error } = await supabase.functions.invoke("ads-sync-ad-accounts", {
-        body: { facebook_account_id: facebookAccountId }
+      const { error } = await supabase.functions.invoke("facebook-oauth", {
+        body: { action: "get_ad_accounts", facebook_account_id: facebookAccountId }
       });
 
       if (error) throw error;

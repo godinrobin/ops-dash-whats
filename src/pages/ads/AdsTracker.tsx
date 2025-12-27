@@ -178,9 +178,10 @@ export default function AdsTracker() {
 
     setSendingPurchase(true);
     try {
-      const { error } = await supabase.functions.invoke("ads-send-purchase-event", {
+      const { error } = await supabase.functions.invoke("facebook-conversions", {
         body: {
-          lead_id: selectedLead.id,
+          leadId: selectedLead.id,
+          eventName: "Purchase",
           value: parseFloat(purchaseValue),
           currency: "BRL"
         }
