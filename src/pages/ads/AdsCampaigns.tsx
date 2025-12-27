@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -20,11 +20,21 @@ import {
   Play,
   ChevronUp,
   ChevronDown,
-  Calendar
+  Calendar,
+  Eye,
+  EyeOff,
+  Pencil,
+  Columns3,
+  Power,
+  DollarSign
 } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { splashedToast } from "@/hooks/useSplashedToast";
+import { motion, AnimatePresence } from "framer-motion";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import {
   Table,
   TableBody,
@@ -57,11 +67,35 @@ interface Campaign {
   messaging_conversations_started: number;
   meta_conversions: number;
   conversion_value: number;
+  last_synced_at?: string;
 }
 
 type SortField = 'name' | 'status' | 'daily_budget' | 'spend' | 'impressions' | 'reach' | 'cpm' | 'cpc' | 'ctr' | 'cost_per_message' | 'messaging_conversations_started' | 'meta_conversions' | 'conversion_value' | 'profit';
 type SortOrder = 'asc' | 'desc';
 type DateFilter = "today" | "yesterday" | "7days" | "30days" | "month";
+
+interface ColumnConfig {
+  key: string;
+  label: string;
+  visible: boolean;
+  width: number;
+}
+
+const defaultColumns: ColumnConfig[] = [
+  { key: 'name', label: 'Nome', visible: true, width: 200 },
+  { key: 'daily_budget', label: 'Orçamento', visible: true, width: 120 },
+  { key: 'spend', label: 'Valor Usado', visible: true, width: 120 },
+  { key: 'impressions', label: 'Impressões', visible: true, width: 110 },
+  { key: 'reach', label: 'Alcance', visible: true, width: 100 },
+  { key: 'cpm', label: 'CPM', visible: true, width: 90 },
+  { key: 'cpc', label: 'CPC (link)', visible: true, width: 90 },
+  { key: 'ctr', label: 'CTR (link)', visible: true, width: 90 },
+  { key: 'cost_per_message', label: 'Custo/Msg', visible: true, width: 100 },
+  { key: 'messaging_conversations_started', label: 'Conversas', visible: true, width: 100 },
+  { key: 'meta_conversions', label: 'Conversão', visible: true, width: 100 },
+  { key: 'conversion_value', label: 'Valor Conv.', visible: true, width: 110 },
+  { key: 'profit', label: 'Lucro', visible: true, width: 100 },
+];
 
 export default function AdsCampaigns() {
   const { user } = useAuth();
@@ -73,12 +107,17 @@ export default function AdsCampaigns() {
   const [selectedAccount, setSelectedAccount] = useState<string>("all");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editBudgetDialogOpen, setEditBudgetDialogOpen] = useState(false);
+  const [bulkBudgetDialogOpen, setBulkBudgetDialogOpen] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const [newBudget, setNewBudget] = useState("");
+  const [bulkNewBudget, setBulkNewBudget] = useState("");
   const [selectedCampaigns, setSelectedCampaigns] = useState<Set<string>>(new Set());
   const [sortField, setSortField] = useState<SortField>('spend');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [dateFilter, setDateFilter] = useState<DateFilter>("7days");
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [columns, setColumns] = useState<ColumnConfig[]>(defaultColumns);
+  const [resizingColumn, setResizingColumn] = useState<string | null>(null);
 
   const datePresetMap: Record<DateFilter, string> = {
     today: "today",
@@ -128,6 +167,16 @@ export default function AdsCampaigns() {
 
       const { data: campaignsData } = await query;
       setCampaigns(campaignsData || []);
+      
+      // Get last synced time from most recent campaign
+      if (campaignsData && campaignsData.length > 0) {
+        const mostRecent = campaignsData.reduce((latest, c) => {
+          if (!c.last_synced_at) return latest;
+          if (!latest) return c.last_synced_at;
+          return new Date(c.last_synced_at) > new Date(latest) ? c.last_synced_at : latest;
+        }, null as string | null);
+        setLastSyncedAt(mostRecent);
+      }
     } catch (error) {
       console.error("Error loading campaigns:", error);
     } finally {
@@ -185,6 +234,65 @@ export default function AdsCampaigns() {
     } catch (error) {
       console.error("Toggle error:", error);
       splashedToast.error("Erro ao alterar status");
+    }
+  };
+
+  const handleBulkToggle = async (activate: boolean) => {
+    const newStatus = activate ? "ACTIVE" : "PAUSED";
+    const campaignsToUpdate = campaigns.filter(c => selectedCampaigns.has(c.id));
+    
+    try {
+      for (const campaign of campaignsToUpdate) {
+        await supabase.functions.invoke("facebook-campaigns", {
+          body: {
+            action: "update_campaign_status",
+            campaignId: campaign.campaign_id,
+            adAccountId: campaign.ad_account_id,
+            status: newStatus
+          }
+        });
+      }
+
+      setCampaigns(prev => prev.map(c => 
+        selectedCampaigns.has(c.id) ? { ...c, status: newStatus } : c
+      ));
+
+      splashedToast.success(`${campaignsToUpdate.length} campanha(s) ${activate ? "ativada(s)" : "pausada(s)"}`);
+      setSelectedCampaigns(new Set());
+    } catch (error) {
+      console.error("Bulk toggle error:", error);
+      splashedToast.error("Erro ao alterar campanhas");
+    }
+  };
+
+  const handleBulkBudgetUpdate = async () => {
+    if (!bulkNewBudget) return;
+
+    const campaignsToUpdate = campaigns.filter(c => selectedCampaigns.has(c.id));
+
+    try {
+      for (const campaign of campaignsToUpdate) {
+        await supabase.functions.invoke("facebook-campaigns", {
+          body: {
+            action: "update_campaign_budget",
+            campaignId: campaign.campaign_id,
+            adAccountId: campaign.ad_account_id,
+            daily_budget: parseFloat(bulkNewBudget) * 100
+          }
+        });
+      }
+
+      setCampaigns(prev => prev.map(c => 
+        selectedCampaigns.has(c.id) ? { ...c, daily_budget: parseFloat(bulkNewBudget) } : c
+      ));
+
+      setBulkBudgetDialogOpen(false);
+      setBulkNewBudget("");
+      setSelectedCampaigns(new Set());
+      splashedToast.success(`Orçamento atualizado para ${campaignsToUpdate.length} campanha(s)`);
+    } catch (error) {
+      console.error("Bulk budget error:", error);
+      splashedToast.error("Erro ao atualizar orçamentos");
     }
   };
 
@@ -255,6 +363,18 @@ export default function AdsCampaigns() {
     }
   };
 
+  const toggleColumnVisibility = (columnKey: string) => {
+    setColumns(prev => prev.map(col => 
+      col.key === columnKey ? { ...col, visible: !col.visible } : col
+    ));
+  };
+
+  const handleColumnResize = (columnKey: string, delta: number) => {
+    setColumns(prev => prev.map(col => 
+      col.key === columnKey ? { ...col, width: Math.max(60, col.width + delta) } : col
+    ));
+  };
+
   const sortedCampaigns = [...campaigns].sort((a, b) => {
     // Handle the calculated 'profit' field
     let aValue: string | number;
@@ -322,6 +442,78 @@ export default function AdsCampaigns() {
   const formatCurrency = (value: number) => `R$ ${(value || 0).toFixed(2)}`;
   const formatNumber = (value: number) => (value || 0).toLocaleString('pt-BR');
   const formatPercent = (value: number) => `${(value || 0).toFixed(2)}%`;
+
+  const visibleColumns = columns.filter(col => col.visible);
+
+  const rowVariants = {
+    hidden: { opacity: 0, y: 20, scale: 0.98, filter: "blur(4px)" },
+    visible: {
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      filter: "blur(0px)",
+      transition: { type: "spring" as const, stiffness: 400, damping: 25, mass: 0.7 },
+    },
+    exit: { opacity: 0, y: -10, transition: { duration: 0.2 } }
+  };
+
+  const renderCellContent = (campaign: Campaign, columnKey: string) => {
+    const profit = (campaign.conversion_value || 0) - (campaign.spend || 0);
+    
+    switch (columnKey) {
+      case 'name':
+        return (
+          <div className="flex flex-col gap-1">
+            <span className="font-medium truncate max-w-[200px]">{campaign.name}</span>
+            {getStatusBadge(campaign.status)}
+          </div>
+        );
+      case 'daily_budget':
+        return (
+          <div className="flex items-center gap-1 justify-end">
+            <span className="font-medium">{formatCurrency(campaign.daily_budget)}</span>
+            <span className="text-xs text-muted-foreground">/dia</span>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-5 w-5 ml-1"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedCampaign(campaign);
+                setNewBudget(campaign.daily_budget?.toString() || "");
+                setEditBudgetDialogOpen(true);
+              }}
+            >
+              <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+            </Button>
+          </div>
+        );
+      case 'spend':
+        return <span className="text-red-400 font-medium">{formatCurrency(campaign.spend)}</span>;
+      case 'impressions':
+        return formatNumber(campaign.impressions);
+      case 'reach':
+        return formatNumber(campaign.reach || 0);
+      case 'cpm':
+        return formatCurrency(campaign.cpm);
+      case 'cpc':
+        return formatCurrency(campaign.cpc || 0);
+      case 'ctr':
+        return formatPercent(campaign.ctr);
+      case 'cost_per_message':
+        return formatCurrency(campaign.cost_per_message || 0);
+      case 'messaging_conversations_started':
+        return formatNumber(campaign.messaging_conversations_started || 0);
+      case 'meta_conversions':
+        return <span className="font-medium text-green-400">{formatNumber(campaign.meta_conversions || 0)}</span>;
+      case 'conversion_value':
+        return <span className="font-medium text-blue-400">{formatCurrency(campaign.conversion_value || 0)}</span>;
+      case 'profit':
+        return <span className={cn("font-medium", profit >= 0 ? "text-green-400" : "text-red-400")}>{formatCurrency(profit)}</span>;
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -430,14 +622,21 @@ export default function AdsCampaigns() {
             </DialogContent>
           </Dialog>
 
-          <Button 
-            variant="outline" 
-            size="icon"
-            onClick={handleSync}
-            disabled={syncing}
-          >
-            <RefreshCcw className={cn("h-4 w-4", syncing && "animate-spin")} />
-          </Button>
+          <div className="flex flex-col items-center">
+            <Button 
+              variant="outline" 
+              size="icon"
+              onClick={handleSync}
+              disabled={syncing}
+            >
+              <RefreshCcw className={cn("h-4 w-4", syncing && "animate-spin")} />
+            </Button>
+            {lastSyncedAt && (
+              <span className="text-[10px] text-muted-foreground mt-1">
+                {format(new Date(lastSyncedAt), "dd/MM HH:mm", { locale: ptBR })}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -482,16 +681,84 @@ export default function AdsCampaigns() {
             ))}
           </SelectContent>
         </Select>
+
+        {/* Column visibility dropdown */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="icon">
+              <Columns3 className="h-4 w-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-56" align="end">
+            <div className="space-y-2">
+              <p className="text-sm font-medium mb-3">Colunas visíveis</p>
+              {columns.map(col => (
+                <label key={col.key} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-1 rounded">
+                  <Checkbox 
+                    checked={col.visible} 
+                    onCheckedChange={() => toggleColumnVisibility(col.key)} 
+                  />
+                  <span className="text-sm">{col.label}</span>
+                  {col.visible ? <Eye className="h-3 w-3 ml-auto text-muted-foreground" /> : <EyeOff className="h-3 w-3 ml-auto text-muted-foreground" />}
+                </label>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
-      {/* Selected count */}
-      {selectedCampaigns.size > 0 && (
-        <div className="flex items-center gap-2 px-2 py-1 bg-primary/10 rounded-lg text-sm">
-          <Badge variant="secondary" className="bg-primary text-primary-foreground">
-            {selectedCampaigns.size} selecionada{selectedCampaigns.size > 1 ? 's' : ''}
-          </Badge>
-        </div>
-      )}
+      {/* Bulk Actions */}
+      <AnimatePresence>
+        {selectedCampaigns.size > 0 && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="flex items-center gap-3 p-3 bg-primary/10 border border-primary/30 rounded-lg"
+          >
+            <Badge variant="secondary" className="bg-primary text-primary-foreground">
+              {selectedCampaigns.size} selecionada{selectedCampaigns.size > 1 ? 's' : ''}
+            </Badge>
+            
+            <div className="flex items-center gap-2 ml-auto">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => handleBulkToggle(true)}
+                className="gap-1"
+              >
+                <Play className="h-3 w-3" />
+                Ativar
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => handleBulkToggle(false)}
+                className="gap-1"
+              >
+                <Pause className="h-3 w-3" />
+                Pausar
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setBulkBudgetDialogOpen(true)}
+                className="gap-1"
+              >
+                <DollarSign className="h-3 w-3" />
+                Alterar Orçamento
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => setSelectedCampaigns(new Set())}
+              >
+                Limpar
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Campaigns Table */}
       <div className="rounded-lg border border-border overflow-hidden bg-card/50 backdrop-blur">
@@ -517,221 +784,123 @@ export default function AdsCampaigns() {
                     />
                   </TableHead>
                   <TableHead className="w-[60px]">On/Off</TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:text-foreground min-w-[200px]"
-                    onClick={() => handleSort('name')}
-                  >
-                    <div className="flex items-center">
-                      Nome <SortIcon field="name" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:text-foreground text-right"
-                    onClick={() => handleSort('daily_budget')}
-                  >
-                    <div className="flex items-center justify-end">
-                      Orçamento <SortIcon field="daily_budget" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:text-foreground text-right"
-                    onClick={() => handleSort('spend')}
-                  >
-                    <div className="flex items-center justify-end">
-                      Valor Usado <SortIcon field="spend" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:text-foreground text-right"
-                    onClick={() => handleSort('impressions')}
-                  >
-                    <div className="flex items-center justify-end">
-                      Impressões <SortIcon field="impressions" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:text-foreground text-right"
-                    onClick={() => handleSort('reach')}
-                  >
-                    <div className="flex items-center justify-end">
-                      Alcance <SortIcon field="reach" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:text-foreground text-right"
-                    onClick={() => handleSort('cpm')}
-                  >
-                    <div className="flex items-center justify-end">
-                      CPM <SortIcon field="cpm" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:text-foreground text-right"
-                    onClick={() => handleSort('cpc')}
-                  >
-                    <div className="flex items-center justify-end">
-                      CPC (link) <SortIcon field="cpc" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:text-foreground text-right"
-                    onClick={() => handleSort('ctr')}
-                  >
-                    <div className="flex items-center justify-end">
-                      CTR (link) <SortIcon field="ctr" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:text-foreground text-right"
-                    onClick={() => handleSort('cost_per_message')}
-                  >
-                    <div className="flex items-center justify-end">
-                      Custo/Msg <SortIcon field="cost_per_message" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:text-foreground text-right"
-                    onClick={() => handleSort('messaging_conversations_started')}
-                  >
-                    <div className="flex items-center justify-end">
-                      Conversas <SortIcon field="messaging_conversations_started" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:text-foreground text-right"
-                    onClick={() => handleSort('meta_conversions')}
-                  >
-                    <div className="flex items-center justify-end">
-                      Conversão <SortIcon field="meta_conversions" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:text-foreground text-right"
-                    onClick={() => handleSort('conversion_value')}
-                  >
-                    <div className="flex items-center justify-end">
-                      Valor Conv. <SortIcon field="conversion_value" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:text-foreground text-right"
-                    onClick={() => handleSort('profit')}
-                  >
-                    <div className="flex items-center justify-end">
-                      Lucro <SortIcon field="profit" />
-                    </div>
-                  </TableHead>
+                  {visibleColumns.map(col => (
+                    <TableHead 
+                      key={col.key}
+                      className={cn(
+                        "cursor-pointer hover:text-foreground relative group",
+                        col.key !== 'name' && "text-right"
+                      )}
+                      style={{ minWidth: col.width, width: col.width }}
+                      onClick={() => handleSort(col.key as SortField)}
+                    >
+                      <div className={cn("flex items-center", col.key !== 'name' && "justify-end")}>
+                        {col.label} <SortIcon field={col.key as SortField} />
+                      </div>
+                      {/* Resize handle */}
+                      <div 
+                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/50 opacity-0 group-hover:opacity-100"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          const startX = e.clientX;
+                          const startWidth = col.width;
+                          
+                          const handleMouseMove = (moveE: MouseEvent) => {
+                            const delta = moveE.clientX - startX;
+                            handleColumnResize(col.key, delta);
+                          };
+                          
+                          const handleMouseUp = () => {
+                            document.removeEventListener('mousemove', handleMouseMove);
+                            document.removeEventListener('mouseup', handleMouseUp);
+                          };
+                          
+                          document.addEventListener('mousemove', handleMouseMove);
+                          document.addEventListener('mouseup', handleMouseUp);
+                        }}
+                      />
+                    </TableHead>
+                  ))}
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredCampaigns.map((campaign) => {
-                  const profit = (campaign.conversion_value || 0) - (campaign.spend || 0);
-                  return (
-                    <TableRow 
-                      key={campaign.id}
-                      className={cn(
-                        "hover:bg-muted/50",
-                        selectedCampaigns.has(campaign.id) && "bg-primary/5"
-                      )}
-                    >
-                    <TableCell>
-                      <Checkbox
-                        checked={selectedCampaigns.has(campaign.id)}
-                        onCheckedChange={() => toggleCampaignSelection(campaign.id)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Switch
-                        checked={campaign.status === "ACTIVE"}
-                        onCheckedChange={() => handleToggleCampaign(campaign)}
+                <AnimatePresence mode="popLayout">
+                  {filteredCampaigns.map((campaign, index) => {
+                    return (
+                      <motion.tr 
+                        key={campaign.id}
+                        variants={rowVariants}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                        style={{ animationDelay: `${index * 0.04}s` }}
                         className={cn(
-                          "data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500",
-                          "[&>span]:bg-white"
+                          "border-b border-border/20 hover:bg-muted/20 transition-colors",
+                          selectedCampaigns.has(campaign.id) && "bg-primary/5"
                         )}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col gap-1">
-                        <span className="font-medium truncate max-w-[200px]">{campaign.name}</span>
-                        {getStatusBadge(campaign.status)}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {formatCurrency(campaign.daily_budget)}
-                      <span className="text-xs text-muted-foreground">/dia</span>
-                    </TableCell>
-                    <TableCell className="text-right text-red-400 font-medium">
-                      {formatCurrency(campaign.spend)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatNumber(campaign.impressions)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatNumber(campaign.reach || 0)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(campaign.cpm)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(campaign.cpc || 0)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatPercent(campaign.ctr)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(campaign.cost_per_message || 0)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatNumber(campaign.messaging_conversations_started || 0)}
-                    </TableCell>
-                    <TableCell className="text-right font-medium text-green-400">
-                      {formatNumber(campaign.meta_conversions || 0)}
-                    </TableCell>
-                    <TableCell className="text-right font-medium text-blue-400">
-                      {formatCurrency(campaign.conversion_value || 0)}
-                    </TableCell>
-                    <TableCell className={cn(
-                      "text-right font-medium",
-                      profit >= 0 ? "text-green-400" : "text-red-400"
-                    )}>
-                      {formatCurrency(profit)}
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => {
-                            setSelectedCampaign(campaign);
-                            setNewBudget(campaign.daily_budget?.toString() || "");
-                            setEditBudgetDialogOpen(true);
-                          }}>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Editar Orçamento
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleToggleCampaign(campaign)}>
-                            {campaign.status === "ACTIVE" ? (
-                              <>
-                                <Pause className="h-4 w-4 mr-2" />
-                                Pausar
-                              </>
-                            ) : (
-                              <>
-                                <Play className="h-4 w-4 mr-2" />
-                                Ativar
-                              </>
+                      >
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedCampaigns.has(campaign.id)}
+                            onCheckedChange={() => toggleCampaignSelection(campaign.id)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Switch
+                            checked={campaign.status === "ACTIVE"}
+                            onCheckedChange={() => handleToggleCampaign(campaign)}
+                            className={cn(
+                              "data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500",
+                              "[&>span]:bg-white"
                             )}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                  );
-                })}
+                          />
+                        </TableCell>
+                        {visibleColumns.map(col => (
+                          <TableCell 
+                            key={col.key} 
+                            className={cn(col.key !== 'name' && "text-right")}
+                            style={{ minWidth: col.width, width: col.width }}
+                          >
+                            {renderCellContent(campaign, col.key)}
+                          </TableCell>
+                        ))}
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => {
+                                setSelectedCampaign(campaign);
+                                setNewBudget(campaign.daily_budget?.toString() || "");
+                                setEditBudgetDialogOpen(true);
+                              }}>
+                                <Edit className="h-4 w-4 mr-2" />
+                                Editar Orçamento
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleToggleCampaign(campaign)}>
+                                {campaign.status === "ACTIVE" ? (
+                                  <>
+                                    <Pause className="h-4 w-4 mr-2" />
+                                    Pausar
+                                  </>
+                                ) : (
+                                  <>
+                                    <Play className="h-4 w-4 mr-2" />
+                                    Ativar
+                                  </>
+                                )}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </motion.tr>
+                    );
+                  })}
+                </AnimatePresence>
               </TableBody>
             </Table>
           </div>
@@ -766,6 +935,39 @@ export default function AdsCampaigns() {
             </Button>
             <Button onClick={handleUpdateBudget}>
               Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Budget Dialog */}
+      <Dialog open={bulkBudgetDialogOpen} onOpenChange={setBulkBudgetDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Alterar Orçamento em Massa</DialogTitle>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Alterar orçamento de <span className="font-medium text-foreground">{selectedCampaigns.size}</span> campanha(s)
+            </p>
+            <div className="space-y-2">
+              <Label>Novo Orçamento Diário (R$)</Label>
+              <Input
+                type="number"
+                value={bulkNewBudget}
+                onChange={(e) => setBulkNewBudget(e.target.value)}
+                placeholder="50.00"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkBudgetDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleBulkBudgetUpdate}>
+              Aplicar a Todas
             </Button>
           </DialogFooter>
         </DialogContent>

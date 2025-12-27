@@ -15,13 +15,15 @@ import {
   Users,
   ShoppingCart,
   RefreshCcw,
-  AlertCircle
+  AlertCircle,
+  Info
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { splashedToast } from "@/hooks/useSplashedToast";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface MetricCard {
   title: string;
@@ -35,7 +37,6 @@ interface FunnelStep {
   label: string;
   value: number;
   percentage: number;
-  color: string;
 }
 
 type DateFilter = "today" | "yesterday" | "7days" | "30days";
@@ -47,6 +48,7 @@ export default function AdsDashboard() {
   const [dateFilter, setDateFilter] = useState<DateFilter>("7days");
   const [selectedAccount, setSelectedAccount] = useState<string>("all");
   const [adAccounts, setAdAccounts] = useState<any[]>([]);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [metrics, setMetrics] = useState({
     spend: 0,
     impressions: 0,
@@ -59,7 +61,8 @@ export default function AdsDashboard() {
     revenue: 0,
     profit: 0,
     totalMessages: 0,
-    totalPurchases: 0
+    totalPurchases: 0,
+    conversionValue: 0
   });
   const [hasAccounts, setHasAccounts] = useState(false);
 
@@ -104,8 +107,19 @@ export default function AdsDashboard() {
       const totalSpend = campaigns?.reduce((sum, c) => sum + (c.spend || 0), 0) || 0;
       const totalImpressions = campaigns?.reduce((sum, c) => sum + (c.impressions || 0), 0) || 0;
       const totalClicks = campaigns?.reduce((sum, c) => sum + (c.clicks || 0), 0) || 0;
-      // Use meta_conversions instead of conversions for accurate Meta conversion tracking
       const totalConversions = campaigns?.reduce((sum, c) => sum + ((c as any).meta_conversions || 0), 0) || 0;
+      const totalConversionValue = campaigns?.reduce((sum, c) => sum + ((c as any).conversion_value || 0), 0) || 0;
+      const totalMessaging = campaigns?.reduce((sum, c) => sum + ((c as any).messaging_conversations_started || 0), 0) || 0;
+
+      // Get last synced time
+      if (campaigns && campaigns.length > 0) {
+        const mostRecent = campaigns.reduce((latest, c) => {
+          if (!c.last_synced_at) return latest;
+          if (!latest) return c.last_synced_at;
+          return new Date(c.last_synced_at) > new Date(latest) ? c.last_synced_at : latest;
+        }, null as string | null);
+        setLastSyncedAt(mostRecent);
+      }
 
       // Get leads data for funnel
       const { data: leads } = await supabase
@@ -125,11 +139,12 @@ export default function AdsDashboard() {
         cpm: totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0,
         ctr: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
         cpc: totalClicks > 0 ? totalSpend / totalClicks : 0,
-        roas: totalSpend > 0 ? totalRevenue / totalSpend : 0,
-        revenue: totalRevenue,
-        profit: totalRevenue - totalSpend,
-        totalMessages,
-        totalPurchases
+        roas: totalSpend > 0 ? totalConversionValue / totalSpend : 0,
+        revenue: totalConversionValue,
+        profit: totalConversionValue - totalSpend,
+        totalMessages: totalMessaging,
+        totalPurchases: totalConversions,
+        conversionValue: totalConversionValue
       });
     } catch (error) {
       console.error("Error loading dashboard data:", error);
@@ -184,7 +199,7 @@ export default function AdsDashboard() {
   ];
 
   const resultCards: MetricCard[] = [
-    { title: "Receita", value: `R$ ${metrics.revenue.toFixed(2)}`, icon: DollarSign, color: "text-green-400" },
+    { title: "Receita (Conversões)", value: `R$ ${metrics.conversionValue.toFixed(2)}`, icon: DollarSign, color: "text-green-400" },
     { 
       title: "Lucro", 
       value: `R$ ${metrics.profit.toFixed(2)}`, 
@@ -193,20 +208,27 @@ export default function AdsDashboard() {
     },
   ];
 
+  // Funnel data for Meta Ads (using campaign data)
   const funnelSteps: FunnelStep[] = [
     { 
-      label: "Total de Mensagens", 
-      value: metrics.totalMessages, 
-      percentage: 100,
-      color: "bg-blue-500"
+      label: "Cliques", 
+      value: metrics.clicks, 
+      percentage: metrics.clicks > 0 ? 100 : 0,
     },
     { 
-      label: "Compras Enviadas", 
+      label: "Conversas", 
+      value: metrics.totalMessages, 
+      percentage: metrics.clicks > 0 ? (metrics.totalMessages / metrics.clicks) * 100 : 0,
+    },
+    { 
+      label: "Compras", 
       value: metrics.totalPurchases, 
-      percentage: metrics.totalMessages > 0 ? (metrics.totalPurchases / metrics.totalMessages) * 100 : 0,
-      color: "bg-green-500"
+      percentage: metrics.clicks > 0 ? (metrics.totalPurchases / metrics.clicks) * 100 : 0,
     },
   ];
+
+  // Calculate max value for funnel scaling
+  const maxFunnelValue = Math.max(...funnelSteps.map(s => s.value), 1);
 
   if (!hasAccounts && !loading) {
     return (
@@ -259,14 +281,21 @@ export default function AdsDashboard() {
             </SelectContent>
           </Select>
 
-          <Button 
-            variant="outline" 
-            size="icon"
-            onClick={handleSync}
-            disabled={syncing}
-          >
-            <RefreshCcw className={cn("h-4 w-4", syncing && "animate-spin")} />
-          </Button>
+          <div className="flex flex-col items-center">
+            <Button 
+              variant="outline" 
+              size="icon"
+              onClick={handleSync}
+              disabled={syncing}
+            >
+              <RefreshCcw className={cn("h-4 w-4", syncing && "animate-spin")} />
+            </Button>
+            {lastSyncedAt && (
+              <span className="text-[10px] text-muted-foreground mt-1">
+                {format(new Date(lastSyncedAt), "dd/MM HH:mm", { locale: ptBR })}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -326,48 +355,85 @@ export default function AdsDashboard() {
         ))}
       </div>
 
-      {/* Conversion Funnel */}
+      {/* Conversion Funnel - Meta Ads Style */}
       <Card className="bg-card/50 backdrop-blur border-border/50">
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
-            Funil de Conversão WhatsApp
+            Funil de Conversão (Meta Ads)
           </CardTitle>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs max-w-xs">Visualização do funil de conversão baseado nos dados das suas campanhas</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <Skeleton className="h-32" />
+            <Skeleton className="h-64" />
           ) : (
-            <div className="space-y-4">
-              {funnelSteps.map((step, index) => (
-                <div key={step.label} className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>{step.label}</span>
-                    <span className="font-medium">
-                      {step.value.toLocaleString("pt-BR")} ({step.percentage.toFixed(1)}%)
-                    </span>
-                  </div>
-                  <div className="h-8 bg-muted rounded-lg overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${step.percentage}%` }}
-                      transition={{ duration: 0.8, delay: index * 0.2 }}
-                      className={cn("h-full rounded-lg", step.color)}
-                    />
-                  </div>
-                </div>
-              ))}
+            <div className="relative">
+              {/* Funnel visualization */}
+              <div className="flex items-end justify-center gap-1 h-64">
+                {funnelSteps.map((step, index) => {
+                  const height = step.value > 0 ? Math.max(20, (step.value / maxFunnelValue) * 100) : 5;
+                  const gradientColors = [
+                    "from-blue-500 to-purple-500",
+                    "from-purple-500 to-pink-500", 
+                    "from-pink-500 to-rose-500"
+                  ];
+                  
+                  return (
+                    <div key={step.label} className="flex flex-col items-center flex-1 max-w-[150px]">
+                      {/* Percentage */}
+                      <span className="text-lg font-bold mb-2 text-foreground">
+                        {step.percentage.toFixed(1)}%
+                      </span>
+                      
+                      {/* Bar */}
+                      <motion.div
+                        initial={{ height: 0 }}
+                        animate={{ height: `${height}%` }}
+                        transition={{ duration: 0.8, delay: index * 0.2, ease: "easeOut" }}
+                        className={cn(
+                          "w-full rounded-t-lg bg-gradient-to-t relative",
+                          gradientColors[index % gradientColors.length]
+                        )}
+                        style={{ minHeight: 20 }}
+                      >
+                        {/* Curved connector to next step */}
+                        {index < funnelSteps.length - 1 && (
+                          <div className="absolute -right-1 top-0 bottom-0 w-2 overflow-hidden">
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent to-background/50" />
+                          </div>
+                        )}
+                      </motion.div>
+                      
+                      {/* Value */}
+                      <span className="text-sm text-muted-foreground mt-2">
+                        {step.value.toLocaleString("pt-BR")}
+                      </span>
+                      
+                      {/* Label */}
+                      <span className="text-xs text-muted-foreground mt-1 text-center">
+                        {step.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
 
-              {metrics.totalMessages > 0 && (
-                <div className="pt-4 border-t border-border mt-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Taxa de Conversão</span>
-                    <span className="text-lg font-bold text-green-400">
-                      {((metrics.totalPurchases / metrics.totalMessages) * 100).toFixed(2)}%
-                    </span>
-                  </div>
-                </div>
-              )}
+              {/* Vertical dividers */}
+              <div className="absolute inset-x-0 top-0 bottom-0 flex justify-between pointer-events-none">
+                {funnelSteps.map((_, i) => (
+                  <div key={i} className="flex-1 border-r border-border/20 last:border-0" />
+                ))}
+              </div>
             </div>
           )}
         </CardContent>
