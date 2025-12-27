@@ -149,27 +149,55 @@ serve(async (req) => {
 
     console.log(`Fetching chats from ${EVOLUTION_BASE_URL} for instance ${instanceName}`);
 
-    // Fetch chats from Evolution API
-    const chatsResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/findChats/${instanceName}`, {
-      method: 'POST',
-      headers: {
-        'apikey': EVOLUTION_API_KEY,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({}),
-    });
+    // Fetch chats from Evolution API with error handling
+    let chats: any[] = [];
+    try {
+      const chatsResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/findChats/${instanceName}`, {
+        method: 'POST',
+        headers: {
+          'apikey': EVOLUTION_API_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      });
 
-    if (!chatsResponse.ok) {
-      const errorText = await chatsResponse.text();
-      console.error('Evolution API error:', errorText);
-      return new Response(JSON.stringify({ error: 'Failed to fetch chats from Evolution API', details: errorText }), {
-        status: 500,
+      if (!chatsResponse.ok) {
+        const errorText = await chatsResponse.text();
+        console.error('Evolution API findChats error:', errorText);
+        // Don't fail completely - return partial success with warning
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: 'Evolution API findChats failed',
+          details: errorText,
+          imported: 0,
+          updated: 0,
+          skipped: 0,
+          total: 0,
+          instanceName
+        }), {
+          status: 200, // Return 200 so client doesn't show error toast
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      chats = await chatsResponse.json();
+      console.log(`Found ${chats?.length || 0} chats from Evolution API`);
+    } catch (fetchError) {
+      console.error('Evolution API fetch error:', fetchError);
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'Failed to connect to Evolution API',
+        details: String(fetchError),
+        imported: 0,
+        updated: 0,
+        skipped: 0,
+        total: 0,
+        instanceName
+      }), {
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-
-    const chats = await chatsResponse.json();
-    console.log(`Found ${chats?.length || 0} chats from Evolution API`);
 
     let imported = 0;
     let updated = 0;
