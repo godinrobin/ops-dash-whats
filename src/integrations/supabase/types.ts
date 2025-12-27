@@ -229,6 +229,193 @@ export type Database = {
           },
         ]
       }
+      ads_ads: {
+        Row: {
+          ad_account_id: string | null
+          ad_id: string
+          adset_id: string
+          campaign_id: string
+          clicks: number | null
+          conversion_value: number | null
+          cost_per_message: number | null
+          cost_per_result: number | null
+          cpc: number | null
+          cpm: number | null
+          created_at: string
+          creative_id: string | null
+          ctr: number | null
+          id: string
+          impressions: number | null
+          last_synced_at: string | null
+          messaging_conversations_started: number | null
+          meta_conversions: number | null
+          name: string | null
+          reach: number | null
+          results: number | null
+          spend: number | null
+          status: string | null
+          thumbnail_url: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ad_account_id?: string | null
+          ad_id: string
+          adset_id: string
+          campaign_id: string
+          clicks?: number | null
+          conversion_value?: number | null
+          cost_per_message?: number | null
+          cost_per_result?: number | null
+          cpc?: number | null
+          cpm?: number | null
+          created_at?: string
+          creative_id?: string | null
+          ctr?: number | null
+          id?: string
+          impressions?: number | null
+          last_synced_at?: string | null
+          messaging_conversations_started?: number | null
+          meta_conversions?: number | null
+          name?: string | null
+          reach?: number | null
+          results?: number | null
+          spend?: number | null
+          status?: string | null
+          thumbnail_url?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ad_account_id?: string | null
+          ad_id?: string
+          adset_id?: string
+          campaign_id?: string
+          clicks?: number | null
+          conversion_value?: number | null
+          cost_per_message?: number | null
+          cost_per_result?: number | null
+          cpc?: number | null
+          cpm?: number | null
+          created_at?: string
+          creative_id?: string | null
+          ctr?: number | null
+          id?: string
+          impressions?: number | null
+          last_synced_at?: string | null
+          messaging_conversations_started?: number | null
+          meta_conversions?: number | null
+          name?: string | null
+          reach?: number | null
+          results?: number | null
+          spend?: number | null
+          status?: string | null
+          thumbnail_url?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ads_ads_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "ads_ad_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ads_adsets: {
+        Row: {
+          ad_account_id: string | null
+          adset_id: string
+          campaign_id: string
+          clicks: number | null
+          conversion_value: number | null
+          cost_per_message: number | null
+          cost_per_result: number | null
+          cpc: number | null
+          cpm: number | null
+          created_at: string
+          ctr: number | null
+          daily_budget: number | null
+          id: string
+          impressions: number | null
+          last_synced_at: string | null
+          lifetime_budget: number | null
+          messaging_conversations_started: number | null
+          meta_conversions: number | null
+          name: string | null
+          reach: number | null
+          results: number | null
+          spend: number | null
+          status: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ad_account_id?: string | null
+          adset_id: string
+          campaign_id: string
+          clicks?: number | null
+          conversion_value?: number | null
+          cost_per_message?: number | null
+          cost_per_result?: number | null
+          cpc?: number | null
+          cpm?: number | null
+          created_at?: string
+          ctr?: number | null
+          daily_budget?: number | null
+          id?: string
+          impressions?: number | null
+          last_synced_at?: string | null
+          lifetime_budget?: number | null
+          messaging_conversations_started?: number | null
+          meta_conversions?: number | null
+          name?: string | null
+          reach?: number | null
+          results?: number | null
+          spend?: number | null
+          status?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ad_account_id?: string | null
+          adset_id?: string
+          campaign_id?: string
+          clicks?: number | null
+          conversion_value?: number | null
+          cost_per_message?: number | null
+          cost_per_result?: number | null
+          cpc?: number | null
+          cpm?: number | null
+          created_at?: string
+          ctr?: number | null
+          daily_budget?: number | null
+          id?: string
+          impressions?: number | null
+          last_synced_at?: string | null
+          lifetime_budget?: number | null
+          messaging_conversations_started?: number | null
+          meta_conversions?: number | null
+          name?: string | null
+          reach?: number | null
+          results?: number | null
+          spend?: number | null
+          status?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ads_adsets_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "ads_ad_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ads_alert_numbers: {
         Row: {
           created_at: string

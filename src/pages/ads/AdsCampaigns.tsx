@@ -26,7 +26,8 @@ import {
   Pencil,
   Columns3,
   Power,
-  DollarSign
+  DollarSign,
+  Check
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -70,6 +71,52 @@ interface Campaign {
   last_synced_at?: string;
 }
 
+interface AdSet {
+  id: string;
+  adset_id: string;
+  campaign_id: string;
+  name: string;
+  status: string;
+  daily_budget: number;
+  lifetime_budget: number;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  reach: number;
+  cpm: number;
+  cpc: number;
+  ctr: number;
+  cost_per_message: number;
+  messaging_conversations_started: number;
+  meta_conversions: number;
+  conversion_value: number;
+  ad_account_id: string;
+  last_synced_at?: string;
+}
+
+interface Ad {
+  id: string;
+  ad_id: string;
+  adset_id: string;
+  campaign_id: string;
+  name: string;
+  status: string;
+  thumbnail_url: string | null;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  reach: number;
+  cpm: number;
+  cpc: number;
+  ctr: number;
+  cost_per_message: number;
+  messaging_conversations_started: number;
+  meta_conversions: number;
+  conversion_value: number;
+  ad_account_id: string;
+  last_synced_at?: string;
+}
+
 type SortField = 'name' | 'status' | 'daily_budget' | 'spend' | 'impressions' | 'reach' | 'cpm' | 'cpc' | 'ctr' | 'cost_per_message' | 'messaging_conversations_started' | 'meta_conversions' | 'conversion_value' | 'profit';
 type SortOrder = 'asc' | 'desc';
 type DateFilter = "today" | "yesterday" | "7days" | "30days" | "month";
@@ -98,6 +145,22 @@ const defaultColumns: ColumnConfig[] = [
   { key: 'profit', label: 'Lucro', visible: true, width: 100 },
 ];
 
+const adColumns: ColumnConfig[] = [
+  { key: 'thumbnail', label: 'Preview', visible: true, width: 80 },
+  { key: 'name', label: 'Nome', visible: true, width: 200 },
+  { key: 'spend', label: 'Valor Usado', visible: true, width: 120 },
+  { key: 'impressions', label: 'Impressões', visible: true, width: 110 },
+  { key: 'reach', label: 'Alcance', visible: true, width: 100 },
+  { key: 'cpm', label: 'CPM', visible: true, width: 90 },
+  { key: 'cpc', label: 'CPC (link)', visible: true, width: 90 },
+  { key: 'ctr', label: 'CTR (link)', visible: true, width: 90 },
+  { key: 'cost_per_message', label: 'Custo/Msg', visible: true, width: 100 },
+  { key: 'messaging_conversations_started', label: 'Conversas', visible: true, width: 100 },
+  { key: 'meta_conversions', label: 'Conversão', visible: true, width: 100 },
+  { key: 'conversion_value', label: 'Valor Conv.', visible: true, width: 110 },
+  { key: 'profit', label: 'Lucro', visible: true, width: 100 },
+];
+
 const viewLevelTabs = [
   { value: 'campaign' as ViewLevel, label: 'Campanhas', icon: '📊' },
   { value: 'adset' as ViewLevel, label: 'Conjuntos de anúncios', icon: '📋' },
@@ -109,16 +172,19 @@ export default function AdsCampaigns() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [adsets, setAdsets] = useState<AdSet[]>([]);
+  const [ads, setAds] = useState<Ad[]>([]);
   const [adAccounts, setAdAccounts] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedAccount, setSelectedAccount] = useState<string>("all");
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editBudgetDialogOpen, setEditBudgetDialogOpen] = useState(false);
   const [bulkBudgetDialogOpen, setBulkBudgetDialogOpen] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
+  const [selectedAdset, setSelectedAdset] = useState<AdSet | null>(null);
   const [newBudget, setNewBudget] = useState("");
   const [bulkNewBudget, setBulkNewBudget] = useState("");
-  const [selectedCampaigns, setSelectedCampaigns] = useState<Set<string>>(new Set());
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [sortField, setSortField] = useState<SortField>('spend');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [dateFilter, setDateFilter] = useState<DateFilter>("7days");
@@ -126,6 +192,7 @@ export default function AdsCampaigns() {
   const [columns, setColumns] = useState<ColumnConfig[]>(defaultColumns);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [viewLevel, setViewLevel] = useState<ViewLevel>('campaign');
+  const [accountFilterOpen, setAccountFilterOpen] = useState(false);
 
   const datePresetMap: Record<DateFilter, string> = {
     today: "today",
@@ -147,7 +214,7 @@ export default function AdsCampaigns() {
     if (user) {
       loadData();
     }
-  }, [user, selectedAccount]);
+  }, [user, selectedAccounts]);
 
   const loadData = async () => {
     if (!user) return;
@@ -162,21 +229,52 @@ export default function AdsCampaigns() {
 
       setAdAccounts(accounts || []);
 
+      // Build filter for selected accounts
+      const accountFilter = selectedAccounts.length > 0 ? selectedAccounts : null;
+
       // Load campaigns
-      let query = supabase
+      let campaignsQuery = supabase
         .from("ads_campaigns")
         .select("*")
         .eq("user_id", user.id)
         .order("spend", { ascending: false });
 
-      if (selectedAccount !== "all") {
-        query = query.eq("ad_account_id", selectedAccount);
+      if (accountFilter) {
+        campaignsQuery = campaignsQuery.in("ad_account_id", accountFilter);
       }
 
-      const { data: campaignsData } = await query;
+      const { data: campaignsData } = await campaignsQuery;
       setCampaigns(campaignsData || []);
+
+      // Load adsets
+      let adsetsQuery = supabase
+        .from("ads_adsets")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("spend", { ascending: false });
+
+      if (accountFilter) {
+        adsetsQuery = adsetsQuery.in("ad_account_id", accountFilter);
+      }
+
+      const { data: adsetsData } = await adsetsQuery;
+      setAdsets(adsetsData || []);
+
+      // Load ads
+      let adsQuery = supabase
+        .from("ads_ads")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("spend", { ascending: false });
+
+      if (accountFilter) {
+        adsQuery = adsQuery.in("ad_account_id", accountFilter);
+      }
+
+      const { data: adsData } = await adsQuery;
+      setAds(adsData || []);
       
-      // Get last synced time from most recent campaign
+      // Get last synced time
       if (campaignsData && campaignsData.length > 0) {
         const mostRecent = campaignsData.reduce((latest, c) => {
           if (!c.last_synced_at) return latest;
@@ -186,7 +284,7 @@ export default function AdsCampaigns() {
         setLastSyncedAt(mostRecent);
       }
     } catch (error) {
-      console.error("Error loading campaigns:", error);
+      console.error("Error loading data:", error);
     } finally {
       setLoading(false);
     }
@@ -195,14 +293,20 @@ export default function AdsCampaigns() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const { error } = await supabase.functions.invoke("facebook-campaigns", { 
-        body: { 
-          action: "sync_campaigns",
-          datePreset: datePresetMap[dateFilter]
-        } 
-      });
-      if (error) throw error;
-      splashedToast.success("Campanhas sincronizadas!");
+      // Sync all three levels
+      await Promise.all([
+        supabase.functions.invoke("facebook-campaigns", { 
+          body: { action: "sync_campaigns", datePreset: datePresetMap[dateFilter] } 
+        }),
+        supabase.functions.invoke("facebook-campaigns", { 
+          body: { action: "sync_adsets", datePreset: datePresetMap[dateFilter] } 
+        }),
+        supabase.functions.invoke("facebook-campaigns", { 
+          body: { action: "sync_ads", datePreset: datePresetMap[dateFilter] } 
+        }),
+      ]);
+      
+      splashedToast.success("Dados sincronizados!");
       await loadData();
     } catch (error) {
       console.error("Sync error:", error);
@@ -245,59 +349,157 @@ export default function AdsCampaigns() {
     }
   };
 
-  const handleBulkToggle = async (activate: boolean) => {
-    const newStatus = activate ? "ACTIVE" : "PAUSED";
-    const campaignsToUpdate = campaigns.filter(c => selectedCampaigns.has(c.id));
+  const handleToggleAdset = async (adset: AdSet) => {
+    const newStatus = adset.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
     
     try {
-      for (const campaign of campaignsToUpdate) {
-        await supabase.functions.invoke("facebook-campaigns", {
-          body: {
-            action: "update_campaign_status",
-            campaignId: campaign.campaign_id,
-            adAccountId: campaign.ad_account_id,
-            status: newStatus
-          }
-        });
-      }
+      const { error } = await supabase.functions.invoke("facebook-campaigns", {
+        body: {
+          action: "update_adset_status",
+          adsetId: adset.adset_id,
+          adAccountId: adset.ad_account_id,
+          status: newStatus
+        }
+      });
 
-      setCampaigns(prev => prev.map(c => 
-        selectedCampaigns.has(c.id) ? { ...c, status: newStatus } : c
+      if (error) throw error;
+
+      setAdsets(prev => prev.map(a => 
+        a.id === adset.id ? { ...a, status: newStatus } : a
       ));
 
-      splashedToast.success(`${campaignsToUpdate.length} campanha(s) ${activate ? "ativada(s)" : "pausada(s)"}`);
-      setSelectedCampaigns(new Set());
+      splashedToast.success(`Conjunto ${newStatus === "ACTIVE" ? "ativado" : "pausado"}!`);
+    } catch (error) {
+      console.error("Toggle error:", error);
+      splashedToast.error("Erro ao alterar status");
+    }
+  };
+
+  const handleToggleAd = async (ad: Ad) => {
+    const newStatus = ad.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
+    
+    try {
+      const { error } = await supabase.functions.invoke("facebook-campaigns", {
+        body: {
+          action: "update_ad_status",
+          adId: ad.ad_id,
+          adAccountId: ad.ad_account_id,
+          status: newStatus
+        }
+      });
+
+      if (error) throw error;
+
+      setAds(prev => prev.map(a => 
+        a.id === ad.id ? { ...a, status: newStatus } : a
+      ));
+
+      splashedToast.success(`Anúncio ${newStatus === "ACTIVE" ? "ativado" : "pausado"}!`);
+    } catch (error) {
+      console.error("Toggle error:", error);
+      splashedToast.error("Erro ao alterar status");
+    }
+  };
+
+  const handleBulkToggle = async (activate: boolean) => {
+    const newStatus = activate ? "ACTIVE" : "PAUSED";
+    
+    try {
+      if (viewLevel === 'campaign') {
+        const itemsToUpdate = campaigns.filter(c => selectedItems.has(c.id));
+        for (const item of itemsToUpdate) {
+          await supabase.functions.invoke("facebook-campaigns", {
+            body: {
+              action: "update_campaign_status",
+              campaignId: item.campaign_id,
+              adAccountId: item.ad_account_id,
+              status: newStatus
+            }
+          });
+        }
+        setCampaigns(prev => prev.map(c => 
+          selectedItems.has(c.id) ? { ...c, status: newStatus } : c
+        ));
+      } else if (viewLevel === 'adset') {
+        const itemsToUpdate = adsets.filter(a => selectedItems.has(a.id));
+        for (const item of itemsToUpdate) {
+          await supabase.functions.invoke("facebook-campaigns", {
+            body: {
+              action: "update_adset_status",
+              adsetId: item.adset_id,
+              adAccountId: item.ad_account_id,
+              status: newStatus
+            }
+          });
+        }
+        setAdsets(prev => prev.map(a => 
+          selectedItems.has(a.id) ? { ...a, status: newStatus } : a
+        ));
+      } else {
+        const itemsToUpdate = ads.filter(a => selectedItems.has(a.id));
+        for (const item of itemsToUpdate) {
+          await supabase.functions.invoke("facebook-campaigns", {
+            body: {
+              action: "update_ad_status",
+              adId: item.ad_id,
+              adAccountId: item.ad_account_id,
+              status: newStatus
+            }
+          });
+        }
+        setAds(prev => prev.map(a => 
+          selectedItems.has(a.id) ? { ...a, status: newStatus } : a
+        ));
+      }
+
+      splashedToast.success(`${selectedItems.size} item(s) ${activate ? "ativado(s)" : "pausado(s)"}`);
+      setSelectedItems(new Set());
     } catch (error) {
       console.error("Bulk toggle error:", error);
-      splashedToast.error("Erro ao alterar campanhas");
+      splashedToast.error("Erro ao alterar itens");
     }
   };
 
   const handleBulkBudgetUpdate = async () => {
     if (!bulkNewBudget) return;
 
-    const campaignsToUpdate = campaigns.filter(c => selectedCampaigns.has(c.id));
-
     try {
-      for (const campaign of campaignsToUpdate) {
-        await supabase.functions.invoke("facebook-campaigns", {
-          body: {
-            action: "update_campaign_budget",
-            campaignId: campaign.campaign_id,
-            adAccountId: campaign.ad_account_id,
-            daily_budget: parseFloat(bulkNewBudget) * 100
-          }
-        });
+      if (viewLevel === 'campaign') {
+        const itemsToUpdate = campaigns.filter(c => selectedItems.has(c.id));
+        for (const item of itemsToUpdate) {
+          await supabase.functions.invoke("facebook-campaigns", {
+            body: {
+              action: "update_campaign_budget",
+              campaignId: item.campaign_id,
+              adAccountId: item.ad_account_id,
+              daily_budget: parseFloat(bulkNewBudget) * 100
+            }
+          });
+        }
+        setCampaigns(prev => prev.map(c => 
+          selectedItems.has(c.id) ? { ...c, daily_budget: parseFloat(bulkNewBudget) } : c
+        ));
+      } else if (viewLevel === 'adset') {
+        const itemsToUpdate = adsets.filter(a => selectedItems.has(a.id));
+        for (const item of itemsToUpdate) {
+          await supabase.functions.invoke("facebook-campaigns", {
+            body: {
+              action: "update_adset_budget",
+              adsetId: item.adset_id,
+              adAccountId: item.ad_account_id,
+              daily_budget: parseFloat(bulkNewBudget) * 100
+            }
+          });
+        }
+        setAdsets(prev => prev.map(a => 
+          selectedItems.has(a.id) ? { ...a, daily_budget: parseFloat(bulkNewBudget) } : a
+        ));
       }
-
-      setCampaigns(prev => prev.map(c => 
-        selectedCampaigns.has(c.id) ? { ...c, daily_budget: parseFloat(bulkNewBudget) } : c
-      ));
 
       setBulkBudgetDialogOpen(false);
       setBulkNewBudget("");
-      setSelectedCampaigns(new Set());
-      splashedToast.success(`Orçamento atualizado para ${campaignsToUpdate.length} campanha(s)`);
+      setSelectedItems(new Set());
+      splashedToast.success(`Orçamento atualizado!`);
     } catch (error) {
       console.error("Bulk budget error:", error);
       splashedToast.error("Erro ao atualizar orçamentos");
@@ -305,27 +507,45 @@ export default function AdsCampaigns() {
   };
 
   const handleUpdateBudget = async () => {
-    if (!selectedCampaign || !newBudget) return;
+    if (!newBudget) return;
 
     try {
-      const { error } = await supabase.functions.invoke("facebook-campaigns", {
-        body: {
-          action: "update_campaign_budget",
-          campaignId: selectedCampaign.campaign_id,
-          adAccountId: selectedCampaign.ad_account_id,
-          daily_budget: parseFloat(newBudget) * 100 // Convert to cents
-        }
-      });
+      if (selectedCampaign) {
+        const { error } = await supabase.functions.invoke("facebook-campaigns", {
+          body: {
+            action: "update_campaign_budget",
+            campaignId: selectedCampaign.campaign_id,
+            adAccountId: selectedCampaign.ad_account_id,
+            daily_budget: parseFloat(newBudget) * 100
+          }
+        });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      setCampaigns(prev => prev.map(c => 
-        c.id === selectedCampaign.id ? { ...c, daily_budget: parseFloat(newBudget) } : c
-      ));
+        setCampaigns(prev => prev.map(c => 
+          c.id === selectedCampaign.id ? { ...c, daily_budget: parseFloat(newBudget) } : c
+        ));
+      } else if (selectedAdset) {
+        const { error } = await supabase.functions.invoke("facebook-campaigns", {
+          body: {
+            action: "update_adset_budget",
+            adsetId: selectedAdset.adset_id,
+            adAccountId: selectedAdset.ad_account_id,
+            daily_budget: parseFloat(newBudget) * 100
+          }
+        });
+
+        if (error) throw error;
+
+        setAdsets(prev => prev.map(a => 
+          a.id === selectedAdset.id ? { ...a, daily_budget: parseFloat(newBudget) } : a
+        ));
+      }
 
       setEditBudgetDialogOpen(false);
       setNewBudget("");
       setSelectedCampaign(null);
+      setSelectedAdset(null);
       splashedToast.success("Orçamento atualizado!");
     } catch (error) {
       console.error("Budget update error:", error);
@@ -388,60 +608,86 @@ export default function AdsCampaigns() {
     return columnWidths[col.key] ?? col.width;
   };
 
-  const sortedCampaigns = [...campaigns].sort((a, b) => {
-    // Handle the calculated 'profit' field
-    let aValue: string | number;
-    let bValue: string | number;
-    
-    if (sortField === 'profit') {
-      aValue = (a.conversion_value || 0) - (a.spend || 0);
-      bValue = (b.conversion_value || 0) - (b.spend || 0);
-    } else {
-      aValue = a[sortField] || 0;
-      bValue = b[sortField] || 0;
-    }
-    
-    if (typeof aValue === 'string' && typeof bValue === 'string') {
-      return sortOrder === 'asc' 
-        ? aValue.localeCompare(bValue) 
-        : bValue.localeCompare(aValue);
-    }
-    
-    return sortOrder === 'asc' 
-      ? (aValue as number) - (bValue as number)
-      : (bValue as number) - (aValue as number);
-  });
-
-  const filteredCampaigns = sortedCampaigns.filter(c =>
-    c.name?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const toggleCampaignSelection = (campaignId: string) => {
-    setSelectedCampaigns(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(campaignId)) {
-        newSet.delete(campaignId);
+  const toggleAccountSelection = (accountId: string) => {
+    setSelectedAccounts(prev => {
+      if (prev.includes(accountId)) {
+        return prev.filter(id => id !== accountId);
       } else {
-        newSet.add(campaignId);
+        return [...prev, accountId];
+      }
+    });
+  };
+
+  // Get current data based on view level
+  const currentData = useMemo(() => {
+    if (viewLevel === 'campaign') return campaigns;
+    if (viewLevel === 'adset') return adsets;
+    return ads;
+  }, [viewLevel, campaigns, adsets, ads]);
+
+  const sortedData = useMemo(() => {
+    const data = [...currentData];
+    return data.sort((a: any, b: any) => {
+      let aValue: string | number;
+      let bValue: string | number;
+      
+      if (sortField === 'profit') {
+        aValue = (a.conversion_value || 0) - (a.spend || 0);
+        bValue = (b.conversion_value || 0) - (b.spend || 0);
+      } else {
+        aValue = a[sortField] || 0;
+        bValue = b[sortField] || 0;
+      }
+      
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return sortOrder === 'asc' 
+          ? aValue.localeCompare(bValue) 
+          : bValue.localeCompare(aValue);
+      }
+      
+      return sortOrder === 'asc' 
+        ? (aValue as number) - (bValue as number)
+        : (bValue as number) - (aValue as number);
+    });
+  }, [currentData, sortField, sortOrder]);
+
+  const filteredData = useMemo(() => {
+    return sortedData.filter((item: any) =>
+      item.name?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [sortedData, searchQuery]);
+
+  const toggleItemSelection = (itemId: string) => {
+    setSelectedItems(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(itemId)) {
+        newSet.delete(itemId);
+      } else {
+        newSet.add(itemId);
       }
       return newSet;
     });
   };
 
-  const toggleAllCampaigns = () => {
-    if (selectedCampaigns.size === filteredCampaigns.length) {
-      setSelectedCampaigns(new Set());
+  const toggleAllItems = () => {
+    if (selectedItems.size === filteredData.length) {
+      setSelectedItems(new Set());
     } else {
-      setSelectedCampaigns(new Set(filteredCampaigns.map(c => c.id)));
+      setSelectedItems(new Set(filteredData.map((item: any) => item.id)));
     }
   };
+
+  // Reset selection when view level changes
+  useEffect(() => {
+    setSelectedItems(new Set());
+  }, [viewLevel]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "ACTIVE":
-        return <Badge className="bg-green-500/20 text-green-400 border-green-500/50 hover:bg-green-500/30 text-xs px-2 py-0.5 w-fit">Ativa</Badge>;
+        return <Badge className="bg-green-500/20 text-green-400 border-green-500/50 hover:bg-green-500/30 text-xs px-2 py-0.5 w-fit">Ativo</Badge>;
       case "PAUSED":
-        return <Badge className="bg-red-500/20 text-red-400 border-red-500/50 hover:bg-red-500/30 text-xs px-2 py-0.5 w-fit">Pausada</Badge>;
+        return <Badge className="bg-red-500/20 text-red-400 border-red-500/50 hover:bg-red-500/30 text-xs px-2 py-0.5 w-fit">Pausado</Badge>;
       default:
         return <Badge variant="secondary" className="text-xs px-2 py-0.5 w-fit">{status}</Badge>;
     }
@@ -456,7 +702,8 @@ export default function AdsCampaigns() {
   const formatNumber = (value: number) => (value || 0).toLocaleString('pt-BR');
   const formatPercent = (value: number) => `${(value || 0).toFixed(2)}%`;
 
-  const visibleColumns = columns.filter(col => col.visible);
+  const currentColumns = viewLevel === 'ad' ? adColumns : columns;
+  const visibleColumns = currentColumns.filter(col => col.visible);
 
   const rowVariants = {
     hidden: { opacity: 0, y: 20, scale: 0.98, filter: "blur(4px)" },
@@ -470,21 +717,29 @@ export default function AdsCampaigns() {
     exit: { opacity: 0, y: -10, transition: { duration: 0.2 } }
   };
 
-  const renderCellContent = (campaign: Campaign, columnKey: string) => {
-    const profit = (campaign.conversion_value || 0) - (campaign.spend || 0);
+  const renderCellContent = (item: any, columnKey: string) => {
+    const profit = (item.conversion_value || 0) - (item.spend || 0);
     
     switch (columnKey) {
+      case 'thumbnail':
+        return item.thumbnail_url ? (
+          <img src={item.thumbnail_url} alt="" className="w-12 h-12 object-cover rounded" />
+        ) : (
+          <div className="w-12 h-12 bg-muted rounded flex items-center justify-center text-muted-foreground text-xs">N/A</div>
+        );
       case 'name':
         return (
           <div className="flex flex-col gap-1">
-            <span className="font-medium truncate max-w-[200px]">{campaign.name}</span>
-            {getStatusBadge(campaign.status)}
+            <span className="font-medium truncate max-w-[200px]">{item.name}</span>
+            {getStatusBadge(item.status)}
           </div>
         );
       case 'daily_budget':
+        const hasBudget = viewLevel !== 'ad';
+        if (!hasBudget) return '-';
         return (
           <div className="flex items-center gap-1 justify-end">
-            <span className="font-medium">{formatCurrency(campaign.daily_budget)}</span>
+            <span className="font-medium">{formatCurrency(item.daily_budget)}</span>
             <span className="text-xs text-muted-foreground">/dia</span>
             <Button 
               variant="ghost" 
@@ -492,8 +747,14 @@ export default function AdsCampaigns() {
               className="h-5 w-5 ml-1"
               onClick={(e) => {
                 e.stopPropagation();
-                setSelectedCampaign(campaign);
-                setNewBudget(campaign.daily_budget?.toString() || "");
+                if (viewLevel === 'campaign') {
+                  setSelectedCampaign(item);
+                  setSelectedAdset(null);
+                } else {
+                  setSelectedAdset(item);
+                  setSelectedCampaign(null);
+                }
+                setNewBudget(item.daily_budget?.toString() || "");
                 setEditBudgetDialogOpen(true);
               }}
             >
@@ -502,29 +763,39 @@ export default function AdsCampaigns() {
           </div>
         );
       case 'spend':
-        return <span className="text-red-400 font-medium">{formatCurrency(campaign.spend)}</span>;
+        return <span className="text-red-400 font-medium">{formatCurrency(item.spend)}</span>;
       case 'impressions':
-        return formatNumber(campaign.impressions);
+        return formatNumber(item.impressions);
       case 'reach':
-        return formatNumber(campaign.reach || 0);
+        return formatNumber(item.reach || 0);
       case 'cpm':
-        return formatCurrency(campaign.cpm);
+        return formatCurrency(item.cpm);
       case 'cpc':
-        return formatCurrency(campaign.cpc || 0);
+        return formatCurrency(item.cpc || 0);
       case 'ctr':
-        return formatPercent(campaign.ctr);
+        return formatPercent(item.ctr);
       case 'cost_per_message':
-        return formatCurrency(campaign.cost_per_message || 0);
+        return formatCurrency(item.cost_per_message || 0);
       case 'messaging_conversations_started':
-        return formatNumber(campaign.messaging_conversations_started || 0);
+        return formatNumber(item.messaging_conversations_started || 0);
       case 'meta_conversions':
-        return <span className="font-medium text-green-400">{formatNumber(campaign.meta_conversions || 0)}</span>;
+        return <span className="font-medium text-green-400">{formatNumber(item.meta_conversions || 0)}</span>;
       case 'conversion_value':
-        return <span className="font-medium text-blue-400">{formatCurrency(campaign.conversion_value || 0)}</span>;
+        return <span className="font-medium text-blue-400">{formatCurrency(item.conversion_value || 0)}</span>;
       case 'profit':
         return <span className={cn("font-medium", profit >= 0 ? "text-green-400" : "text-red-400")}>{formatCurrency(profit)}</span>;
       default:
         return null;
+    }
+  };
+
+  const handleToggleItem = (item: any) => {
+    if (viewLevel === 'campaign') {
+      handleToggleCampaign(item);
+    } else if (viewLevel === 'adset') {
+      handleToggleAdset(item);
+    } else {
+      handleToggleAd(item);
     }
   };
 
@@ -660,7 +931,7 @@ export default function AdsCampaigns() {
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar campanhas..."
+            placeholder="Buscar..."
             className="pl-10"
           />
         </div>
@@ -681,19 +952,49 @@ export default function AdsCampaigns() {
           </Select>
         </div>
         
-        <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Conta de anúncios" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas as contas</SelectItem>
-            {adAccounts.map((acc) => (
-              <SelectItem key={acc.id} value={acc.id}>
-                {acc.name || acc.ad_account_id}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Multi-select account filter */}
+        <Popover open={accountFilterOpen} onOpenChange={setAccountFilterOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="w-[220px] justify-between">
+              {selectedAccounts.length === 0 
+                ? "Todas as contas" 
+                : `${selectedAccounts.length} conta${selectedAccounts.length > 1 ? 's' : ''} selecionada${selectedAccounts.length > 1 ? 's' : ''}`
+              }
+              <ChevronDown className="h-4 w-4 ml-2 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[220px] p-2" align="end">
+            <div className="space-y-1">
+              <button
+                onClick={() => setSelectedAccounts([])}
+                className={cn(
+                  "w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-muted",
+                  selectedAccounts.length === 0 && "bg-orange-500/10 text-orange-400"
+                )}
+              >
+                {selectedAccounts.length === 0 && <Check className="h-4 w-4" />}
+                <span className={selectedAccounts.length === 0 ? "" : "ml-6"}>Todas as contas</span>
+              </button>
+              <div className="border-t border-border my-2" />
+              {adAccounts.map((acc) => (
+                <button
+                  key={acc.id}
+                  onClick={() => toggleAccountSelection(acc.id)}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-muted",
+                    selectedAccounts.includes(acc.id) && "bg-orange-500/10 text-orange-400"
+                  )}
+                >
+                  <Checkbox 
+                    checked={selectedAccounts.includes(acc.id)}
+                    className="border-orange-500 data-[state=checked]:bg-orange-500 data-[state=checked]:text-white"
+                  />
+                  <span className="truncate">{acc.name || acc.ad_account_id}</span>
+                </button>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
 
         {/* Column visibility dropdown */}
         <Popover>
@@ -705,7 +1006,7 @@ export default function AdsCampaigns() {
           <PopoverContent className="w-56" align="end">
             <div className="space-y-2">
               <p className="text-sm font-medium mb-3">Colunas visíveis</p>
-              {columns.map(col => (
+              {currentColumns.map(col => (
                 <label key={col.key} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-1 rounded">
                   <Checkbox 
                     checked={col.visible} 
@@ -722,15 +1023,15 @@ export default function AdsCampaigns() {
 
       {/* Bulk Actions */}
       <AnimatePresence>
-        {selectedCampaigns.size > 0 && (
+        {selectedItems.size > 0 && (
           <motion.div 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="flex items-center gap-3 p-3 bg-primary/10 border border-primary/30 rounded-lg"
+            className="flex items-center gap-3 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg"
           >
-            <Badge variant="secondary" className="bg-primary text-primary-foreground">
-              {selectedCampaigns.size} selecionada{selectedCampaigns.size > 1 ? 's' : ''}
+            <Badge variant="secondary" className="bg-orange-500 text-white">
+              {selectedItems.size} selecionado{selectedItems.size > 1 ? 's' : ''}
             </Badge>
             
             <div className="flex items-center gap-2 ml-auto">
@@ -752,19 +1053,21 @@ export default function AdsCampaigns() {
                 <Pause className="h-3 w-3" />
                 Pausar
               </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setBulkBudgetDialogOpen(true)}
-                className="gap-1"
-              >
-                <DollarSign className="h-3 w-3" />
-                Alterar Orçamento
-              </Button>
+              {viewLevel !== 'ad' && (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setBulkBudgetDialogOpen(true)}
+                  className="gap-1"
+                >
+                  <DollarSign className="h-3 w-3" />
+                  Alterar Orçamento
+                </Button>
+              )}
               <Button 
                 variant="ghost" 
                 size="sm"
-                onClick={() => setSelectedCampaigns(new Set())}
+                onClick={() => setSelectedItems(new Set())}
               >
                 Limpar
               </Button>
@@ -789,12 +1092,15 @@ export default function AdsCampaigns() {
             >
               <span>{tab.icon}</span>
               <span>{tab.label}</span>
+              <Badge variant="secondary" className="ml-1 text-xs">
+                {tab.value === 'campaign' ? campaigns.length : tab.value === 'adset' ? adsets.length : ads.length}
+              </Badge>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Campaigns Table */}
+      {/* Data Table */}
       <div className="rounded-lg border border-border overflow-hidden bg-card/50 backdrop-blur">
         {loading ? (
           <div className="p-4 space-y-3">
@@ -802,12 +1108,15 @@ export default function AdsCampaigns() {
               <Skeleton key={i} className="h-12" />
             ))}
           </div>
-        ) : filteredCampaigns.length === 0 ? (
+        ) : filteredData.length === 0 ? (
           <div className="py-12 text-center">
             <p className="text-muted-foreground">
               {viewLevel === 'campaign' ? 'Nenhuma campanha encontrada' : 
                viewLevel === 'adset' ? 'Nenhum conjunto de anúncios encontrado' : 
                'Nenhum anúncio encontrado'}
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              Clique em sincronizar para buscar dados do Facebook
             </p>
           </div>
         ) : (
@@ -817,8 +1126,8 @@ export default function AdsCampaigns() {
                 <TableRow className="bg-muted/30 hover:bg-muted/30">
                   <TableHead className="w-[40px] border-r border-border/30">
                     <Checkbox
-                      checked={selectedCampaigns.size === filteredCampaigns.length && filteredCampaigns.length > 0}
-                      onCheckedChange={toggleAllCampaigns}
+                      checked={selectedItems.size === filteredData.length && filteredData.length > 0}
+                      onCheckedChange={toggleAllItems}
                       className="border-orange-500 data-[state=checked]:bg-orange-500 data-[state=checked]:text-white"
                     />
                   </TableHead>
@@ -830,15 +1139,15 @@ export default function AdsCampaigns() {
                         key={col.key}
                         className={cn(
                           "cursor-pointer hover:text-foreground relative group border-r border-border/30 transition-all duration-150",
-                          col.key !== 'name' && "text-right"
+                          col.key !== 'name' && col.key !== 'thumbnail' && "text-right"
                         )}
                         style={{ minWidth: width, width: width }}
-                        onClick={() => handleSort(col.key as SortField)}
+                        onClick={() => col.key !== 'thumbnail' && handleSort(col.key as SortField)}
                       >
-                        <div className={cn("flex items-center", col.key !== 'name' && "justify-end")}>
-                          {col.label} <SortIcon field={col.key as SortField} />
+                        <div className={cn("flex items-center", col.key !== 'name' && col.key !== 'thumbnail' && "justify-end")}>
+                          {col.label} {col.key !== 'thumbnail' && <SortIcon field={col.key as SortField} />}
                         </div>
-                        {/* Resize handle - more precise and smooth */}
+                        {/* Resize handle */}
                         <div 
                           className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize bg-transparent hover:bg-orange-500/50 transition-colors"
                           onMouseDown={(e) => {
@@ -850,7 +1159,6 @@ export default function AdsCampaigns() {
                             const handleMouseMove = (moveE: MouseEvent) => {
                               moveE.preventDefault();
                               const delta = moveE.clientX - startX;
-                              // Apply smoothing factor for more precise control
                               const newWidth = startWidth + delta * 0.5;
                               handleColumnResize(col.key, newWidth);
                             };
@@ -876,10 +1184,10 @@ export default function AdsCampaigns() {
               </TableHeader>
               <TableBody>
                 <AnimatePresence mode="popLayout">
-                  {filteredCampaigns.map((campaign, index) => {
+                  {filteredData.map((item: any, index: number) => {
                     return (
                       <motion.tr 
-                        key={campaign.id}
+                        key={item.id}
                         variants={rowVariants}
                         initial="hidden"
                         animate="visible"
@@ -887,41 +1195,38 @@ export default function AdsCampaigns() {
                         style={{ animationDelay: `${index * 0.04}s` }}
                         className={cn(
                           "border-b border-border/20 hover:bg-muted/20 transition-colors",
-                          selectedCampaigns.has(campaign.id) && "bg-orange-500/5"
+                          selectedItems.has(item.id) && "bg-orange-500/5"
                         )}
                       >
                         <TableCell className="border-r border-border/20">
                           <Checkbox
-                            checked={selectedCampaigns.has(campaign.id)}
-                            onCheckedChange={() => toggleCampaignSelection(campaign.id)}
+                            checked={selectedItems.has(item.id)}
+                            onCheckedChange={() => toggleItemSelection(item.id)}
                             className="border-orange-500 data-[state=checked]:bg-orange-500 data-[state=checked]:text-white"
                           />
                         </TableCell>
                         <TableCell className="border-r border-border/20">
                           <Switch
-                            checked={campaign.status === "ACTIVE"}
-                            onCheckedChange={() => handleToggleCampaign(campaign)}
+                            checked={item.status === "ACTIVE"}
+                            onCheckedChange={() => handleToggleItem(item)}
                             className={cn(
                               "data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500",
                               "[&>span]:bg-white"
                             )}
                           />
                         </TableCell>
-                        {visibleColumns.map((col) => {
-                          const width = getColumnWidth(col);
-                          return (
-                            <TableCell 
-                              key={col.key} 
-                              className={cn(
-                                "border-r border-border/20 transition-all duration-150",
-                                col.key !== 'name' && "text-right"
-                              )}
-                              style={{ minWidth: width, width: width }}
-                            >
-                              {renderCellContent(campaign, col.key)}
-                            </TableCell>
-                          );
-                        })}
+                        {visibleColumns.map((col) => (
+                          <TableCell 
+                            key={col.key}
+                            className={cn(
+                              "border-r border-border/20",
+                              col.key !== 'name' && col.key !== 'thumbnail' && "text-right"
+                            )}
+                            style={{ minWidth: getColumnWidth(col), width: getColumnWidth(col) }}
+                          >
+                            {renderCellContent(item, col.key)}
+                          </TableCell>
+                        ))}
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -930,16 +1235,8 @@ export default function AdsCampaigns() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => {
-                                setSelectedCampaign(campaign);
-                                setNewBudget(campaign.daily_budget?.toString() || "");
-                                setEditBudgetDialogOpen(true);
-                              }}>
-                                <Edit className="h-4 w-4 mr-2" />
-                                Editar Orçamento
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleToggleCampaign(campaign)}>
-                                {campaign.status === "ACTIVE" ? (
+                              <DropdownMenuItem onClick={() => handleToggleItem(item)}>
+                                {item.status === "ACTIVE" ? (
                                   <>
                                     <Pause className="h-4 w-4 mr-2" />
                                     Pausar
@@ -951,6 +1248,22 @@ export default function AdsCampaigns() {
                                   </>
                                 )}
                               </DropdownMenuItem>
+                              {viewLevel !== 'ad' && (
+                                <DropdownMenuItem onClick={() => {
+                                  if (viewLevel === 'campaign') {
+                                    setSelectedCampaign(item);
+                                    setSelectedAdset(null);
+                                  } else {
+                                    setSelectedAdset(item);
+                                    setSelectedCampaign(null);
+                                  }
+                                  setNewBudget(item.daily_budget?.toString() || "");
+                                  setEditBudgetDialogOpen(true);
+                                }}>
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Editar Orçamento
+                                </DropdownMenuItem>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
@@ -968,15 +1281,11 @@ export default function AdsCampaigns() {
       <Dialog open={editBudgetDialogOpen} onOpenChange={setEditBudgetDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Editar Orçamento</DialogTitle>
+            <DialogTitle>Editar Orçamento Diário</DialogTitle>
           </DialogHeader>
-          
-          <div className="py-4 space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Campanha: <span className="font-medium text-foreground">{selectedCampaign?.name}</span>
-            </p>
+          <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Novo Orçamento Diário (R$)</Label>
+              <Label>Novo Orçamento (R$)</Label>
               <Input
                 type="number"
                 value={newBudget}
@@ -985,7 +1294,6 @@ export default function AdsCampaigns() {
               />
             </div>
           </div>
-
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditBudgetDialogOpen(false)}>
               Cancelar
@@ -1003,10 +1311,9 @@ export default function AdsCampaigns() {
           <DialogHeader>
             <DialogTitle>Alterar Orçamento em Massa</DialogTitle>
           </DialogHeader>
-          
-          <div className="py-4 space-y-4">
+          <div className="space-y-4 py-4">
             <p className="text-sm text-muted-foreground">
-              Alterar orçamento de <span className="font-medium text-foreground">{selectedCampaigns.size}</span> campanha(s)
+              Alterando orçamento de {selectedItems.size} item(s)
             </p>
             <div className="space-y-2">
               <Label>Novo Orçamento Diário (R$)</Label>
@@ -1018,13 +1325,12 @@ export default function AdsCampaigns() {
               />
             </div>
           </div>
-
           <DialogFooter>
             <Button variant="outline" onClick={() => setBulkBudgetDialogOpen(false)}>
               Cancelar
             </Button>
             <Button onClick={handleBulkBudgetUpdate}>
-              Aplicar a Todas
+              Aplicar a Todos
             </Button>
           </DialogFooter>
         </DialogContent>
