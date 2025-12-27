@@ -80,28 +80,43 @@ serve(async (req) => {
       const remoteJid = key.remoteJid || '';
       const remoteJidAlt = key.remoteJidAlt || '';
       
-      // Evolution API v2+ uses remoteJidAlt with @s.whatsapp.net format for actual phone
-      // remoteJid may contain @lid format (internal ID) which is not a valid phone
-      let jidForPhone = remoteJid;
-      if (remoteJidAlt && remoteJidAlt.includes('@s.whatsapp.net')) {
+      console.log(`Message JIDs: remoteJid=${remoteJid}, remoteJidAlt=${remoteJidAlt}`);
+      
+      // Skip group messages (@g.us)
+      if (remoteJid.includes('@g.us') || remoteJidAlt?.includes('@g.us')) {
+        console.log('Skipping group message');
+        return new Response(JSON.stringify({ success: true, skipped: true, reason: 'group_message' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      // Find valid phone from remoteJid or remoteJidAlt
+      // ONLY accept @s.whatsapp.net format - reject @lid (internal IDs)
+      let jidForPhone = '';
+      if (remoteJid.includes('@s.whatsapp.net')) {
+        jidForPhone = remoteJid;
+        console.log(`Using remoteJid for phone extraction: ${remoteJid}`);
+      } else if (remoteJidAlt && remoteJidAlt.includes('@s.whatsapp.net')) {
         jidForPhone = remoteJidAlt;
         console.log(`Using remoteJidAlt for phone extraction: ${remoteJidAlt}`);
-      } else if (remoteJidAlt && !remoteJid.includes('@s.whatsapp.net')) {
-        // If remoteJid doesn't have @s.whatsapp.net, try remoteJidAlt
-        jidForPhone = remoteJidAlt || remoteJid;
-        console.log(`remoteJid format unusual (${remoteJid}), trying remoteJidAlt: ${remoteJidAlt}`);
+      } else {
+        // Both are @lid format or other non-phone format - cannot extract real phone number
+        console.log(`Skipping message: no valid @s.whatsapp.net found. remoteJid=${remoteJid}, remoteJidAlt=${remoteJidAlt}`);
+        return new Response(JSON.stringify({ success: true, skipped: true, reason: 'no_valid_phone_jid' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
       
       const rawPhone = jidForPhone.split('@')[0];
       // Clean and validate phone number
       const phone = rawPhone.replace(/\D/g, '');
       
-      console.log(`Phone extraction: remoteJid=${remoteJid}, remoteJidAlt=${remoteJidAlt}, extracted=${phone}`);
+      console.log(`Phone extraction: jidForPhone=${jidForPhone}, extracted=${phone}`);
       
       // Validate phone is 10-15 digits
       if (!/^\d{10,15}$/.test(phone)) {
-        console.log(`Skipping message with invalid phone: ${rawPhone}`);
-        return new Response(JSON.stringify({ success: true, skipped: true, reason: 'Invalid phone' }), {
+        console.log(`Skipping message with invalid phone length: ${rawPhone} (${phone.length} digits)`);
+        return new Response(JSON.stringify({ success: true, skipped: true, reason: 'invalid_phone_length' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
