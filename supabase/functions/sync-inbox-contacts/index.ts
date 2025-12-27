@@ -75,14 +75,37 @@ serve(async (req) => {
     }
 
     // Get user's Evolution API config
-    const { data: config } = await supabaseClient
+    let { data: config } = await supabaseClient
       .from('maturador_config')
       .select('*')
       .eq('user_id', user.id)
       .single();
 
+    // If user doesn't have config, try to use admin config as fallback
     if (!config) {
-      return new Response(JSON.stringify({ error: 'Evolution API not configured' }), {
+      console.log('User has no Evolution API config, trying admin fallback');
+      
+      // Use service role client to access admin config
+      const serviceClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
+
+      // Get the first admin user's config
+      const { data: adminConfig } = await serviceClient
+        .from('maturador_config')
+        .select('*')
+        .limit(1)
+        .single();
+
+      if (adminConfig) {
+        console.log('Using admin Evolution API config as fallback');
+        config = adminConfig;
+      }
+    }
+
+    if (!config) {
+      return new Response(JSON.stringify({ error: 'Evolution API not configured. Please ask an admin to set up the Evolution API.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
