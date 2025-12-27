@@ -19,7 +19,8 @@ import {
   Pause,
   Play,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Calendar
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -59,6 +60,7 @@ interface Campaign {
 
 type SortField = 'name' | 'status' | 'daily_budget' | 'spend' | 'impressions' | 'reach' | 'cpm' | 'cpc' | 'ctr' | 'cost_per_message' | 'messaging_conversations_started' | 'meta_conversions';
 type SortOrder = 'asc' | 'desc';
+type DateFilter = "today" | "yesterday" | "7days" | "30days" | "month";
 
 export default function AdsCampaigns() {
   const { user } = useAuth();
@@ -75,6 +77,15 @@ export default function AdsCampaigns() {
   const [selectedCampaigns, setSelectedCampaigns] = useState<Set<string>>(new Set());
   const [sortField, setSortField] = useState<SortField>('spend');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [dateFilter, setDateFilter] = useState<DateFilter>("7days");
+
+  const datePresetMap: Record<DateFilter, string> = {
+    today: "today",
+    yesterday: "yesterday",
+    "7days": "last_7d",
+    "30days": "last_30d",
+    month: "this_month"
+  };
 
   // New campaign form state
   const [newCampaign, setNewCampaign] = useState({
@@ -126,7 +137,12 @@ export default function AdsCampaigns() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const { error } = await supabase.functions.invoke("facebook-campaigns", { body: { action: "sync_campaigns" } });
+      const { error } = await supabase.functions.invoke("facebook-campaigns", { 
+        body: { 
+          action: "sync_campaigns",
+          datePreset: datePresetMap[dateFilter]
+        } 
+      });
       if (error) throw error;
       splashedToast.success("Campanhas sincronizadas!");
       await loadData();
@@ -137,6 +153,13 @@ export default function AdsCampaigns() {
       setSyncing(false);
     }
   };
+
+  // Re-sync when date filter changes
+  useEffect(() => {
+    if (user && !loading) {
+      handleSync();
+    }
+  }, [dateFilter]);
 
   const handleToggleCampaign = async (campaign: Campaign) => {
     const newStatus = campaign.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
@@ -418,6 +441,22 @@ export default function AdsCampaigns() {
             placeholder="Buscar campanhas..."
             className="pl-10"
           />
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-muted-foreground" />
+          <Select value={dateFilter} onValueChange={(v) => setDateFilter(v as DateFilter)}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Selecionar período" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="today">Hoje</SelectItem>
+              <SelectItem value="yesterday">Ontem</SelectItem>
+              <SelectItem value="7days">Últimos 7 dias</SelectItem>
+              <SelectItem value="30days">Últimos 30 dias</SelectItem>
+              <SelectItem value="month">Este mês</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         
         <Select value={selectedAccount} onValueChange={setSelectedAccount}>
