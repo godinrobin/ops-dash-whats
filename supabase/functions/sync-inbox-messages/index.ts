@@ -289,6 +289,15 @@ serve(async (req) => {
         const topKeys = Object.keys(val).slice(0, 10);
         console.log("Input is object with keys:", topKeys);
         
+        // Evolution API v2 format: { messages: { records: [...] } }
+        if (val.messages?.records && Array.isArray(val.messages.records)) {
+          console.log("Found val.messages.records array, length:", val.messages.records.length);
+          if (val.messages.records.length > 0) {
+            console.log("First message sample:", JSON.stringify(val.messages.records[0]).slice(0, 300));
+          }
+          return val.messages.records as EvolutionMessage[];
+        }
+        
         // common wrappers: { messages: [...] }
         if (Array.isArray(val.messages)) {
           console.log("Found val.messages array, length:", val.messages.length);
@@ -333,7 +342,7 @@ serve(async (req) => {
       }
 
       console.log("Fallback: returning empty array");
-      return [];
+      return []
     };
 
     const messagesArr = coerceMessagesArray(msgsData);
@@ -344,11 +353,11 @@ serve(async (req) => {
       Array.isArray(messagesArr)
     );
 
-    // Only inbound messages
-    const inbound = (Array.isArray(messagesArr) ? messagesArr : []).filter((m) => m && !m?.key?.fromMe);
-    const remoteIds = inbound.map((m) => m?.key?.id).filter(Boolean) as string[];
+    // Include both inbound and outbound messages
+    const allMessages = (Array.isArray(messagesArr) ? messagesArr : []).filter((m) => m && m?.key?.id);
+    const remoteIds = allMessages.map((m) => m?.key?.id).filter(Boolean) as string[];
 
-    console.log("Inbound messages:", inbound.length, "Remote IDs:", remoteIds.length);
+    console.log("Total messages:", allMessages.length, "Remote IDs:", remoteIds.length);
 
     if (remoteIds.length === 0) {
       return new Response(JSON.stringify({ inserted: 0 }), {
@@ -364,7 +373,7 @@ serve(async (req) => {
 
     const existing = new Set((existingRows || []).map((r: any) => r.remote_message_id).filter(Boolean));
 
-    const rowsToInsert = inbound
+    const rowsToInsert = allMessages
       .filter((m) => {
         const id = m?.key?.id;
         return id && !existing.has(id);
@@ -373,17 +382,18 @@ serve(async (req) => {
         const { content, messageType, mediaUrl } = parseEvolutionContent(m);
         const ts = m.messageTimestamp ? Number(m.messageTimestamp) : 0;
         const createdAt = ts > 0 ? new Date(ts * 1000).toISOString() : new Date().toISOString();
+        const isFromMe = m?.key?.fromMe === true;
 
         return {
           contact_id: contact.id,
           instance_id: contact.instance_id,
           user_id: user.id,
-          direction: "inbound",
+          direction: isFromMe ? "outbound" : "inbound",
           message_type: messageType,
           content,
           media_url: mediaUrl,
           remote_message_id: m.key?.id,
-          status: "delivered",
+          status: isFromMe ? "sent" : "delivered",
           is_from_flow: false,
           created_at: createdAt,
         };
@@ -407,15 +417,24 @@ serve(async (req) => {
       });
     }
 
-    // bump contact metadata
-    await supabaseAdmin
-      .from("inbox_contacts")
-      .update({
-        last_message_at: new Date().toISOString(),
-      })
-      .eq("id", contact.id);
+    // Update last_message_at with the most recent message timestamp
+    const latestMessage = rowsToInsert.reduce((latest, msg) => {
+      if (!latest) return msg;
+      return new Date(msg.created_at) > new Date(latest.created_at) ? msg : latest;
+    }, null as typeof rowsToInsert[0] | null);
 
-    console.log(`Synced inbound messages for contact ${contact.id}: inserted=${rowsToInsert.length}`);
+    if (latestMessage) {
+      await supabaseAdmin
+        .from("inbox_contacts")
+        .update({
+          last_message_at: latestMessage.created_at,
+        })
+        .eq("id", contact.id);
+    }
+
+    const inboundCount = rowsToInsert.filter(r => r.direction === 'inbound').length;
+    const outboundCount = rowsToInsert.filter(r => r.direction === 'outbound').length;
+    console.log(`Synced messages for contact ${contact.id}: inserted=${rowsToInsert.length} (inbound=${inboundCount}, outbound=${outboundCount})`);
 
     return new Response(JSON.stringify({ inserted: rowsToInsert.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

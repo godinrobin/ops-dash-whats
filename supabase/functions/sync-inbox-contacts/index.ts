@@ -225,6 +225,9 @@ serve(async (req) => {
           // Handle different response formats
           if (Array.isArray(messagesData)) {
             messagesArr = messagesData;
+          } else if (messagesData?.messages?.records && Array.isArray(messagesData.messages.records)) {
+            // Evolution API v2 format: { messages: { records: [...] } }
+            messagesArr = messagesData.messages.records;
           } else if (Array.isArray(messagesData?.messages)) {
             messagesArr = messagesData.messages;
           } else if (messagesData?.messages && typeof messagesData.messages === 'object') {
@@ -356,6 +359,9 @@ serve(async (req) => {
             let messagesArr: any[] = [];
             if (Array.isArray(messagesData)) {
               messagesArr = messagesData;
+            } else if (messagesData?.messages?.records && Array.isArray(messagesData.messages.records)) {
+              // Evolution API v2 format: { messages: { records: [...] } }
+              messagesArr = messagesData.messages.records;
             } else if (Array.isArray(messagesData?.messages)) {
               messagesArr = messagesData.messages;
             } else if (messagesData?.messages && typeof messagesData.messages === 'object') {
