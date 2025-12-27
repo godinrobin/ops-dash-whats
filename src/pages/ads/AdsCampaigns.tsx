@@ -296,11 +296,11 @@ export default function AdsCampaigns() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "ACTIVE":
-        return <Badge className="bg-green-500/20 text-green-400 border-green-500/50 hover:bg-green-500/30">Ativa</Badge>;
+        return <Badge className="bg-green-500/20 text-green-400 border-green-500/50 hover:bg-green-500/30 text-xs px-2 py-0.5 w-fit">Ativa</Badge>;
       case "PAUSED":
-        return <Badge className="bg-red-500/20 text-red-400 border-red-500/50 hover:bg-red-500/30">Pausada</Badge>;
+        return <Badge className="bg-red-500/20 text-red-400 border-red-500/50 hover:bg-red-500/30 text-xs px-2 py-0.5 w-fit">Pausada</Badge>;
       default:
-        return <Badge variant="secondary">{status}</Badge>;
+        return <Badge variant="secondary" className="text-xs px-2 py-0.5 w-fit">{status}</Badge>;
     }
   };
 
@@ -617,7 +617,10 @@ export default function AdsCampaigns() {
                       <Switch
                         checked={campaign.status === "ACTIVE"}
                         onCheckedChange={() => handleToggleCampaign(campaign)}
-                        className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500"
+                        className={cn(
+                          "data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500",
+                          "[&>span]:bg-white"
+                        )}
                       />
                     </TableCell>
                     <TableCell>
