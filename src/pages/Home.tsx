@@ -79,9 +79,11 @@ const Home = () => {
     Autoplay({ delay: 3000, stopOnInteraction: true })
   );
 
-  const [mode, setMode] = useState<"sistemas" | "marketplace">(() => {
+  const [mode, setMode] = useState<"sistemas" | "marketplace" | "ads">(() => {
     const saved = localStorage.getItem("homeMode");
-    return (saved === "marketplace" ? "marketplace" : "sistemas");
+    if (saved === "marketplace") return "marketplace";
+    if (saved === "ads") return "ads";
+    return "sistemas";
   });
 
   useEffect(() => {

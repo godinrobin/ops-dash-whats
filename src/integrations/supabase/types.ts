@@ -179,6 +179,354 @@ export type Database = {
         }
         Relationships: []
       }
+      ads_ad_accounts: {
+        Row: {
+          account_status: number | null
+          ad_account_id: string
+          created_at: string
+          currency: string | null
+          facebook_account_id: string | null
+          id: string
+          is_selected: boolean | null
+          name: string | null
+          timezone: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_status?: number | null
+          ad_account_id: string
+          created_at?: string
+          currency?: string | null
+          facebook_account_id?: string | null
+          id?: string
+          is_selected?: boolean | null
+          name?: string | null
+          timezone?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_status?: number | null
+          ad_account_id?: string
+          created_at?: string
+          currency?: string | null
+          facebook_account_id?: string | null
+          id?: string
+          is_selected?: boolean | null
+          name?: string | null
+          timezone?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ads_ad_accounts_facebook_account_id_fkey"
+            columns: ["facebook_account_id"]
+            isOneToOne: false
+            referencedRelation: "ads_facebook_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ads_alert_numbers: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean | null
+          label: string | null
+          phone_number: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          label?: string | null
+          phone_number: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          label?: string | null
+          phone_number?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ads_alerts: {
+        Row: {
+          ad_account_id: string | null
+          alert_type: string
+          campaign_id: string | null
+          created_at: string
+          id: string
+          is_read: boolean | null
+          message: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          ad_account_id?: string | null
+          alert_type: string
+          campaign_id?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          message?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          ad_account_id?: string | null
+          alert_type?: string
+          campaign_id?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          message?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ads_campaigns: {
+        Row: {
+          ad_account_id: string | null
+          campaign_id: string
+          clicks: number | null
+          conversions: number | null
+          cost_per_result: number | null
+          cpm: number | null
+          created_at: string
+          ctr: number | null
+          daily_budget: number | null
+          id: string
+          impressions: number | null
+          last_synced_at: string | null
+          lifetime_budget: number | null
+          name: string | null
+          objective: string | null
+          results: number | null
+          spend: number | null
+          status: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ad_account_id?: string | null
+          campaign_id: string
+          clicks?: number | null
+          conversions?: number | null
+          cost_per_result?: number | null
+          cpm?: number | null
+          created_at?: string
+          ctr?: number | null
+          daily_budget?: number | null
+          id?: string
+          impressions?: number | null
+          last_synced_at?: string | null
+          lifetime_budget?: number | null
+          name?: string | null
+          objective?: string | null
+          results?: number | null
+          spend?: number | null
+          status?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ad_account_id?: string | null
+          campaign_id?: string
+          clicks?: number | null
+          conversions?: number | null
+          cost_per_result?: number | null
+          cpm?: number | null
+          created_at?: string
+          ctr?: number | null
+          daily_budget?: number | null
+          id?: string
+          impressions?: number | null
+          last_synced_at?: string | null
+          lifetime_budget?: number | null
+          name?: string | null
+          objective?: string | null
+          results?: number | null
+          spend?: number | null
+          status?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ads_campaigns_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "ads_ad_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ads_facebook_accounts: {
+        Row: {
+          access_token: string
+          created_at: string
+          email: string | null
+          facebook_user_id: string
+          id: string
+          name: string | null
+          profile_pic_url: string | null
+          token_expires_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token: string
+          created_at?: string
+          email?: string | null
+          facebook_user_id: string
+          id?: string
+          name?: string | null
+          profile_pic_url?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          email?: string | null
+          facebook_user_id?: string
+          id?: string
+          name?: string | null
+          profile_pic_url?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ads_whatsapp_leads: {
+        Row: {
+          ad_id: string | null
+          adset_id: string | null
+          campaign_id: string | null
+          created_at: string
+          ctwa_clid: string | null
+          fbclid: string | null
+          first_contact_at: string
+          first_message: string | null
+          id: string
+          instance_id: string | null
+          name: string | null
+          phone: string
+          profile_pic_url: string | null
+          purchase_sent_at: string | null
+          purchase_value: number | null
+          updated_at: string
+          user_id: string
+          whatsapp_number_id: string | null
+        }
+        Insert: {
+          ad_id?: string | null
+          adset_id?: string | null
+          campaign_id?: string | null
+          created_at?: string
+          ctwa_clid?: string | null
+          fbclid?: string | null
+          first_contact_at?: string
+          first_message?: string | null
+          id?: string
+          instance_id?: string | null
+          name?: string | null
+          phone: string
+          profile_pic_url?: string | null
+          purchase_sent_at?: string | null
+          purchase_value?: number | null
+          updated_at?: string
+          user_id: string
+          whatsapp_number_id?: string | null
+        }
+        Update: {
+          ad_id?: string | null
+          adset_id?: string | null
+          campaign_id?: string | null
+          created_at?: string
+          ctwa_clid?: string | null
+          fbclid?: string | null
+          first_contact_at?: string
+          first_message?: string | null
+          id?: string
+          instance_id?: string | null
+          name?: string | null
+          phone?: string
+          profile_pic_url?: string | null
+          purchase_sent_at?: string | null
+          purchase_value?: number | null
+          updated_at?: string
+          user_id?: string
+          whatsapp_number_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ads_whatsapp_leads_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ads_whatsapp_leads_whatsapp_number_id_fkey"
+            columns: ["whatsapp_number_id"]
+            isOneToOne: false
+            referencedRelation: "ads_whatsapp_numbers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ads_whatsapp_numbers: {
+        Row: {
+          created_at: string
+          id: string
+          instance_id: string | null
+          is_active: boolean | null
+          label: string | null
+          phone_number: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          instance_id?: string | null
+          is_active?: boolean | null
+          label?: string | null
+          phone_number: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          instance_id?: string | null
+          is_active?: boolean | null
+          label?: string | null
+          phone_number?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ads_whatsapp_numbers_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_creative_learnings: {
         Row: {
           analysis_result: Json
