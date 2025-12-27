@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Outlet, useNavigate, useLocation } from "react-router-dom";
+import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { Header, AppMode } from "@/components/Header";
 import { 
   LayoutDashboard, 
@@ -14,6 +14,11 @@ import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { BackgroundBeams } from "@/components/ui/background-beams";
+import AdsDashboard from "./AdsDashboard";
+import AdsCampaigns from "./AdsCampaigns";
+import AdsAlerts from "./AdsAlerts";
+import AdsTracker from "./AdsTracker";
+import AdsSettings from "./AdsSettings";
 
 interface SidebarItem {
   icon: React.ElementType;
@@ -29,18 +34,13 @@ const sidebarItems: SidebarItem[] = [
   { icon: Settings, label: "Configurações", path: "/ads/settings" },
 ];
 
-interface AdsLayoutProps {
-  onModeChange: (mode: AppMode) => void;
-}
-
-export default function AdsLayout({ onModeChange }: AdsLayoutProps) {
+export default function AdsLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
 
   const handleModeChange = (mode: AppMode) => {
     if (mode !== "ads") {
-      onModeChange(mode);
       navigate("/");
     }
   };
@@ -119,7 +119,13 @@ export default function AdsLayout({ onModeChange }: AdsLayoutProps) {
         >
           <BackgroundBeams className="z-0 opacity-30" />
           <div className="relative z-10 p-4 md:p-6">
-            <Outlet />
+            <Routes>
+              <Route index element={<AdsDashboard />} />
+              <Route path="campaigns" element={<AdsCampaigns />} />
+              <Route path="alerts" element={<AdsAlerts />} />
+              <Route path="tracker" element={<AdsTracker />} />
+              <Route path="settings" element={<AdsSettings />} />
+            </Routes>
           </div>
         </main>
       </div>
