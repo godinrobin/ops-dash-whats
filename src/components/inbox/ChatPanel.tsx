@@ -1,16 +1,18 @@
 import { useRef, useEffect, useState, useMemo } from 'react';
-import { User, MessageSquare, Smartphone, ChevronDown, Tag, X, Plus, Pause, Play, Mail, MailOpen, Trash2 } from 'lucide-react';
+import { User, MessageSquare, Smartphone, ChevronDown, Tag, X, Plus, Pause, Play, Mail, MailOpen, Trash2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { InboxContact, InboxMessage } from '@/types/inbox';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useNavigate } from 'react-router-dom';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,7 +54,7 @@ interface ChatPanelProps {
   contact: InboxContact | null;
   messages: InboxMessage[];
   loading: boolean;
-  onSendMessage: (content: string, messageType?: string, mediaUrl?: string) => Promise<{ error?: string; data?: any }>;
+  onSendMessage: (content: string, messageType?: string, mediaUrl?: string) => Promise<{ error?: string; errorCode?: string; data?: any }>;
   onToggleDetails: () => void;
   flows?: { id: string; name: string; is_active: boolean }[];
   onTriggerFlow?: (flowId: string) => void;
@@ -78,6 +80,7 @@ export const ChatPanel = ({
   onRefreshContact,
   onContactDeleted,
 }: ChatPanelProps) => {
+  const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [instances, setInstances] = useState<Instance[]>([]);
   const [instanceName, setInstanceName] = useState<string | null>(null);
@@ -87,6 +90,7 @@ export const ChatPanel = ({
   const [showNewLabelInput, setShowNewLabelInput] = useState(false);
   const [flowPaused, setFlowPaused] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [connectionError, setConnectionError] = useState<{ show: boolean; errorCode?: string; instanceName?: string }>({ show: false });
 
   // Predefined labels with colors
   const predefinedLabels = [
@@ -334,6 +338,26 @@ export const ChatPanel = ({
     } finally {
       setIsDeleting(false);
     }
+  };
+
+  // Handler for send message with connection error detection
+  const handleSendWithErrorDetection = async (content: string, messageType?: string, mediaUrl?: string) => {
+    const result = await onSendMessage(content, messageType, mediaUrl);
+    
+    if (result.errorCode === 'CONNECTION_CLOSED' || result.errorCode === 'INSTANCE_DISCONNECTED') {
+      setConnectionError({
+        show: true,
+        errorCode: result.errorCode,
+        instanceName: instanceName || undefined,
+      });
+    }
+    
+    return result;
+  };
+
+  // Navigate to instances page for reconnection
+  const handleReconnectInstance = () => {
+    navigate('/maturador/instances');
   };
 
   if (!contact) {
@@ -595,9 +619,42 @@ export const ChatPanel = ({
         )}
       </ScrollArea>
 
+      {/* Connection Error Alert */}
+      {connectionError.show && (
+        <Alert variant="destructive" className="mx-4 mb-2">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Instância Desconectada</AlertTitle>
+          <AlertDescription className="flex items-center justify-between">
+            <span>
+              {connectionError.instanceName 
+                ? `A instância "${connectionError.instanceName}" perdeu conexão.`
+                : 'A instância perdeu conexão com o WhatsApp.'}
+            </span>
+            <div className="flex gap-2 ml-4">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setConnectionError({ show: false })}
+                className="text-destructive-foreground bg-transparent border-destructive-foreground/30 hover:bg-destructive-foreground/10"
+              >
+                Fechar
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleReconnectInstance}
+                className="bg-background text-foreground hover:bg-background/90"
+              >
+                <RefreshCw className="h-3 w-3 mr-1" />
+                Reconectar
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Input Area */}
       <ChatInput 
-        onSendMessage={onSendMessage} 
+        onSendMessage={handleSendWithErrorDetection} 
         flows={flows} 
         onTriggerFlow={onTriggerFlow} 
         contactInstanceId={contact.instance_id}

@@ -481,60 +481,128 @@ serve(async (req) => {
 
     const existing = new Set((existingRows || []).map((r: any) => r.remote_message_id).filter(Boolean));
 
+    // Also fetch recent outbound messages from flow that don't have remote_message_id yet
+    // These could be duplicates when the sync picks up the same message from the phone
+    const thirtySecondsAgo = new Date(Date.now() - 30 * 1000).toISOString();
+    const { data: recentFlowMessages } = await supabaseAdmin
+      .from("inbox_messages")
+      .select("id, content, message_type, created_at, is_from_flow, remote_message_id")
+      .eq("contact_id", contact.id)
+      .eq("direction", "outbound")
+      .is("remote_message_id", null)
+      .gte("created_at", thirtySecondsAgo);
+
+    console.log(`Found ${recentFlowMessages?.length || 0} recent outbound messages without remote_message_id`);
+
     let skippedExisting = 0;
     let skippedEmpty = 0;
     let skippedProtocol = 0;
+    let matchedFlowMessages = 0;
     
-    const rowsToInsert = allMessages
-      .filter((m) => {
-        const id = m?.key?.id;
-        if (!id) return false;
-        if (existing.has(id)) {
-          skippedExisting++;
-          return false;
+    // Helper to find matching flow message
+    const findMatchingFlowMessage = (content: string | null, messageType: string) => {
+      if (!recentFlowMessages || recentFlowMessages.length === 0) return null;
+      
+      return recentFlowMessages.find((flowMsg) => {
+        // Match by similar content (case insensitive, trimmed)
+        const flowContent = (flowMsg.content || "").trim().toLowerCase();
+        const syncContent = (content || "").trim().toLowerCase();
+        
+        // For text messages, compare content
+        if (messageType === "text" && flowMsg.message_type === "text") {
+          return flowContent === syncContent;
         }
-        return true;
-      })
-      .map((m) => {
-        const { content, messageType, mediaUrl } = parseEvolutionContent(m);
-        const ts = m.messageTimestamp ? Number(m.messageTimestamp) : 0;
-        const createdAt = ts > 0 ? new Date(ts * 1000).toISOString() : new Date().toISOString();
-        const isFromMe = m?.key?.fromMe === true;
-
-        return {
-          contact_id: contact.id,
-          instance_id: contact.instance_id,
-          user_id: user.id,
-          direction: isFromMe ? "outbound" : "inbound",
-          message_type: messageType,
-          content,
-          media_url: mediaUrl,
-          remote_message_id: m.key?.id,
-          status: isFromMe ? "sent" : "delivered",
-          is_from_flow: false,
-          created_at: createdAt,
-        };
-      })
-      // ignore protocol and empty messages
-      .filter((r) => {
-        if (r.message_type === "protocol") {
-          skippedProtocol++;
-          return false;
+        
+        // For media messages, just match by type if no remote_message_id
+        if (messageType !== "text" && flowMsg.message_type === messageType) {
+          return true;
         }
-        const hasContent = r.content && String(r.content).length > 0;
-        const hasMedia = !!r.media_url;
-        if (!hasContent && !hasMedia) {
-          skippedEmpty++;
-          return false;
-        }
-        return true;
+        
+        return false;
       });
+    };
+    
+    const rowsToInsert: any[] = [];
+    const messagesToUpdate: { id: string; remote_message_id: string }[] = [];
 
-    console.log(`Filtering results: skippedExisting=${skippedExisting}, skippedProtocol=${skippedProtocol}, skippedEmpty=${skippedEmpty}, toInsert=${rowsToInsert.length}`);
+    for (const m of allMessages) {
+      const id = m?.key?.id;
+      if (!id) continue;
+      
+      if (existing.has(id)) {
+        skippedExisting++;
+        continue;
+      }
+
+      const { content, messageType, mediaUrl } = parseEvolutionContent(m);
+      const ts = m.messageTimestamp ? Number(m.messageTimestamp) : 0;
+      const createdAt = ts > 0 ? new Date(ts * 1000).toISOString() : new Date().toISOString();
+      const isFromMe = m?.key?.fromMe === true;
+      
+      // Skip protocol messages
+      if (messageType === "protocol") {
+        skippedProtocol++;
+        continue;
+      }
+      
+      // Skip empty messages
+      const hasContent = content && String(content).length > 0;
+      const hasMedia = !!mediaUrl;
+      if (!hasContent && !hasMedia) {
+        skippedEmpty++;
+        continue;
+      }
+
+      // For outbound messages, check if there's a matching flow message to update instead of insert
+      if (isFromMe) {
+        const matchingFlowMsg = findMatchingFlowMessage(content, messageType);
+        if (matchingFlowMsg) {
+          // Update the existing flow message with the remote_message_id instead of inserting duplicate
+          messagesToUpdate.push({
+            id: matchingFlowMsg.id,
+            remote_message_id: id,
+          });
+          matchedFlowMessages++;
+          
+          // Remove from recentFlowMessages to avoid matching same message twice
+          const idx = recentFlowMessages!.findIndex((fm) => fm.id === matchingFlowMsg.id);
+          if (idx > -1) recentFlowMessages!.splice(idx, 1);
+          
+          continue;
+        }
+      }
+
+      rowsToInsert.push({
+        contact_id: contact.id,
+        instance_id: contact.instance_id,
+        user_id: user.id,
+        direction: isFromMe ? "outbound" : "inbound",
+        message_type: messageType,
+        content,
+        media_url: mediaUrl,
+        remote_message_id: id,
+        status: isFromMe ? "sent" : "delivered",
+        is_from_flow: false,
+        created_at: createdAt,
+      });
+    }
+
+    console.log(`Filtering results: skippedExisting=${skippedExisting}, skippedProtocol=${skippedProtocol}, skippedEmpty=${skippedEmpty}, matchedFlowMessages=${matchedFlowMessages}, toInsert=${rowsToInsert.length}`);
+
+    // Update flow messages with their remote_message_id
+    if (messagesToUpdate.length > 0) {
+      console.log(`Updating ${messagesToUpdate.length} flow messages with remote_message_id`);
+      for (const update of messagesToUpdate) {
+        await supabaseAdmin
+          .from("inbox_messages")
+          .update({ remote_message_id: update.remote_message_id })
+          .eq("id", update.id);
+      }
+    }
 
     if (rowsToInsert.length === 0) {
       console.log("No new messages to insert after filtering");
-      return new Response(JSON.stringify({ inserted: 0, skippedExisting, skippedProtocol, skippedEmpty }), {
+      return new Response(JSON.stringify({ inserted: 0, updated: messagesToUpdate.length, skippedExisting, skippedProtocol, skippedEmpty }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
