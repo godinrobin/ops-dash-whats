@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useMemo } from 'react';
-import { User, MessageSquare, Smartphone, ChevronDown, Tag, X, Plus, Pause, Play, Mail, MailOpen } from 'lucide-react';
+import { User, MessageSquare, Smartphone, ChevronDown, Tag, X, Plus, Pause, Play, Mail, MailOpen, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -24,6 +24,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 // Instance colors for consistency
 const instanceColors = [
@@ -46,6 +57,7 @@ interface ChatPanelProps {
   flows?: { id: string; name: string; is_active: boolean }[];
   onTriggerFlow?: (flowId: string) => void;
   onRefreshContact?: () => void;
+  onContactDeleted?: () => void;
 }
 
 interface Instance {
@@ -64,6 +76,7 @@ export const ChatPanel = ({
   flows = [],
   onTriggerFlow,
   onRefreshContact,
+  onContactDeleted,
 }: ChatPanelProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [instances, setInstances] = useState<Instance[]>([]);
@@ -73,6 +86,7 @@ export const ChatPanel = ({
   const [newLabelInput, setNewLabelInput] = useState('');
   const [showNewLabelInput, setShowNewLabelInput] = useState(false);
   const [flowPaused, setFlowPaused] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Predefined labels with colors
   const predefinedLabels = [
@@ -278,6 +292,50 @@ export const ChatPanel = ({
     }
   };
 
+  // Handle delete contact
+  const handleDeleteContact = async () => {
+    if (!contact || isDeleting) return;
+    
+    setIsDeleting(true);
+    try {
+      // 1. Delete all messages from this contact
+      const { error: messagesError } = await supabase
+        .from('inbox_messages')
+        .delete()
+        .eq('contact_id', contact.id);
+      
+      if (messagesError) {
+        console.error('Error deleting messages:', messagesError);
+      }
+
+      // 2. Delete flow sessions
+      const { error: sessionsError } = await supabase
+        .from('inbox_flow_sessions')
+        .delete()
+        .eq('contact_id', contact.id);
+      
+      if (sessionsError) {
+        console.error('Error deleting flow sessions:', sessionsError);
+      }
+
+      // 3. Delete the contact
+      const { error: contactError } = await supabase
+        .from('inbox_contacts')
+        .delete()
+        .eq('id', contact.id);
+      
+      if (contactError) throw contactError;
+      
+      toast.success('Contato deletado com sucesso');
+      onContactDeleted?.();
+    } catch (err) {
+      console.error('Error deleting contact:', err);
+      toast.error('Erro ao deletar contato');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   if (!contact) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-muted/30">
@@ -468,6 +526,43 @@ export const ChatPanel = ({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Delete contact */}
+          <AlertDialog>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <AlertDialogTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-9 w-9 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    disabled={isDeleting}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Deletar Contato</TooltipContent>
+            </Tooltip>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Deletar contato?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Isso irá deletar permanentemente o contato, todas as mensagens e sessões de fluxo associadas.
+                  O contato poderá acionar o fluxo novamente ao enviar uma nova mensagem.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDeleteContact}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Deletar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           <Button variant="ghost" size="icon" className="h-9 w-9" onClick={onToggleDetails}>
             <User className="h-4 w-4" />
