@@ -103,6 +103,7 @@ export function AdminAdsMetrics() {
   const [loading, setLoading] = useState(true);
   const [userSearch, setUserSearch] = useState("");
   const [dateFilter, setDateFilter] = useState<DateFilterType>("all");
+  const [modalDateFilter, setModalDateFilter] = useState<DateFilterType>("all"); // Filtro independente do modal
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [userAccounts, setUserAccounts] = useState<UserAdAccount[]>([]);
   const [userMetrics, setUserMetrics] = useState<UserAggregatedMetrics[]>([]);
@@ -112,14 +113,13 @@ export function AdminAdsMetrics() {
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>("all");
-
-  const getDateRange = (): { start: Date | null; end: Date | null } => {
+  const getDateRange = (filter: DateFilterType): { start: Date | null; end: Date | null } => {
     const MS_DAY = 86400000;
     const utcStart = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
     const utcEnd = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
     const subUtc = (d: Date, days: number) => new Date(d.getTime() - days * MS_DAY);
     const now = new Date();
-    switch (dateFilter) {
+    switch (filter) {
       case "today":
         return { start: utcStart(now), end: utcEnd(now) };
       case "yesterday": {
@@ -142,7 +142,7 @@ export function AdminAdsMetrics() {
   const loadAllUserMetrics = async () => {
     setLoading(true);
     try {
-      const { start, end } = getDateRange();
+      const { start, end } = getDateRange(dateFilter);
 
       // Load all ad accounts with user info
       const { data: accounts, error: accountsError } = await supabase
@@ -232,11 +232,11 @@ export function AdminAdsMetrics() {
     }
   };
 
-  const loadUserDetails = async (userId: string) => {
+  const loadUserDetails = async (userId: string, filter?: DateFilterType) => {
     setLoadingDetails(true);
     setSelectedCampaignId("all");
     try {
-      const { start, end } = getDateRange();
+      const { start, end } = getDateRange(filter ?? modalDateFilter);
 
       // Load campaigns for this user with date filter
       let campaignsQuery = supabase
@@ -353,6 +353,13 @@ export function AdminAdsMetrics() {
       setLoadingDetails(false);
     }
   };
+
+  // Recarregar detalhes do usuário quando o filtro do modal mudar
+  useEffect(() => {
+    if (selectedUserId) {
+      loadUserDetails(selectedUserId, modalDateFilter);
+    }
+  }, [modalDateFilter]);
 
   const filteredUsers = userMetrics.filter(u => 
     u.username.toLowerCase().includes(userSearch.toLowerCase()) ||
@@ -560,8 +567,23 @@ export function AdminAdsMetrics() {
             </DialogTitle>
           </DialogHeader>
           
-          {/* Campaign Filter */}
-          <div className="flex items-center gap-4 py-2">
+          {/* Date and Campaign Filters */}
+          <div className="flex flex-wrap items-center gap-4 py-2">
+            {/* Filtro de Data Independente do Modal */}
+            <Select value={modalDateFilter} onValueChange={(value: DateFilterType) => setModalDateFilter(value)}>
+              <SelectTrigger className="w-[200px]">
+                <Calendar className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Filtrar por data" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os períodos</SelectItem>
+                <SelectItem value="today">Hoje</SelectItem>
+                <SelectItem value="yesterday">Ontem</SelectItem>
+                <SelectItem value="7days">Últimos 7 dias</SelectItem>
+                <SelectItem value="30days">Últimos 30 dias</SelectItem>
+              </SelectContent>
+            </Select>
+
             <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId}>
               <SelectTrigger className="w-[300px]">
                 <Target className="h-4 w-4 mr-2" />
@@ -576,9 +598,13 @@ export function AdminAdsMetrics() {
                 ))}
               </SelectContent>
             </Select>
-            {selectedCampaignId !== "all" && (
-              <Button variant="ghost" size="sm" onClick={() => setSelectedCampaignId("all")}>
-                Limpar filtro
+            
+            {(selectedCampaignId !== "all" || modalDateFilter !== "all") && (
+              <Button variant="ghost" size="sm" onClick={() => {
+                setSelectedCampaignId("all");
+                setModalDateFilter("all");
+              }}>
+                Limpar filtros
               </Button>
             )}
           </div>
