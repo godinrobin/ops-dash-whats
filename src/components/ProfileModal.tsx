@@ -12,8 +12,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/useSplashedToast";
-import { NotificationsModal } from "./NotificationsModal";
-import { Bell, Lock } from "lucide-react";
 
 interface ProfileModalProps {
   open: boolean;
@@ -27,7 +25,6 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,28 +102,6 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
               </div>
             </div>
 
-            {/* Quick Actions */}
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                variant="outline"
-                className="flex flex-col h-auto py-4 gap-2"
-                onClick={() => setNotificationsOpen(true)}
-              >
-                <Bell className="h-5 w-5" />
-                <span className="text-xs">Notificações</span>
-              </Button>
-              <Button
-                variant="outline"
-                className="flex flex-col h-auto py-4 gap-2"
-                onClick={() => {
-                  const el = document.getElementById('password-section');
-                  el?.scrollIntoView({ behavior: 'smooth' });
-                }}
-              >
-                <Lock className="h-5 w-5" />
-                <span className="text-xs">Alterar Senha</span>
-              </Button>
-            </div>
 
             {/* Change Password Form */}
             <form id="password-section" onSubmit={handleChangePassword} className="space-y-4">
@@ -169,11 +144,6 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
           </div>
         </DialogContent>
       </Dialog>
-
-      <NotificationsModal 
-        open={notificationsOpen} 
-        onOpenChange={setNotificationsOpen} 
-      />
     </>
   );
 };

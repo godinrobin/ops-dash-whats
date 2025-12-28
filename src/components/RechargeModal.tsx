@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Loader2, Copy, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/useSplashedToast";
 import { supabase } from "@/integrations/supabase/client";
-import { createAdminNotification } from "@/utils/adminNotifications";
 
 interface RechargeModalProps {
   open: boolean;
@@ -65,13 +64,6 @@ export function RechargeModal({ open, onOpenChange, onSuccess }: RechargeModalPr
           setPaymentCompleted(true);
           toast({ title: "Pagamento confirmado!" });
           onSuccess(data.newBalance);
-          
-          // Notifica admin
-          createAdminNotification({
-            actionType: "deposit",
-            actionDescription: `Realizou depósito via PIX`,
-            amount: pixData.amount,
-          });
         } else if (data.status === 'failed') {
           toast({ title: "Pagamento falhou ou expirou", variant: "destructive" });
           setPixData(null);
