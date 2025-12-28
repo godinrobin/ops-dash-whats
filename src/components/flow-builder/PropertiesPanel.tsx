@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Trash2, Save, Settings, Copy, Plus, Minus } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { ConditionEditor } from './ConditionEditor';
 import { supabase } from '@/integrations/supabase/client';
@@ -279,12 +280,10 @@ export const PropertiesPanel = ({
             {/* Presence/Typing indicator option */}
             <div className="space-y-3 pt-2 border-t border-border">
               <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
+                <Checkbox
                   id="showPresence"
                   checked={(nodeData.showPresence as boolean) || false}
-                  onChange={(e) => onUpdateNode(selectedNode.id, { showPresence: e.target.checked })}
-                  className="h-4 w-4 rounded border-gray-300"
+                  onCheckedChange={(checked) => onUpdateNode(selectedNode.id, { showPresence: checked })}
                 />
                 <Label htmlFor="showPresence" className="text-sm cursor-pointer">
                   Mostrar "digitando..." antes de enviar
@@ -466,12 +465,10 @@ export const PropertiesPanel = ({
             {selectedNode.type === 'audio' && (
               <div className="space-y-3 pt-2 border-t border-border">
                 <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     id="showPresenceAudio"
                     checked={(nodeData.showPresence as boolean) || false}
-                    onChange={(e) => onUpdateNode(selectedNode.id, { showPresence: e.target.checked })}
-                    className="h-4 w-4 rounded border-gray-300"
+                    onCheckedChange={(checked) => onUpdateNode(selectedNode.id, { showPresence: checked })}
                   />
                   <Label htmlFor="showPresenceAudio" className="text-sm cursor-pointer">
                     Mostrar "gravando áudio..." antes de enviar
