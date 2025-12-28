@@ -8,7 +8,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { MemberRoute } from "@/components/MemberRoute";
 import { AdminRoute } from "@/components/AdminRoute";
 import { AnnouncementPopup } from "@/components/AnnouncementPopup";
-import { AdminNotifications } from "@/components/AdminNotifications";
+
 import Toaster, { ToasterRef } from "@/components/ui/toast";
 import { setGlobalToasterRef } from "@/hooks/useSplashedToast";
 import Home from "./pages/Home";
@@ -68,7 +68,7 @@ const App = () => {
           <AuthProvider>
             <FacebookOAuthHandler />
             <AnnouncementPopup />
-            <AdminNotifications />
+            
             <Routes>
               <Route path="/auth" element={<Auth />} />
               <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
