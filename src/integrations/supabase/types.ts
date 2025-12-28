@@ -1912,6 +1912,50 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_notifications: {
+        Row: {
+          amount: number
+          bank_type: string
+          created_at: string
+          id: string
+          notification_sent: boolean | null
+          payer_name: string | null
+          raw_payload: Json | null
+          user_id: string
+          webhook_id: string
+        }
+        Insert: {
+          amount: number
+          bank_type: string
+          created_at?: string
+          id?: string
+          notification_sent?: boolean | null
+          payer_name?: string | null
+          raw_payload?: Json | null
+          user_id: string
+          webhook_id: string
+        }
+        Update: {
+          amount?: number
+          bank_type?: string
+          created_at?: string
+          id?: string
+          notification_sent?: boolean | null
+          payer_name?: string | null
+          raw_payload?: Json | null
+          user_id?: string
+          webhook_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_notifications_webhook_id_fkey"
+            columns: ["webhook_id"]
+            isOneToOne: false
+            referencedRelation: "user_payment_webhooks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       platform_margins: {
         Row: {
           id: string
@@ -2416,6 +2460,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_payment_webhooks: {
+        Row: {
+          bank_type: string
+          created_at: string
+          id: string
+          is_active: boolean | null
+          notifications_count: number | null
+          total_received: number | null
+          updated_at: string
+          user_id: string
+          webhook_id: string
+        }
+        Insert: {
+          bank_type: string
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          notifications_count?: number | null
+          total_received?: number | null
+          updated_at?: string
+          user_id: string
+          webhook_id: string
+        }
+        Update: {
+          bank_type?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          notifications_count?: number | null
+          total_received?: number | null
+          updated_at?: string
+          user_id?: string
+          webhook_id?: string
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {

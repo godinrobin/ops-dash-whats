@@ -158,3 +158,6 @@ verify_jwt = true
 
 [functions.facebook-conversions]
 verify_jwt = true
+
+[functions.payment-webhook]
+verify_jwt = false
