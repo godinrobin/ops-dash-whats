@@ -301,8 +301,8 @@ export function AdminAdsMetrics() {
         cpm: c.cpm || 0,
         cpc: c.cpc || 0,
         ctr: c.ctr || 0,
-        conversions: (c as any).meta_conversions || 0,
-        conversion_value: c.conversion_value || 0,
+        conversions: Number((c as any).meta_conversions ?? 0),
+        conversion_value: Number(c.conversion_value ?? 0),
         cost_per_result: c.cost_per_result || 0,
         messaging_conversations_started: (c as any).messaging_conversations_started || 0,
         cost_per_message: (c as any).cost_per_message || 0
@@ -548,7 +548,7 @@ export function AdminAdsMetrics() {
 
       {/* User Details Dialog */}
       <Dialog open={!!selectedUserId} onOpenChange={(open) => !open && setSelectedUserId(null)}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden">
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
