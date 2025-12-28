@@ -177,6 +177,9 @@ serve(async (req) => {
         console.log(`Found ${campaigns.length} campaigns`);
         totalCampaigns += campaigns.length;
 
+        // Get synced campaign IDs from Facebook
+        const syncedCampaignIds = campaigns.map((c: any) => c.id);
+
         for (const campaign of campaigns) {
           const metrics = extractMetrics(campaign.insights);
 
@@ -211,6 +214,29 @@ serve(async (req) => {
               ad_account_id: adAccount.id,
               ...campaignData,
             });
+          }
+        }
+
+        // Delete campaigns that no longer exist in Facebook
+        const { data: existingCampaigns } = await supabaseClient
+          .from("ads_campaigns")
+          .select("id, campaign_id")
+          .eq("user_id", user.id)
+          .eq("ad_account_id", adAccount.id);
+
+        if (existingCampaigns) {
+          const campaignsToDelete = existingCampaigns.filter(
+            (existing) => !syncedCampaignIds.includes(existing.campaign_id)
+          );
+
+          if (campaignsToDelete.length > 0) {
+            const idsToDelete = campaignsToDelete.map((c) => c.id);
+            console.log(`Deleting ${campaignsToDelete.length} campaigns that no longer exist in Facebook:`, campaignsToDelete.map(c => c.campaign_id));
+            
+            await supabaseClient
+              .from("ads_campaigns")
+              .delete()
+              .in("id", idsToDelete);
           }
         }
       }
@@ -274,6 +300,9 @@ serve(async (req) => {
         console.log(`Found ${adsets.length} adsets`);
         totalAdsets += adsets.length;
 
+        // Get synced adset IDs from Facebook
+        const syncedAdsetIds = adsets.map((a: any) => a.id);
+
         for (const adset of adsets) {
           const metrics = extractMetrics(adset.insights);
 
@@ -309,6 +338,29 @@ serve(async (req) => {
               ad_account_id: adAccount.id,
               ...adsetData,
             });
+          }
+        }
+
+        // Delete adsets that no longer exist in Facebook
+        const { data: existingAdsets } = await supabaseClient
+          .from("ads_adsets")
+          .select("id, adset_id")
+          .eq("user_id", user.id)
+          .eq("ad_account_id", adAccount.id);
+
+        if (existingAdsets) {
+          const adsetsToDelete = existingAdsets.filter(
+            (existing) => !syncedAdsetIds.includes(existing.adset_id)
+          );
+
+          if (adsetsToDelete.length > 0) {
+            const idsToDelete = adsetsToDelete.map((a) => a.id);
+            console.log(`Deleting ${adsetsToDelete.length} adsets that no longer exist in Facebook:`, adsetsToDelete.map(a => a.adset_id));
+            
+            await supabaseClient
+              .from("ads_adsets")
+              .delete()
+              .in("id", idsToDelete);
           }
         }
       }
@@ -372,6 +424,9 @@ serve(async (req) => {
         console.log(`Found ${ads.length} ads`);
         totalAds += ads.length;
 
+        // Get synced ad IDs from Facebook
+        const syncedAdIds = ads.map((a: any) => a.id);
+
         for (const ad of ads) {
           const metrics = extractMetrics(ad.insights);
 
@@ -408,6 +463,29 @@ serve(async (req) => {
               ad_account_id: adAccount.id,
               ...adData,
             });
+          }
+        }
+
+        // Delete ads that no longer exist in Facebook
+        const { data: existingAds } = await supabaseClient
+          .from("ads_ads")
+          .select("id, ad_id")
+          .eq("user_id", user.id)
+          .eq("ad_account_id", adAccount.id);
+
+        if (existingAds) {
+          const adsToDelete = existingAds.filter(
+            (existing) => !syncedAdIds.includes(existing.ad_id)
+          );
+
+          if (adsToDelete.length > 0) {
+            const idsToDelete = adsToDelete.map((a) => a.id);
+            console.log(`Deleting ${adsToDelete.length} ads that no longer exist in Facebook:`, adsToDelete.map(a => a.ad_id));
+            
+            await supabaseClient
+              .from("ads_ads")
+              .delete()
+              .in("id", idsToDelete);
           }
         }
       }
