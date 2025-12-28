@@ -54,6 +54,7 @@ interface CampaignData {
 interface AdsetData {
   id: string;
   adset_id: string;
+  campaign_id: string;
   name: string;
   status: string;
   spend: number;
@@ -69,6 +70,7 @@ interface AdsetData {
 interface AdData {
   id: string;
   ad_id: string;
+  campaign_id: string;
   name: string;
   status: string;
   spend: number;
@@ -107,6 +109,7 @@ export function AdminAdsMetrics() {
   const [ads, setAds] = useState<AdData[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string>("all");
 
   const getDateRange = (): { start: Date | null; end: Date | null } => {
     const now = new Date();
@@ -223,31 +226,61 @@ export function AdminAdsMetrics() {
 
   const loadUserDetails = async (userId: string) => {
     setLoadingDetails(true);
+    setSelectedCampaignId("all");
     try {
-      // Load campaigns for this user
-      const { data: campaignsData, error: campaignsError } = await supabase
+      const { start, end } = getDateRange();
+
+      // Load campaigns for this user with date filter
+      let campaignsQuery = supabase
         .from("ads_campaigns")
         .select("*")
         .eq("user_id", userId)
         .order("spend", { ascending: false });
 
+      if (start) {
+        campaignsQuery = campaignsQuery.gte("updated_at", start.toISOString());
+      }
+      if (end) {
+        campaignsQuery = campaignsQuery.lte("updated_at", end.toISOString());
+      }
+
+      const { data: campaignsData, error: campaignsError } = await campaignsQuery;
+
       if (campaignsError) throw campaignsError;
 
-      // Load adsets for this user
-      const { data: adsetsData, error: adsetsError } = await supabase
+      // Load adsets for this user with date filter
+      let adsetsQuery = supabase
         .from("ads_adsets")
         .select("*")
         .eq("user_id", userId)
         .order("spend", { ascending: false });
 
+      if (start) {
+        adsetsQuery = adsetsQuery.gte("updated_at", start.toISOString());
+      }
+      if (end) {
+        adsetsQuery = adsetsQuery.lte("updated_at", end.toISOString());
+      }
+
+      const { data: adsetsData, error: adsetsError } = await adsetsQuery;
+
       if (adsetsError) throw adsetsError;
 
-      // Load ads for this user
-      const { data: adsData, error: adsError } = await supabase
+      // Load ads for this user with date filter
+      let adsQuery = supabase
         .from("ads_ads")
         .select("*")
         .eq("user_id", userId)
         .order("spend", { ascending: false });
+
+      if (start) {
+        adsQuery = adsQuery.gte("updated_at", start.toISOString());
+      }
+      if (end) {
+        adsQuery = adsQuery.lte("updated_at", end.toISOString());
+      }
+
+      const { data: adsData, error: adsError } = await adsQuery;
 
       if (adsError) throw adsError;
 
@@ -272,6 +305,7 @@ export function AdminAdsMetrics() {
       setAdsets(adsetsData?.map(a => ({
         id: a.id,
         adset_id: a.adset_id,
+        campaign_id: a.campaign_id,
         name: a.name || a.adset_id,
         status: a.status || "unknown",
         spend: a.spend || 0,
@@ -287,6 +321,7 @@ export function AdminAdsMetrics() {
       setAds(adsData?.map(a => ({
         id: a.id,
         ad_id: a.ad_id,
+        campaign_id: a.campaign_id,
         name: a.name || a.ad_id,
         status: a.status || "unknown",
         spend: a.spend || 0,
@@ -313,6 +348,15 @@ export function AdminAdsMetrics() {
     u.username.toLowerCase().includes(userSearch.toLowerCase()) ||
     u.user_email.toLowerCase().includes(userSearch.toLowerCase())
   );
+
+  // Filter adsets and ads by selected campaign
+  const filteredAdsets = selectedCampaignId === "all" 
+    ? adsets 
+    : adsets.filter(a => a.campaign_id === selectedCampaignId);
+
+  const filteredAds = selectedCampaignId === "all"
+    ? ads
+    : ads.filter(a => a.campaign_id === selectedCampaignId);
 
   const formatCurrency = (value: number) => `R$ ${value.toFixed(2)}`;
   const formatNumber = (value: number) => value.toLocaleString("pt-BR");
@@ -506,6 +550,29 @@ export function AdminAdsMetrics() {
             </DialogTitle>
           </DialogHeader>
           
+          {/* Campaign Filter */}
+          <div className="flex items-center gap-4 py-2">
+            <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId}>
+              <SelectTrigger className="w-[300px]">
+                <Target className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Filtrar por campanha" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as campanhas</SelectItem>
+                {campaigns.map(campaign => (
+                  <SelectItem key={campaign.campaign_id} value={campaign.campaign_id}>
+                    {campaign.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedCampaignId !== "all" && (
+              <Button variant="ghost" size="sm" onClick={() => setSelectedCampaignId("all")}>
+                Limpar filtro
+              </Button>
+            )}
+          </div>
+          
           {loadingDetails ? (
             <div className="flex items-center justify-center h-64">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -514,8 +581,8 @@ export function AdminAdsMetrics() {
             <Tabs defaultValue="campaigns" className="w-full">
               <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="campaigns">Campanhas ({campaigns.length})</TabsTrigger>
-                <TabsTrigger value="adsets">Conjuntos ({adsets.length})</TabsTrigger>
-                <TabsTrigger value="ads">Anúncios ({ads.length})</TabsTrigger>
+                <TabsTrigger value="adsets">Conjuntos ({filteredAdsets.length})</TabsTrigger>
+                <TabsTrigger value="ads">Anúncios ({filteredAds.length})</TabsTrigger>
               </TabsList>
               
               <TabsContent value="campaigns">
@@ -585,7 +652,7 @@ export function AdminAdsMetrics() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {adsets.map((adset) => (
+                      {filteredAdsets.map((adset) => (
                         <TableRow key={adset.id}>
                           <TableCell className="font-medium max-w-[200px] truncate">
                             {adset.name}
@@ -624,7 +691,7 @@ export function AdminAdsMetrics() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {ads.map((ad) => (
+                      {filteredAds.map((ad) => (
                         <TableRow key={ad.id}>
                           <TableCell>
                             {ad.thumbnail_url ? (
