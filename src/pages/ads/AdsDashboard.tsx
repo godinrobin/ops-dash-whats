@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -59,6 +60,7 @@ const defaultCardOrder = [
 
 export default function AdsDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [dateFilter, setDateFilter] = useState<DateFilter>("7days");
@@ -305,7 +307,7 @@ export default function AdsDashboard() {
         <p className="text-muted-foreground mb-6 max-w-md">
           Para ver seus dados de anúncios, conecte sua conta do Facebook nas configurações.
         </p>
-        <Button onClick={() => window.location.href = "/ads/settings"}>
+        <Button onClick={() => navigate("/ads/settings")}>
           Ir para Configurações
         </Button>
       </div>
