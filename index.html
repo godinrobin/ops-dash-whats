@@ -3,6 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <script>
+      // Facebook sometimes appends "#=_" after OAuth redirects.
+      // With HashRouter this becomes a non-existent route (/_), causing a brief 404 screen.
+      // Normalize it before the app boots.
+      if (window.location.hash === "#=_") {
+        window.location.hash = "#/ads/settings";
+      }
+    </script>
+
     <title>Zapdata - Plataforma de Marketing Digital</title>
     <meta name="description" content="Plataforma completa de marketing digital com ferramentas de métricas, criativos, funis de WhatsApp e muito mais." />
     <meta name="author" content="Zapdata" />
