@@ -148,7 +148,7 @@ export default function AdsLayout() {
             collapsed ? "ml-16" : "ml-60"
           )}
         >
-          <BackgroundBeams className="z-0 opacity-30" />
+          <BackgroundBeams className="z-0" />
           <div className="relative z-10 p-4 md:p-6">
             <Routes>
               <Route index element={<AdsDashboard />} />
