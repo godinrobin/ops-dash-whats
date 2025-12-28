@@ -161,3 +161,6 @@ verify_jwt = true
 
 [functions.payment-webhook]
 verify_jwt = false
+
+[functions.admin-facebook-insights]
+verify_jwt = true
