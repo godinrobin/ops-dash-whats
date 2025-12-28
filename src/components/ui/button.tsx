@@ -42,8 +42,16 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const Comp = asChild ? Slot : "button";
     const showNeon = neon && variant !== 'link' && variant !== 'ghost' && !asChild;
     
+    if (asChild) {
+      return (
+        <Slot className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props}>
+          {children}
+        </Slot>
+      );
+    }
+
     return (
-      <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props}>
+      <button className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props}>
         {showNeon && (
           <>
             <span className="absolute h-px opacity-0 group-hover:opacity-100 transition-all duration-500 ease-in-out inset-x-0 top-0 bg-gradient-to-r w-3/4 mx-auto from-transparent via-accent to-transparent pointer-events-none" />
@@ -51,7 +59,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           </>
         )}
         {children}
-      </Comp>
+      </button>
     );
   },
 );
