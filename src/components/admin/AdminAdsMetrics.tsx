@@ -656,8 +656,8 @@ export function AdminAdsMetrics() {
                           <TableHead className="text-right">CTR</TableHead>
                           <TableHead className="text-right">CPM</TableHead>
                           <TableHead className="text-right">CPC</TableHead>
-                          <TableHead className="text-right">Resultados</TableHead>
-                          <TableHead className="text-right">Custo/Resultado</TableHead>
+                          <TableHead className="text-right">Conversões</TableHead>
+                          <TableHead className="text-right">Custo/Conv.</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -698,7 +698,7 @@ export function AdminAdsMetrics() {
                           <TableHead className="text-right">CTR</TableHead>
                           <TableHead className="text-right">CPM</TableHead>
                           <TableHead className="text-right">CPC</TableHead>
-                          <TableHead className="text-right">Resultados</TableHead>
+                          <TableHead className="text-right">Conversões</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
