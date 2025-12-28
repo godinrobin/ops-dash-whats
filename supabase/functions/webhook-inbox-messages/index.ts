@@ -90,22 +90,59 @@ serve(async (req) => {
         });
       }
       
-      // Find valid phone from remoteJid or remoteJidAlt
+      // Find valid phone from multiple sources
+      // Priority: remoteJid > remoteJidAlt > participant > participantAlt
       // ONLY accept @s.whatsapp.net format - reject @lid (internal IDs)
       let jidForPhone = '';
+      let phoneSource = '';
+      
+      // Get participant fields (used in ads/group-like messages)
+      const participant = key.participant || '';
+      const participantAlt = key.participantAlt || '';
+      
+      console.log(`Checking all JID sources: remoteJid=${remoteJid}, remoteJidAlt=${remoteJidAlt}, participant=${participant}, participantAlt=${participantAlt}`);
+      
+      // 1. Try remoteJid with @s.whatsapp.net
       if (remoteJid.includes('@s.whatsapp.net')) {
         jidForPhone = remoteJid;
-        console.log(`Using remoteJid for phone extraction: ${remoteJid}`);
-      } else if (remoteJidAlt && remoteJidAlt.includes('@s.whatsapp.net')) {
+        phoneSource = 'remoteJid';
+      } 
+      // 2. Try remoteJidAlt with @s.whatsapp.net
+      else if (remoteJidAlt && remoteJidAlt.includes('@s.whatsapp.net')) {
         jidForPhone = remoteJidAlt;
-        console.log(`Using remoteJidAlt for phone extraction: ${remoteJidAlt}`);
-      } else {
-        // Both are @lid format or other non-phone format - cannot extract real phone number
-        console.log(`Skipping message: no valid @s.whatsapp.net found. remoteJid=${remoteJid}, remoteJidAlt=${remoteJidAlt}`);
-        return new Response(JSON.stringify({ success: true, skipped: true, reason: 'no_valid_phone_jid' }), {
+        phoneSource = 'remoteJidAlt';
+      }
+      // 3. Try participant (for ads/group-like messages where remoteJid is @lid)
+      else if (participant && participant.includes('@s.whatsapp.net')) {
+        jidForPhone = participant;
+        phoneSource = 'participant';
+      }
+      // 4. Try participantAlt
+      else if (participantAlt && participantAlt.includes('@s.whatsapp.net')) {
+        jidForPhone = participantAlt;
+        phoneSource = 'participantAlt';
+      }
+      
+      // If still no valid JID found, log detailed info and skip
+      if (!jidForPhone) {
+        console.log(`Skipping message: no valid @s.whatsapp.net found in any field.`);
+        console.log(`  remoteJid=${remoteJid}`);
+        console.log(`  remoteJidAlt=${remoteJidAlt}`);
+        console.log(`  participant=${participant}`);
+        console.log(`  participantAlt=${participantAlt}`);
+        console.log(`  Full key object:`, JSON.stringify(key));
+        
+        return new Response(JSON.stringify({ 
+          success: true, 
+          skipped: true, 
+          reason: 'no_valid_phone_jid',
+          debug: { remoteJid, remoteJidAlt, participant, participantAlt }
+        }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+      
+      console.log(`Using ${phoneSource} for phone extraction: ${jidForPhone}`);
       
       const rawPhone = jidForPhone.split('@')[0];
       // Clean and validate phone number
