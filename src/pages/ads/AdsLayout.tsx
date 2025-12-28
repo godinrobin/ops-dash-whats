@@ -63,12 +63,17 @@ export default function AdsLayout() {
       <Header mode="ads" onModeChange={handleModeChange} />
       <div className="h-14 md:h-16" />
       
-      <div className="flex min-h-[calc(100vh-56px)] md:min-h-[calc(100vh-64px)]">
+      {/* Background Beams - fixed position covering the entire viewport */}
+      <div className="fixed inset-0 top-14 md:top-16 pointer-events-none z-0">
+        <BackgroundBeams className="opacity-100" />
+      </div>
+      
+      <div className="flex min-h-[calc(100vh-56px)] md:min-h-[calc(100vh-64px)] relative z-10">
         {/* Sidebar */}
         <motion.aside
           initial={false}
           animate={{ width: collapsed ? 64 : 240 }}
-          className="fixed left-0 top-14 md:top-16 h-[calc(100vh-56px)] md:h-[calc(100vh-64px)] bg-card border-r border-border z-40 flex flex-col"
+          className="fixed left-0 top-14 md:top-16 h-[calc(100vh-56px)] md:h-[calc(100vh-64px)] bg-card/80 backdrop-blur-sm border-r border-border z-40 flex flex-col"
         >
           <nav className="flex-1 py-4 px-2 space-y-1">
             {sidebarItems.map((item) => {
@@ -144,11 +149,10 @@ export default function AdsLayout() {
         {/* Main Content */}
         <main 
           className={cn(
-            "flex-1 transition-all duration-300 relative overflow-hidden",
+            "flex-1 transition-all duration-300 relative",
             collapsed ? "ml-16" : "ml-60"
           )}
         >
-          <BackgroundBeams className="z-0" />
           <div className="relative z-10 p-4 md:p-6">
             <Routes>
               <Route index element={<AdsDashboard />} />
