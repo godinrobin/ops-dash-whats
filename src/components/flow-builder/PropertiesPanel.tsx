@@ -275,6 +275,38 @@ export const PropertiesPanel = ({
                 Clique para inserir no texto
               </p>
             </div>
+            
+            {/* Presence/Typing indicator option */}
+            <div className="space-y-3 pt-2 border-t border-border">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="showPresence"
+                  checked={(nodeData.showPresence as boolean) || false}
+                  onChange={(e) => onUpdateNode(selectedNode.id, { showPresence: e.target.checked })}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <Label htmlFor="showPresence" className="text-sm cursor-pointer">
+                  Mostrar "digitando..." antes de enviar
+                </Label>
+              </div>
+              {(nodeData.showPresence as boolean) && (
+                <div className="space-y-2 pl-6">
+                  <Label className="text-xs">Duração (segundos)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={(nodeData.presenceDelay as number) || 3}
+                    onChange={(e) => onUpdateNode(selectedNode.id, { presenceDelay: Math.min(60, Math.max(1, parseInt(e.target.value) || 3)) })}
+                    className="w-24 h-8"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    1 a 60 segundos
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         );
 
@@ -429,6 +461,41 @@ export const PropertiesPanel = ({
                 )}
               </div>
             </div>
+            
+            {/* Presence/Recording indicator option for audio */}
+            {selectedNode.type === 'audio' && (
+              <div className="space-y-3 pt-2 border-t border-border">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="showPresenceAudio"
+                    checked={(nodeData.showPresence as boolean) || false}
+                    onChange={(e) => onUpdateNode(selectedNode.id, { showPresence: e.target.checked })}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <Label htmlFor="showPresenceAudio" className="text-sm cursor-pointer">
+                    Mostrar "gravando áudio..." antes de enviar
+                  </Label>
+                </div>
+                {(nodeData.showPresence as boolean) && (
+                  <div className="space-y-2 pl-6">
+                    <Label className="text-xs">Duração (segundos)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={60}
+                      value={(nodeData.presenceDelay as number) || 3}
+                      onChange={(e) => onUpdateNode(selectedNode.id, { presenceDelay: Math.min(60, Math.max(1, parseInt(e.target.value) || 3)) })}
+                      className="w-24 h-8"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      1 a 60 segundos
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+            
             <div className="space-y-2">
               <Label>Legenda (opcional)</Label>
               <Input
