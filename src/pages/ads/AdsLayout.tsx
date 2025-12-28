@@ -44,8 +44,9 @@ export default function AdsLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const { isAdmin } = useAdminStatus();
 
-  const handleModeChange = (mode: AppMode) => {
-    if (mode !== "ads") {
+  const handleModeChange = (newMode: AppMode) => {
+    if (newMode !== "ads") {
+      localStorage.setItem("homeMode", newMode);
       navigate("/");
     }
   };
