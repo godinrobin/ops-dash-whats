@@ -367,7 +367,9 @@ export default function AdsSettings() {
                                 </p>
                               </div>
                             </div>
-                            {getAccountStatusBadge(adAccount.account_status)}
+                            <Badge variant={adAccount.is_selected ? "default" : "outline"} className={adAccount.is_selected ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-red-500/20 text-red-400 border-red-500/30"}>
+                              {adAccount.is_selected ? "Ativa" : "Desativada"}
+                            </Badge>
                           </div>
                         ))}
                       {adAccounts.filter(a => a.facebook_account_id === account.id).length === 0 && (
