@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -23,7 +25,8 @@ import {
   GripVertical,
   EyeOff,
   Plus,
-  X
+  X,
+  ChevronDown
 } from "lucide-react";
 import { motion, Reorder } from "framer-motion";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
@@ -64,7 +67,7 @@ export default function AdsDashboard() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [dateFilter, setDateFilter] = useState<DateFilter>("7days");
-  const [selectedAccount, setSelectedAccount] = useState<string>("all");
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>(["all"]);
   const [adAccounts, setAdAccounts] = useState<any[]>([]);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
@@ -101,7 +104,7 @@ export default function AdsDashboard() {
     if (user) {
       loadData();
     }
-  }, [user, dateFilter, selectedAccount]);
+  }, [user, dateFilter, selectedAccounts]);
 
   // Save card order to localStorage
   useEffect(() => {
@@ -140,9 +143,11 @@ export default function AdsDashboard() {
         .select("*")
         .eq("user_id", user.id);
 
-      if (selectedAccount !== "all") {
-        query = query.eq("ad_account_id", selectedAccount);
-      } else if (activeAccountIds.length > 0) {
+      // Filter by selected accounts
+      const hasAllSelected = selectedAccounts.includes("all");
+      if (!hasAllSelected && selectedAccounts.length > 0) {
+        query = query.in("ad_account_id", selectedAccounts);
+      } else if (hasAllSelected && activeAccountIds.length > 0) {
         query = query.in("ad_account_id", activeAccountIds);
       }
 
@@ -324,19 +329,59 @@ export default function AdsDashboard() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Conta de anúncios" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas as contas</SelectItem>
-              {activeAdAccounts.map((acc) => (
-                <SelectItem key={acc.id} value={acc.id}>
-                  {acc.name || acc.ad_account_id}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-[180px] justify-between">
+                {selectedAccounts.includes("all") 
+                  ? "Todas as contas" 
+                  : selectedAccounts.length === 1 
+                    ? activeAdAccounts.find(a => a.id === selectedAccounts[0])?.name || "1 conta"
+                    : `${selectedAccounts.length} contas`
+                }
+                <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[220px] p-2" align="start">
+              <div className="space-y-1">
+                <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted cursor-pointer">
+                  <Checkbox
+                    checked={selectedAccounts.includes("all")}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setSelectedAccounts(["all"]);
+                      }
+                    }}
+                  />
+                  <span className="text-sm font-medium">Todas as contas</span>
+                </label>
+                <div className="h-px bg-border my-1" />
+                {activeAdAccounts.map((acc) => (
+                  <label 
+                    key={acc.id} 
+                    className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted cursor-pointer"
+                  >
+                    <Checkbox
+                      checked={!selectedAccounts.includes("all") && selectedAccounts.includes(acc.id)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedAccounts(prev => {
+                            const filtered = prev.filter(id => id !== "all");
+                            return [...filtered, acc.id];
+                          });
+                        } else {
+                          setSelectedAccounts(prev => {
+                            const filtered = prev.filter(id => id !== acc.id);
+                            return filtered.length === 0 ? ["all"] : filtered;
+                          });
+                        }
+                      }}
+                    />
+                    <span className="text-sm">{acc.name || acc.ad_account_id}</span>
+                  </label>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
 
           <Select value={dateFilter} onValueChange={(v) => setDateFilter(v as DateFilter)}>
             <SelectTrigger className="w-[140px]">
