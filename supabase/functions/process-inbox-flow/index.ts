@@ -28,9 +28,9 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { sessionId, userInput, resumeFromDelay } = await req.json();
+    const { sessionId, userInput, resumeFromDelay, resumeFromTimeout } = await req.json();
     console.log('=== PROCESS-INBOX-FLOW START ===');
-    console.log('SessionId:', sessionId, 'Input:', userInput, 'ResumeFromDelay:', resumeFromDelay);
+    console.log('SessionId:', sessionId, 'Input:', userInput, 'ResumeFromDelay:', resumeFromDelay, 'ResumeFromTimeout:', resumeFromTimeout);
 
     // Get session with flow data
     const { data: session, error: sessionError } = await supabaseClient
@@ -378,6 +378,52 @@ serve(async (req) => {
             break;
 
           case 'waitInput':
+            // If resumeFromTimeout, skip waiting and move to next node (with empty variable)
+            if (resumeFromTimeout) {
+              console.log('Timeout expired, continuing flow without user input');
+              const varName = currentNode.data.variableName as string;
+              if (varName) {
+                variables[varName] = ''; // Empty value for timeout
+              }
+              
+              // Clear timeout and move to next node
+              await supabaseClient
+                .from('inbox_flow_sessions')
+                .update({
+                  timeout_at: null,
+                  variables,
+                  last_interaction: new Date().toISOString(),
+                })
+                .eq('id', sessionId);
+              
+              processedActions.push('Timeout expired, continuing without input');
+              
+              const timeoutEdge = edges.find((e: { source: string }) => e.source === currentNodeId);
+              if (timeoutEdge) {
+                currentNodeId = timeoutEdge.target;
+              } else {
+                continueProcessing = false;
+              }
+              break;
+            }
+            
+            // Calculate timeout if enabled
+            const timeoutEnabled = (currentNode.data.timeoutEnabled as boolean) !== false;
+            let timeoutAt: string | null = null;
+            
+            if (timeoutEnabled) {
+              const timeoutValue = (currentNode.data.timeout as number) || 5;
+              const timeoutUnit = (currentNode.data.timeoutUnit as string) || 'minutes';
+              
+              // Convert to seconds
+              let timeoutSeconds = timeoutValue;
+              if (timeoutUnit === 'minutes') timeoutSeconds *= 60;
+              if (timeoutUnit === 'hours') timeoutSeconds *= 3600;
+              
+              timeoutAt = new Date(Date.now() + timeoutSeconds * 1000).toISOString();
+              console.log(`Timeout configured: ${timeoutValue} ${timeoutUnit} -> expires at ${timeoutAt}`);
+            }
+            
             // Stop and wait for user input - save state and release lock
             await supabaseClient
               .from('inbox_flow_sessions')
@@ -387,10 +433,26 @@ serve(async (req) => {
                 last_interaction: new Date().toISOString(),
                 processing: false,
                 processing_started_at: null,
+                timeout_at: timeoutAt,
               })
               .eq('id', sessionId);
             
-            processedActions.push('Waiting for user input');
+            // Create timeout job if timeout is enabled
+            if (timeoutAt) {
+              await supabaseClient
+                .from('inbox_flow_delay_jobs')
+                .upsert({
+                  session_id: sessionId,
+                  user_id: session.user_id,
+                  run_at: timeoutAt,
+                  status: 'scheduled',
+                  attempts: 0,
+                }, { onConflict: 'session_id' });
+              
+              console.log(`Timeout job created for session ${sessionId}, will expire at ${timeoutAt}`);
+            }
+            
+            processedActions.push(`Waiting for user input${timeoutAt ? ` (timeout: ${timeoutAt})` : ''}`);
             continueProcessing = false;
             
             // Return early - lock already released in the update above
@@ -398,7 +460,8 @@ serve(async (req) => {
               success: true, 
               currentNode: currentNodeId,
               actions: processedActions,
-              waitingForInput: true
+              waitingForInput: true,
+              timeoutAt
             }), {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });

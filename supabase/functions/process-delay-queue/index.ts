@@ -68,30 +68,81 @@ serve(async (req) => {
         
         console.log(`[process-delay-queue] Processing job for session ${job.session_id}`);
         
-        // Call the process-inbox-flow function to resume the flow
-        const { error: invokeError } = await supabase.functions.invoke("process-inbox-flow", {
-          body: {
-            sessionId: job.session_id,
-            resumeFromDelay: true,
-          },
-        });
+        // Check if this is a timeout job (session has timeout_at set and is waiting for input)
+        const { data: session } = await supabase
+          .from("inbox_flow_sessions")
+          .select("*, flow:inbox_flows(nodes)")
+          .eq("id", job.session_id)
+          .single();
         
-        if (invokeError) {
-          console.error(`[process-delay-queue] Error invoking process-inbox-flow for ${job.session_id}:`, invokeError);
-          
-          // Mark as failed if max attempts reached, otherwise back to scheduled
-          const newStatus = job.attempts >= 2 ? "failed" : "scheduled";
+        if (!session) {
+          console.log(`[process-delay-queue] Session ${job.session_id} not found, marking job as done`);
           await supabase
             .from("inbox_flow_delay_jobs")
-            .update({ 
-              status: newStatus,
-              last_error: invokeError.message || "Unknown error",
-              updated_at: new Date().toISOString()
-            })
+            .update({ status: "done", updated_at: new Date().toISOString() })
             .eq("session_id", job.session_id);
-          
-          failed++;
           continue;
+        }
+        
+        // Determine if this is a timeout or a delay job
+        const isTimeoutJob = session.timeout_at !== null;
+        const flowNodes = (session.flow?.nodes || []) as Array<{ id: string; type: string }>;
+        const currentNode = flowNodes.find(n => n.id === session.current_node_id);
+        const isWaitingForInput = currentNode?.type === 'waitInput' || currentNode?.type === 'menu';
+        
+        console.log(`[process-delay-queue] Session status: isTimeoutJob=${isTimeoutJob}, isWaitingForInput=${isWaitingForInput}, nodeType=${currentNode?.type}`);
+        
+        // If this is a timeout job and session is still waiting for input, trigger timeout
+        if (isTimeoutJob && isWaitingForInput) {
+          console.log(`[process-delay-queue] Timeout expired for session ${job.session_id}, continuing flow`);
+          
+          const { error: invokeError } = await supabase.functions.invoke("process-inbox-flow", {
+            body: {
+              sessionId: job.session_id,
+              resumeFromTimeout: true,
+            },
+          });
+          
+          if (invokeError) {
+            console.error(`[process-delay-queue] Error invoking process-inbox-flow for timeout ${job.session_id}:`, invokeError);
+            const newStatus = job.attempts >= 2 ? "failed" : "scheduled";
+            await supabase
+              .from("inbox_flow_delay_jobs")
+              .update({ 
+                status: newStatus,
+                last_error: invokeError.message || "Unknown error",
+                updated_at: new Date().toISOString()
+              })
+              .eq("session_id", job.session_id);
+            failed++;
+            continue;
+          }
+        } else {
+          // This is a regular delay job, call process-inbox-flow to resume
+          const { error: invokeError } = await supabase.functions.invoke("process-inbox-flow", {
+            body: {
+              sessionId: job.session_id,
+              resumeFromDelay: true,
+            },
+          });
+          
+          if (invokeError) {
+            console.error(`[process-delay-queue] Error invoking process-inbox-flow for ${job.session_id}:`, invokeError);
+            
+            // Mark as failed if max attempts reached, otherwise back to scheduled
+            const newStatus = job.attempts >= 2 ? "failed" : "scheduled";
+            await supabase
+              .from("inbox_flow_delay_jobs")
+              .update({ 
+                status: newStatus,
+                last_error: invokeError.message || "Unknown error",
+                updated_at: new Date().toISOString()
+              })
+              .eq("session_id", job.session_id);
+            
+            failed++;
+            continue;
+          }
         }
         
         // Mark job as done

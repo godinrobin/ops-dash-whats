@@ -524,6 +524,28 @@ serve(async (req) => {
         if (currentNode && (currentNode.type === 'waitInput' || currentNode.type === 'menu')) {
           console.log(`Found active session ${activeSession.id} waiting for input at node ${currentNode.id}`);
           
+          // Cancel any pending timeout job for this session
+          const { error: cancelError } = await supabaseClient
+            .from('inbox_flow_delay_jobs')
+            .update({ 
+              status: 'done',
+              updated_at: new Date().toISOString()
+            })
+            .eq('session_id', activeSession.id)
+            .eq('status', 'scheduled');
+          
+          if (cancelError) {
+            console.error('Error canceling timeout job:', cancelError);
+          } else {
+            console.log('Timeout job canceled (if any)');
+          }
+          
+          // Clear timeout_at from session
+          await supabaseClient
+            .from('inbox_flow_sessions')
+            .update({ timeout_at: null })
+            .eq('id', activeSession.id);
+          
           // Process the user's input and continue the flow
           try {
             const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
