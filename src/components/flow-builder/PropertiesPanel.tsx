@@ -532,7 +532,7 @@ export const PropertiesPanel = ({
                     type="number"
                     min={1}
                     value={(nodeData.delay as number) || 5}
-                    onChange={(e) => onUpdateNode(selectedNode.id, { delay: parseInt(e.target.value) })}
+                    onChange={(e) => onUpdateNode(selectedNode.id, { delay: parseInt(e.target.value) || 1 })}
                   />
                   <Select
                     value={(nodeData.unit as string) || 'seconds'}
@@ -545,6 +545,7 @@ export const PropertiesPanel = ({
                       <SelectItem value="seconds">Segundos</SelectItem>
                       <SelectItem value="minutes">Minutos</SelectItem>
                       <SelectItem value="hours">Horas</SelectItem>
+                      <SelectItem value="days">Dias</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -558,7 +559,7 @@ export const PropertiesPanel = ({
                       type="number"
                       min={1}
                       value={(nodeData.minDelay as number) || 5}
-                      onChange={(e) => onUpdateNode(selectedNode.id, { minDelay: parseInt(e.target.value) })}
+                      onChange={(e) => onUpdateNode(selectedNode.id, { minDelay: parseInt(e.target.value) || 1 })}
                     />
                     <Select
                       value={(nodeData.unit as string) || 'seconds'}
@@ -571,6 +572,7 @@ export const PropertiesPanel = ({
                         <SelectItem value="seconds">Segundos</SelectItem>
                         <SelectItem value="minutes">Minutos</SelectItem>
                         <SelectItem value="hours">Horas</SelectItem>
+                        <SelectItem value="days">Dias</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -582,11 +584,12 @@ export const PropertiesPanel = ({
                       type="number"
                       min={1}
                       value={(nodeData.maxDelay as number) || 15}
-                      onChange={(e) => onUpdateNode(selectedNode.id, { maxDelay: parseInt(e.target.value) })}
+                      onChange={(e) => onUpdateNode(selectedNode.id, { maxDelay: parseInt(e.target.value) || 1 })}
                     />
                     <span className="flex items-center text-sm text-muted-foreground w-28 pl-3">
                       {(nodeData.unit as string) === 'minutes' ? 'Minutos' : 
-                       (nodeData.unit as string) === 'hours' ? 'Horas' : 'Segundos'}
+                       (nodeData.unit as string) === 'hours' ? 'Horas' : 
+                       (nodeData.unit as string) === 'days' ? 'Dias' : 'Segundos'}
                     </span>
                   </div>
                 </div>
@@ -599,7 +602,7 @@ export const PropertiesPanel = ({
         );
 
       case 'waitInput':
-        const timeoutEnabled = (nodeData.timeoutEnabled as boolean) !== false; // default true
+        const timeoutEnabled = (nodeData.timeoutEnabled as boolean) === true; // default false
         const timeoutValue = (nodeData.timeout as number) || 5;
         const timeoutUnit = (nodeData.timeoutUnit as string) || 'minutes';
         
@@ -655,6 +658,7 @@ export const PropertiesPanel = ({
                         <SelectItem value="seconds">Segundos</SelectItem>
                         <SelectItem value="minutes">Minutos</SelectItem>
                         <SelectItem value="hours">Horas</SelectItem>
+                        <SelectItem value="days">Dias</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

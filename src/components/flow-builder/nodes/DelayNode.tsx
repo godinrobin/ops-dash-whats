@@ -17,7 +17,7 @@ export const DelayNode = ({ data }: NodeProps) => {
   const maxDelay = nodeData.maxDelay || 15;
   const unit = nodeData.unit || 'seconds';
   
-  const unitLabel = unit === 'seconds' ? 's' : unit === 'minutes' ? 'min' : 'h';
+  const unitLabel = unit === 'seconds' ? 's' : unit === 'minutes' ? 'min' : unit === 'hours' ? 'h' : 'd';
 
   const getDelayText = () => {
     if (delayType === 'variable') {
