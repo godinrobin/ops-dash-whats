@@ -356,10 +356,7 @@ export default function AdsSettings() {
                               <Switch
                                 checked={adAccount.is_selected}
                                 onCheckedChange={(checked) => handleToggleAdAccount(adAccount.id, checked)}
-                                className={cn(
-                                  "data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500",
-                                  "[&>span]:bg-white"
-                                )}
+                                className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500 [&>span]:!bg-white"
                               />
                               <div>
                                 <p className="text-sm font-medium">
