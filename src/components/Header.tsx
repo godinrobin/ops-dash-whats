@@ -24,8 +24,9 @@ export const Header = ({ mode, onModeChange }: HeaderProps) => {
   const location = useLocation();
   const [profileOpen, setProfileOpen] = useState(false);
   
-  const showBackButton = location.pathname !== "/" && location.pathname !== "/auth";
-  const showModeToggle = location.pathname === "/" && mode && onModeChange;
+  const showBackButton = location.pathname !== "/" && location.pathname !== "/auth" && !location.pathname.startsWith("/ads");
+  const isInAdsSection = location.pathname.startsWith("/ads");
+  const showModeToggle = (location.pathname === "/" || isInAdsSection) && mode && onModeChange;
 
   const dockItems = [
     { 
