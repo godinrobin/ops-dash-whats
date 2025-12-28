@@ -368,9 +368,9 @@ export function AdminAdsMetrics() {
     ? ads
     : ads.filter(a => a.campaign_id === selectedCampaignId);
 
-  const formatCurrency = (value: number) => `R$ ${value.toFixed(2)}`;
-  const formatNumber = (value: number) => value.toLocaleString("pt-BR");
-  const formatPercent = (value: number) => `${value.toFixed(2)}%`;
+  const formatCurrency = (value: number | undefined | null) => `R$ ${(value ?? 0).toFixed(2)}`;
+  const formatNumber = (value: number | undefined | null) => (value ?? 0).toLocaleString("pt-BR");
+  const formatPercent = (value: number | undefined | null) => `${(value ?? 0).toFixed(2)}%`;
 
   const getStatusBadge = (status: string) => {
     const statusColors: Record<string, string> = {
