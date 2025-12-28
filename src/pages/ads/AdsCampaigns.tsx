@@ -746,10 +746,21 @@ export default function AdsCampaigns() {
     }
   };
 
-  // Reset selection when view level changes (but keep hierarchy selection)
+  // Sync selectedItems with hierarchy selection when view level changes
   useEffect(() => {
-    setSelectedItems(new Set());
-  }, [viewLevel]);
+    if (viewLevel === 'campaign') {
+      // Restore campaign selection based on selectedCampaignIds
+      const campaignItems = campaigns.filter(c => selectedCampaignIds.has(c.campaign_id)).map(c => c.id);
+      setSelectedItems(new Set(campaignItems));
+    } else if (viewLevel === 'adset') {
+      // Restore adset selection based on selectedAdsetIds
+      const adsetItems = filteredAdsetsByHierarchy.filter(a => selectedAdsetIds.has(a.adset_id)).map(a => a.id);
+      setSelectedItems(new Set(adsetItems));
+    } else {
+      // For ads, clear selection
+      setSelectedItems(new Set());
+    }
+  }, [viewLevel, selectedCampaignIds, selectedAdsetIds, campaigns, filteredAdsetsByHierarchy]);
 
   // Toggle campaign selection for hierarchy filtering
   const toggleCampaignHierarchySelection = (campaignId: string) => {
