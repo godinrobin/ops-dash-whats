@@ -15,13 +15,14 @@ import {
   Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X, Key, Loader2, 
   UserPlus, Activity, Megaphone, Eye, MousePointer, Trash2, Image, Clock, Settings, Users, 
   BarChart3, Phone, FileText, Wallet, History, Percent, Menu, ShoppingBag, Package, Globe, RefreshCw,
-  Smartphone, Shield
+  Smartphone, Shield, TrendingUp
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { MarketplaceProductModal } from "@/components/MarketplaceProductModal";
 import { AdminMFA } from "@/components/admin/AdminMFA";
+import { AdminAdsMetrics } from "@/components/admin/AdminAdsMetrics";
 import { AdminInstances } from "@/components/admin/AdminInstances";
 
 // Product image imports for admin
@@ -112,6 +113,13 @@ const SIDEBAR_MENU = [
       { id: "marketplace-products", label: "Produtos", icon: Package },
       { id: "marketplace-sales", label: "Vendas de Ativos", icon: ShoppingBag },
       { id: "proxy-orders", label: "Vendas de Proxies", icon: Globe },
+    ]
+  },
+  {
+    category: "Anúncios",
+    icon: TrendingUp,
+    items: [
+      { id: "ads-metrics", label: "Métricas de Ads", icon: TrendingUp },
     ]
   },
   {
@@ -2417,6 +2425,9 @@ const AdminPanelNew = () => {
 
       case 'security':
         return <AdminMFA />;
+
+      case 'ads-metrics':
+        return <AdminAdsMetrics />;
 
       default:
         return null;
