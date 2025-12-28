@@ -305,8 +305,9 @@ serve(async (req) => {
             let delayMs = delay * 1000;
             if (unit === 'minutes') delayMs = delay * 60 * 1000;
             if (unit === 'hours') delayMs = delay * 60 * 60 * 1000;
+            if (unit === 'days') delayMs = delay * 24 * 60 * 60 * 1000;
             
-            const unitLabel = unit === 'seconds' ? 's' : unit === 'minutes' ? 'min' : 'h';
+            const unitLabel = unit === 'seconds' ? 's' : unit === 'minutes' ? 'min' : unit === 'hours' ? 'h' : 'd';
             
             // Check if delay is longer than what we can handle inline
             if (delayMs > MAX_INLINE_DELAY_MS) {
@@ -407,9 +408,11 @@ serve(async (req) => {
               break;
             }
             
-            // Calculate timeout if enabled
-            const timeoutEnabled = (currentNode.data.timeoutEnabled as boolean) !== false;
+            // Calculate timeout if enabled - default is false now for clarity
+            const timeoutEnabled = currentNode.data.timeoutEnabled === true;
             let timeoutAt: string | null = null;
+            
+            console.log(`WaitInput node ${currentNodeId}: timeoutEnabled=${currentNode.data.timeoutEnabled}, timeout=${currentNode.data.timeout}, timeoutUnit=${currentNode.data.timeoutUnit}`);
             
             if (timeoutEnabled) {
               const timeoutValue = (currentNode.data.timeout as number) || 5;
@@ -419,9 +422,12 @@ serve(async (req) => {
               let timeoutSeconds = timeoutValue;
               if (timeoutUnit === 'minutes') timeoutSeconds *= 60;
               if (timeoutUnit === 'hours') timeoutSeconds *= 3600;
+              if (timeoutUnit === 'days') timeoutSeconds *= 86400;
               
               timeoutAt = new Date(Date.now() + timeoutSeconds * 1000).toISOString();
-              console.log(`Timeout configured: ${timeoutValue} ${timeoutUnit} -> expires at ${timeoutAt}`);
+              console.log(`Timeout configured: ${timeoutValue} ${timeoutUnit} (${timeoutSeconds}s) -> expires at ${timeoutAt}`);
+            } else {
+              console.log('Timeout disabled for this waitInput node');
             }
             
             // Stop and wait for user input - save state and release lock
