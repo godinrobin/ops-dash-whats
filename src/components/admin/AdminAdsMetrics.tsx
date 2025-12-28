@@ -49,6 +49,7 @@ interface CampaignData {
   cost_per_result: number;
   messaging_conversations_started: number;
   cost_per_message: number;
+  last_synced_at: string | null;
 }
 
 interface AdsetData {
@@ -103,7 +104,7 @@ export function AdminAdsMetrics() {
   const [loading, setLoading] = useState(true);
   const [userSearch, setUserSearch] = useState("");
   const [dateFilter, setDateFilter] = useState<DateFilterType>("all");
-  const [modalDateFilter, setModalDateFilter] = useState<DateFilterType>("all"); // Filtro independente do modal
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [userAccounts, setUserAccounts] = useState<UserAdAccount[]>([]);
   const [userMetrics, setUserMetrics] = useState<UserAggregatedMetrics[]>([]);
@@ -232,65 +233,44 @@ export function AdminAdsMetrics() {
     }
   };
 
-  const loadUserDetails = async (userId: string, filter?: DateFilterType) => {
+  const loadUserDetails = async (userId: string) => {
     setLoadingDetails(true);
     setSelectedCampaignId("all");
     try {
-      const { start, end } = getDateRange(filter ?? modalDateFilter);
-
-      // Load campaigns for this user with date filter
-      let campaignsQuery = supabase
+      // Load campaigns for this user (sem filtro de data - dados são agregados)
+      const { data: campaignsData, error: campaignsError } = await supabase
         .from("ads_campaigns")
         .select("*")
         .eq("user_id", userId)
         .order("spend", { ascending: false });
 
-      if (start) {
-        campaignsQuery = campaignsQuery.gte("updated_at", start.toISOString());
-      }
-      if (end) {
-        campaignsQuery = campaignsQuery.lte("updated_at", end.toISOString());
-      }
-
-      const { data: campaignsData, error: campaignsError } = await campaignsQuery;
-
       if (campaignsError) throw campaignsError;
 
-      // Load adsets for this user with date filter
-      let adsetsQuery = supabase
+      // Load adsets for this user (sem filtro de data - dados são agregados)
+      const { data: adsetsData, error: adsetsError } = await supabase
         .from("ads_adsets")
         .select("*")
         .eq("user_id", userId)
         .order("spend", { ascending: false });
 
-      if (start) {
-        adsetsQuery = adsetsQuery.gte("updated_at", start.toISOString());
-      }
-      if (end) {
-        adsetsQuery = adsetsQuery.lte("updated_at", end.toISOString());
-      }
-
-      const { data: adsetsData, error: adsetsError } = await adsetsQuery;
-
       if (adsetsError) throw adsetsError;
 
-      // Load ads for this user with date filter
-      let adsQuery = supabase
+      // Load ads for this user (sem filtro de data - dados são agregados)
+      const { data: adsData, error: adsError } = await supabase
         .from("ads_ads")
         .select("*")
         .eq("user_id", userId)
         .order("spend", { ascending: false });
 
-      if (start) {
-        adsQuery = adsQuery.gte("updated_at", start.toISOString());
-      }
-      if (end) {
-        adsQuery = adsQuery.lte("updated_at", end.toISOString());
-      }
-
-      const { data: adsData, error: adsError } = await adsQuery;
-
       if (adsError) throw adsError;
+
+      // Pegar a última sincronização das campanhas
+      const lastSync = campaignsData?.reduce((latest, c) => {
+        if (!c.last_synced_at) return latest;
+        if (!latest) return c.last_synced_at;
+        return new Date(c.last_synced_at) > new Date(latest) ? c.last_synced_at : latest;
+      }, null as string | null);
+      setLastSyncedAt(lastSync);
 
       setCampaigns(campaignsData?.map(c => ({
         id: c.id,
@@ -307,7 +287,8 @@ export function AdminAdsMetrics() {
         conversion_value: Number(c.conversion_value ?? 0),
         cost_per_result: c.cost_per_result || 0,
         messaging_conversations_started: (c as any).messaging_conversations_started || 0,
-        cost_per_message: (c as any).cost_per_message || 0
+        cost_per_message: (c as any).cost_per_message || 0,
+        last_synced_at: c.last_synced_at
       })) || []);
 
       setAdsets(adsetsData?.map(a => ({
@@ -354,12 +335,6 @@ export function AdminAdsMetrics() {
     }
   };
 
-  // Recarregar detalhes do usuário quando o filtro do modal mudar
-  useEffect(() => {
-    if (selectedUserId) {
-      loadUserDetails(selectedUserId, modalDateFilter);
-    }
-  }, [modalDateFilter]);
 
   const filteredUsers = userMetrics.filter(u => 
     u.username.toLowerCase().includes(userSearch.toLowerCase()) ||
@@ -567,22 +542,15 @@ export function AdminAdsMetrics() {
             </DialogTitle>
           </DialogHeader>
           
-          {/* Date and Campaign Filters */}
+          {/* Última sincronização e Filtro de Campanha */}
           <div className="flex flex-wrap items-center gap-4 py-2">
-            {/* Filtro de Data Independente do Modal */}
-            <Select value={modalDateFilter} onValueChange={(value: DateFilterType) => setModalDateFilter(value)}>
-              <SelectTrigger className="w-[200px]">
-                <Calendar className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="Filtrar por data" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os períodos</SelectItem>
-                <SelectItem value="today">Hoje</SelectItem>
-                <SelectItem value="yesterday">Ontem</SelectItem>
-                <SelectItem value="7days">Últimos 7 dias</SelectItem>
-                <SelectItem value="30days">Últimos 30 dias</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Indicador de última sincronização */}
+            {lastSyncedAt && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 px-3 py-1.5 rounded-md">
+                <Calendar className="h-4 w-4" />
+                <span>Última sincronização: {format(new Date(lastSyncedAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</span>
+              </div>
+            )}
 
             <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId}>
               <SelectTrigger className="w-[300px]">
@@ -599,12 +567,9 @@ export function AdminAdsMetrics() {
               </SelectContent>
             </Select>
             
-            {(selectedCampaignId !== "all" || modalDateFilter !== "all") && (
-              <Button variant="ghost" size="sm" onClick={() => {
-                setSelectedCampaignId("all");
-                setModalDateFilter("all");
-              }}>
-                Limpar filtros
+            {selectedCampaignId !== "all" && (
+              <Button variant="ghost" size="sm" onClick={() => setSelectedCampaignId("all")}>
+                Limpar filtro
               </Button>
             )}
           </div>
