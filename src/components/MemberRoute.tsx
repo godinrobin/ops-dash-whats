@@ -76,14 +76,25 @@ export const MemberRoute = ({ children, featureName }: MemberRouteProps) => {
     return null;
   }
 
-  // If not a full member, show the restricted modal
+  // If not a full member, show the content blurred with restricted modal
   if (isFullMember === false) {
     return (
-      <RestrictedFeatureModal
-        open={showModal}
-        onOpenChange={handleModalClose}
-        featureName={featureName}
-      />
+      <div className="relative min-h-screen">
+        {/* Blurred background content */}
+        <div className="blur-md pointer-events-none select-none opacity-50">
+          {children}
+        </div>
+        
+        {/* Overlay to prevent interaction */}
+        <div className="fixed inset-0 bg-background/60 backdrop-blur-sm z-40" />
+        
+        {/* Restricted modal */}
+        <RestrictedFeatureModal
+          open={showModal}
+          onOpenChange={handleModalClose}
+          featureName={featureName}
+        />
+      </div>
     );
   }
 
