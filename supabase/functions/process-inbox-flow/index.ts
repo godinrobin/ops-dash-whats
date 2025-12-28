@@ -218,6 +218,13 @@ serve(async (req) => {
             // Send text message
             const message = replaceVariables(currentNode.data.message as string || '', variables);
             if (instanceName && phone && message) {
+              // Check if presence (typing) should be shown before sending
+              if (currentNode.data.showPresence) {
+                const presenceDelaySeconds = (currentNode.data.presenceDelay as number) || 3;
+                await sendPresence(instanceName, phone, 'composing', presenceDelaySeconds * 1000);
+                processedActions.push(`Showed typing for ${presenceDelaySeconds}s`);
+              }
+              
               const sendResult = await sendMessage(instanceName, phone, message, 'text');
               await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, message, 'text', flow.id, undefined, sendResult.remoteMessageId);
               processedActions.push(`Sent text: ${message.substring(0, 50)}`);
@@ -248,6 +255,14 @@ serve(async (req) => {
             console.log('phone:', phone);
             
             if (instanceName && phone && mediaUrl) {
+              // Check if presence should be shown before sending (audio = recording, others = composing)
+              if (currentNode.data.showPresence) {
+                const presenceDelaySeconds = (currentNode.data.presenceDelay as number) || 3;
+                const presenceType = currentNode.type === 'audio' ? 'recording' : 'composing';
+                await sendPresence(instanceName, phone, presenceType, presenceDelaySeconds * 1000);
+                processedActions.push(`Showed ${presenceType} for ${presenceDelaySeconds}s`);
+              }
+              
               console.log(`Sending ${currentNode.type} message...`);
               // For images/videos, send caption. For documents, send fileName.
               // DO NOT send fileName as caption for image/video - that causes the filename to appear to the user
@@ -796,6 +811,49 @@ serve(async (req) => {
 
 function replaceVariables(text: string, variables: Record<string, unknown>): string {
   return text.replace(/\{\{(\w+)\}\}/g, (_, key) => String(variables[key] || ''));
+}
+
+// Send presence status (typing, recording) before sending a message
+async function sendPresence(
+  instanceName: string,
+  phone: string,
+  presenceType: 'composing' | 'recording',
+  delayMs: number
+): Promise<void> {
+  const formattedPhone = phone.replace(/\D/g, '');
+  
+  console.log(`Sending ${presenceType} presence to ${formattedPhone} for ${delayMs}ms`);
+  
+  try {
+    const response = await fetch(`${EVOLUTION_BASE_URL}/chat/sendPresence/${instanceName}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': EVOLUTION_API_KEY,
+      },
+      body: JSON.stringify({
+        number: formattedPhone,
+        options: {
+          delay: delayMs,
+          presence: presenceType,
+        }
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Failed to send presence:`, errorText);
+    } else {
+      console.log(`Presence ${presenceType} sent successfully`);
+    }
+    
+    // Wait for the presence duration before continuing
+    await new Promise(resolve => setTimeout(resolve, delayMs));
+    
+  } catch (error) {
+    console.error(`Error sending presence:`, error);
+    // Don't throw - presence is optional, continue with sending the message
+  }
 }
 
 interface SendMessageResult {

@@ -1,9 +1,9 @@
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { Mic } from 'lucide-react';
+import { Mic, Radio } from 'lucide-react';
 
 export const AudioNode = ({ data }: NodeProps) => {
-  const mediaUrl = (data as { mediaUrl?: string })?.mediaUrl;
-  const hasMedia = !!mediaUrl;
+  const nodeData = data as { mediaUrl?: string; showPresence?: boolean; presenceDelay?: number };
+  const hasMedia = !!nodeData.mediaUrl;
 
   return (
     <div className="bg-card border-2 border-orange-500 rounded-lg p-3 shadow-md min-w-[180px]">
@@ -17,11 +17,16 @@ export const AudioNode = ({ data }: NodeProps) => {
           <Mic className="h-3.5 w-3.5 text-white" />
         </div>
         <span className="font-medium text-sm">Áudio</span>
+        {nodeData.showPresence && (
+          <div className="flex items-center gap-1 ml-auto" title={`Gravando por ${nodeData.presenceDelay || 3}s`}>
+            <Radio className="h-3 w-3 text-orange-500" />
+          </div>
+        )}
       </div>
       {hasMedia ? (
         <div className="w-full">
           <audio 
-            src={mediaUrl} 
+            src={nodeData.mediaUrl} 
             controls 
             className="w-full h-8"
             style={{ maxWidth: '160px' }}
