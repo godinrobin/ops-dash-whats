@@ -1179,6 +1179,7 @@ export type Database = {
           processing_started_at: string | null
           started_at: string
           status: string
+          timeout_at: string | null
           user_id: string
           variables: Json | null
         }
@@ -1193,6 +1194,7 @@ export type Database = {
           processing_started_at?: string | null
           started_at?: string
           status?: string
+          timeout_at?: string | null
           user_id: string
           variables?: Json | null
         }
@@ -1207,6 +1209,7 @@ export type Database = {
           processing_started_at?: string | null
           started_at?: string
           status?: string
+          timeout_at?: string | null
           user_id?: string
           variables?: Json | null
         }

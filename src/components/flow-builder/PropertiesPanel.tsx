@@ -599,6 +599,10 @@ export const PropertiesPanel = ({
         );
 
       case 'waitInput':
+        const timeoutEnabled = (nodeData.timeoutEnabled as boolean) !== false; // default true
+        const timeoutValue = (nodeData.timeout as number) || 5;
+        const timeoutUnit = (nodeData.timeoutUnit as string) || 'minutes';
+        
         return (
           <div className="space-y-4">
             <div className="space-y-2">
@@ -615,17 +619,50 @@ export const PropertiesPanel = ({
                 }}
               />
             </div>
-            <div className="space-y-2">
-              <Label>Prazo para responder (segundos)</Label>
-              <Input
-                type="number"
-                min={30}
-                value={(nodeData.timeout as number) || 300}
-                onChange={(e) => onUpdateNode(selectedNode.id, { timeout: parseInt(e.target.value) })}
-              />
-              <p className="text-xs text-muted-foreground">
-                O fluxo continuará automaticamente após este prazo, mesmo sem resposta.
-              </p>
+            
+            {/* Timeout toggle */}
+            <div className="space-y-3 pt-2 border-t border-border">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="timeoutEnabled"
+                  checked={timeoutEnabled}
+                  onCheckedChange={(checked) => onUpdateNode(selectedNode.id, { timeoutEnabled: checked })}
+                />
+                <Label htmlFor="timeoutEnabled" className="text-sm cursor-pointer">
+                  Definir prazo para responder
+                </Label>
+              </div>
+              
+              {timeoutEnabled && (
+                <div className="space-y-2 pl-6 animate-in slide-in-from-top-2 duration-200">
+                  <Label className="text-muted-foreground">Tempo máximo de espera</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      min={1}
+                      value={timeoutValue}
+                      onChange={(e) => onUpdateNode(selectedNode.id, { timeout: parseInt(e.target.value) || 1 })}
+                      className="w-20"
+                    />
+                    <Select
+                      value={timeoutUnit}
+                      onValueChange={(value) => onUpdateNode(selectedNode.id, { timeoutUnit: value })}
+                    >
+                      <SelectTrigger className="w-28">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="seconds">Segundos</SelectItem>
+                        <SelectItem value="minutes">Minutos</SelectItem>
+                        <SelectItem value="hours">Horas</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    O fluxo continuará automaticamente após este prazo, mesmo sem resposta.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         );
