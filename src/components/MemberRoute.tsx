@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { RestrictedFeatureModal } from "@/components/RestrictedFeatureModal";
+import Home from "@/pages/Home";
 
 interface MemberRouteProps {
   children: React.ReactNode;
@@ -12,6 +13,7 @@ interface MemberRouteProps {
 export const MemberRoute = ({ children, featureName }: MemberRouteProps) => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [isFullMember, setIsFullMember] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -76,17 +78,12 @@ export const MemberRoute = ({ children, featureName }: MemberRouteProps) => {
     return null;
   }
 
-  // If not a full member, show the content blurred with restricted modal
+  // If not a full member, show the Home page with blurred content area and modal
   if (isFullMember === false) {
     return (
       <div className="relative min-h-screen">
-        {/* Blurred background content */}
-        <div className="blur-md pointer-events-none select-none opacity-50">
-          {children}
-        </div>
-        
-        {/* Overlay to prevent interaction */}
-        <div className="fixed inset-0 bg-background/60 backdrop-blur-sm z-40" />
+        {/* Show home page with functional header */}
+        <Home restrictedMode restrictedFeatureName={featureName} />
         
         {/* Restricted modal */}
         <RestrictedFeatureModal
