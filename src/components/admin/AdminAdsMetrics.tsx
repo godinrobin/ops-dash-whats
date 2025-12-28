@@ -112,16 +112,22 @@ export function AdminAdsMetrics() {
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>("all");
 
   const getDateRange = (): { start: Date | null; end: Date | null } => {
+    const MS_DAY = 86400000;
+    const utcStart = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
+    const utcEnd = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
+    const subUtc = (d: Date, days: number) => new Date(d.getTime() - days * MS_DAY);
     const now = new Date();
     switch (dateFilter) {
       case "today":
-        return { start: startOfDay(now), end: null };
-      case "yesterday":
-        return { start: startOfYesterday(), end: endOfYesterday() };
+        return { start: utcStart(now), end: utcEnd(now) };
+      case "yesterday": {
+        const d = subUtc(now, 1);
+        return { start: utcStart(d), end: utcEnd(d) };
+      }
       case "7days":
-        return { start: startOfDay(subDays(now, 7)), end: null };
+        return { start: utcStart(subUtc(now, 7)), end: utcEnd(now) };
       case "30days":
-        return { start: startOfDay(subDays(now, 30)), end: null };
+        return { start: utcStart(subUtc(now, 30)), end: utcEnd(now) };
       default:
         return { start: null, end: null };
     }
@@ -587,140 +593,147 @@ export function AdminAdsMetrics() {
               
               <TabsContent value="campaigns">
                 <ScrollArea className="h-[60vh]">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Investido</TableHead>
-                        <TableHead className="text-right">Impressões</TableHead>
-                        <TableHead className="text-right">Cliques</TableHead>
-                        <TableHead className="text-right">CTR</TableHead>
-                        <TableHead className="text-right">CPM</TableHead>
-                        <TableHead className="text-right">CPC</TableHead>
-                        <TableHead className="text-right">Conversas</TableHead>
-                        <TableHead className="text-right">Custo/Msg</TableHead>
-                        <TableHead className="text-right">Conversões</TableHead>
-                        <TableHead className="text-right">Valor Conv.</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {campaigns.map((campaign) => (
-                        <TableRow key={campaign.id}>
-                          <TableCell className="font-medium max-w-[200px] truncate">
-                            {campaign.name}
-                          </TableCell>
-                          <TableCell>{getStatusBadge(campaign.status)}</TableCell>
-                          <TableCell className="text-right text-red-400">{formatCurrency(campaign.spend)}</TableCell>
-                          <TableCell className="text-right">{formatNumber(campaign.impressions)}</TableCell>
-                          <TableCell className="text-right">{formatNumber(campaign.clicks)}</TableCell>
-                          <TableCell className="text-right">{formatPercent(campaign.ctr)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(campaign.cpm)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(campaign.cpc)}</TableCell>
-                          <TableCell className="text-right text-pink-400">
-                            {formatNumber(campaign.messaging_conversations_started)}
-                          </TableCell>
-                          <TableCell className="text-right">{formatCurrency(campaign.cost_per_message)}</TableCell>
-                          <TableCell className="text-right text-green-400">
-                            {formatNumber(campaign.conversions)}
-                          </TableCell>
-                          <TableCell className="text-right text-emerald-400">
-                            {formatCurrency(campaign.conversion_value)}
-                          </TableCell>
+                  <div className="w-full overflow-x-auto">
+                    <Table className="min-w-[1100px]">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="text-right">Investido</TableHead>
+                          <TableHead className="text-right">Impressões</TableHead>
+                          <TableHead className="text-right">Cliques</TableHead>
+                          <TableHead className="text-right">CTR</TableHead>
+                          <TableHead className="text-right">CPM</TableHead>
+                          <TableHead className="text-right">CPC</TableHead>
+                          <TableHead className="text-right">Conversas</TableHead>
+                          <TableHead className="text-right">Custo/Msg</TableHead>
+                          <TableHead className="text-right">Conversões</TableHead>
+                          <TableHead className="text-right">Valor Conv.</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {campaigns.map((campaign) => (
+                          <TableRow key={campaign.id}>
+                            <TableCell className="font-medium max-w-[200px] truncate">
+                              {campaign.name}
+                            </TableCell>
+                            <TableCell>{getStatusBadge(campaign.status)}</TableCell>
+                            <TableCell className="text-right text-red-400">{formatCurrency(campaign.spend)}</TableCell>
+                            <TableCell className="text-right">{formatNumber(campaign.impressions)}</TableCell>
+                            <TableCell className="text-right">{formatNumber(campaign.clicks)}</TableCell>
+                            <TableCell className="text-right">{formatPercent(campaign.ctr)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(campaign.cpm)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(campaign.cpc)}</TableCell>
+                            <TableCell className="text-right text-pink-400">
+                              {formatNumber(campaign.messaging_conversations_started)}
+                            </TableCell>
+                            <TableCell className="text-right">{formatCurrency(campaign.cost_per_message)}</TableCell>
+                            <TableCell className="text-right text-green-400">
+                              {formatNumber(campaign.conversions)}
+                            </TableCell>
+                            <TableCell className="text-right text-emerald-400">
+                              {formatCurrency(campaign.conversion_value)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </ScrollArea>
               </TabsContent>
               
               <TabsContent value="adsets">
                 <ScrollArea className="h-[60vh]">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Investido</TableHead>
-                        <TableHead className="text-right">Impressões</TableHead>
-                        <TableHead className="text-right">Cliques</TableHead>
-                        <TableHead className="text-right">CTR</TableHead>
-                        <TableHead className="text-right">CPM</TableHead>
-                        <TableHead className="text-right">CPC</TableHead>
-                        <TableHead className="text-right">Resultados</TableHead>
-                        <TableHead className="text-right">Custo/Resultado</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredAdsets.map((adset) => (
-                        <TableRow key={adset.id}>
-                          <TableCell className="font-medium max-w-[200px] truncate">
-                            {adset.name}
-                          </TableCell>
-                          <TableCell>{getStatusBadge(adset.status)}</TableCell>
-                          <TableCell className="text-right text-red-400">{formatCurrency(adset.spend)}</TableCell>
-                          <TableCell className="text-right">{formatNumber(adset.impressions)}</TableCell>
-                          <TableCell className="text-right">{formatNumber(adset.clicks)}</TableCell>
-                          <TableCell className="text-right">{formatPercent(adset.ctr)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(adset.cpm)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(adset.cpc)}</TableCell>
-                          <TableCell className="text-right text-green-400">{formatNumber(adset.results)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(adset.cost_per_result)}</TableCell>
+                  <div className="w-full overflow-x-auto">
+                    <Table className="min-w-[900px]">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="text-right">Investido</TableHead>
+                          <TableHead className="text-right">Impressões</TableHead>
+                          <TableHead className="text-right">Cliques</TableHead>
+                          <TableHead className="text-right">CTR</TableHead>
+                          <TableHead className="text-right">CPM</TableHead>
+                          <TableHead className="text-right">CPC</TableHead>
+                          <TableHead className="text-right">Resultados</TableHead>
+                          <TableHead className="text-right">Custo/Resultado</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredAdsets.map((adset) => (
+                          <TableRow key={adset.id}>
+                            <TableCell className="font-medium max-w-[200px] truncate">
+                              {adset.name}
+                            </TableCell>
+                            <TableCell>{getStatusBadge(adset.status)}</TableCell>
+                            <TableCell className="text-right text-red-400">{formatCurrency(adset.spend)}</TableCell>
+                            <TableCell className="text-right">{formatNumber(adset.impressions)}</TableCell>
+                            <TableCell className="text-right">{formatNumber(adset.clicks)}</TableCell>
+                            <TableCell className="text-right">{formatPercent(adset.ctr)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(adset.cpm)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(adset.cpc)}</TableCell>
+                            <TableCell className="text-right text-green-400">{formatNumber(adset.results)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(adset.cost_per_result)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </ScrollArea>
               </TabsContent>
               
               <TabsContent value="ads">
                 <ScrollArea className="h-[60vh]">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Preview</TableHead>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Investido</TableHead>
-                        <TableHead className="text-right">Impressões</TableHead>
-                        <TableHead className="text-right">Cliques</TableHead>
-                        <TableHead className="text-right">CTR</TableHead>
-                        <TableHead className="text-right">CPM</TableHead>
-                        <TableHead className="text-right">CPC</TableHead>
-                        <TableHead className="text-right">Resultados</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredAds.map((ad) => (
-                        <TableRow key={ad.id}>
-                          <TableCell>
-                            {ad.thumbnail_url ? (
-                              <img 
-                                src={ad.thumbnail_url} 
-                                alt="Ad preview" 
-                                className="w-12 h-12 object-cover rounded"
-                              />
-                            ) : (
-                              <div className="w-12 h-12 bg-muted rounded flex items-center justify-center">
-                                <Eye className="h-4 w-4 text-muted-foreground" />
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell className="font-medium max-w-[180px] truncate">
-                            {ad.name}
-                          </TableCell>
-                          <TableCell>{getStatusBadge(ad.status)}</TableCell>
-                          <TableCell className="text-right text-red-400">{formatCurrency(ad.spend)}</TableCell>
-                          <TableCell className="text-right">{formatNumber(ad.impressions)}</TableCell>
-                          <TableCell className="text-right">{formatNumber(ad.clicks)}</TableCell>
-                          <TableCell className="text-right">{formatPercent(ad.ctr)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(ad.cpm)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(ad.cpc)}</TableCell>
-                          <TableCell className="text-right text-green-400">{formatNumber(ad.results)}</TableCell>
+                  <div className="w-full overflow-x-auto">
+                    <Table className="min-w-[1000px]">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Preview</TableHead>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="text-right">Investido</TableHead>
+                          <TableHead className="text-right">Impressões</TableHead>
+                          <TableHead className="text-right">Cliques</TableHead>
+                          <TableHead className="text-right">CTR</TableHead>
+                          <TableHead className="text-right">CPM</TableHead>
+                          <TableHead className="text-right">CPC</TableHead>
+                          <TableHead className="text-right">Resultados</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredAds.map((ad) => (
+                          <TableRow key={ad.id}>
+                            <TableCell>
+                              {ad.thumbnail_url ? (
+                                <img
+                                  src={ad.thumbnail_url}
+                                  alt={`Prévia do anúncio ${ad.name}`}
+                                  loading="lazy"
+                                  className="w-12 h-12 object-cover rounded"
+                                />
+                              ) : (
+                                <div className="w-12 h-12 bg-muted rounded flex items-center justify-center">
+                                  <Eye className="h-4 w-4 text-muted-foreground" />
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell className="font-medium max-w-[180px] truncate">
+                              {ad.name}
+                            </TableCell>
+                            <TableCell>{getStatusBadge(ad.status)}</TableCell>
+                            <TableCell className="text-right text-red-400">{formatCurrency(ad.spend)}</TableCell>
+                            <TableCell className="text-right">{formatNumber(ad.impressions)}</TableCell>
+                            <TableCell className="text-right">{formatNumber(ad.clicks)}</TableCell>
+                            <TableCell className="text-right">{formatPercent(ad.ctr)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(ad.cpm)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(ad.cpc)}</TableCell>
+                            <TableCell className="text-right text-green-400">{formatNumber(ad.results)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </ScrollArea>
               </TabsContent>
             </Tabs>
