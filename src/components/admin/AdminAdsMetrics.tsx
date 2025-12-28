@@ -13,12 +13,13 @@ import { toast } from "sonner";
 import { 
   Search, Eye, DollarSign, MousePointerClick, TrendingUp, Target,
   Users, ChevronDown, ChevronRight, MessageCircle, BarChart3, Loader2,
-  Calendar
+  Calendar, RefreshCw, Zap
 } from "lucide-react";
 import { format, startOfDay, subDays, startOfYesterday, endOfYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 type DateFilterType = "all" | "today" | "yesterday" | "7days" | "30days";
+type AdminDatePreset = "saved" | "today" | "yesterday" | "last_7d";
 
 interface UserAdAccount {
   id: string;
@@ -114,6 +115,13 @@ export function AdminAdsMetrics() {
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>("all");
+  
+  // Admin real-time fetch state
+  const [adminDatePreset, setAdminDatePreset] = useState<AdminDatePreset>("saved");
+  const [loadingRealtime, setLoadingRealtime] = useState(false);
+  const [isRealtimeData, setIsRealtimeData] = useState(false);
+  const [realtimeFetchedAt, setRealtimeFetchedAt] = useState<string | null>(null);
+  
   const getDateRange = (filter: DateFilterType): { start: Date | null; end: Date | null } => {
     const MS_DAY = 86400000;
     const utcStart = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
@@ -327,11 +335,116 @@ export function AdminAdsMetrics() {
       })) || []);
 
       setSelectedUserId(userId);
+      setAdminDatePreset("saved");
+      setIsRealtimeData(false);
+      setRealtimeFetchedAt(null);
     } catch (err) {
       console.error("Error loading user details:", err);
       toast.error("Erro ao carregar detalhes do usuário");
     } finally {
       setLoadingDetails(false);
+    }
+  };
+
+  // Fetch real-time data from Facebook API (admin only, doesn't save to DB)
+  const fetchRealtimeInsights = async (userId: string, datePreset: AdminDatePreset) => {
+    if (datePreset === "saved") {
+      // Load saved data from database
+      setIsRealtimeData(false);
+      setRealtimeFetchedAt(null);
+      await loadUserDetails(userId);
+      return;
+    }
+
+    setLoadingRealtime(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-facebook-insights", {
+        body: {
+          action: "fetch_user_insights",
+          targetUserId: userId,
+          datePreset: datePreset,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.error) {
+        toast.error(`Erro: ${data.error}`);
+        return;
+      }
+
+      // Set realtime data
+      setCampaigns(data.campaigns?.map((c: any) => ({
+        id: c.campaign_id,
+        campaign_id: c.campaign_id,
+        name: c.name || c.campaign_id,
+        status: c.status || "unknown",
+        spend: c.spend || 0,
+        impressions: c.impressions || 0,
+        clicks: c.clicks || 0,
+        cpm: c.cpm || 0,
+        cpc: c.cpc || 0,
+        ctr: c.ctr || 0,
+        conversions: c.meta_conversions || 0,
+        conversion_value: c.conversion_value || 0,
+        cost_per_result: c.cost_per_result || 0,
+        messaging_conversations_started: c.messaging_conversations_started || 0,
+        cost_per_message: c.cost_per_message || 0,
+        last_synced_at: null,
+      })) || []);
+
+      setAdsets(data.adsets?.map((a: any) => ({
+        id: a.adset_id,
+        adset_id: a.adset_id,
+        campaign_id: a.campaign_id,
+        name: a.name || a.adset_id,
+        status: a.status || "unknown",
+        spend: a.spend || 0,
+        impressions: a.impressions || 0,
+        clicks: a.clicks || 0,
+        cpm: a.cpm || 0,
+        cpc: a.cpc || 0,
+        ctr: a.ctr || 0,
+        conversions: a.meta_conversions || 0,
+        conversion_value: a.conversion_value || 0,
+        cost_per_result: a.cost_per_result || 0,
+      })) || []);
+
+      setAds(data.ads?.map((a: any) => ({
+        id: a.ad_id,
+        ad_id: a.ad_id,
+        campaign_id: a.campaign_id,
+        name: a.name || a.ad_id,
+        status: a.status || "unknown",
+        spend: a.spend || 0,
+        impressions: a.impressions || 0,
+        clicks: a.clicks || 0,
+        cpm: a.cpm || 0,
+        cpc: a.cpc || 0,
+        ctr: a.ctr || 0,
+        conversions: a.meta_conversions || 0,
+        conversion_value: a.conversion_value || 0,
+        cost_per_result: a.cost_per_result || 0,
+        thumbnail_url: a.thumbnail_url || null,
+      })) || []);
+
+      setIsRealtimeData(true);
+      setRealtimeFetchedAt(data.fetchedAt);
+      setLastSyncedAt(null);
+      
+      toast.success(`Dados em tempo real carregados: ${data.campaigns?.length || 0} campanhas`);
+    } catch (err) {
+      console.error("Error fetching realtime insights:", err);
+      toast.error("Erro ao buscar dados em tempo real");
+    } finally {
+      setLoadingRealtime(false);
+    }
+  };
+
+  const handleAdminDatePresetChange = (preset: AdminDatePreset) => {
+    setAdminDatePreset(preset);
+    if (selectedUserId) {
+      fetchRealtimeInsights(selectedUserId, preset);
     }
   };
 
@@ -542,16 +655,65 @@ export function AdminAdsMetrics() {
             </DialogTitle>
           </DialogHeader>
           
-          {/* Última sincronização e Filtro de Campanha */}
-          <div className="flex flex-wrap items-center gap-4 py-2">
-            {/* Indicador de última sincronização */}
-            {lastSyncedAt && (
+          {/* Admin Date Preset Selector */}
+          <div className="flex flex-wrap items-center gap-4 py-2 border-b border-border pb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground">Período:</span>
+              <Select value={adminDatePreset} onValueChange={(v: AdminDatePreset) => handleAdminDatePresetChange(v)}>
+                <SelectTrigger className="w-[180px]">
+                  {loadingRealtime ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Calendar className="h-4 w-4 mr-2" />
+                  )}
+                  <SelectValue placeholder="Selecionar período" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="saved">📁 Dados salvos</SelectItem>
+                  <SelectItem value="today">📅 Hoje (tempo real)</SelectItem>
+                  <SelectItem value="yesterday">📆 Ontem (tempo real)</SelectItem>
+                  <SelectItem value="last_7d">📊 Últimos 7 dias (tempo real)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Realtime indicator */}
+            {isRealtimeData && (
+              <div className="flex items-center gap-2 text-sm bg-yellow-500/10 text-yellow-400 px-3 py-1.5 rounded-md border border-yellow-500/20">
+                <Zap className="h-4 w-4" />
+                <span>Dados em tempo real (não salvos)</span>
+                {realtimeFetchedAt && (
+                  <span className="text-xs opacity-70">
+                    • {format(new Date(realtimeFetchedAt), "HH:mm:ss", { locale: ptBR })}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Última sincronização (only for saved data) */}
+            {!isRealtimeData && lastSyncedAt && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 px-3 py-1.5 rounded-md">
                 <Calendar className="h-4 w-4" />
                 <span>Última sincronização: {format(new Date(lastSyncedAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</span>
               </div>
             )}
 
+            {/* Refresh button for realtime */}
+            {isRealtimeData && selectedUserId && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => fetchRealtimeInsights(selectedUserId, adminDatePreset)}
+                disabled={loadingRealtime}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${loadingRealtime ? 'animate-spin' : ''}`} />
+                Atualizar
+              </Button>
+            )}
+          </div>
+
+          {/* Campaign filter */}
+          <div className="flex flex-wrap items-center gap-4 py-2">
             <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId}>
               <SelectTrigger className="w-[300px]">
                 <Target className="h-4 w-4 mr-2" />
@@ -574,9 +736,10 @@ export function AdminAdsMetrics() {
             )}
           </div>
           
-          {loadingDetails ? (
+          {loadingDetails || loadingRealtime ? (
             <div className="flex items-center justify-center h-64">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              {loadingRealtime && <span className="ml-2 text-muted-foreground">Buscando dados do Facebook...</span>}
             </div>
           ) : (
             <Tabs defaultValue="campaigns" className="w-full">
