@@ -108,7 +108,7 @@ const App = () => {
               <Route path="/clonador" element={<MemberRoute featureName="Clonador de Entregável"><SiteCloner /></MemberRoute>} />
               
               {/* ADS MODULE */}
-              <Route path="/ads/*" element={<MemberRoute featureName="ADS Tracker"><AdsLayout /></MemberRoute>} />
+              <Route path="/ads/*" element={<MemberRoute featureName="ADS X1"><AdsLayout /></MemberRoute>} />
               
               {/* ADMIN ROUTES */}
               <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />

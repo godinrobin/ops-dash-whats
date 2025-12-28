@@ -85,7 +85,7 @@ export const MemberRoute = ({ children, featureName }: MemberRouteProps) => {
         {/* Show home page with functional header */}
         <Home restrictedMode restrictedFeatureName={featureName} />
         
-        {/* Restricted modal */}
+        {/* Restricted modal - uses custom overlay that doesn't cover header */}
         <RestrictedFeatureModal
           open={showModal}
           onOpenChange={handleModalClose}
