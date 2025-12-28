@@ -63,7 +63,8 @@ interface AdsetData {
   cpm: number;
   cpc: number;
   ctr: number;
-  results: number;
+  conversions: number;
+  conversion_value: number;
   cost_per_result: number;
 }
 
@@ -79,7 +80,8 @@ interface AdData {
   cpm: number;
   cpc: number;
   ctr: number;
-  results: number;
+  conversions: number;
+  conversion_value: number;
   cost_per_result: number;
   thumbnail_url: string | null;
 }
@@ -320,7 +322,8 @@ export function AdminAdsMetrics() {
         cpm: a.cpm || 0,
         cpc: a.cpc || 0,
         ctr: a.ctr || 0,
-        results: a.results || 0,
+        conversions: Number((a as any).meta_conversions ?? 0),
+        conversion_value: Number((a as any).conversion_value ?? 0),
         cost_per_result: a.cost_per_result || 0
       })) || []);
 
@@ -336,7 +339,8 @@ export function AdminAdsMetrics() {
         cpm: a.cpm || 0,
         cpc: a.cpc || 0,
         ctr: a.ctr || 0,
-        results: a.results || 0,
+        conversions: Number((a as any).meta_conversions ?? 0),
+        conversion_value: Number((a as any).conversion_value ?? 0),
         cost_per_result: a.cost_per_result || 0,
         thumbnail_url: a.thumbnail_url
       })) || []);
@@ -657,7 +661,7 @@ export function AdminAdsMetrics() {
                           <TableHead className="text-right">CPM</TableHead>
                           <TableHead className="text-right">CPC</TableHead>
                           <TableHead className="text-right">Conversões</TableHead>
-                          <TableHead className="text-right">Custo/Conv.</TableHead>
+                          <TableHead className="text-right">Valor Conv.</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -673,8 +677,8 @@ export function AdminAdsMetrics() {
                             <TableCell className="text-right">{formatPercent(adset.ctr)}</TableCell>
                             <TableCell className="text-right">{formatCurrency(adset.cpm)}</TableCell>
                             <TableCell className="text-right">{formatCurrency(adset.cpc)}</TableCell>
-                            <TableCell className="text-right text-green-400">{formatNumber(adset.results)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(adset.cost_per_result)}</TableCell>
+                            <TableCell className="text-right text-green-400">{formatNumber(adset.conversions)}</TableCell>
+                            <TableCell className="text-right text-emerald-400">{formatCurrency(adset.conversion_value)}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -699,6 +703,7 @@ export function AdminAdsMetrics() {
                           <TableHead className="text-right">CPM</TableHead>
                           <TableHead className="text-right">CPC</TableHead>
                           <TableHead className="text-right">Conversões</TableHead>
+                          <TableHead className="text-right">Valor Conv.</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -728,7 +733,8 @@ export function AdminAdsMetrics() {
                             <TableCell className="text-right">{formatPercent(ad.ctr)}</TableCell>
                             <TableCell className="text-right">{formatCurrency(ad.cpm)}</TableCell>
                             <TableCell className="text-right">{formatCurrency(ad.cpc)}</TableCell>
-                            <TableCell className="text-right text-green-400">{formatNumber(ad.results)}</TableCell>
+                            <TableCell className="text-right text-green-400">{formatNumber(ad.conversions)}</TableCell>
+                            <TableCell className="text-right text-emerald-400">{formatCurrency(ad.conversion_value)}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
