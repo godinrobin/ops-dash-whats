@@ -27,8 +27,7 @@ import {
   Columns3,
   Power,
   DollarSign,
-  Check,
-  Target
+  Check
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -687,13 +686,41 @@ export default function AdsCampaigns() {
     );
   }, [sortedData, searchQuery]);
 
-  const toggleItemSelection = (itemId: string) => {
+  const toggleItemSelection = (itemId: string, item?: any) => {
     setSelectedItems(prev => {
       const newSet = new Set(prev);
       if (newSet.has(itemId)) {
         newSet.delete(itemId);
+        // Also remove from hierarchy selection
+        if (item && viewLevel === 'campaign') {
+          setSelectedCampaignIds(prevIds => {
+            const ids = new Set(prevIds);
+            ids.delete(item.campaign_id);
+            return ids;
+          });
+        } else if (item && viewLevel === 'adset') {
+          setSelectedAdsetIds(prevIds => {
+            const ids = new Set(prevIds);
+            ids.delete(item.adset_id);
+            return ids;
+          });
+        }
       } else {
         newSet.add(itemId);
+        // Also add to hierarchy selection for filtering
+        if (item && viewLevel === 'campaign') {
+          setSelectedCampaignIds(prevIds => {
+            const ids = new Set(prevIds);
+            ids.add(item.campaign_id);
+            return ids;
+          });
+        } else if (item && viewLevel === 'adset') {
+          setSelectedAdsetIds(prevIds => {
+            const ids = new Set(prevIds);
+            ids.add(item.adset_id);
+            return ids;
+          });
+        }
       }
       return newSet;
     });
@@ -702,8 +729,20 @@ export default function AdsCampaigns() {
   const toggleAllItems = () => {
     if (selectedItems.size === filteredData.length) {
       setSelectedItems(new Set());
+      // Clear hierarchy selection when deselecting all
+      if (viewLevel === 'campaign') {
+        setSelectedCampaignIds(new Set());
+      } else if (viewLevel === 'adset') {
+        setSelectedAdsetIds(new Set());
+      }
     } else {
       setSelectedItems(new Set(filteredData.map((item: any) => item.id)));
+      // Add all to hierarchy selection
+      if (viewLevel === 'campaign') {
+        setSelectedCampaignIds(new Set(filteredData.map((item: any) => item.campaign_id)));
+      } else if (viewLevel === 'adset') {
+        setSelectedAdsetIds(new Set(filteredData.map((item: any) => item.adset_id)));
+      }
     }
   };
 
@@ -792,37 +831,9 @@ export default function AdsCampaigns() {
           <div className="w-12 h-12 bg-muted rounded flex items-center justify-center text-muted-foreground text-xs">N/A</div>
         );
       case 'name':
-        const isSelectedForHierarchy = viewLevel === 'campaign' 
-          ? selectedCampaignIds.has(item.campaign_id)
-          : viewLevel === 'adset' 
-            ? selectedAdsetIds.has(item.adset_id)
-            : false;
         return (
           <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <span className="font-medium truncate max-w-[200px]">{item.name}</span>
-              {viewLevel !== 'ad' && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn(
-                    "h-5 w-5 shrink-0",
-                    isSelectedForHierarchy && "bg-orange-500/20 text-orange-400"
-                  )}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (viewLevel === 'campaign') {
-                      toggleCampaignHierarchySelection(item.campaign_id);
-                    } else if (viewLevel === 'adset') {
-                      toggleAdsetHierarchySelection(item.adset_id);
-                    }
-                  }}
-                  title={viewLevel === 'campaign' ? 'Filtrar conjuntos e anúncios desta campanha' : 'Filtrar anúncios deste conjunto'}
-                >
-                  <Target className="h-3 w-3" />
-                </Button>
-              )}
-            </div>
+            <span className="font-medium truncate max-w-[200px]">{item.name}</span>
             {getStatusBadge(item.status)}
           </div>
         );
@@ -1313,7 +1324,7 @@ export default function AdsCampaigns() {
                         <TableCell className="border-r border-border/20">
                           <Checkbox
                             checked={selectedItems.has(item.id)}
-                            onCheckedChange={() => toggleItemSelection(item.id)}
+                            onCheckedChange={() => toggleItemSelection(item.id, item)}
                             className="border-orange-500 data-[state=checked]:bg-orange-500 data-[state=checked]:text-white"
                           />
                         </TableCell>

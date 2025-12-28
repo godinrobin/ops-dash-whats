@@ -280,22 +280,17 @@ export default function AdsDashboard() {
     },
   ];
 
-  // Funnel data for Meta Ads (using campaign data)
+  // Funnel data for Meta Ads (using campaign data) - only conversations and purchases
   const funnelSteps: FunnelStep[] = [
-    { 
-      label: "Cliques", 
-      value: metrics.clicks, 
-      percentage: metrics.clicks > 0 ? 100 : 0,
-    },
     { 
       label: "Conversas", 
       value: metrics.totalMessages, 
-      percentage: metrics.clicks > 0 ? (metrics.totalMessages / metrics.clicks) * 100 : 0,
+      percentage: metrics.totalMessages > 0 ? 100 : 0,
     },
     { 
       label: "Compras", 
       value: metrics.totalPurchases, 
-      percentage: metrics.clicks > 0 ? (metrics.totalPurchases / metrics.clicks) * 100 : 0,
+      percentage: metrics.totalMessages > 0 ? (metrics.totalPurchases / metrics.totalMessages) * 100 : 0,
     },
   ];
 
