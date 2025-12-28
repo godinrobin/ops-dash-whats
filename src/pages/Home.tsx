@@ -68,7 +68,12 @@ const SystemCard = ({ icon, title, shortTitle, description, onClick, isLocked, g
   );
 };
 
-const Home = () => {
+interface HomeProps {
+  restrictedMode?: boolean;
+  restrictedFeatureName?: string;
+}
+
+const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isFullMember, loading: accessLoading } = useAccessLevel();
@@ -294,11 +299,12 @@ const Home = () => {
     setRestrictedModalOpen(true);
   };
 
+  // Don't navigate to ads in restricted mode - stay on home
   useEffect(() => {
-    if (mode === "ads") {
+    if (mode === "ads" && !restrictedMode) {
       navigate("/ads");
     }
-  }, [mode, navigate]);
+  }, [mode, navigate, restrictedMode]);
 
   if (mode === "marketplace") {
     return <Marketplace onModeChange={setMode} currentMode={mode} />;
@@ -321,7 +327,10 @@ const Home = () => {
     <>
       <Header mode={mode} onModeChange={setMode} />
       <div className="h-14 md:h-16" />
-      <div className="min-h-screen bg-background p-4 md:p-10 relative overflow-hidden">
+      <div className={cn(
+        "min-h-screen bg-background p-4 md:p-10 relative overflow-hidden",
+        restrictedMode && "blur-md pointer-events-none select-none"
+      )}>
         <BackgroundBeams className="z-0" />
         
         <div className="container mx-auto max-w-7xl relative z-10">
