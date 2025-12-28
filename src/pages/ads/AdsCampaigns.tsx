@@ -130,35 +130,35 @@ interface ColumnConfig {
 }
 
 const defaultColumns: ColumnConfig[] = [
-  { key: 'name', label: 'Nome', visible: true, width: 200 },
-  { key: 'daily_budget', label: 'Orçamento', visible: true, width: 120 },
-  { key: 'spend', label: 'Valor Usado', visible: true, width: 120 },
-  { key: 'impressions', label: 'Impressões', visible: true, width: 110 },
-  { key: 'reach', label: 'Alcance', visible: true, width: 100 },
-  { key: 'cpm', label: 'CPM', visible: true, width: 90 },
-  { key: 'cpc', label: 'CPC (link)', visible: true, width: 90 },
-  { key: 'ctr', label: 'CTR (link)', visible: true, width: 90 },
-  { key: 'cost_per_message', label: 'Custo/Msg', visible: true, width: 100 },
-  { key: 'messaging_conversations_started', label: 'Conversas', visible: true, width: 100 },
-  { key: 'meta_conversions', label: 'Conversão', visible: true, width: 100 },
-  { key: 'conversion_value', label: 'Valor Conv.', visible: true, width: 110 },
-  { key: 'profit', label: 'Lucro', visible: true, width: 100 },
+  { key: 'name', label: 'Nome', visible: true, width: 180 },
+  { key: 'daily_budget', label: 'Orçamento', visible: true, width: 100 },
+  { key: 'spend', label: 'Gasto', visible: true, width: 85 },
+  { key: 'impressions', label: 'Impr.', visible: true, width: 75 },
+  { key: 'reach', label: 'Alcance', visible: true, width: 75 },
+  { key: 'cpm', label: 'CPM', visible: true, width: 70 },
+  { key: 'cpc', label: 'CPC', visible: true, width: 70 },
+  { key: 'ctr', label: 'CTR', visible: true, width: 65 },
+  { key: 'cost_per_message', label: 'C/Msg', visible: true, width: 70 },
+  { key: 'messaging_conversations_started', label: 'Conv.', visible: true, width: 65 },
+  { key: 'meta_conversions', label: 'Vendas', visible: true, width: 65 },
+  { key: 'conversion_value', label: 'Valor', visible: true, width: 80 },
+  { key: 'profit', label: 'Lucro', visible: true, width: 80 },
 ];
 
 const adColumns: ColumnConfig[] = [
-  { key: 'thumbnail', label: 'Preview', visible: true, width: 80 },
-  { key: 'name', label: 'Nome', visible: true, width: 200 },
-  { key: 'spend', label: 'Valor Usado', visible: true, width: 120 },
-  { key: 'impressions', label: 'Impressões', visible: true, width: 110 },
-  { key: 'reach', label: 'Alcance', visible: true, width: 100 },
-  { key: 'cpm', label: 'CPM', visible: true, width: 90 },
-  { key: 'cpc', label: 'CPC (link)', visible: true, width: 90 },
-  { key: 'ctr', label: 'CTR (link)', visible: true, width: 90 },
-  { key: 'cost_per_message', label: 'Custo/Msg', visible: true, width: 100 },
-  { key: 'messaging_conversations_started', label: 'Conversas', visible: true, width: 100 },
-  { key: 'meta_conversions', label: 'Conversão', visible: true, width: 100 },
-  { key: 'conversion_value', label: 'Valor Conv.', visible: true, width: 110 },
-  { key: 'profit', label: 'Lucro', visible: true, width: 100 },
+  { key: 'thumbnail', label: 'Preview', visible: true, width: 60 },
+  { key: 'name', label: 'Nome', visible: true, width: 180 },
+  { key: 'spend', label: 'Gasto', visible: true, width: 85 },
+  { key: 'impressions', label: 'Impr.', visible: true, width: 75 },
+  { key: 'reach', label: 'Alcance', visible: true, width: 75 },
+  { key: 'cpm', label: 'CPM', visible: true, width: 70 },
+  { key: 'cpc', label: 'CPC', visible: true, width: 70 },
+  { key: 'ctr', label: 'CTR', visible: true, width: 65 },
+  { key: 'cost_per_message', label: 'C/Msg', visible: true, width: 70 },
+  { key: 'messaging_conversations_started', label: 'Conv.', visible: true, width: 65 },
+  { key: 'meta_conversions', label: 'Vendas', visible: true, width: 65 },
+  { key: 'conversion_value', label: 'Valor', visible: true, width: 80 },
+  { key: 'profit', label: 'Lucro', visible: true, width: 80 },
 ];
 
 const viewLevelTabs = [
@@ -837,14 +837,14 @@ export default function AdsCampaigns() {
     switch (columnKey) {
       case 'thumbnail':
         return item.thumbnail_url ? (
-          <img src={item.thumbnail_url} alt="" className="w-12 h-12 object-cover rounded" />
+          <img src={item.thumbnail_url} alt="" className="w-10 h-10 object-cover rounded" />
         ) : (
-          <div className="w-12 h-12 bg-muted rounded flex items-center justify-center text-muted-foreground text-xs">N/A</div>
+          <div className="w-10 h-10 bg-muted rounded flex items-center justify-center text-muted-foreground text-[10px]">N/A</div>
         );
       case 'name':
         return (
-          <div className="flex flex-col gap-1">
-            <span className="font-medium truncate max-w-[200px]">{item.name}</span>
+          <div className="flex flex-col gap-0.5">
+            <span className="font-medium truncate max-w-[160px] text-sm">{item.name}</span>
             {getStatusBadge(item.status)}
           </div>
         );
@@ -852,13 +852,12 @@ export default function AdsCampaigns() {
         const hasBudget = viewLevel !== 'ad';
         if (!hasBudget) return '-';
         return (
-          <div className="flex items-center gap-1 justify-end">
-            <span className="font-medium">{formatCurrency(item.daily_budget)}</span>
-            <span className="text-xs text-muted-foreground">/dia</span>
+          <div className="flex items-center gap-0.5 justify-end">
+            <span className="font-medium text-sm">{formatCurrency(item.daily_budget)}</span>
             <Button 
               variant="ghost" 
               size="icon" 
-              className="h-5 w-5 ml-1"
+              className="h-4 w-4"
               onClick={(e) => {
                 e.stopPropagation();
                 if (viewLevel === 'campaign') {
@@ -872,32 +871,32 @@ export default function AdsCampaigns() {
                 setEditBudgetDialogOpen(true);
               }}
             >
-              <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+              <Pencil className="h-2.5 w-2.5 text-muted-foreground hover:text-foreground" />
             </Button>
           </div>
         );
       case 'spend':
-        return <span className="text-red-400 font-medium">{formatCurrency(item.spend)}</span>;
+        return <span className="text-red-400 font-medium text-sm">{formatCurrency(item.spend)}</span>;
       case 'impressions':
-        return formatNumber(item.impressions);
+        return <span className="text-sm">{formatNumber(item.impressions)}</span>;
       case 'reach':
-        return formatNumber(item.reach || 0);
+        return <span className="text-sm">{formatNumber(item.reach || 0)}</span>;
       case 'cpm':
-        return formatCurrency(item.cpm);
+        return <span className="text-sm">{formatCurrency(item.cpm)}</span>;
       case 'cpc':
-        return formatCurrency(item.cpc || 0);
+        return <span className="text-sm">{formatCurrency(item.cpc || 0)}</span>;
       case 'ctr':
-        return formatPercent(item.ctr);
+        return <span className="text-sm">{formatPercent(item.ctr)}</span>;
       case 'cost_per_message':
-        return formatCurrency(item.cost_per_message || 0);
+        return <span className="text-sm">{formatCurrency(item.cost_per_message || 0)}</span>;
       case 'messaging_conversations_started':
-        return formatNumber(item.messaging_conversations_started || 0);
+        return <span className="text-sm">{formatNumber(item.messaging_conversations_started || 0)}</span>;
       case 'meta_conversions':
-        return <span className="font-medium text-green-400">{formatNumber(item.meta_conversions || 0)}</span>;
+        return <span className="font-medium text-green-400 text-sm">{formatNumber(item.meta_conversions || 0)}</span>;
       case 'conversion_value':
-        return <span className="font-medium text-blue-400">{formatCurrency(item.conversion_value || 0)}</span>;
+        return <span className="font-medium text-blue-400 text-sm">{formatCurrency(item.conversion_value || 0)}</span>;
       case 'profit':
-        return <span className={cn("font-medium", profit >= 0 ? "text-green-400" : "text-red-400")}>{formatCurrency(profit)}</span>;
+        return <span className={cn("font-medium text-sm", profit >= 0 ? "text-green-400" : "text-red-400")}>{formatCurrency(profit)}</span>;
       default:
         return null;
     }

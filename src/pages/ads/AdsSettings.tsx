@@ -52,6 +52,7 @@ export default function AdsSettings() {
   const [facebookAccounts, setFacebookAccounts] = useState<FacebookAccount[]>([]);
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
   const [expandedAccounts, setExpandedAccounts] = useState<Set<string>>(new Set());
+  const [syncingAccounts, setSyncingAccounts] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (user) {
@@ -181,6 +182,7 @@ export default function AdsSettings() {
   };
 
   const handleSyncAdAccounts = async (facebookAccountId: string) => {
+    setSyncingAccounts(prev => new Set(prev).add(facebookAccountId));
     try {
       const { error } = await supabase.functions.invoke("facebook-oauth", {
         body: { action: "get_ad_accounts", facebook_account_id: facebookAccountId }
@@ -192,6 +194,12 @@ export default function AdsSettings() {
     } catch (error) {
       console.error("Error syncing ad accounts:", error);
       splashedToast.error("Erro ao sincronizar");
+    } finally {
+      setSyncingAccounts(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(facebookAccountId);
+        return newSet;
+      });
     }
   };
 
@@ -290,9 +298,10 @@ export default function AdsSettings() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleSyncAdAccounts(account.id)}
+                        disabled={syncingAccounts.has(account.id)}
                       >
-                        <RefreshCcw className="h-4 w-4 mr-1" />
-                        Sincronizar Contas
+                        <RefreshCcw className={cn("h-4 w-4 mr-1", syncingAccounts.has(account.id) && "animate-spin")} />
+                        {syncingAccounts.has(account.id) ? "Sincronizando..." : "Sincronizar Contas"}
                       </Button>
                       <Button
                         variant="ghost"
