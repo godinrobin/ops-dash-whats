@@ -12,10 +12,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { 
   Search, Eye, DollarSign, MousePointerClick, TrendingUp, Target,
-  Users, ChevronDown, ChevronRight, MessageCircle, BarChart3, Loader2
+  Users, ChevronDown, ChevronRight, MessageCircle, BarChart3, Loader2,
+  Calendar
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, startOfDay, subDays, startOfYesterday, endOfYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
+
+type DateFilterType = "all" | "today" | "yesterday" | "7days" | "30days";
 
 interface UserAdAccount {
   id: string;
@@ -94,6 +97,7 @@ interface UserAggregatedMetrics {
 export function AdminAdsMetrics() {
   const [loading, setLoading] = useState(true);
   const [userSearch, setUserSearch] = useState("");
+  const [dateFilter, setDateFilter] = useState<DateFilterType>("all");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [userAccounts, setUserAccounts] = useState<UserAdAccount[]>([]);
   const [userMetrics, setUserMetrics] = useState<UserAggregatedMetrics[]>([]);
@@ -103,13 +107,31 @@ export function AdminAdsMetrics() {
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
 
+  const getDateRange = (): { start: Date | null; end: Date | null } => {
+    const now = new Date();
+    switch (dateFilter) {
+      case "today":
+        return { start: startOfDay(now), end: null };
+      case "yesterday":
+        return { start: startOfYesterday(), end: endOfYesterday() };
+      case "7days":
+        return { start: startOfDay(subDays(now, 7)), end: null };
+      case "30days":
+        return { start: startOfDay(subDays(now, 30)), end: null };
+      default:
+        return { start: null, end: null };
+    }
+  };
+
   useEffect(() => {
     loadAllUserMetrics();
-  }, []);
+  }, [dateFilter]);
 
   const loadAllUserMetrics = async () => {
     setLoading(true);
     try {
+      const { start, end } = getDateRange();
+
       // Load all ad accounts with user info
       const { data: accounts, error: accountsError } = await supabase
         .from("ads_ad_accounts")
@@ -130,10 +152,17 @@ export function AdminAdsMetrics() {
 
       const profileMap = new Map(profiles?.map(p => [p.id, p.username]) || []);
 
-      // Load campaigns for aggregation
-      const { data: allCampaigns, error: campaignsError } = await supabase
-        .from("ads_campaigns")
-        .select("*");
+      // Load campaigns for aggregation with date filter
+      let campaignsQuery = supabase.from("ads_campaigns").select("*");
+      
+      if (start) {
+        campaignsQuery = campaignsQuery.gte("updated_at", start.toISOString());
+      }
+      if (end) {
+        campaignsQuery = campaignsQuery.lte("updated_at", end.toISOString());
+      }
+
+      const { data: allCampaigns, error: campaignsError } = await campaignsQuery;
 
       if (campaignsError) throw campaignsError;
 
@@ -378,15 +407,31 @@ export function AdminAdsMetrics() {
         </Card>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar usuário..."
-          value={userSearch}
-          onChange={(e) => setUserSearch(e.target.value)}
-          className="pl-10"
-        />
+      {/* Search and Date Filter */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar usuário..."
+            value={userSearch}
+            onChange={(e) => setUserSearch(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        
+        <Select value={dateFilter} onValueChange={(value: DateFilterType) => setDateFilter(value)}>
+          <SelectTrigger className="w-[180px]">
+            <Calendar className="h-4 w-4 mr-2" />
+            <SelectValue placeholder="Filtrar por data" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos</SelectItem>
+            <SelectItem value="today">Hoje</SelectItem>
+            <SelectItem value="yesterday">Ontem</SelectItem>
+            <SelectItem value="7days">Últimos 7 dias</SelectItem>
+            <SelectItem value="30days">Últimos 30 dias</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Users Table */}
