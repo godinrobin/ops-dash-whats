@@ -45,6 +45,7 @@ interface CampaignData {
   cpc: number;
   ctr: number;
   conversions: number;
+  conversion_value: number;
   cost_per_result: number;
   messaging_conversations_started: number;
   cost_per_message: number;
@@ -262,6 +263,7 @@ export function AdminAdsMetrics() {
         cpc: c.cpc || 0,
         ctr: c.ctr || 0,
         conversions: (c as any).meta_conversions || 0,
+        conversion_value: c.conversion_value || 0,
         cost_per_result: c.cost_per_result || 0,
         messaging_conversations_started: (c as any).messaging_conversations_started || 0,
         cost_per_message: (c as any).cost_per_message || 0
@@ -531,6 +533,8 @@ export function AdminAdsMetrics() {
                         <TableHead className="text-right">CPC</TableHead>
                         <TableHead className="text-right">Conversas</TableHead>
                         <TableHead className="text-right">Custo/Msg</TableHead>
+                        <TableHead className="text-right">Conversões</TableHead>
+                        <TableHead className="text-right">Valor Conv.</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -550,6 +554,12 @@ export function AdminAdsMetrics() {
                             {formatNumber(campaign.messaging_conversations_started)}
                           </TableCell>
                           <TableCell className="text-right">{formatCurrency(campaign.cost_per_message)}</TableCell>
+                          <TableCell className="text-right text-green-400">
+                            {formatNumber(campaign.conversions)}
+                          </TableCell>
+                          <TableCell className="text-right text-emerald-400">
+                            {formatCurrency(campaign.conversion_value)}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
