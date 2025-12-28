@@ -12,6 +12,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/useSplashedToast";
+import { NotificationsModal } from "./NotificationsModal";
+import { Bell, Lock } from "lucide-react";
 
 interface ProfileModalProps {
   open: boolean;
@@ -25,6 +27,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,64 +86,94 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md border-accent/50">
-        <DialogHeader>
-          <DialogTitle>Meu Perfil</DialogTitle>
-          <DialogDescription>
-            Visualize suas informações e altere sua senha
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-md border-accent/50">
+          <DialogHeader>
+            <DialogTitle>Meu Perfil</DialogTitle>
+            <DialogDescription>
+              Visualize suas informações e configurações
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="space-y-6">
-          {/* User Info */}
-          <div className="space-y-3 p-4 rounded-lg bg-secondary/30 border border-border">
-            <div>
-              <Label className="text-muted-foreground text-sm">Email</Label>
-              <p className="font-medium">{user?.email}</p>
+          <div className="space-y-6">
+            {/* User Info */}
+            <div className="space-y-3 p-4 rounded-lg bg-secondary/30 border border-border">
+              <div>
+                <Label className="text-muted-foreground text-sm">Email</Label>
+                <p className="font-medium">{user?.email}</p>
+              </div>
             </div>
+
+            {/* Quick Actions */}
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                variant="outline"
+                className="flex flex-col h-auto py-4 gap-2"
+                onClick={() => setNotificationsOpen(true)}
+              >
+                <Bell className="h-5 w-5" />
+                <span className="text-xs">Notificações</span>
+              </Button>
+              <Button
+                variant="outline"
+                className="flex flex-col h-auto py-4 gap-2"
+                onClick={() => {
+                  const el = document.getElementById('password-section');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              >
+                <Lock className="h-5 w-5" />
+                <span className="text-xs">Alterar Senha</span>
+              </Button>
+            </div>
+
+            {/* Change Password Form */}
+            <form id="password-section" onSubmit={handleChangePassword} className="space-y-4">
+              <h3 className="font-semibold text-sm">Alterar Senha</h3>
+              
+              <div className="space-y-2">
+                <Label htmlFor="new-password">Nova senha</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  placeholder="Digite a nova senha"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  disabled={loading}
+                  className="focus-visible:ring-accent focus-visible:border-accent"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">Confirmar nova senha</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  placeholder="Confirme a nova senha"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  disabled={loading}
+                  className="focus-visible:ring-accent focus-visible:border-accent"
+                />
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
+                disabled={loading}
+              >
+                {loading ? "Alterando..." : "Alterar Senha"}
+              </Button>
+            </form>
           </div>
+        </DialogContent>
+      </Dialog>
 
-          {/* Change Password Form */}
-          <form onSubmit={handleChangePassword} className="space-y-4">
-            <h3 className="font-semibold text-sm">Alterar Senha</h3>
-            
-            <div className="space-y-2">
-              <Label htmlFor="new-password">Nova senha</Label>
-              <Input
-                id="new-password"
-                type="password"
-                placeholder="Digite a nova senha"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                disabled={loading}
-                className="focus-visible:ring-accent focus-visible:border-accent"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="confirm-password">Confirmar nova senha</Label>
-              <Input
-                id="confirm-password"
-                type="password"
-                placeholder="Confirme a nova senha"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                disabled={loading}
-                className="focus-visible:ring-accent focus-visible:border-accent"
-              />
-            </div>
-
-            <Button
-              type="submit"
-              className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
-              disabled={loading}
-            >
-              {loading ? "Alterando..." : "Alterar Senha"}
-            </Button>
-          </form>
-        </div>
-      </DialogContent>
-    </Dialog>
+      <NotificationsModal 
+        open={notificationsOpen} 
+        onOpenChange={setNotificationsOpen} 
+      />
+    </>
   );
 };
