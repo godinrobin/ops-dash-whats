@@ -99,12 +99,15 @@ export default function AdsSettings() {
     }
   };
 
+  const FACEBOOK_REDIRECT_URI = "https://zapdata.co/";
+
   const handleConnectFacebook = async () => {
     setConnecting(true);
     try {
-      // Use the official ZapData domain for Facebook OAuth redirect
-      const redirectUri = "https://zapdata.co/#/ads/settings";
-      
+      // Facebook OAuth often rejects redirects with fragments (#). We redirect to the site root,
+      // then route internally to /#/ads/settings after connecting.
+      const redirectUri = FACEBOOK_REDIRECT_URI;
+
       const { data, error } = await supabase.functions.invoke("facebook-oauth", {
         body: { action: "get_login_url", redirect_uri: redirectUri }
       });
@@ -123,15 +126,14 @@ export default function AdsSettings() {
   const handleOAuthCallback = async (code: string) => {
     setConnecting(true);
     try {
-      // Use the official ZapData domain for token exchange
-      const redirectUri = "https://zapdata.co/#/ads/settings";
-      
+      const redirectUri = FACEBOOK_REDIRECT_URI;
+
       const { data, error } = await supabase.functions.invoke("facebook-oauth", {
         body: { action: "exchange_code", code, redirect_uri: redirectUri }
       });
 
       if (error) throw error;
-      
+
       splashedToast.success("Conta do Facebook conectada!");
       await loadData();
     } catch (error) {

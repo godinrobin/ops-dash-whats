@@ -3,6 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import FacebookOAuthHandler from "@/components/ads/FacebookOAuthHandler";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { MemberRoute } from "@/components/MemberRoute";
 import { AdminRoute } from "@/components/AdminRoute";
@@ -65,6 +66,7 @@ const App = () => {
         <Toaster ref={toasterRef} defaultPosition="bottom-right" />
         <HashRouter>
           <AuthProvider>
+            <FacebookOAuthHandler />
             <AnnouncementPopup />
             <AdminNotifications />
             <Routes>
