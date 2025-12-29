@@ -319,12 +319,28 @@ serve(async (req) => {
       
       if (!jidForPhone) {
         // Check if this is a @lid message (common for ad leads without phone disclosure)
-        if (remoteJid.includes('@lid') || participant.includes('@lid')) {
-          lidRemoteJid = remoteJid.includes('@lid') ? remoteJid : participant;
+        if (remoteJid.includes('@lid') || participant.includes('@lid') || remoteJidAlt?.includes('@lid')) {
+          // Priority for LID: remoteJidAlt > remoteJid > participant (some versions put it differently)
+          if (remoteJidAlt?.includes('@lid')) {
+            lidRemoteJid = remoteJidAlt;
+          } else if (remoteJid.includes('@lid')) {
+            lidRemoteJid = remoteJid;
+          } else {
+            lidRemoteJid = participant;
+          }
           const lidId = lidRemoteJid.split('@')[0];
           
           console.log(`[LID-ONLY] No phone found but have @lid: ${lidRemoteJid}`);
           console.log(`[LID-ONLY] Using LID as contact identifier: ${lidId}`);
+          
+          // Validate LID format: should be a numeric string, typically 15-20 digits
+          // Skip if it looks like an invalid or garbage ID
+          if (!/^\d{10,25}$/.test(lidId)) {
+            console.log(`[LID-ONLY] Invalid LID format: ${lidId}, skipping`);
+            return new Response(JSON.stringify({ success: true, skipped: true, reason: 'invalid_lid_format' }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
           
           // Use the LID as the "phone" - it's a long numeric ID
           phone = lidId;
@@ -441,9 +457,12 @@ serve(async (req) => {
       }
       
       // pushName is at data root level in Evolution API v2
-      const pushName = data.pushName || null;
+      // CRITICAL: For outbound messages (fromMe=true), pushName is the SENDER's name (the instance)
+      // NOT the contact's name. We should NOT use pushName to update contact name for outbound messages.
+      const rawPushName = data.pushName || null;
+      const pushName = isFromMe ? null : rawPushName; // Only use pushName for inbound messages
 
-      console.log(`Processing message from ${phone}: ${messageType} - ${content?.substring(0, 50)}`);
+      console.log(`Processing message from ${phone}: ${messageType} - ${content?.substring(0, 50)} (fromMe=${isFromMe}, pushName=${rawPushName})`);
 
       // Find the instance in our database (including label and phone for pushName validation)
       const { data: instanceData, error: instanceError } = await supabaseClient

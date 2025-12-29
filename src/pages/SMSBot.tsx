@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { AnimatedTabs, AnimatedTabsList, AnimatedTabsTrigger, AnimatedTabsContent } from "@/components/ui/animated-tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Copy, RefreshCw, X, CheckCircle2, Clock, XCircle, Wallet } from "lucide-react";
+import { Loader2, Copy, RefreshCw, X, CheckCircle2, Clock, XCircle, Wallet, ChevronDown, ChevronUp } from "lucide-react";
 import { useToast } from "@/hooks/useSplashedToast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -63,6 +63,7 @@ const SMSBot = () => {
   const [pollingOrders, setPollingOrders] = useState<Set<string>>(new Set());
   const [showRechargeModal, setShowRechargeModal] = useState(false);
   const [serviceQuantities, setServiceQuantities] = useState<Record<string, number>>({});
+  const [countriesExpanded, setCountriesExpanded] = useState(false);
 
   // Carrega saldo do usuário
   const loadBalance = useCallback(async () => {
@@ -372,18 +373,51 @@ const SMSBot = () => {
                       <Loader2 className="h-6 w-6 animate-spin" />
                     </div>
                   ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {countries.map(country => (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap gap-2">
+                        {(() => {
+                          // Sort countries with Brazil first
+                          const sortedCountries = [...countries].sort((a, b) => {
+                            if (a.code === '73') return -1;
+                            if (b.code === '73') return 1;
+                            return a.name.localeCompare(b.name);
+                          });
+                          // Show only 5 countries when collapsed
+                          const visibleCountries = countriesExpanded ? sortedCountries : sortedCountries.slice(0, 5);
+                          
+                          return visibleCountries.map(country => (
+                            <Button
+                              key={country.code}
+                              variant={selectedCountry?.code === country.code ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setSelectedCountry(country)}
+                              className={selectedCountry?.code === country.code ? "bg-accent text-accent-foreground" : ""}
+                            >
+                              {country.flag} {country.name}
+                            </Button>
+                          ));
+                        })()}
+                      </div>
+                      {countries.length > 5 && (
                         <Button
-                          key={country.code}
-                          variant={selectedCountry?.code === country.code ? "default" : "outline"}
+                          variant="ghost"
                           size="sm"
-                          onClick={() => setSelectedCountry(country)}
-                          className={selectedCountry?.code === country.code ? "bg-accent text-accent-foreground" : ""}
+                          onClick={() => setCountriesExpanded(!countriesExpanded)}
+                          className="w-full text-muted-foreground hover:text-foreground"
                         >
-                          {country.flag} {country.name}
+                          {countriesExpanded ? (
+                            <>
+                              <ChevronUp className="h-4 w-4 mr-1" />
+                              Recolher
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="h-4 w-4 mr-1" />
+                              Ver mais países ({countries.length - 5})
+                            </>
+                          )}
                         </Button>
-                      ))}
+                      )}
                     </div>
                   )}
                 </CardContent>
