@@ -647,7 +647,142 @@ serve(async (req) => {
     const outboundCount = rowsToInsert.filter(r => r.direction === 'outbound').length;
     console.log(`[SYNC] Synced messages for contact ${contact.id}: inserted=${actuallyInserted} (requested=${rowsToInsert.length}, inbound=${inboundCount}, outbound=${outboundCount})`);
 
-    return new Response(JSON.stringify({ inserted: rowsToInsert.length }), {
+    // === FALLBACK TRIGGER: Check if we should trigger a flow for new inbound messages ===
+    // This handles cases where the webhook failed to process the message
+    if (actuallyInserted > 0 && inboundCount > 0) {
+      console.log(`[SYNC-TRIGGER] Checking for flow trigger fallback (${inboundCount} new inbound messages)`);
+      
+      // Get the latest inbound message that was just inserted
+      const inboundMessages = rowsToInsert.filter(r => r.direction === 'inbound');
+      const latestInbound = inboundMessages.reduce((latest, msg) => {
+        if (!latest) return msg;
+        return new Date(msg.created_at) > new Date(latest.created_at) ? msg : latest;
+      }, null as typeof inboundMessages[0] | null);
+      
+      if (latestInbound) {
+        // Check if there's already an active flow session for this contact
+        const { data: existingSession } = await supabaseAdmin
+          .from('inbox_flow_sessions')
+          .select('id, flow_id, status')
+          .eq('contact_id', contact.id)
+          .in('status', ['active', 'waiting_input'])
+          .maybeSingle();
+        
+        if (existingSession) {
+          console.log(`[SYNC-TRIGGER] Contact has active flow session ${existingSession.id}, triggering process-inbox-flow`);
+          
+          // Trigger the flow processor for the existing session
+          try {
+            const processRes = await fetch(`${supabaseUrl}/functions/v1/process-inbox-flow`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${serviceKey}`,
+              },
+              body: JSON.stringify({
+                sessionId: existingSession.id,
+                userInput: latestInbound.content || '',
+              }),
+            });
+            console.log(`[SYNC-TRIGGER] process-inbox-flow response: ${processRes.status}`);
+          } catch (triggerError) {
+            console.error(`[SYNC-TRIGGER] Failed to trigger flow:`, triggerError);
+          }
+        } else {
+          // No active session - check for flows with matching triggers (keyword or 'all')
+          const { data: userFlows } = await supabaseAdmin
+            .from('inbox_flows')
+            .select('id, name, trigger_type, trigger_keywords, flow_data')
+            .eq('user_id', user.id)
+            .eq('is_active', true);
+          
+          if (userFlows && userFlows.length > 0) {
+            const messageContent = (latestInbound.content || '').toLowerCase().trim();
+            console.log(`[SYNC-TRIGGER] Checking ${userFlows.length} active flows for message: "${messageContent.substring(0, 50)}"`);
+            
+            // Find matching flow
+            let matchedFlow = null;
+            
+            for (const flow of userFlows) {
+              const triggerType = flow.trigger_type || 'keyword';
+              
+              // 'all' trigger - matches any message
+              if (triggerType === 'all') {
+                matchedFlow = flow;
+                console.log(`[SYNC-TRIGGER] Matched 'all' trigger flow: ${flow.name} (${flow.id})`);
+                break;
+              }
+              
+              // 'keyword' trigger - check keywords
+              if (triggerType === 'keyword') {
+                const keywords = flow.trigger_keywords || [];
+                if (Array.isArray(keywords) && keywords.length > 0) {
+                  const matched = keywords.some((kw: string) => {
+                    const keyword = (kw || '').toLowerCase().trim();
+                    return keyword && messageContent.includes(keyword);
+                  });
+                  
+                  if (matched) {
+                    matchedFlow = flow;
+                    console.log(`[SYNC-TRIGGER] Matched keyword trigger flow: ${flow.name} (${flow.id})`);
+                    break;
+                  }
+                }
+              }
+            }
+            
+            if (matchedFlow) {
+              console.log(`[SYNC-TRIGGER] Creating new flow session for contact ${contact.id} with flow ${matchedFlow.id}`);
+              
+              // Create new session
+              const { data: newSession, error: sessionError } = await supabaseAdmin
+                .from('inbox_flow_sessions')
+                .insert({
+                  contact_id: contact.id,
+                  flow_id: matchedFlow.id,
+                  user_id: user.id,
+                  instance_id: contact.instance_id,
+                  status: 'active',
+                  variables: { _trigger_message: latestInbound.content, _trigger_source: 'sync_fallback' },
+                  processing: false,
+                })
+                .select()
+                .single();
+              
+              if (sessionError) {
+                console.error(`[SYNC-TRIGGER] Failed to create session:`, sessionError);
+              } else if (newSession) {
+                console.log(`[SYNC-TRIGGER] Created session ${newSession.id}, triggering process-inbox-flow`);
+                
+                // Trigger the flow processor
+                try {
+                  const processRes = await fetch(`${supabaseUrl}/functions/v1/process-inbox-flow`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${serviceKey}`,
+                    },
+                    body: JSON.stringify({
+                      sessionId: newSession.id,
+                      userInput: latestInbound.content || '',
+                    }),
+                  });
+                  console.log(`[SYNC-TRIGGER] process-inbox-flow response: ${processRes.status}`);
+                } catch (triggerError) {
+                  console.error(`[SYNC-TRIGGER] Failed to trigger flow:`, triggerError);
+                }
+              }
+            } else {
+              console.log(`[SYNC-TRIGGER] No matching flow found for message`);
+            }
+          } else {
+            console.log(`[SYNC-TRIGGER] No active flows for user`);
+          }
+        }
+      }
+    }
+
+    return new Response(JSON.stringify({ inserted: rowsToInsert.length, flowTriggered: inboundCount > 0 }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {

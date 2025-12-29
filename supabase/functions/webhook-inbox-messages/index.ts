@@ -91,7 +91,7 @@ serve(async (req) => {
       }
       
       // Find valid phone from multiple sources
-      // Priority: remoteJid > remoteJidAlt > participant > participantAlt
+      // Priority: remoteJid > remoteJidAlt > participant > participantAlt > contextInfo
       // ONLY accept @s.whatsapp.net format - reject @lid (internal IDs)
       let jidForPhone = '';
       let phoneSource = '';
@@ -100,49 +100,112 @@ serve(async (req) => {
       const participant = key.participant || '';
       const participantAlt = key.participantAlt || '';
       
-      console.log(`Checking all JID sources: remoteJid=${remoteJid}, remoteJidAlt=${remoteJidAlt}, participant=${participant}, participantAlt=${participantAlt}`);
+      // Get contextInfo fields (often contains real phone for ad messages)
+      const contextInfo = data.contextInfo || {};
+      const contextParticipant = contextInfo.participant || '';
+      
+      // Get sender field (some Evolution versions use this for ads)
+      const sender = payload.sender || '';
+      
+      console.log(`[AD-DEBUG] Checking all JID sources:`);
+      console.log(`  remoteJid=${remoteJid}`);
+      console.log(`  remoteJidAlt=${remoteJidAlt}`);
+      console.log(`  participant=${participant}`);
+      console.log(`  participantAlt=${participantAlt}`);
+      console.log(`  contextInfo.participant=${contextParticipant}`);
+      console.log(`  payload.sender=${sender}`);
+      console.log(`  addressingMode=${key.addressingMode || 'none'}`);
+      
+      // Helper function to validate and extract JID
+      const isValidPhoneJid = (jid: string): boolean => {
+        if (!jid) return false;
+        if (!jid.includes('@s.whatsapp.net')) return false;
+        const phone = jid.split('@')[0].replace(/\D/g, '');
+        // Must be 10-15 digits (international phone numbers)
+        return phone.length >= 10 && phone.length <= 15;
+      };
       
       // 1. Try remoteJid with @s.whatsapp.net
-      if (remoteJid.includes('@s.whatsapp.net')) {
+      if (isValidPhoneJid(remoteJid)) {
         jidForPhone = remoteJid;
         phoneSource = 'remoteJid';
       } 
       // 2. Try remoteJidAlt with @s.whatsapp.net
-      else if (remoteJidAlt && remoteJidAlt.includes('@s.whatsapp.net')) {
+      else if (isValidPhoneJid(remoteJidAlt)) {
         jidForPhone = remoteJidAlt;
         phoneSource = 'remoteJidAlt';
       }
       // 3. Try participant (for ads/group-like messages where remoteJid is @lid)
-      else if (participant && participant.includes('@s.whatsapp.net')) {
+      else if (isValidPhoneJid(participant)) {
         jidForPhone = participant;
         phoneSource = 'participant';
       }
-      // 4. Try participantAlt
-      else if (participantAlt && participantAlt.includes('@s.whatsapp.net')) {
+      // 4. Try participantAlt (commonly used for Facebook ad messages)
+      else if (isValidPhoneJid(participantAlt)) {
         jidForPhone = participantAlt;
         phoneSource = 'participantAlt';
+      }
+      // 5. Try contextInfo.participant (another source for ad messages)
+      else if (isValidPhoneJid(contextParticipant)) {
+        jidForPhone = contextParticipant;
+        phoneSource = 'contextInfo.participant';
+      }
+      // 6. Try payload.sender (fallback for some Evolution versions)
+      else if (isValidPhoneJid(sender)) {
+        jidForPhone = sender;
+        phoneSource = 'payload.sender';
+      }
+      
+      // If we have @lid remoteJid but no valid phone yet, this is likely an ad message
+      // Log extra debug info to help diagnose
+      if (!jidForPhone && remoteJid.includes('@lid')) {
+        console.log(`[AD-MESSAGE] Detected @lid message (likely from ad/CTWA), searching for phone...`);
+        console.log(`  Full data object keys: ${Object.keys(data).join(', ')}`);
+        console.log(`  Full key object: ${JSON.stringify(key)}`);
+        console.log(`  Full contextInfo: ${JSON.stringify(contextInfo)}`);
+        
+        // Try to find phone in any nested field
+        const findPhoneInObject = (obj: any, path: string = ''): string | null => {
+          if (!obj || typeof obj !== 'object') return null;
+          
+          for (const [k, v] of Object.entries(obj)) {
+            if (typeof v === 'string' && v.includes('@s.whatsapp.net') && isValidPhoneJid(v)) {
+              console.log(`[AD-MESSAGE] Found phone at ${path}.${k}: ${v}`);
+              return v;
+            }
+            if (typeof v === 'object' && v !== null) {
+              const found = findPhoneInObject(v, `${path}.${k}`);
+              if (found) return found;
+            }
+          }
+          return null;
+        };
+        
+        const foundPhone = findPhoneInObject(data, 'data');
+        if (foundPhone) {
+          jidForPhone = foundPhone;
+          phoneSource = 'deep_search';
+          console.log(`[AD-MESSAGE] Deep search found phone: ${foundPhone}`);
+        }
       }
       
       // If still no valid JID found, log detailed info and skip
       if (!jidForPhone) {
-        console.log(`Skipping message: no valid @s.whatsapp.net found in any field.`);
-        console.log(`  remoteJid=${remoteJid}`);
-        console.log(`  remoteJidAlt=${remoteJidAlt}`);
-        console.log(`  participant=${participant}`);
-        console.log(`  participantAlt=${participantAlt}`);
-        console.log(`  Full key object:`, JSON.stringify(key));
+        console.log(`[SKIP] No valid @s.whatsapp.net found in any field.`);
+        console.log(`  This may be an ad message with missing phone info`);
+        console.log(`  Full payload preview: ${JSON.stringify(payload).substring(0, 1000)}`);
         
         return new Response(JSON.stringify({ 
           success: true, 
           skipped: true, 
           reason: 'no_valid_phone_jid',
-          debug: { remoteJid, remoteJidAlt, participant, participantAlt }
+          debug: { remoteJid, remoteJidAlt, participant, participantAlt, contextParticipant, sender, addressingMode: key.addressingMode }
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
       
-      console.log(`Using ${phoneSource} for phone extraction: ${jidForPhone}`);
+      console.log(`[PHONE] Using ${phoneSource} for phone extraction: ${jidForPhone}`);
       
       const rawPhone = jidForPhone.split('@')[0];
       // Clean and validate phone number
