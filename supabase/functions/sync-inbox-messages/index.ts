@@ -607,19 +607,19 @@ serve(async (req) => {
       });
     }
 
-    // Use upsert with the partial unique index on remote_message_id
+    // Use insert instead of upsert - duplicates are already filtered out by existing check
     const { error: insertError, data: insertedData } = await supabaseAdmin
       .from("inbox_messages")
-      .upsert(rowsToInsert, { 
-        onConflict: 'remote_message_id',
-        ignoreDuplicates: true 
-      })
+      .insert(rowsToInsert)
       .select('id');
 
     if (insertError) {
-      console.error("[SYNC] Insert inbox_messages failed:", insertError);
-      // Log but don't fail - may be partial duplication
-      console.warn("[SYNC] Some messages may have been skipped due to duplicates");
+      // If it's a duplicate key error, some messages may have been already inserted
+      if (insertError.code === '23505') {
+        console.log("[SYNC] Some messages were duplicates, continuing...");
+      } else {
+        console.error("[SYNC] Insert inbox_messages failed:", insertError);
+      }
     }
     
     const actuallyInserted = insertedData?.length || 0;

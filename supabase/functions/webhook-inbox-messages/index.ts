@@ -377,11 +377,26 @@ serve(async (req) => {
         }
       }
       
-      // Save the message using upsert to avoid duplication
-      // The unique partial index on remote_message_id handles conflicts
+      // Check if message with this remote_message_id already exists
+      if (messageId) {
+        const { data: existingMsg } = await supabaseClient
+          .from('inbox_messages')
+          .select('id')
+          .eq('remote_message_id', messageId)
+          .maybeSingle();
+        
+        if (existingMsg) {
+          console.log('[WEBHOOK] Message already exists, skipping:', messageId);
+          return new Response(JSON.stringify({ success: true, skipped: true, reason: 'duplicate_message' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+
+      // Save the message using insert
       const { data: savedMessage, error: messageError } = await supabaseClient
         .from('inbox_messages')
-        .upsert({
+        .insert({
           contact_id: contact.id,
           instance_id: instanceId,
           user_id: userId,
@@ -392,9 +407,6 @@ serve(async (req) => {
           remote_message_id: messageId,
           status: isFromMe ? 'sent' : 'delivered',
           is_from_flow: false,
-        }, {
-          onConflict: 'remote_message_id',
-          ignoreDuplicates: true
         })
         .select('id')
         .maybeSingle();
@@ -402,7 +414,7 @@ serve(async (req) => {
       if (messageError) {
         // If it's a duplicate error, just log and continue
         if (messageError.code === '23505') {
-          console.log('[WEBHOOK] Message already exists (duplicate remote_message_id), skipping:', messageId);
+          console.log('[WEBHOOK] Duplicate message (race condition), skipping:', messageId);
         } else {
           console.error('[WEBHOOK] Error saving message:', messageError);
           return new Response(JSON.stringify({ success: false, error: 'Failed to save message' }), {
