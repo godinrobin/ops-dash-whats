@@ -1697,6 +1697,8 @@ export type Database = {
         Row: {
           conversation_count: number | null
           created_at: string
+          evolution_api_key: string | null
+          evolution_base_url: string | null
           id: string
           instance_name: string
           label: string | null
@@ -1713,6 +1715,8 @@ export type Database = {
         Insert: {
           conversation_count?: number | null
           created_at?: string
+          evolution_api_key?: string | null
+          evolution_base_url?: string | null
           id?: string
           instance_name: string
           label?: string | null
@@ -1729,6 +1733,8 @@ export type Database = {
         Update: {
           conversation_count?: number | null
           created_at?: string
+          evolution_api_key?: string | null
+          evolution_base_url?: string | null
           id?: string
           instance_name?: string
           label?: string | null

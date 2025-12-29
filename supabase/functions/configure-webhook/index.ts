@@ -7,8 +7,24 @@ const corsHeaders = {
 };
 
 // Helper to get Evolution API config with fallback strategy
-async function getEvolutionConfig(supabaseClient: any, userId: string): Promise<{ baseUrl: string; apiKey: string; source: string } | null> {
-  // 1) Try user's own config
+// PRIORITY: 1) Instance config, 2) User config, 3) Admin config, 4) Global secrets
+async function getEvolutionConfig(
+  supabaseClient: any, 
+  userId: string, 
+  instanceConfig?: { evolution_base_url?: string; evolution_api_key?: string }
+): Promise<{ baseUrl: string; apiKey: string; source: string } | null> {
+  
+  // 1) Try instance's own config (highest priority)
+  if (instanceConfig?.evolution_base_url && instanceConfig?.evolution_api_key) {
+    console.log('[CONFIGURE-WEBHOOK] Using instance config');
+    return {
+      baseUrl: instanceConfig.evolution_base_url.replace(/\/$/, ''),
+      apiKey: instanceConfig.evolution_api_key,
+      source: 'instance'
+    };
+  }
+
+  // 2) Try user's own config
   const { data: userConfig } = await supabaseClient
     .from('maturador_config')
     .select('evolution_base_url, evolution_api_key')
@@ -24,7 +40,7 @@ async function getEvolutionConfig(supabaseClient: any, userId: string): Promise<
     };
   }
 
-  // 2) Try any admin config (first available)
+  // 3) Try any admin config (first available)
   const { data: adminConfig } = await supabaseClient
     .from('maturador_config')
     .select('evolution_base_url, evolution_api_key')
@@ -40,7 +56,7 @@ async function getEvolutionConfig(supabaseClient: any, userId: string): Promise<
     };
   }
 
-  // 3) Try global secrets
+  // 4) Try global secrets
   const globalBaseUrl = Deno.env.get('EVOLUTION_BASE_URL');
   const globalApiKey = Deno.env.get('EVOLUTION_API_KEY');
 
@@ -89,10 +105,10 @@ serve(async (req) => {
     const { instanceId } = await req.json();
     console.log(`[CONFIGURE-WEBHOOK] Configuring webhook for instance: ${instanceId}, user: ${user.id}`);
 
-    // Get instance info
+    // Get instance info INCLUDING evolution config columns
     const { data: instance, error: instanceError } = await supabaseClient
       .from('maturador_instances')
-      .select('*')
+      .select('*, evolution_base_url, evolution_api_key')
       .eq('id', instanceId)
       .eq('user_id', user.id)
       .single();
@@ -105,8 +121,11 @@ serve(async (req) => {
       });
     }
 
-    // Get Evolution API config with fallback strategy
-    const evolutionConfig = await getEvolutionConfig(supabaseClient, user.id);
+    // Get Evolution API config with fallback strategy (instance config has priority)
+    const evolutionConfig = await getEvolutionConfig(supabaseClient, user.id, {
+      evolution_base_url: instance.evolution_base_url,
+      evolution_api_key: instance.evolution_api_key,
+    });
 
     if (!evolutionConfig) {
       console.error('[CONFIGURE-WEBHOOK] No Evolution API configuration available');
@@ -116,7 +135,7 @@ serve(async (req) => {
       });
     }
 
-    console.log(`[CONFIGURE-WEBHOOK] Using config source: ${evolutionConfig.source}`);
+    console.log(`[CONFIGURE-WEBHOOK] Using config source: ${evolutionConfig.source}, baseUrl: ${evolutionConfig.baseUrl}`);
 
     const EVOLUTION_BASE_URL = evolutionConfig.baseUrl;
     const EVOLUTION_API_KEY = evolutionConfig.apiKey;
@@ -221,6 +240,7 @@ serve(async (req) => {
             v1Details: v1Text,
             webhookUrl,
             configSource: evolutionConfig.source,
+            evolutionBaseUrl: evolutionConfig.baseUrl,
             tip: 'You may need to configure the webhook manually in your Evolution API dashboard'
           }), {
             status: 500,
@@ -241,7 +261,8 @@ serve(async (req) => {
           instanceName,
           result: v1Result,
           format: 'v1',
-          configSource: evolutionConfig.source
+          configSource: evolutionConfig.source,
+          evolutionBaseUrl: evolutionConfig.baseUrl
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -260,7 +281,8 @@ serve(async (req) => {
         instanceName,
         result: altResult,
         format: 'alternative',
-        configSource: evolutionConfig.source
+        configSource: evolutionConfig.source,
+        evolutionBaseUrl: evolutionConfig.baseUrl
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -281,7 +303,8 @@ serve(async (req) => {
       instanceName,
       result,
       format: 'v2',
-      configSource: evolutionConfig.source
+      configSource: evolutionConfig.source,
+      evolutionBaseUrl: evolutionConfig.baseUrl
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

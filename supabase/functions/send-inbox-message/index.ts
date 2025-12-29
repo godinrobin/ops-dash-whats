@@ -48,39 +48,81 @@ serve(async (req) => {
       });
     }
 
-    // Resolve instance id for status updates (best-effort)
+    // Resolve instance id and get Evolution config for status updates
     const { data: instanceRow } = await supabaseAdmin
       .from('maturador_instances')
-      .select('id')
+      .select('id, evolution_base_url, evolution_api_key')
       .eq('instance_name', instanceName)
       .eq('user_id', user.id)
       .maybeSingle();
 
     const instanceId = instanceRow?.id ?? null;
 
-    // Get user's Evolution API config, fallback to admin config
-    let { data: config } = await supabaseClient
-      .from('maturador_config')
-      .select('*')
-      .eq('user_id', user.id)
-      .single();
+    // PRIORITY: 1) Instance config, 2) User config, 3) Admin config, 4) Global secrets
+    let EVOLUTION_BASE_URL = '';
+    let EVOLUTION_API_KEY = '';
+    let configSource = 'none';
 
-    // If user doesn't have their own config, fallback to admin config (global)
-    if (!config?.evolution_base_url || !config?.evolution_api_key) {
+    // 1) Try instance's own config (highest priority)
+    if (instanceRow?.evolution_base_url && instanceRow?.evolution_api_key) {
+      EVOLUTION_BASE_URL = instanceRow.evolution_base_url.replace(/\/$/, '');
+      EVOLUTION_API_KEY = instanceRow.evolution_api_key;
+      configSource = 'instance';
+      console.log(`[SEND-MESSAGE] Using instance config: ${EVOLUTION_BASE_URL}`);
+    }
+    
+    // 2) Try user's own config
+    if (!EVOLUTION_BASE_URL) {
+      const { data: userConfig } = await supabaseAdmin
+        .from('maturador_config')
+        .select('evolution_base_url, evolution_api_key')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      
+      if (userConfig?.evolution_base_url && userConfig?.evolution_api_key) {
+        EVOLUTION_BASE_URL = userConfig.evolution_base_url.replace(/\/$/, '');
+        EVOLUTION_API_KEY = userConfig.evolution_api_key;
+        configSource = 'user';
+        console.log(`[SEND-MESSAGE] Using user config: ${EVOLUTION_BASE_URL}`);
+      }
+    }
+
+    // 3) Try any admin config (first available)
+    if (!EVOLUTION_BASE_URL) {
       const { data: adminConfig } = await supabaseAdmin
         .from('maturador_config')
         .select('evolution_base_url, evolution_api_key')
         .limit(1)
-        .single();
+        .maybeSingle();
       
       if (adminConfig?.evolution_base_url && adminConfig?.evolution_api_key) {
-        config = adminConfig;
-        console.log("Using admin Evolution API config as fallback");
+        EVOLUTION_BASE_URL = adminConfig.evolution_base_url.replace(/\/$/, '');
+        EVOLUTION_API_KEY = adminConfig.evolution_api_key;
+        configSource = 'admin';
+        console.log(`[SEND-MESSAGE] Using admin config: ${EVOLUTION_BASE_URL}`);
       }
     }
 
-    const EVOLUTION_BASE_URL = config?.evolution_base_url?.replace(/\/$/, '') || 'https://api.chatwp.xyz';
-    const EVOLUTION_API_KEY = config?.evolution_api_key || Deno.env.get('EVOLUTION_API_KEY') || '';
+    // 4) Try global secrets
+    if (!EVOLUTION_BASE_URL) {
+      const globalBaseUrl = Deno.env.get('EVOLUTION_BASE_URL');
+      const globalApiKey = Deno.env.get('EVOLUTION_API_KEY');
+      
+      if (globalBaseUrl && globalApiKey) {
+        EVOLUTION_BASE_URL = globalBaseUrl.replace(/\/$/, '');
+        EVOLUTION_API_KEY = globalApiKey;
+        configSource = 'global';
+        console.log(`[SEND-MESSAGE] Using global config: ${EVOLUTION_BASE_URL}`);
+      }
+    }
+
+    if (!EVOLUTION_BASE_URL || !EVOLUTION_API_KEY) {
+      console.error('[SEND-MESSAGE] No Evolution API configuration available');
+      return new Response(JSON.stringify({ error: 'Evolution API not configured' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Determine how to send: via remoteJid (for @lid contacts) or formatted phone
     // Priority: remoteJid if it's @lid, otherwise use formatted phone

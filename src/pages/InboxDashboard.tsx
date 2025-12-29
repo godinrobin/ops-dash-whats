@@ -71,6 +71,11 @@ export default function InboxDashboard() {
   const [proxyProtocol, setProxyProtocol] = useState("http");
   const [proxyUsername, setProxyUsername] = useState("");
   const [proxyPassword, setProxyPassword] = useState("");
+  
+  // Evolution API configuration (optional per instance)
+  const [evolutionEnabled, setEvolutionEnabled] = useState(false);
+  const [evolutionBaseUrl, setEvolutionBaseUrl] = useState("");
+  const [evolutionApiKey, setEvolutionApiKey] = useState("");
 
   // QR Code modal
   const [qrModalOpen, setQrModalOpen] = useState(false);
@@ -254,6 +259,14 @@ export default function InboxDashboard() {
           password: proxyPassword || undefined,
         };
       }
+      
+      // Add Evolution API configuration if enabled
+      if (evolutionEnabled && evolutionBaseUrl && evolutionApiKey) {
+        body.evolutionConfig = {
+          baseUrl: evolutionBaseUrl,
+          apiKey: evolutionApiKey,
+        };
+      }
 
       const { data, error } = await supabase.functions.invoke('maturador-evolution', { body });
       if (error) throw error;
@@ -291,6 +304,9 @@ export default function InboxDashboard() {
     setProxyProtocol("http");
     setProxyUsername("");
     setProxyPassword("");
+    setEvolutionEnabled(false);
+    setEvolutionBaseUrl("");
+    setEvolutionApiKey("");
   };
 
   const handleGetQrCode = async (instance: Instance) => {
@@ -919,6 +935,37 @@ export default function InboxDashboard() {
                     <Label>Senha (opcional)</Label>
                     <Input type="password" placeholder="password" value={proxyPassword} onChange={(e) => setProxyPassword(e.target.value)} />
                   </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* Evolution API Configuration (Optional) */}
+            <Collapsible open={evolutionEnabled} onOpenChange={setEvolutionEnabled}>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" size="sm" className="w-full justify-between">
+                  <span>Servidor Evolution personalizado (opcional)</span>
+                  {evolutionEnabled ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-4 space-y-3">
+                <div className="space-y-2">
+                  <Label>URL do Servidor Evolution</Label>
+                  <Input 
+                    placeholder="https://api.seuservidor.com" 
+                    value={evolutionBaseUrl} 
+                    onChange={(e) => setEvolutionBaseUrl(e.target.value)} 
+                  />
+                  <p className="text-xs text-muted-foreground">URL completa do seu servidor Evolution API</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>API Key</Label>
+                  <Input 
+                    type="password"
+                    placeholder="sua-api-key" 
+                    value={evolutionApiKey} 
+                    onChange={(e) => setEvolutionApiKey(e.target.value)} 
+                  />
+                  <p className="text-xs text-muted-foreground">Chave de API do seu servidor Evolution</p>
                 </div>
               </CollapsibleContent>
             </Collapsible>
