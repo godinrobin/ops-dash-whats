@@ -556,6 +556,25 @@ serve(async (req) => {
         if (currentNode && (currentNode.type === 'waitInput' || currentNode.type === 'menu')) {
           console.log(`Found active session ${activeSession.id} waiting for input at node ${currentNode.id}`);
           
+          // Check if message is media without text content - if so, IGNORE it and keep waiting
+          const isMediaMessage = ['image', 'audio', 'video', 'document', 'sticker'].includes(messageType);
+          const hasTextContent = content && content.trim().length > 0;
+          
+          if (isMediaMessage && !hasTextContent) {
+            console.log(`[WAIT_INPUT] Ignoring media message (${messageType}) without caption - flow continues waiting for text input`);
+            return new Response(JSON.stringify({ 
+              success: true, 
+              skipped: true, 
+              reason: 'ignored_media_while_waiting_input',
+              messageType,
+              sessionId: activeSession.id
+            }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          
+          console.log(`[WAIT_INPUT] Valid input received: ${messageType} with content: "${content?.substring(0, 50)}"`);
+          
           // Cancel any pending timeout job for this session
           const { error: cancelError } = await supabaseClient
             .from('inbox_flow_delay_jobs')
