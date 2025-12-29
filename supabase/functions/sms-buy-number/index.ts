@@ -133,8 +133,24 @@ serve(async (req) => {
     let available = 0;
 
     if (serviceCode === 'wa') {
-      // Handle WhatsApp - check both formats
-      const waCandidate = (priceData?.[countryCode] as any)?.wa ?? (priceData?.wa as any)?.[countryCode] ?? null;
+      // Handle WhatsApp - API formats vary when passing service=wa
+      // A) { "73": { "wa": { cost, count, physicalCount } } }
+      // B) { "wa": { "73": { cost, count, physicalCount } } }
+      // C) { "73": { cost, count, physicalCount } }
+      const countryEntry = (priceData?.[countryCode] as any) ?? null;
+      let waCandidate: any = countryEntry?.wa ?? (priceData?.wa as any)?.[countryCode] ?? null;
+
+      if (!waCandidate && countryEntry && typeof countryEntry === 'object') {
+        const hasPricingKeys =
+          'cost' in countryEntry ||
+          'count' in countryEntry ||
+          'physicalCount' in countryEntry ||
+          'physical_count' in countryEntry ||
+          'physicalTotalCount' in countryEntry ||
+          'physical_total_count' in countryEntry;
+        if (hasPricingKeys) waCandidate = countryEntry;
+      }
+
       if (!waCandidate) {
         console.error('WhatsApp not found in response for country:', countryCode, JSON.stringify(priceData).substring(0, 200));
         throw new Error('WhatsApp não disponível neste país');
