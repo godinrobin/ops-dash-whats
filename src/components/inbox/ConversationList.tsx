@@ -127,10 +127,43 @@ export const ConversationList = ({
   };
 
   const getInitials = (name: string | null, phone: string) => {
-    if (name) {
+    if (name && name.trim()) {
       return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
     }
+    // For LID-only contacts (long phone), show "?" 
+    if (phone.length > 15) return '?';
     return phone.slice(-2);
+  };
+  
+  // Helper to check if this is a LID-only contact (no real phone)
+  const isLidContact = (phone: string, remoteJid?: string) => {
+    return phone.length > 15 || (remoteJid && remoteJid.includes('@lid'));
+  };
+  
+  // Helper to format display name
+  const getDisplayName = (contact: InboxContact) => {
+    if (contact.name && contact.name.trim()) {
+      return contact.name;
+    }
+    const remoteJid = (contact as any).remote_jid;
+    if (isLidContact(contact.phone, remoteJid)) {
+      return 'Desconhecido';
+    }
+    return formatPhoneDisplay(contact.phone);
+  };
+  
+  // Helper to get subtitle
+  const getSubtitle = (contact: InboxContact) => {
+    const remoteJid = (contact as any).remote_jid;
+    if (isLidContact(contact.phone, remoteJid)) {
+      // Show last 6 chars of LID as identifier
+      const shortId = contact.phone.slice(-6);
+      return `Lead via anúncio • ID ${shortId}`;
+    }
+    if (contact.name && contact.name.trim()) {
+      return formatPhoneDisplay(contact.phone);
+    }
+    return null;
   };
 
   const handleContactCreated = (contact: InboxContact) => {
@@ -264,15 +297,15 @@ export const ConversationList = ({
                   <div className="flex-1 min-w-0 overflow-hidden">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-medium text-sm truncate">
-                        {contact.name || formatPhoneDisplay(contact.phone)}
+                        {getDisplayName(contact)}
                       </span>
                       <span className="text-[10px] text-muted-foreground whitespace-nowrap flex-shrink-0">
                         {formatTime(contact.last_message_at)}
                       </span>
                     </div>
-                    {contact.name && (
+                    {getSubtitle(contact) && (
                       <p className="text-xs text-muted-foreground truncate mt-0.5">
-                        {formatPhoneDisplay(contact.phone)}
+                        {getSubtitle(contact)}
                       </p>
                     )}
                     <div className="flex items-center gap-1 mt-1 flex-wrap">

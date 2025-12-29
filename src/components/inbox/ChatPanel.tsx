@@ -392,10 +392,39 @@ export const ChatPanel = ({
   }
 
   const getInitials = (name: string | null, phone: string) => {
-    if (name) {
+    if (name && name.trim()) {
       return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
     }
+    // For LID-only contacts (long phone), show "?"
+    if (phone.length > 15) return '?';
     return phone.slice(-2);
+  };
+  
+  // Helper to check if this is a LID-only contact (no real phone)
+  const isLidContact = (phone: string, remoteJid?: string) => {
+    return phone.length > 15 || (remoteJid && remoteJid.includes('@lid'));
+  };
+  
+  // Get display name for contact
+  const getDisplayName = () => {
+    if (contact.name && contact.name.trim()) {
+      return contact.name;
+    }
+    const remoteJid = (contact as any).remote_jid;
+    if (isLidContact(contact.phone, remoteJid)) {
+      return 'Desconhecido';
+    }
+    return contact.phone;
+  };
+  
+  // Get subtitle for contact
+  const getContactSubtitle = () => {
+    const remoteJid = (contact as any).remote_jid;
+    if (isLidContact(contact.phone, remoteJid)) {
+      const shortId = contact.phone.slice(-6);
+      return `Lead via anúncio • ID ${shortId}`;
+    }
+    return formatPhoneDisplay(contact.phone);
   };
 
   const instanceColor = contact.instance_id 
@@ -415,7 +444,7 @@ export const ChatPanel = ({
           </Avatar>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-medium">{contact.name || contact.phone}</h3>
+              <h3 className="font-medium">{getDisplayName()}</h3>
               {contactLabels.map((label) => (
                 <Badge 
                   key={label} 
@@ -432,7 +461,7 @@ export const ChatPanel = ({
               ))}
             </div>
             <div className="flex items-center gap-2">
-              <p className="text-sm text-muted-foreground">{formatPhoneDisplay(contact.phone)}</p>
+              <p className="text-sm text-muted-foreground">{getContactSubtitle()}</p>
               {instanceName && (
                 <Badge 
                   variant="outline" 
