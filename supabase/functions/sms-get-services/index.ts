@@ -79,7 +79,7 @@ async function getMarginFromDatabase(): Promise<number> {
 // Mapa de nomes corrigidos para serviços conhecidos
 const SERVICE_NAME_OVERRIDES: Record<string, string> = {
   'wa': 'WhatsApp',
-  // bex = Whatnot (serviço diferente, mantém nome original)
+  'bex': 'WhatsApp', // Whatnot = WhatsApp para Brasil
   'wb': 'WeChat',
   'tg': 'Telegram',
   'go': 'Google/Gmail',
@@ -90,6 +90,11 @@ const SERVICE_NAME_OVERRIDES: Record<string, string> = {
   'fu': 'Snapchat',
   'vi': 'Viber',
   'ot': 'Outro (Qualquer)',
+};
+
+// Serviço bex (WhatsApp Brasil) tem preço fixo de $1.10 USD
+const FIXED_PRICE_SERVICES: Record<string, number> = {
+  'bex': 1.10,
 };
 
 // Serviços para esconder (têm nomes confusos ou são duplicados)
@@ -350,9 +355,10 @@ serve(async (req) => {
 
       const countryData = pricesData[countryCode];
       if (countryData) {
-        for (const [serviceCode, serviceData] of Object.entries(countryData)) {
+      for (const [serviceCode, serviceData] of Object.entries(countryData)) {
           const sData = serviceData as any;
-          const priceUsd = Number(sData.cost ?? 0);
+          // Usar preço fixo se definido, senão usar preço da API
+          const priceUsd = FIXED_PRICE_SERVICES[serviceCode] ?? Number(sData.cost ?? 0);
           // CRITICAL FIX: Use parseAvailability for ALL services
           const available = parseAvailability(sData);
           

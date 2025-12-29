@@ -12,6 +12,11 @@ const HERO_SMS_API_URL = 'https://hero-sms.com/stubs/handler_api.php';
 // Taxa de conversão USD para BRL (a API retorna preços em USD)
 const USD_TO_BRL = 6.10;
 
+// Serviço bex (WhatsApp Brasil) tem preço fixo de $1.10 USD
+const FIXED_PRICE_SERVICES: Record<string, number> = {
+  'bex': 1.10,
+};
+
 /**
  * CRITICAL FIX: Parse availability correctly from Hero SMS API response
  * The API returns both `count` (virtual/estimated) and `physicalCount` (real availability)
@@ -163,7 +168,8 @@ serve(async (req) => {
     } else {
       if (priceData[countryCode] && priceData[countryCode][serviceCode]) {
         const sData = priceData[countryCode][serviceCode];
-        priceUsd = Number(sData.cost ?? 0);
+        // Usar preço fixo se definido, senão usar preço da API
+        priceUsd = FIXED_PRICE_SERVICES[serviceCode] ?? Number(sData.cost ?? 0);
         // CRITICAL FIX: Use parseAvailability for ALL services
         available = parseAvailability(sData);
         console.log(`[Service ${serviceCode}] Price: $${priceUsd}, Available: ${available}`);
