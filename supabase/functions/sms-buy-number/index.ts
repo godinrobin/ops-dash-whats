@@ -12,6 +12,45 @@ const HERO_SMS_API_URL = 'https://hero-sms.com/stubs/handler_api.php';
 // Taxa de conversão USD para BRL (a API retorna preços em USD)
 const USD_TO_BRL = 6.10;
 
+/**
+ * CRITICAL FIX: Parse availability correctly from Hero SMS API response
+ * The API returns both `count` (virtual/estimated) and `physicalCount` (real availability)
+ * When `count` is 0, `physicalCount` often has the real availability
+ * We use Math.max to get the highest available count
+ */
+function parseAvailability(serviceData: any): number {
+  if (!serviceData || typeof serviceData !== 'object') {
+    return 0;
+  }
+
+  // Extract raw values - handle different field name formats
+  const countRaw = serviceData.count;
+  const physicalCountRaw = serviceData.physicalCount ?? serviceData.physical_count;
+  const physicalTotalCountRaw = serviceData.physicalTotalCount ?? serviceData.physical_total_count;
+
+  // Parse to numbers, handling string values like "1747 pcs"
+  const parseNum = (val: any): number => {
+    if (val === null || val === undefined) return 0;
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') {
+      const match = val.match(/(\d+)/);
+      return match ? parseInt(match[1], 10) : 0;
+    }
+    return 0;
+  };
+
+  const count = parseNum(countRaw);
+  const physicalCount = parseNum(physicalCountRaw);
+  const physicalTotalCount = parseNum(physicalTotalCountRaw);
+
+  // Use the MAXIMUM value to ensure we don't lose real availability
+  const finalCount = Math.max(count, physicalCount, physicalTotalCount);
+
+  console.log(`[parseAvailability] count=${count}, physicalCount=${physicalCount}, physicalTotalCount=${physicalTotalCount} => final=${finalCount}`);
+
+  return finalCount;
+}
+
 async function getMarginPercent(supabase: any): Promise<number> {
   try {
     const { data, error } = await supabase
@@ -76,7 +115,7 @@ serve(async (req) => {
       ? `${HERO_SMS_API_URL}?api_key=${apiKey}&action=getPrices&service=wa`
       : `${HERO_SMS_API_URL}?api_key=${apiKey}&action=getPrices&country=${countryCode}&service=${serviceCode}`;
 
-    console.log('Fetching prices from Hero SMS...', { countryCode, serviceCode });
+    console.log('Fetching prices from Hero SMS...', { countryCode, serviceCode, url: priceUrl });
 
     const priceResponse = await fetch(priceUrl);
     const priceText = await priceResponse.text();
@@ -94,6 +133,7 @@ serve(async (req) => {
     let available = 0;
 
     if (serviceCode === 'wa') {
+      // Handle WhatsApp - check both formats
       const waCandidate = (priceData?.[countryCode] as any)?.wa ?? (priceData?.wa as any)?.[countryCode] ?? null;
       if (!waCandidate) {
         console.error('WhatsApp not found in response for country:', countryCode, JSON.stringify(priceData).substring(0, 200));
@@ -101,13 +141,16 @@ serve(async (req) => {
       }
 
       priceUsd = Number(waCandidate.cost ?? 0);
-      available = Number(waCandidate.count ?? waCandidate.physicalCount ?? 0);
-      console.log(`WhatsApp price found: $${priceUsd}, Available: ${available}`);
+      // CRITICAL FIX: Use parseAvailability instead of nullish coalescing
+      available = parseAvailability(waCandidate);
+      console.log(`[WhatsApp] Price: $${priceUsd}, Available: ${available} (raw: count=${waCandidate.count}, physicalCount=${waCandidate.physicalCount})`);
     } else {
       if (priceData[countryCode] && priceData[countryCode][serviceCode]) {
-        priceUsd = priceData[countryCode][serviceCode].cost;
-        available = priceData[countryCode][serviceCode].count;
-        console.log(`Price found: $${priceUsd}, Available: ${available}`);
+        const sData = priceData[countryCode][serviceCode];
+        priceUsd = Number(sData.cost ?? 0);
+        // CRITICAL FIX: Use parseAvailability for ALL services
+        available = parseAvailability(sData);
+        console.log(`[Service ${serviceCode}] Price: $${priceUsd}, Available: ${available}`);
       } else {
         console.error('Service not found in response:', JSON.stringify(priceData).substring(0, 200));
         throw new Error('Serviço não disponível neste país');
@@ -134,7 +177,7 @@ serve(async (req) => {
     const priceWithMarkupUnit = Math.ceil(priceUsd * USD_TO_BRL * marginMultiplier * 100) / 100;
     const totalCharge = Math.ceil(priceWithMarkupUnit * buyQuantity * 100) / 100;
 
-    console.log(`Pricing | margin=${marginPercent}% unit=R$${priceWithMarkupUnit} total=R$${totalCharge}`);
+    console.log(`Pricing | priceUSD=${priceUsd} x USD_TO_BRL=${USD_TO_BRL} x margin=${marginPercent}% => unit=R$${priceWithMarkupUnit} total=R$${totalCharge}`);
 
     // Verifica saldo do usuário
     const { data: wallet, error: walletError } = await supabase

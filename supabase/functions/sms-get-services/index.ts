@@ -12,6 +12,46 @@ const HERO_SMS_API_URL = 'https://hero-sms.com/stubs/handler_api.php';
 // Taxa de conversão USD para BRL
 const USD_TO_BRL = 6.10;
 
+/**
+ * CRITICAL FIX: Parse availability correctly from Hero SMS API response
+ * The API returns both `count` (virtual/estimated) and `physicalCount` (real availability)
+ * When `count` is 0, `physicalCount` often has the real availability
+ * We use Math.max to get the highest available count
+ */
+function parseAvailability(serviceData: any): number {
+  if (!serviceData || typeof serviceData !== 'object') {
+    return 0;
+  }
+
+  // Extract raw values - handle different field name formats
+  const countRaw = serviceData.count;
+  const physicalCountRaw = serviceData.physicalCount ?? serviceData.physical_count;
+  const physicalTotalCountRaw = serviceData.physicalTotalCount ?? serviceData.physical_total_count;
+
+  // Parse to numbers, handling string values like "1747 pcs"
+  const parseNum = (val: any): number => {
+    if (val === null || val === undefined) return 0;
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') {
+      const match = val.match(/(\d+)/);
+      return match ? parseInt(match[1], 10) : 0;
+    }
+    return 0;
+  };
+
+  const count = parseNum(countRaw);
+  const physicalCount = parseNum(physicalCountRaw);
+  const physicalTotalCount = parseNum(physicalTotalCountRaw);
+
+  // Use the MAXIMUM value to ensure we don't lose real availability
+  const finalCount = Math.max(count, physicalCount, physicalTotalCount);
+
+  // Log for debugging
+  console.log(`[parseAvailability] count=${count}, physicalCount=${physicalCount}, physicalTotalCount=${physicalTotalCount} => final=${finalCount}`);
+
+  return finalCount;
+}
+
 async function getMarginFromDatabase(): Promise<number> {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -195,7 +235,7 @@ serve(async (req) => {
       const marginPercent = await getMarginFromDatabase();
       const marginMultiplier = 1 + (marginPercent / 100);
       
-      console.log(`Using margin: ${marginPercent}% (multiplier: ${marginMultiplier})`);
+      console.log(`Using margin: ${marginPercent}% (multiplier: ${marginMultiplier}), USD_TO_BRL: ${USD_TO_BRL}`);
       
       const countryCode = country || '73';
       
@@ -217,12 +257,7 @@ serve(async (req) => {
       try {
         const whatsappData = await whatsappPricesResponse.json();
 
-        const wa73 = (whatsappData?.['73'] as any)?.wa;
-        const wa62 = (whatsappData?.['62'] as any)?.wa;
-        console.log(
-          'WhatsApp prices debug (73/62):',
-          JSON.stringify({ wa73, wa62 }).substring(0, 500),
-        );
+        console.log('WhatsApp API raw response keys:', Object.keys(whatsappData ?? {}).slice(0, 20));
 
         // Formatos possíveis:
         // 1) { "73": { "wa": { cost, count, physicalCount } } }
@@ -234,28 +269,28 @@ serve(async (req) => {
 
         if (waCandidate) {
           const cost = Number(waCandidate.cost ?? 0);
-          const count = Number(waCandidate.count ?? waCandidate.physicalCount ?? 0);
+          // CRITICAL FIX: Use parseAvailability instead of nullish coalescing
+          const count = parseAvailability(waCandidate);
 
           console.log(
-            'WhatsApp candidate for country',
-            countryCode,
-            ':',
-            JSON.stringify({ cost, count }).substring(0, 300),
+            `[WhatsApp] country=${countryCode} raw:`,
+            JSON.stringify({ cost: waCandidate.cost, count: waCandidate.count, physicalCount: waCandidate.physicalCount }),
+            `=> parsed: cost=${cost}, count=${count}`,
           );
 
           if (cost > 0 && count > 0) {
             whatsappAvailable = true;
             whatsappPrice = cost;
             whatsappCount = count;
-            console.log(
-              `WhatsApp available for country ${countryCode}: price=${whatsappPrice} USD, count=${whatsappCount}`,
-            );
+            console.log(`[WhatsApp] AVAILABLE for country ${countryCode}: priceUSD=${whatsappPrice}, count=${whatsappCount}`);
+          } else {
+            console.log(`[WhatsApp] NOT available for country ${countryCode}: cost=${cost}, count=${count}`);
           }
         } else {
           console.log(
-            'WhatsApp candidate not found for country',
+            '[WhatsApp] Candidate not found for country',
             countryCode,
-            'keys=',
+            'available keys=',
             Object.keys(whatsappData ?? {}).slice(0, 30),
           );
         }
@@ -298,9 +333,10 @@ serve(async (req) => {
       const countryData = pricesData[countryCode];
       if (countryData) {
         for (const [serviceCode, serviceData] of Object.entries(countryData)) {
-          const sData = serviceData as { cost: number; count: number };
-          const priceUsd = sData.cost;
-          const available = sData.count;
+          const sData = serviceData as any;
+          const priceUsd = Number(sData.cost ?? 0);
+          // CRITICAL FIX: Use parseAvailability for ALL services
+          const available = parseAvailability(sData);
           
           // Pular serviços escondidos
           if (HIDDEN_SERVICES.includes(serviceCode)) {
@@ -315,6 +351,8 @@ serve(async (req) => {
             const priceBrlBase = priceUsd * USD_TO_BRL;
             // Preço com margem
             const priceWithMarkup = Math.ceil(priceBrlBase * marginMultiplier * 100) / 100;
+            
+            console.log(`[Service] ${serviceCode}: priceUSD=${priceUsd} => priceBRL=${priceBrlBase.toFixed(2)} => withMarkup=R$${priceWithMarkup} (available=${available})`);
             
             services.push({
               code: serviceCode,
@@ -342,7 +380,7 @@ serve(async (req) => {
           available: whatsappCount,
         });
         
-        console.log(`Added WhatsApp service manually: price=${priceWithMarkup} BRL, count=${whatsappCount}`);
+        console.log(`[WhatsApp] Added manually: priceUSD=${whatsappPrice} => priceBRL=${priceBrlBase.toFixed(2)} => withMarkup=R$${priceWithMarkup}, count=${whatsappCount}`);
       }
 
       // Ordenar por preço
