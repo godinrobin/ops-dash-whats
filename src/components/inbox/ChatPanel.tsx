@@ -58,7 +58,7 @@ interface ChatPanelProps {
   onSendMessage: (content: string, messageType?: string, mediaUrl?: string) => Promise<{ error?: string; errorCode?: string; data?: any }>;
   onToggleDetails: () => void;
   flows?: { id: string; name: string; is_active: boolean }[];
-  onTriggerFlow?: (flowId: string) => void;
+  onTriggerFlow?: (flowId: string) => Promise<void>;
   onRefreshContact?: () => void;
   onContactDeleted?: () => void;
 }

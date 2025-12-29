@@ -18,7 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 interface ChatInputProps {
   onSendMessage: (content: string, messageType?: string, mediaUrl?: string) => Promise<{ error?: string; data?: any }>;
   flows?: { id: string; name: string; is_active: boolean }[];
-  onTriggerFlow?: (flowId: string) => void;
+  onTriggerFlow?: (flowId: string) => Promise<void>;
   contactInstanceId?: string | null;
 }
 
@@ -349,10 +349,13 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactIns
                       variant="ghost" 
                       className="w-full justify-start gap-2" 
                       size="sm"
-                      onClick={() => {
-                        onTriggerFlow?.(flow.id);
+                      onClick={async () => {
                         setShowFlowsMenu(false);
-                        toast.success(`Fluxo "${flow.name}" disparado!`);
+                        try {
+                          await onTriggerFlow?.(flow.id);
+                        } catch (err) {
+                          console.error('Erro ao disparar fluxo:', err);
+                        }
                       }}
                     >
                       <Zap className="h-4 w-4 text-primary" />
