@@ -114,70 +114,119 @@ const deleteWebhook = async (baseUrl: string, apiKey: string, instanceName: stri
 const configureWebhook = async (baseUrl: string, apiKey: string, instanceName: string): Promise<boolean> => {
   const webhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/webhook-inbox-messages`;
   
-  // List of webhook payloads to try (different Evolution API versions)
-  const payloads = [
-    // Format 1: Modern Evolution API v2
+  // Different endpoint/payload combinations to try
+  const attempts = [
+    // Attempt 1: Evolution API v2 - POST /webhook/set/{instanceName}
     {
-      url: webhookUrl,
-      enabled: true,
-      webhookByEvents: false,
-      webhookBase64: false,
-      events: [
-        'MESSAGES_UPSERT',
-        'MESSAGES_UPDATE',
-        'CONNECTION_UPDATE',
-        'SEND_MESSAGE',
-        'MESSAGES_DELETE'
-      ]
-    },
-    // Format 2: Evolution API with webhook object
-    {
-      webhook: {
+      endpoint: `/webhook/set/${instanceName}`,
+      method: 'POST',
+      payload: {
         url: webhookUrl,
         enabled: true,
+        webhookByEvents: false,
+        webhookBase64: false,
         events: [
-          'messages.upsert',
-          'messages.update',
-          'connection.update',
-          'send.message',
-          'messages.delete'
+          'MESSAGES_UPSERT',
+          'MESSAGES_UPDATE', 
+          'CONNECTION_UPDATE',
+          'SEND_MESSAGE'
         ]
       }
     },
-    // Format 3: Simplified format
+    // Attempt 2: Evolution API v2 - PUT /webhook/set/{instanceName}
     {
-      url: webhookUrl,
-      webhook: true,
-      events: ['all']
+      endpoint: `/webhook/set/${instanceName}`,
+      method: 'PUT',
+      payload: {
+        url: webhookUrl,
+        enabled: true,
+        webhookByEvents: false,
+        webhookBase64: false,
+        events: [
+          'MESSAGES_UPSERT',
+          'MESSAGES_UPDATE', 
+          'CONNECTION_UPDATE',
+          'SEND_MESSAGE'
+        ]
+      }
+    },
+    // Attempt 3: Evolution API v1 style - POST /webhook/instance/{instanceName}
+    {
+      endpoint: `/webhook/instance/${instanceName}`,
+      method: 'POST',
+      payload: {
+        webhook: {
+          url: webhookUrl,
+          enabled: true,
+          events: [
+            'messages.upsert',
+            'messages.update',
+            'connection.update',
+            'send.message'
+          ]
+        }
+      }
+    },
+    // Attempt 4: Simpler payload format
+    {
+      endpoint: `/webhook/set/${instanceName}`,
+      method: 'POST',
+      payload: {
+        webhook: {
+          url: webhookUrl,
+          enabled: true
+        },
+        events: ['all']
+      }
+    },
+    // Attempt 5: Direct URL only
+    {
+      endpoint: `/webhook/set/${instanceName}`,
+      method: 'POST',
+      payload: {
+        url: webhookUrl,
+        webhook: true
+      }
     }
   ];
 
-  for (let i = 0; i < payloads.length; i++) {
+  for (let i = 0; i < attempts.length; i++) {
+    const attempt = attempts[i];
     try {
-      const url = `${baseUrl}/webhook/set/${instanceName}`;
-      console.log(`[CONFIGURE-WEBHOOK] Attempt ${i + 1} for ${instanceName}: ${url}`);
-      console.log(`[CONFIGURE-WEBHOOK] Payload:`, JSON.stringify(payloads[i]));
+      const url = `${baseUrl}${attempt.endpoint}`;
+      console.log(`[CONFIGURE-WEBHOOK] Attempt ${i + 1} for ${instanceName}: ${attempt.method} ${url}`);
+      console.log(`[CONFIGURE-WEBHOOK] Payload:`, JSON.stringify(attempt.payload));
       
       const response = await fetch(url, {
-        method: 'POST',
+        method: attempt.method,
         headers: {
           'Content-Type': 'application/json',
           'apikey': apiKey,
         },
-        body: JSON.stringify(payloads[i]),
+        body: JSON.stringify(attempt.payload),
       });
 
       const responseText = await response.text();
       console.log(`[CONFIGURE-WEBHOOK] Response: ${response.status} - ${responseText}`);
       
       if (response.ok) {
+        console.log(`[CONFIGURE-WEBHOOK] Success with attempt ${i + 1}`);
         return true;
+      }
+      
+      // Try to parse error for better logging
+      try {
+        const errorJson = JSON.parse(responseText);
+        console.log(`[CONFIGURE-WEBHOOK] Error details:`, errorJson);
+      } catch {
+        // Not JSON, already logged raw text
       }
     } catch (error) {
       console.error(`[CONFIGURE-WEBHOOK] Attempt ${i + 1} error:`, error);
     }
   }
 
+  console.error(`[CONFIGURE-WEBHOOK] All ${attempts.length} attempts failed for ${instanceName}`);
   return false;
 };
 
