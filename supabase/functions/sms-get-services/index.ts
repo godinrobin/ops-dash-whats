@@ -179,13 +179,37 @@ serve(async (req) => {
       
       const countryCode = country || '73';
       
-      // Buscar serviços e preços em paralelo
-      const [servicesMap, pricesResponse] = await Promise.all([
+      // Buscar serviços, preços e top países para WhatsApp em paralelo
+      const [servicesMap, pricesResponse, topWhatsappResponse] = await Promise.all([
         getServicesListFromAPI(apiKey, countryCode),
-        fetch(`${HERO_SMS_API_URL}?api_key=${apiKey}&action=getPrices&country=${countryCode}`)
+        fetch(`${HERO_SMS_API_URL}?api_key=${apiKey}&action=getPrices&country=${countryCode}`),
+        fetch(`${HERO_SMS_API_URL}?api_key=${apiKey}&action=getTopCountriesByService&service=wa`)
       ]);
       
       const pricesText = await pricesResponse.text();
+      
+      // Verificar se WhatsApp está disponível para este país
+      let whatsappAvailable = false;
+      let whatsappPrice = 0;
+      let whatsappCount = 0;
+      
+      try {
+        const topWhatsappData = await topWhatsappResponse.json();
+        console.log('Top WhatsApp countries response:', JSON.stringify(topWhatsappData).substring(0, 500));
+        
+        // Procurar o país atual nos top países do WhatsApp
+        if (topWhatsappData && topWhatsappData.wa) {
+          const countryData = topWhatsappData.wa.find((c: any) => String(c.country) === countryCode);
+          if (countryData && countryData.count > 0) {
+            whatsappAvailable = true;
+            whatsappPrice = countryData.price || countryData.retail_price || 1.1;
+            whatsappCount = countryData.count;
+            console.log(`WhatsApp available for country ${countryCode}: price=${whatsappPrice}, count=${whatsappCount}`);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching WhatsApp top countries:', err);
+      }
       
       if (!pricesText || pricesText.trim() === '') {
         console.error('Empty response from Hero SMS getPrices API');
@@ -245,6 +269,23 @@ serve(async (req) => {
             });
           }
         }
+      }
+      
+      // Adicionar WhatsApp se disponível e ainda não estiver na lista
+      if (whatsappAvailable && !services.some(s => s.code === 'wa')) {
+        const priceBrlBase = whatsappPrice * USD_TO_BRL;
+        const priceWithMarkup = Math.ceil(priceBrlBase * marginMultiplier * 100) / 100;
+        
+        services.push({
+          code: 'wa',
+          name: 'WhatsApp',
+          priceUsd: whatsappPrice,
+          priceBrl: priceBrlBase,
+          priceWithMarkup,
+          available: whatsappCount,
+        });
+        
+        console.log(`Added WhatsApp service manually: price=${priceWithMarkup} BRL, count=${whatsappCount}`);
       }
 
       // Ordenar por preço
