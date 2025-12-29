@@ -51,6 +51,9 @@ const SERVICE_NAME_OVERRIDES: Record<string, string> = {
   'ot': 'Outro (Qualquer)',
 };
 
+// Serviços para esconder (têm nomes confusos ou são duplicados)
+const HIDDEN_SERVICES = ['bex']; // Whatnot - não é WhatsApp
+
 // Buscar lista de serviços da API Hero SMS
 async function getServicesListFromAPI(apiKey: string, country: string): Promise<Record<string, string>> {
   const url = `${HERO_SMS_API_URL}?api_key=${apiKey}&action=getServicesList&country=${country}&lang=pt`;
@@ -195,11 +198,11 @@ serve(async (req) => {
       
       const countryCode = country || '73';
       
-      // Buscar serviços, preços e top países para WhatsApp em paralelo
-      const [servicesMap, pricesResponse, topWhatsappResponse] = await Promise.all([
+      // Buscar serviços, preços e preço específico do WhatsApp para este país em paralelo
+      const [servicesMap, pricesResponse, whatsappPriceResponse] = await Promise.all([
         getServicesListFromAPI(apiKey, countryCode),
         fetch(`${HERO_SMS_API_URL}?api_key=${apiKey}&action=getPrices&country=${countryCode}`),
-        fetch(`${HERO_SMS_API_URL}?api_key=${apiKey}&action=getTopCountriesByService&service=wa`)
+        fetch(`${HERO_SMS_API_URL}?api_key=${apiKey}&action=getPrices&service=wa&country=${countryCode}`)
       ]);
       
       const pricesText = await pricesResponse.text();
@@ -210,21 +213,21 @@ serve(async (req) => {
       let whatsappCount = 0;
       
       try {
-        const topWhatsappData = await topWhatsappResponse.json();
-        console.log('Top WhatsApp countries response:', JSON.stringify(topWhatsappData).substring(0, 500));
+        const whatsappData = await whatsappPriceResponse.json();
+        console.log('WhatsApp price response for country', countryCode, ':', JSON.stringify(whatsappData).substring(0, 500));
         
-        // Procurar o país atual nos top países do WhatsApp
-        if (topWhatsappData && topWhatsappData.wa) {
-          const countryData = topWhatsappData.wa.find((c: any) => String(c.country) === countryCode);
-          if (countryData && countryData.count > 0) {
+        // A resposta para getPrices com service específico vem como: {country_id: {wa: {cost, count}}}
+        if (whatsappData && whatsappData[countryCode] && whatsappData[countryCode].wa) {
+          const waData = whatsappData[countryCode].wa;
+          if (waData.count > 0) {
             whatsappAvailable = true;
-            whatsappPrice = countryData.price || countryData.retail_price || 1.1;
-            whatsappCount = countryData.count;
-            console.log(`WhatsApp available for country ${countryCode}: price=${whatsappPrice}, count=${whatsappCount}`);
+            whatsappPrice = waData.cost;
+            whatsappCount = waData.count;
+            console.log(`WhatsApp available for country ${countryCode}: price=${whatsappPrice} USD, count=${whatsappCount}`);
           }
         }
       } catch (err) {
-        console.error('Error fetching WhatsApp top countries:', err);
+        console.error('Error fetching WhatsApp price:', err);
       }
       
       if (!pricesText || pricesText.trim() === '') {
@@ -265,6 +268,11 @@ serve(async (req) => {
           const sData = serviceData as { cost: number; count: number };
           const priceUsd = sData.cost;
           const available = sData.count;
+          
+          // Pular serviços escondidos
+          if (HIDDEN_SERVICES.includes(serviceCode)) {
+            continue;
+          }
           
           if (available > 0) {
             // Usar override, nome da API ou código como fallback
