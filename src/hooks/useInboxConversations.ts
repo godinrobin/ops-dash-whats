@@ -128,15 +128,26 @@ export const useInboxConversations = (instanceId?: string) => {
           } else if (payload.eventType === 'UPDATE') {
             const updated = payload.new as any;
             setContacts(prev => {
+              const existingContact = prev.find(c => c.id === updated.id);
+              
+              // Guard: Only reorder if last_message_at or unread_count actually changed
+              const lastMessageChanged = existingContact?.last_message_at !== updated.last_message_at;
+              const unreadChanged = existingContact?.unread_count !== updated.unread_count;
+              
               const newList = prev.map(c => c.id === updated.id ? {
                 ...updated,
                 tags: Array.isArray(updated.tags) ? (updated.tags as any[]).map((t: any) => String(t)) : [],
                 status: updated.status as 'active' | 'archived'
               } as InboxContact : c);
-              // Re-sort by last_message_at
-              return newList.sort((a, b) => 
-                new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime()
-              );
+              
+              // Only re-sort if there was a meaningful change that affects ordering
+              if (lastMessageChanged || unreadChanged) {
+                return newList.sort((a, b) => 
+                  new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime()
+                );
+              }
+              
+              return newList;
             });
           } else if (payload.eventType === 'DELETE') {
             setContacts(prev => prev.filter(c => c.id !== payload.old.id));
