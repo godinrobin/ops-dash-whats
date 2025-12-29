@@ -355,16 +355,24 @@ serve(async (req) => {
       let sendFailed = false;
 
       // Helper function to find next valid node (skipping non-existent nodes)
-      const findNextValidNode = (fromNodeId: string): string | null => {
-        const edge = edges.find(e => e.source === fromNodeId);
-        if (!edge) return null;
-        
-        const targetNode = nodes.find(n => n.id === edge.target);
-        if (targetNode) return edge.target;
-        
-        // Target node doesn't exist - try to find the next one in the chain
-        console.log(`[${runId}] WARNING: Node ${edge.target} referenced in edge but does not exist, trying to skip`);
-        return findNextValidNode(edge.target);
+      const nodeIdSet = new Set(nodes.map(n => n.id));
+
+      const findNextValidNode = (fromNodeId: string, visited = new Set<string>()): string | null => {
+        if (visited.has(fromNodeId)) return null;
+        visited.add(fromNodeId);
+
+        const outgoing = edges.filter(e => e.source === fromNodeId);
+        if (outgoing.length === 0) return null;
+
+        for (const edge of outgoing) {
+          if (nodeIdSet.has(edge.target)) return edge.target;
+
+          console.log(`[${runId}] WARNING: Node ${edge.target} referenced in edge but does not exist, trying to skip`);
+          const deeper = findNextValidNode(edge.target, visited);
+          if (deeper) return deeper;
+        }
+
+        return null;
       };
 
       while (continueProcessing && !sendFailed) {
@@ -373,24 +381,22 @@ serve(async (req) => {
         if (!currentNode) {
           // Node not found - try to recover by finding next valid node
           console.log(`[${runId}] Node ${currentNodeId} not found, attempting recovery`);
-          
-          // If we're at start, find the first valid node
+
+          // Try to jump to a reachable valid node from the missing one
+          const recoveredNextId = findNextValidNode(currentNodeId);
+          if (recoveredNextId) {
+            currentNodeId = recoveredNextId;
+            console.log(`[${runId}] Recovered by skipping missing nodes: moving to ${currentNodeId}`);
+            continue;
+          }
+
+          // Special case: if we are at start, pick any valid start target
           if (currentNodeId === 'start-1') {
-            const startEdge = edges.find(e => e.source === 'start-1');
-            if (startEdge) {
-              const nextValidNode = nodes.find(n => n.id === startEdge.target);
-              if (nextValidNode) {
-                currentNodeId = startEdge.target;
-                console.log(`[${runId}] Recovered: moving to ${currentNodeId}`);
-                continue;
-              }
-              // Start's target doesn't exist, try to find any valid node connected to start
-              const validNextId = findNextValidNode('start-1');
-              if (validNextId) {
-                currentNodeId = validNextId;
-                console.log(`[${runId}] Recovered by skipping missing nodes: moving to ${currentNodeId}`);
-                continue;
-              }
+            const validNextId = findNextValidNode('start-1');
+            if (validNextId) {
+              currentNodeId = validNextId;
+              console.log(`[${runId}] Recovered from start by skipping missing nodes: moving to ${currentNodeId}`);
+              continue;
             }
           }
           
@@ -426,28 +432,17 @@ serve(async (req) => {
         trackNodeAnalytics(currentNodeId, currentNode.type);
 
         switch (currentNode.type) {
-          case 'start':
-            // Just move to next node - validate it exists first
-            const startEdge = edges.find(e => e.source === currentNodeId);
-            if (startEdge) {
-              const nextNode = nodes.find(n => n.id === startEdge.target);
-              if (nextNode) {
-                currentNodeId = startEdge.target;
-              } else {
-                // Next node doesn't exist, try to find a valid one
-                const validNextId = findNextValidNode(currentNodeId);
-                if (validNextId) {
-                  console.log(`[${runId}] Skipping missing node, jumping to ${validNextId}`);
-                  currentNodeId = validNextId;
-                } else {
-                  console.log(`[${runId}] No valid next node found after start`);
-                  continueProcessing = false;
-                }
-              }
+          case 'start': {
+            // Pick the first reachable valid node (handles multiple start edges + orphaned edges)
+            const nextId = findNextValidNode(currentNodeId);
+            if (nextId) {
+              currentNodeId = nextId;
             } else {
+              console.log(`[${runId}] No valid next node found after start`);
               continueProcessing = false;
             }
             break;
+          }
 
           case 'text':
             // Check if already sent (idempotency)
