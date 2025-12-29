@@ -354,13 +354,70 @@ serve(async (req) => {
       const processedActions: string[] = [];
       let sendFailed = false;
 
+      // Helper function to find next valid node (skipping non-existent nodes)
+      const findNextValidNode = (fromNodeId: string): string | null => {
+        const edge = edges.find(e => e.source === fromNodeId);
+        if (!edge) return null;
+        
+        const targetNode = nodes.find(n => n.id === edge.target);
+        if (targetNode) return edge.target;
+        
+        // Target node doesn't exist - try to find the next one in the chain
+        console.log(`[${runId}] WARNING: Node ${edge.target} referenced in edge but does not exist, trying to skip`);
+        return findNextValidNode(edge.target);
+      };
+
       while (continueProcessing && !sendFailed) {
         const currentNode = nodes.find(n => n.id === currentNodeId);
         
         if (!currentNode) {
-          console.log(`[${runId}] Node not found, ending flow`);
-          continueProcessing = false;
-          break;
+          // Node not found - try to recover by finding next valid node
+          console.log(`[${runId}] Node ${currentNodeId} not found, attempting recovery`);
+          
+          // If we're at start, find the first valid node
+          if (currentNodeId === 'start-1') {
+            const startEdge = edges.find(e => e.source === 'start-1');
+            if (startEdge) {
+              const nextValidNode = nodes.find(n => n.id === startEdge.target);
+              if (nextValidNode) {
+                currentNodeId = startEdge.target;
+                console.log(`[${runId}] Recovered: moving to ${currentNodeId}`);
+                continue;
+              }
+              // Start's target doesn't exist, try to find any valid node connected to start
+              const validNextId = findNextValidNode('start-1');
+              if (validNextId) {
+                currentNodeId = validNextId;
+                console.log(`[${runId}] Recovered by skipping missing nodes: moving to ${currentNodeId}`);
+                continue;
+              }
+            }
+          }
+          
+          // Could not recover - mark session as failed
+          console.error(`[${runId}] FATAL: Could not find node ${currentNodeId} and recovery failed`);
+          variables._recovery_error = `Node ${currentNodeId} not found in flow`;
+          variables._recovery_failed_at = new Date().toISOString();
+          
+          await supabaseClient
+            .from('inbox_flow_sessions')
+            .update({
+              status: 'completed',
+              variables,
+              processing: false,
+              processing_started_at: null,
+            })
+            .eq('id', sessionId);
+          
+          return new Response(JSON.stringify({ 
+            success: false, 
+            error: 'Node not found',
+            nodeId: currentNodeId,
+            recovered: false
+          }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
         }
 
         console.log(`[${runId}] Processing node: ${currentNode.type} (${currentNodeId})`);
@@ -370,10 +427,23 @@ serve(async (req) => {
 
         switch (currentNode.type) {
           case 'start':
-            // Just move to next node
+            // Just move to next node - validate it exists first
             const startEdge = edges.find(e => e.source === currentNodeId);
             if (startEdge) {
-              currentNodeId = startEdge.target;
+              const nextNode = nodes.find(n => n.id === startEdge.target);
+              if (nextNode) {
+                currentNodeId = startEdge.target;
+              } else {
+                // Next node doesn't exist, try to find a valid one
+                const validNextId = findNextValidNode(currentNodeId);
+                if (validNextId) {
+                  console.log(`[${runId}] Skipping missing node, jumping to ${validNextId}`);
+                  currentNodeId = validNextId;
+                } else {
+                  console.log(`[${runId}] No valid next node found after start`);
+                  continueProcessing = false;
+                }
+              }
             } else {
               continueProcessing = false;
             }

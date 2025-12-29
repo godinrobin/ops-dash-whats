@@ -159,13 +159,28 @@ const FlowEditorPage = () => {
 
     setSaving(true);
     try {
+      // Clean up orphaned edges - remove edges that reference non-existent nodes
+      const nodeIds = new Set(nodes.map(n => n.id));
+      const cleanedEdges = edges.filter(edge => {
+        const sourceExists = nodeIds.has(edge.source);
+        const targetExists = nodeIds.has(edge.target);
+        if (!sourceExists || !targetExists) {
+          console.log(`[FlowEditor] Removing orphan edge: ${edge.source} -> ${edge.target} (source exists: ${sourceExists}, target exists: ${targetExists})`);
+        }
+        return sourceExists && targetExists;
+      });
+
+      if (cleanedEdges.length !== edges.length) {
+        console.log(`[FlowEditor] Cleaned ${edges.length - cleanedEdges.length} orphaned edges`);
+      }
+
       const { error } = await supabase
         .from('inbox_flows')
         .update({
           name: flowName,
           description: flowDescription,
           nodes: JSON.parse(JSON.stringify(nodes)),
-          edges: JSON.parse(JSON.stringify(edges)),
+          edges: JSON.parse(JSON.stringify(cleanedEdges)),
           trigger_type: triggerType,
           trigger_keywords: triggerKeywords.split(',').map(k => k.trim()).filter(Boolean),
           assigned_instances: assignedInstances,
