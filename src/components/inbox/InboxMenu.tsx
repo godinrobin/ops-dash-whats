@@ -17,6 +17,7 @@ import { useInboxFlows } from '@/hooks/useInboxFlows';
 import { Smartphone, Zap, Tag, Users, Trash2, Plus, X, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { formatPhoneDisplay } from '@/utils/phoneFormatter';
 
 interface Instance {
   id: string;
@@ -367,10 +368,10 @@ export const InboxMenu = ({ open, onOpenChange }: InboxMenuProps) => {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-medium text-sm">
-                            {contact.name || contact.phone}
+                            {contact.name || formatPhoneDisplay(contact.phone)}
                           </p>
                           {contact.name && (
-                            <p className="text-xs text-muted-foreground">{contact.phone}</p>
+                            <p className="text-xs text-muted-foreground">{formatPhoneDisplay(contact.phone)}</p>
                           )}
                         </div>
                       </div>

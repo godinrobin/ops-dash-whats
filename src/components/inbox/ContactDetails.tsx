@@ -1,6 +1,7 @@
 import { X, Tag, MessageSquare, Calendar, Edit2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { formatPhoneDisplay } from '@/utils/phoneFormatter';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
@@ -65,7 +66,7 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
               </AvatarFallback>
             </Avatar>
             <h4 className="font-medium mt-3">{contact.name || 'Sem nome'}</h4>
-            <p className="text-sm text-muted-foreground">{contact.phone}</p>
+            <p className="text-sm text-muted-foreground">{formatPhoneDisplay(contact.phone)}</p>
           </div>
 
           <Separator />

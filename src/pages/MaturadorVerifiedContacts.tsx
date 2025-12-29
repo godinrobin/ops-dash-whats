@@ -15,6 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { formatPhoneDisplay } from "@/utils/phoneFormatter";
 
 interface Instance {
   id: string;
@@ -31,21 +32,6 @@ interface VerifiedContact {
   profile_pic_url: string | null;
   last_fetched_at: string | null;
 }
-
-// Formata número para exibição
-const formatPhoneDisplay = (phone: string) => {
-  const cleaned = phone.replace(/\D/g, '');
-  if (cleaned.length === 13) {
-    return `+${cleaned.slice(0,2)} (${cleaned.slice(2,4)}) ${cleaned.slice(4,9)}-${cleaned.slice(9)}`;
-  } else if (cleaned.length === 12) {
-    return `+${cleaned.slice(0,2)} (${cleaned.slice(2,4)}) ${cleaned.slice(4,8)}-${cleaned.slice(8)}`;
-  } else if (cleaned.length === 11) {
-    return `(${cleaned.slice(0,2)}) ${cleaned.slice(2,7)}-${cleaned.slice(7)}`;
-  } else if (cleaned.length === 10) {
-    return `(${cleaned.slice(0,2)}) ${cleaned.slice(2,6)}-${cleaned.slice(6)}`;
-  }
-  return phone;
-};
 
 export default function MaturadorVerifiedContacts() {
   const navigate = useNavigate();
