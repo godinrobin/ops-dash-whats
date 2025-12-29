@@ -1,4 +1,4 @@
-import { Check, CheckCheck, Clock, XCircle, Play, Pause, Download, Loader2, FileText } from 'lucide-react';
+import { Check, CheckCheck, Clock, XCircle, Play, Pause, Download, Loader2, FileText, ImageOff, AlertCircle, Volume2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { InboxMessage } from '@/types/inbox';
 import { format } from 'date-fns';
@@ -15,6 +15,9 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
   const [audioProgress, setAudioProgress] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const [audioError, setAudioError] = useState(false);
+  const [videoError, setVideoError] = useState(false);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -28,23 +31,30 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
 
     const handleLoadedMetadata = () => {
       setAudioDuration(audio.duration);
+      setAudioError(false);
+    };
+
+    const handleError = () => {
+      setAudioError(true);
     };
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('error', handleError);
 
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('error', handleError);
     };
   }, []);
 
   const toggleAudio = () => {
-    if (!audioRef.current) return;
+    if (!audioRef.current || audioError) return;
     if (isPlaying) {
       audioRef.current.pause();
     } else {
-      audioRef.current.play();
+      audioRef.current.play().catch(() => setAudioError(true));
     }
     setIsPlaying(!isPlaying);
   };
@@ -72,12 +82,47 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
     }
   };
 
+  const renderExpiredMedia = (type: 'image' | 'audio' | 'video') => {
+    const icons = {
+      image: <ImageOff className="h-6 w-6" />,
+      audio: <Volume2 className="h-6 w-6" />,
+      video: <AlertCircle className="h-6 w-6" />,
+    };
+    const labels = {
+      image: 'Imagem expirada',
+      audio: 'Áudio expirado',
+      video: 'Vídeo expirado',
+    };
+
+    return (
+      <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg border border-border/50 min-w-[180px]">
+        <div className="text-muted-foreground">
+          {icons[type]}
+        </div>
+        <div className="flex flex-col">
+          <span className="text-sm font-medium text-muted-foreground">{labels[type]}</span>
+          <span className="text-xs text-muted-foreground/70">Mídia não disponível</span>
+        </div>
+      </div>
+    );
+  };
+
   const renderContent = () => {
     switch (message.message_type) {
       case 'image':
+        if (imageError) {
+          return (
+            <div className="max-w-xs">
+              {renderExpiredMedia('image')}
+              {message.content && (
+                <p className="mt-2 text-sm">{message.content}</p>
+              )}
+            </div>
+          );
+        }
         return (
           <div className="max-w-xs">
-            {!imageLoaded && (
+            {!imageLoaded && !imageError && (
               <div className="w-48 h-48 bg-muted rounded-lg flex items-center justify-center">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
@@ -85,9 +130,10 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
             <img 
               src={message.media_url || ''} 
               alt="Image" 
-              className={cn("rounded-lg max-w-full cursor-pointer hover:opacity-90 transition-opacity", !imageLoaded && "hidden")}
-              onLoad={() => setImageLoaded(true)}
-              onClick={() => window.open(message.media_url || '', '_blank')}
+              className={cn("rounded-lg max-w-full cursor-pointer hover:opacity-90 transition-opacity", (!imageLoaded || imageError) && "hidden")}
+              onLoad={() => { setImageLoaded(true); setImageError(false); }}
+              onError={() => { setImageError(true); setImageLoaded(false); }}
+              onClick={() => !imageError && window.open(message.media_url || '', '_blank')}
             />
             {message.content && (
               <p className="mt-2 text-sm">{message.content}</p>
@@ -96,6 +142,9 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
         );
 
       case 'audio':
+        if (audioError) {
+          return renderExpiredMedia('audio');
+        }
         return (
           <div className="flex items-center gap-3 min-w-[200px]">
             <button 
@@ -122,11 +171,22 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
                 setIsPlaying(false);
                 setAudioProgress(0);
               }}
+              onError={() => setAudioError(true)}
             />
           </div>
         );
 
       case 'video':
+        if (videoError) {
+          return (
+            <div className="max-w-xs">
+              {renderExpiredMedia('video')}
+              {message.content && (
+                <p className="mt-2 text-sm">{message.content}</p>
+              )}
+            </div>
+          );
+        }
         return (
           <div className="max-w-xs">
             <video 
@@ -134,6 +194,7 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
               controls 
               className="rounded-lg max-w-full"
               preload="metadata"
+              onError={() => setVideoError(true)}
             />
             {message.content && (
               <p className="mt-2 text-sm">{message.content}</p>
@@ -185,6 +246,9 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
             src={message.media_url || ''} 
             alt="Sticker" 
             className="h-24 w-24"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+            }}
           />
         );
 
@@ -194,7 +258,6 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
         );
     }
   };
-
   return (
     <div className={cn(
       "flex animate-in fade-in slide-in-from-bottom-2 duration-200",
