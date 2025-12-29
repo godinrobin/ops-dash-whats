@@ -1134,6 +1134,44 @@ export type Database = {
         }
         Relationships: []
       }
+      inbox_flow_analytics: {
+        Row: {
+          created_at: string
+          flow_id: string
+          id: string
+          node_id: string
+          node_type: string
+          session_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          flow_id: string
+          id?: string
+          node_id: string
+          node_type: string
+          session_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          flow_id?: string
+          id?: string
+          node_id?: string
+          node_type?: string
+          session_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbox_flow_analytics_flow_id_fkey"
+            columns: ["flow_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_flows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inbox_flow_delay_jobs: {
         Row: {
           attempts: number

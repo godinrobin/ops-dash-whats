@@ -25,7 +25,15 @@ interface PropertiesPanelProps {
   allNodes?: Node[];
 }
 // System variables that are always available (synchronized with backend)
-const SYSTEM_VARIABLES = ['nome', 'telefone', 'resposta', 'lastMessage', 'contactName', 'ultima_mensagem'];
+const SYSTEM_VARIABLES = [
+  'nome', 
+  'telefone', 
+  'resposta', 
+  'lastMessage', 
+  'contactName', 
+  'ultima_mensagem',
+  'saudacao_personalizada' // Dynamic greeting based on time of day (São Paulo timezone)
+];
 
 // Function to sanitize file names for upload (removes accents and special characters)
 const sanitizeFileName = (filename: string): string => {

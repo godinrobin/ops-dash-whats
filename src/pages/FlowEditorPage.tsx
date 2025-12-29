@@ -5,11 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ArrowLeft, Settings, Play, Smartphone } from 'lucide-react';
 import { FlowCanvas } from '@/components/flow-builder/FlowCanvas';
+import { FlowAnalyticsBar } from '@/components/flow-builder/FlowAnalyticsBar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { FlowNode, FlowEdge, InboxFlow } from '@/types/inbox';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
+import { DateFilter } from '@/hooks/useFlowAnalytics';
 import {
   Sheet,
   SheetContent,
@@ -54,6 +56,7 @@ const FlowEditorPage = () => {
   const [pauseOnMedia, setPauseOnMedia] = useState(false);
   const [instances, setInstances] = useState<Instance[]>([]);
   const [assignedInstances, setAssignedInstances] = useState<string[]>([]);
+  const [analyticsDateFilter, setAnalyticsDateFilter] = useState<DateFilter>('today');
 
   // Dynamic activity tracking based on route
   const isAutomatiZap = location.pathname.startsWith('/inbox');
@@ -388,6 +391,15 @@ const FlowEditorPage = () => {
           </Button>
         </div>
       </div>
+
+      {/* Analytics bar - only show when flow has ID */}
+      {id && (
+        <FlowAnalyticsBar
+          flowId={id}
+          dateFilter={analyticsDateFilter}
+          onDateFilterChange={setAnalyticsDateFilter}
+        />
+      )}
 
       <div className="flex-1 min-h-0">
         {flow && (
