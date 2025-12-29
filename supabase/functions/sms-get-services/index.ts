@@ -39,7 +39,7 @@ async function getMarginFromDatabase(): Promise<number> {
 // Mapa de nomes corrigidos para serviços conhecidos
 const SERVICE_NAME_OVERRIDES: Record<string, string> = {
   'wa': 'WhatsApp',
-  'bex': 'WhatsApp', // Whatnot na API = WhatsApp
+  // bex = Whatnot (serviço diferente, mantém nome original)
   'wb': 'WeChat',
   'tg': 'Telegram',
   'go': 'Google/Gmail',
