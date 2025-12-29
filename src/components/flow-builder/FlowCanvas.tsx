@@ -35,6 +35,8 @@ import { RandomizerNode } from './nodes/RandomizerNode';
 import { NodeSidebar } from './NodeSidebar';
 import { PropertiesPanel } from './PropertiesPanel';
 import { useFlowValidation } from './hooks/useFlowValidation';
+import { FlowAnalyticsProvider } from './FlowAnalyticsContext';
+import { useFlowAnalytics } from '@/hooks/useFlowAnalytics';
 
 const nodeTypes = {
   start: StartNode,
@@ -66,10 +68,15 @@ interface FlowCanvasProps {
   triggerType?: 'keyword' | 'all' | 'schedule';
   triggerKeywords?: string[];
   onUpdateFlowSettings?: (settings: { triggerType?: string; triggerKeywords?: string[] }) => void;
+  flowId?: string;
 }
 
-const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, triggerKeywords, onUpdateFlowSettings }: FlowCanvasProps) => {
+const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, triggerKeywords, onUpdateFlowSettings, flowId }: FlowCanvasProps) => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const { screenToFlowPosition } = useReactFlow();
+  
+  // Flow analytics for node badges
+  const { analytics, loading: analyticsLoading } = useFlowAnalytics(flowId || '', 'today');
   const { screenToFlowPosition } = useReactFlow();
   
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes.length > 0 ? initialNodes : [
@@ -279,6 +286,11 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
   };
 
   return (
+    <FlowAnalyticsProvider 
+      nodeStats={analytics?.nodeStats || new Map()} 
+      totalSessions={analytics?.totalSessions || 0}
+      isLoading={analyticsLoading}
+    >
     <div className="flex w-full overflow-hidden" style={{ height: 'calc(100vh - 140px)' }}>
       <NodeSidebar />
       
@@ -337,6 +349,7 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
         allNodes={nodes}
       />
     </div>
+    </FlowAnalyticsProvider>
   );
 };
 

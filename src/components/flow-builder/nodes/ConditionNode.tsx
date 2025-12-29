@@ -8,6 +8,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { NodeAnalyticsWrapper } from '../NodeAnalyticsWrapper';
 
 interface ConditionRule {
   id: string;
@@ -43,7 +44,7 @@ const operatorLabels: Record<string, string> = {
   not_exists: 'Não existe',
 };
 
-export const ConditionNode = ({ data }: NodeProps) => {
+export const ConditionNode = ({ id, data }: NodeProps) => {
   const nodeData = data as ConditionNodeData;
   const conditions = nodeData.conditions || [];
   const logicOperator = nodeData.logicOperator || 'and';
@@ -115,6 +116,7 @@ export const ConditionNode = ({ data }: NodeProps) => {
   );
 
   return (
+    <NodeAnalyticsWrapper nodeId={id}>
     <TooltipProvider>
       <div 
         className={cn(
@@ -183,5 +185,6 @@ export const ConditionNode = ({ data }: NodeProps) => {
         />
       </div>
     </TooltipProvider>
+    </NodeAnalyticsWrapper>
   );
 };

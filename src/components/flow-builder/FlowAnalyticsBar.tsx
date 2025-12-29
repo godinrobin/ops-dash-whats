@@ -38,7 +38,7 @@ export const FlowAnalyticsBar = ({ flowId, dateFilter, onDateFilterChange }: Flo
           </Badge>
           <Badge variant="secondary" className="flex items-center gap-1">
             <TrendingUp className="h-3 w-3" />
-            {analytics.conversionRate.toFixed(1)}% conversão
+            {analytics.conversionRate.toFixed(1)}% chegaram ao final
           </Badge>
         </div>
       ) : null}
