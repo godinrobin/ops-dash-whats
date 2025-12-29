@@ -103,6 +103,72 @@ serve(async (req) => {
     let currentNodeId = session.current_node_id || 'start-1';
     let variables = (session.variables || {}) as Record<string, unknown>;
 
+    // === Generate dynamic system variables ===
+    // Helper to generate personalized greeting based on São Paulo timezone (-03:00)
+    const generateSaudacaoPersonalizada = (): string => {
+      // Get current time in São Paulo timezone (UTC-3)
+      const now = new Date();
+      const saoPauloOffset = -3 * 60; // -3 hours in minutes
+      const localOffset = now.getTimezoneOffset();
+      const saoPauloTime = new Date(now.getTime() + (localOffset + saoPauloOffset) * 60000);
+      const hour = saoPauloTime.getHours();
+
+      // Determine time of day
+      let periodGreeting: string;
+      if (hour >= 5 && hour < 12) {
+        periodGreeting = 'bom dia';
+      } else if (hour >= 12 && hour < 18) {
+        periodGreeting = 'boa tarde';
+      } else {
+        periodGreeting = 'boa noite';
+      }
+
+      // Randomize greeting prefix
+      const greetingPrefixes = [
+        'Oi',
+        'Olá',
+        'Oi, tudo bem',
+        'Olá, tudo bem',
+        'Oi, tudo certo',
+        'E aí',
+        'Eai',
+        'Oii',
+        'Oláa',
+        'Hey',
+      ];
+      const randomPrefix = greetingPrefixes[Math.floor(Math.random() * greetingPrefixes.length)];
+
+      // Combine with period greeting in a natural way
+      const combinations = [
+        `${randomPrefix}! ${periodGreeting.charAt(0).toUpperCase() + periodGreeting.slice(1)}!`,
+        `${randomPrefix}, ${periodGreeting}!`,
+        `${periodGreeting.charAt(0).toUpperCase() + periodGreeting.slice(1)}! ${randomPrefix}!`,
+        `${randomPrefix}! ${periodGreeting.charAt(0).toUpperCase() + periodGreeting.slice(1)}, como você está?`,
+        `${randomPrefix}! ${periodGreeting.charAt(0).toUpperCase() + periodGreeting.slice(1)}, tudo bem?`,
+      ];
+
+      return combinations[Math.floor(Math.random() * combinations.length)];
+    };
+
+    // Set system variable for personalized greeting
+    variables['saudacao_personalizada'] = generateSaudacaoPersonalizada();
+    console.log(`Generated saudacao_personalizada: ${variables['saudacao_personalizada']}`);
+
+    // Helper function to track node analytics
+    const trackNodeAnalytics = async (nodeId: string, nodeType: string) => {
+      try {
+        await supabaseClient.from('inbox_flow_analytics').insert({
+          flow_id: flow.id,
+          session_id: sessionId,
+          node_id: nodeId,
+          node_type: nodeType,
+          user_id: session.user_id,
+        });
+      } catch (e) {
+        console.error('Error tracking node analytics:', e);
+      }
+    };
+
     // If user provided input, store it and move to next node IMMEDIATELY (checkpoint)
     if (userInput !== undefined && userInput !== null) {
       const currentNode = nodes.find(n => n.id === currentNodeId);
@@ -202,6 +268,9 @@ serve(async (req) => {
         }
 
         console.log(`Processing node: ${currentNode.type} (${currentNodeId})`);
+
+        // Track analytics for this node (fire and forget)
+        trackNodeAnalytics(currentNodeId, currentNode.type);
 
         switch (currentNode.type) {
           case 'start':

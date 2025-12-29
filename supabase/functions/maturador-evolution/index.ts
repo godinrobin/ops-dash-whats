@@ -251,39 +251,67 @@ Regras:
       fromInstanceId: string,
       conversationId: string
     ): Promise<'text' | 'audio' | 'image'> => {
-      // Get message counts by type for this instance in this conversation
-      const { data: messages } = await supabaseClient
+      // Get ALL messages in this conversation (from both instances)
+      const { data: allMessages } = await supabaseClient
+        .from('maturador_messages')
+        .select('message_type, from_instance_id')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true });
+
+      // Get messages sent by THIS instance
+      const { data: myMessages } = await supabaseClient
         .from('maturador_messages')
         .select('message_type')
         .eq('conversation_id', conversationId)
-        .eq('from_instance_id', fromInstanceId);
+        .eq('from_instance_id', fromInstanceId)
+        .order('created_at', { ascending: true });
 
-      const totalCount = messages?.length || 0;
-      const audioCount = messages?.filter(m => m.message_type === 'audio').length || 0;
-      const imageCount = messages?.filter(m => m.message_type === 'image').length || 0;
-      const mediaCount = audioCount + imageCount;
+      const totalAllMessages = allMessages?.length || 0;
+      const myMessageCount = myMessages?.length || 0;
+      const myAudioCount = myMessages?.filter(m => m.message_type === 'audio').length || 0;
+      const myImageCount = myMessages?.filter(m => m.message_type === 'image').length || 0;
+      const myMediaCount = myAudioCount + myImageCount;
 
-      console.log(`Message stats for instance ${fromInstanceId}: total=${totalCount}, audio=${audioCount}, image=${imageCount}`);
+      console.log(`Message stats for instance ${fromInstanceId}: myTotal=${myMessageCount}, myAudio=${myAudioCount}, myImage=${myImageCount}, totalConversation=${totalAllMessages}`);
 
       // First message: always text
-      if (totalCount === 0) {
+      if (myMessageCount === 0) {
         return 'text';
       }
 
-      // No audio sent yet? Send audio
-      if (audioCount === 0) {
+      // No audio sent yet by this instance? Send audio first
+      if (myAudioCount === 0) {
         return 'audio';
       }
 
-      // No image sent yet? Send image
-      if (imageCount === 0) {
+      // No image sent yet by this instance? Send image
+      if (myImageCount === 0) {
         return 'image';
       }
 
-      // After initial audio+image, every 10 text messages: random audio or image
-      const textsSinceLastMedia = totalCount - mediaCount;
-      if (textsSinceLastMedia >= 10 && textsSinceLastMedia % 10 === 0) {
-        return Math.random() > 0.5 ? 'audio' : 'image';
+      // After initial audio+image, reduce frequency drastically
+      // Send media every 40 TOTAL messages (sent + received combined = 20 from each side)
+      // This means each instance sends 1 media per 20 of their own messages
+      
+      // Count text messages since last media from this instance
+      let textsSinceLastMedia = 0;
+      if (myMessages) {
+        for (let i = myMessages.length - 1; i >= 0; i--) {
+          if (myMessages[i].message_type === 'text') {
+            textsSinceLastMedia++;
+          } else {
+            break; // Stop when we hit a media message
+          }
+        }
+      }
+
+      console.log(`Texts since last media: ${textsSinceLastMedia}`);
+
+      // Every 20 text messages from this instance, send a media (alternating audio/image)
+      if (textsSinceLastMedia >= 20) {
+        // Alternate between audio and image based on which was sent more recently
+        const lastMediaType = myMessages?.slice().reverse().find(m => m.message_type === 'audio' || m.message_type === 'image')?.message_type;
+        return lastMediaType === 'audio' ? 'image' : 'audio';
       }
 
       // Default: text

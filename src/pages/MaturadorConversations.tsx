@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { ArrowLeft, Plus, Loader2, MessageSquare, Trash2, Pencil, Play, Pause, S
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { useMaturadorLoop } from "@/hooks/useMaturadorLoop";
 
 interface Instance {
   id: string;
@@ -46,6 +47,9 @@ export default function MaturadorConversations() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Use global maturador loop hook - loops persist across navigation
+  const { activeLoops, sessionMessageCounts, startConversationLoop, stopConversationLoop } = useMaturadorLoop();
+
   // Create/Edit modal
   const [modalOpen, setModalOpen] = useState(false);
   const [editingConversation, setEditingConversation] = useState<Conversation | null>(null);
@@ -67,12 +71,6 @@ export default function MaturadorConversations() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
   const [deleting, setDeleting] = useState(false);
-
-  // Loop automático de conversas
-  const [activeLoops, setActiveLoops] = useState<Set<string>>(new Set());
-  const [sessionMessageCounts, setSessionMessageCounts] = useState<Map<string, number>>(new Map());
-  const loopTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map());
-  const loopActive = useRef<Set<string>>(new Set());
 
   const fetchData = async () => {
     if (!user) return;
@@ -252,127 +250,7 @@ export default function MaturadorConversations() {
     }
   };
 
-  // Função para enviar uma mensagem e agendar a próxima
-  const runLoopIteration = useCallback(async (conversation: Conversation) => {
-    // Verifica se o loop ainda está ativo
-    if (!loopActive.current.has(conversation.id)) {
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase.functions.invoke('maturador-evolution', {
-        body: { action: 'run-conversation', conversationId: conversation.id },
-      });
-
-      if (error) throw error;
-
-      // Verifica se o loop ainda está ativo após a chamada
-      if (!loopActive.current.has(conversation.id)) {
-        return;
-      }
-
-      if (data.error) {
-        if (data.dailyLimitReached) {
-          toast.warning(`${conversation.name}: Limite diário atingido. Loop parado.`);
-          stopConversationLoop(conversation.id);
-          return;
-        }
-        throw new Error(data.error);
-      }
-
-      if ((data?.messagesSent || 0) > 0) {
-        // Atualiza contador de mensagens da sessão
-        setSessionMessageCounts(prev => {
-          const newMap = new Map(prev);
-          newMap.set(conversation.id, (prev.get(conversation.id) || 0) + 1);
-          return newMap;
-        });
-        
-        // Atualiza dados
-        fetchData();
-      }
-
-      // Verifica novamente se o loop ainda está ativo antes de agendar próxima
-      if (!loopActive.current.has(conversation.id)) {
-        return;
-      }
-
-      // Calcula delay aleatório para próxima mensagem
-      const delay = Math.floor(
-        Math.random() * (conversation.max_delay_seconds - conversation.min_delay_seconds + 1)
-      ) + conversation.min_delay_seconds;
-
-      console.log(`Próxima mensagem de "${conversation.name}" em ${delay} segundos`);
-
-      // Agenda próxima execução
-      const timeout = setTimeout(() => {
-        runLoopIteration(conversation);
-      }, delay * 1000);
-
-      loopTimeouts.current.set(conversation.id, timeout);
-
-    } catch (error: any) {
-      console.error('Erro no loop:', error);
-      toast.error(`${conversation.name}: ${error.message || 'Erro ao enviar mensagem'}`);
-      stopConversationLoop(conversation.id);
-    }
-  }, []);
-
-  // Inicia o loop automático de uma conversa
-  const startConversationLoop = useCallback((conversation: Conversation) => {
-    if (!conversation.is_active) {
-      toast.error('Ative a conversa antes de executar');
-      return;
-    }
-
-    // Adiciona ao set de loops ativos
-    loopActive.current.add(conversation.id);
-    setActiveLoops(prev => new Set(prev).add(conversation.id));
-    setSessionMessageCounts(prev => {
-      const newMap = new Map(prev);
-      newMap.set(conversation.id, 0);
-      return newMap;
-    });
-
-    toast.success(`Loop iniciado: ${conversation.name}`);
-
-    // Inicia imediatamente a primeira iteração
-    runLoopIteration(conversation);
-  }, [runLoopIteration]);
-
-  // Para o loop automático de uma conversa
-  const stopConversationLoop = useCallback((conversationId: string) => {
-    // Remove do set de loops ativos
-    loopActive.current.delete(conversationId);
-    
-    // Limpa o timeout pendente
-    const timeout = loopTimeouts.current.get(conversationId);
-    if (timeout) {
-      clearTimeout(timeout);
-      loopTimeouts.current.delete(conversationId);
-    }
-
-    // Atualiza estado
-    setActiveLoops(prev => {
-      const next = new Set(prev);
-      next.delete(conversationId);
-      return next;
-    });
-
-    const conversation = conversations.find(c => c.id === conversationId);
-    const messagesInSession = sessionMessageCounts.get(conversationId) || 0;
-    toast.info(`Loop parado: ${conversation?.name || 'Conversa'}. ${messagesInSession} mensagens enviadas nesta sessão.`);
-  }, [conversations, sessionMessageCounts]);
-
-  // Cleanup ao desmontar o componente
-  useEffect(() => {
-    return () => {
-      // Para todos os loops ativos ao desmontar
-      loopTimeouts.current.forEach((timeout) => clearTimeout(timeout));
-      loopTimeouts.current.clear();
-      loopActive.current.clear();
-    };
-  }, []);
+  // Note: Loop functions are now handled by useMaturadorLoop hook which persists across navigation
 
   const handleDelete = async () => {
     if (!conversationToDelete) return;
@@ -390,9 +268,9 @@ export default function MaturadorConversations() {
       setDeleteDialogOpen(false);
       setConversationToDelete(null);
       await fetchData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error deleting conversation:', error);
-      toast.error(error.message || 'Erro ao remover conversa');
+      toast.error(error instanceof Error ? error.message : 'Erro ao remover conversa');
     } finally {
       setDeleting(false);
     }
