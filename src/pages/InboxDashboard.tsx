@@ -154,6 +154,21 @@ export default function InboxDashboard() {
     }
   };
 
+  // Auto-heal webhooks silently - force reconfigure to ensure they are active
+  const autoHealWebhooks = async () => {
+    try {
+      console.log('[AUTO-HEAL] Starting silent webhook reconfiguration');
+      const { data, error } = await supabase.functions.invoke('force-reconfigure-webhooks', {});
+      if (error) {
+        console.error('[AUTO-HEAL] Error:', error);
+      } else {
+        console.log('[AUTO-HEAL] Result:', data);
+      }
+    } catch (error) {
+      console.error('[AUTO-HEAL] Error:', error);
+    }
+  };
+
   useEffect(() => {
     fetchData();
   }, [user]);
@@ -192,10 +207,12 @@ export default function InboxDashboard() {
   // Verify webhooks after data is loaded (em background, não bloqueia UI)
   useEffect(() => {
     if (instances.length > 0 && !loading) {
-      // Executa verificação de webhooks de forma assíncrona sem bloquear
-      setTimeout(() => verifyWebhooks(), 2000);
+      // Auto-heal webhooks first (force reconfigure)
+      setTimeout(() => autoHealWebhooks(), 1000);
+      // Then verify webhooks
+      setTimeout(() => verifyWebhooks(), 3000);
       // Enable ignoreGroups on all connected instances (após webhooks)
-      setTimeout(() => enableIgnoreGroupsOnAllInstances(), 4000);
+      setTimeout(() => enableIgnoreGroupsOnAllInstances(), 5000);
     }
   }, [instances, loading]);
 

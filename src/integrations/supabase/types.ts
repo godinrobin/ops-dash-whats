@@ -2795,6 +2795,44 @@ export type Database = {
         }
         Relationships: []
       }
+      webhook_diagnostics: {
+        Row: {
+          event_type: string
+          id: string
+          instance_id: string | null
+          instance_name: string
+          payload_preview: string | null
+          received_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          event_type: string
+          id?: string
+          instance_id?: string | null
+          instance_name: string
+          payload_preview?: string | null
+          received_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          event_type?: string
+          id?: string
+          instance_id?: string | null
+          instance_name?: string
+          payload_preview?: string | null
+          received_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_diagnostics_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       webhook_history: {
         Row: {
           created_at: string | null
@@ -2970,6 +3008,7 @@ export type Database = {
       }
     }
     Functions: {
+      cleanup_old_webhook_diagnostics: { Args: never; Returns: undefined }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
