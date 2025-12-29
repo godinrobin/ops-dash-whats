@@ -6,18 +6,21 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Hero SMS API base URL
+const HERO_SMS_API_URL = 'https://hero-sms.com/stubs/handler_api.php';
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const apiKey = Deno.env.get('SMS_ACTIVATE_API_KEY');
+    const apiKey = Deno.env.get('HERO_SMS_API_KEY');
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     
     if (!apiKey) {
-      throw new Error('SMS_ACTIVATE_API_KEY não configurada');
+      throw new Error('HERO_SMS_API_KEY não configurada');
     }
 
     const authHeader = req.headers.get('Authorization');
@@ -61,12 +64,12 @@ serve(async (req) => {
       throw new Error('Pedido já foi cancelado');
     }
 
-    // Cancela na API SMS-Activate (status 8 = cancelar)
-    const cancelUrl = `https://api.sms-activate.org/stubs/handler_api.php?api_key=${apiKey}&action=setStatus&status=8&id=${smsActivateId}`;
+    // Cancela na API Hero SMS (status 8 = cancelar)
+    const cancelUrl = `${HERO_SMS_API_URL}?api_key=${apiKey}&action=setStatus&status=8&id=${smsActivateId}`;
     const cancelResponse = await fetch(cancelUrl);
     const cancelResult = await cancelResponse.text();
     
-    console.log('Cancel result:', cancelResult);
+    console.log('Hero SMS Cancel result:', cancelResult);
 
     // Verifica se o cancelamento foi negado pela API
     if (cancelResult.includes('EARLY_CANCEL_DENIED')) {
