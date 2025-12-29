@@ -237,8 +237,15 @@ export default function AdsCampaigns() {
 
       setAdAccounts(accounts || []);
 
-      // Build filter for selected accounts
-      const accountFilter = selectedAccounts.length > 0 ? selectedAccounts : null;
+      // Get active account IDs (is_selected = true)
+      const activeAccountIds = (accounts || [])
+        .filter(acc => acc.is_selected === true)
+        .map(acc => acc.id);
+
+      // Use selected accounts if any, otherwise use only active accounts
+      const accountIdsToFilter = selectedAccounts.length > 0 
+        ? selectedAccounts 
+        : activeAccountIds;
 
       // Load campaigns
       let campaignsQuery = supabase
@@ -247,8 +254,9 @@ export default function AdsCampaigns() {
         .eq("user_id", user.id)
         .order("spend", { ascending: false });
 
-      if (accountFilter) {
-        campaignsQuery = campaignsQuery.in("ad_account_id", accountFilter);
+      // Apply filter if we have accounts to filter by
+      if (accountIdsToFilter.length > 0) {
+        campaignsQuery = campaignsQuery.in("ad_account_id", accountIdsToFilter);
       }
 
       const { data: campaignsData } = await campaignsQuery;
@@ -261,8 +269,8 @@ export default function AdsCampaigns() {
         .eq("user_id", user.id)
         .order("spend", { ascending: false });
 
-      if (accountFilter) {
-        adsetsQuery = adsetsQuery.in("ad_account_id", accountFilter);
+      if (accountIdsToFilter.length > 0) {
+        adsetsQuery = adsetsQuery.in("ad_account_id", accountIdsToFilter);
       }
 
       const { data: adsetsData } = await adsetsQuery;
@@ -275,8 +283,8 @@ export default function AdsCampaigns() {
         .eq("user_id", user.id)
         .order("spend", { ascending: false });
 
-      if (accountFilter) {
-        adsQuery = adsQuery.in("ad_account_id", accountFilter);
+      if (accountIdsToFilter.length > 0) {
+        adsQuery = adsQuery.in("ad_account_id", accountIdsToFilter);
       }
 
       const { data: adsData } = await adsQuery;
