@@ -1,5 +1,6 @@
-import { Handle, Position } from '@xyflow/react';
+import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Shuffle } from 'lucide-react';
+import { NodeAnalyticsWrapper } from '../NodeAnalyticsWrapper';
 
 interface Split {
   id: string;
@@ -7,21 +8,20 @@ interface Split {
   percentage: number;
 }
 
-interface RandomizerNodeProps {
-  data: {
-    label?: string;
-    splits?: Split[];
-  };
-  selected?: boolean;
+interface RandomizerNodeData {
+  label?: string;
+  splits?: Split[];
 }
 
-export const RandomizerNode = ({ data, selected }: RandomizerNodeProps) => {
-  const splits: Split[] = data.splits || [
+export const RandomizerNode = ({ id, data, selected }: NodeProps & { selected?: boolean }) => {
+  const nodeData = data as RandomizerNodeData;
+  const splits: Split[] = nodeData.splits || [
     { id: 'A', name: 'A', percentage: 50 },
     { id: 'B', name: 'B', percentage: 50 },
   ];
 
   return (
+    <NodeAnalyticsWrapper nodeId={id}>
     <div className={`px-4 py-3 rounded-lg border-2 min-w-[180px] ${
       selected ? 'border-violet-500 shadow-lg shadow-violet-500/20' : 'border-border'
     } bg-card`}>
@@ -61,5 +61,6 @@ export const RandomizerNode = ({ data, selected }: RandomizerNodeProps) => {
         </div>
       </div>
     </div>
+    </NodeAnalyticsWrapper>
   );
 };
