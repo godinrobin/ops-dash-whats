@@ -613,6 +613,62 @@ export type Database = {
         }
         Relationships: []
       }
+      ads_lead_ingest_logs: {
+        Row: {
+          created_at: string
+          ctwa_source: string | null
+          event_type: string | null
+          id: string
+          instance_id: string | null
+          payload_hash: string | null
+          payload_snippet: Json | null
+          phone_prefix: string | null
+          phone_source: string | null
+          reason: string
+          remote_jid: string | null
+          resolved: boolean | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          ctwa_source?: string | null
+          event_type?: string | null
+          id?: string
+          instance_id?: string | null
+          payload_hash?: string | null
+          payload_snippet?: Json | null
+          phone_prefix?: string | null
+          phone_source?: string | null
+          reason: string
+          remote_jid?: string | null
+          resolved?: boolean | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          ctwa_source?: string | null
+          event_type?: string | null
+          id?: string
+          instance_id?: string | null
+          payload_hash?: string | null
+          payload_snippet?: Json | null
+          phone_prefix?: string | null
+          phone_source?: string | null
+          reason?: string
+          remote_jid?: string | null
+          resolved?: boolean | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ads_lead_ingest_logs_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ads_whatsapp_leads: {
         Row: {
           ad_id: string | null

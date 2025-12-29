@@ -6,6 +6,40 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper function to log ingest events for debugging
+const logIngestEvent = async (
+  supabaseClient: any,
+  data: {
+    instanceId?: string;
+    userId?: string;
+    reason: string;
+    phonePrefix?: string;
+    remoteJid?: string;
+    phoneSource?: string;
+    ctwaSource?: string;
+    payloadHash?: string;
+    payloadSnippet?: any;
+    eventType?: 'skip' | 'error';
+  }
+) => {
+  try {
+    await supabaseClient.from('ads_lead_ingest_logs').insert({
+      instance_id: data.instanceId || null,
+      user_id: data.userId || null,
+      reason: data.reason,
+      phone_prefix: data.phonePrefix || null,
+      remote_jid: data.remoteJid || null,
+      phone_source: data.phoneSource || null,
+      ctwa_source: data.ctwaSource || null,
+      payload_hash: data.payloadHash || null,
+      payload_snippet: data.payloadSnippet || null,
+      event_type: data.eventType || 'skip',
+    });
+    console.log(`[INGEST-LOG] Recorded: ${data.reason}`);
+  } catch (err) {
+    console.error('[INGEST-LOG] Failed to record:', err);
+  }
+};
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -229,6 +263,16 @@ serve(async (req) => {
         console.error(`  addressingMode=${key.addressingMode || 'none'}`);
         console.error(`  Full payload: ${JSON.stringify(payload).substring(0, 2000)}`);
         
+        // Log to database for UI diagnosis
+        await logIngestEvent(supabaseClient, {
+          reason: 'no_valid_phone_jid',
+          remoteJid: remoteJid || remoteJidAlt || 'none',
+          phoneSource: 'none',
+          payloadHash: hashHex,
+          payloadSnippet: { remoteJid, remoteJidAlt, participant, participantAlt, addressingMode: key.addressingMode },
+          eventType: 'skip',
+        });
+        
         return new Response(JSON.stringify({ 
           success: true, 
           skipped: true, 
@@ -256,33 +300,12 @@ serve(async (req) => {
         });
       }
       
-      // Additional validation: reject numbers that don't start with valid country codes
-      // Extended list including:
-      // - Americas: 55 (Brazil), 1 (US/Canada), 54 (Argentina), 52 (Mexico), 56 (Chile), 57 (Colombia), 58 (Venezuela), 51 (Peru), 53 (Cuba), 506 (Costa Rica), 507 (Panama), 593 (Ecuador), 595 (Paraguay), 598 (Uruguay)
-      // - Europe: 44 (UK), 49 (Germany), 33 (France), 34 (Spain), 39 (Italy), 351 (Portugal), 31 (Netherlands), 32 (Belgium), 41 (Switzerland), 43 (Austria), 45 (Denmark), 46 (Sweden), 47 (Norway), 48 (Poland), 420 (Czech), 380 (Ukraine), 7 (Russia)
-      // - Africa: 244 (Angola), 258 (Mozambique), 238 (Cape Verde), 239 (São Tomé), 245 (Guinea-Bissau), 27 (South Africa), 234 (Nigeria), 254 (Kenya), 255 (Tanzania), 256 (Uganda), 20 (Egypt), 212 (Morocco)
-      // - Asia/Middle East: 91 (India), 86 (China), 81 (Japan), 82 (South Korea), 62 (Indonesia), 60 (Malaysia), 63 (Philippines), 66 (Thailand), 84 (Vietnam), 971 (UAE), 966 (Saudi Arabia), 972 (Israel), 90 (Turkey)
-      // - Oceania: 61 (Australia), 64 (New Zealand)
-      const validCountryPrefixes = [
-        // Americas
-        '55', '1', '54', '52', '56', '57', '58', '51', '53', '506', '507', '593', '595', '598',
-        // Europe  
-        '44', '49', '33', '34', '39', '351', '31', '32', '41', '43', '45', '46', '47', '48', '420', '380', '7',
-        // Africa (Portuguese-speaking + major)
-        '244', '258', '238', '239', '245', '27', '234', '254', '255', '256', '20', '212',
-        // Asia/Middle East
-        '91', '86', '81', '82', '62', '60', '63', '66', '84', '971', '966', '972', '90',
-        // Oceania
-        '61', '64'
-      ];
-      const hasValidPrefix = validCountryPrefixes.some(prefix => phone.startsWith(prefix));
+      // Phone validation: Accept any valid E.164 format (10-15 digits)
+      // No country prefix restriction - accept international numbers from all countries
+      console.log(`[PHONE] Validated international phone: ${phone} (${phone.length} digits, prefix: ${phone.substring(0, 3)})`);
       
-      if (!hasValidPrefix) {
-        console.log(`Skipping message with invalid country prefix: ${phone} (first 3 digits: ${phone.substring(0, 3)})`);
-        return new Response(JSON.stringify({ success: true, skipped: true, reason: 'invalid_country_prefix', phone_prefix: phone.substring(0, 3) }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+      // Store phone source for debugging
+      const debugPhoneInfo = { phone, phoneSource, length: phone.length, prefix: phone.substring(0, 3) };
       
       // Extract message content - Evolution API v2 structure
       // data.message contains the actual message object with conversation/extendedTextMessage/etc
@@ -599,19 +622,112 @@ serve(async (req) => {
             let ctwaClid: string | null = null;
             let fbclid: string | null = null;
             
-            // Check for ctwa_clid in the message content
-            const ctwaMatch = content?.match(/ctwa_clid[=:]\s*([a-zA-Z0-9_-]+)/i);
-            if (ctwaMatch) {
-              ctwaClid = ctwaMatch[1];
-              console.log(`[ADS LEAD] Extracted ctwa_clid: ${ctwaClid}`);
+            let ctwaSource = 'none';
+            let fbclidSource = 'none';
+            
+            // === ENHANCED CTWA/FBCLID EXTRACTION ===
+            // 1. Check structured fields first (most reliable for CTWA ads)
+            const referral = data.contextInfo?.externalAdReply || data.message?.contextInfo?.externalAdReply || {};
+            const messageContextInfo = data.message?.extendedTextMessage?.contextInfo || data.message?.contextInfo || {};
+            const externalAdReply = messageContextInfo.externalAdReply || {};
+            
+            // Try to extract from referral/externalAdReply (Meta's official structure)
+            if (referral.containsAutoReply !== undefined || externalAdReply.sourceUrl) {
+              console.log(`[ADS LEAD] Found externalAdReply structure:`, JSON.stringify({ referral, externalAdReply }));
             }
             
-            // Check for fbclid in the message content
-            const fbclidMatch = content?.match(/fbclid[=:]\s*([a-zA-Z0-9_-]+)/i);
-            if (fbclidMatch) {
-              fbclid = fbclidMatch[1];
-              console.log(`[ADS LEAD] Extracted fbclid: ${fbclid}`);
+            // Extract source_url from various locations
+            const sourceUrls = [
+              referral.sourceUrl,
+              externalAdReply.sourceUrl,
+              messageContextInfo.sourceUrl,
+              data.contextInfo?.sourceUrl,
+            ].filter(Boolean);
+            
+            // Parse URLs for tracking parameters
+            for (const url of sourceUrls) {
+              try {
+                const urlObj = new URL(url);
+                const params = urlObj.searchParams;
+                
+                if (!ctwaClid && params.get('ctwa_clid')) {
+                  ctwaClid = params.get('ctwa_clid');
+                  ctwaSource = 'url_param';
+                  console.log(`[ADS LEAD] Extracted ctwa_clid from URL: ${ctwaClid}`);
+                }
+                if (!fbclid && params.get('fbclid')) {
+                  fbclid = params.get('fbclid');
+                  fbclidSource = 'url_param';
+                  console.log(`[ADS LEAD] Extracted fbclid from URL: ${fbclid}`);
+                }
+              } catch (e) {
+                // Invalid URL, skip
+              }
             }
+            
+            // 2. Check for referral data (Facebook Ads referral structure)
+            const referralData = data.referral || data.message?.referral || messageContextInfo.referral || {};
+            if (!ctwaClid && referralData.ctwa_clid) {
+              ctwaClid = referralData.ctwa_clid;
+              ctwaSource = 'referral_data';
+              console.log(`[ADS LEAD] Extracted ctwa_clid from referral: ${ctwaClid}`);
+            }
+            if (!fbclid && referralData.fbclid) {
+              fbclid = referralData.fbclid;
+              fbclidSource = 'referral_data';
+              console.log(`[ADS LEAD] Extracted fbclid from referral: ${fbclid}`);
+            }
+            
+            // 3. Check for headline/body that might contain tracking info
+            const adTitle = referral.title || externalAdReply.title || '';
+            const adBody = referral.body || externalAdReply.body || '';
+            
+            // 4. Deep search in entire data object for ctwa_clid
+            if (!ctwaClid) {
+              const findCtwaInObject = (obj: any, path: string = ''): string | null => {
+                if (!obj || typeof obj !== 'object') return null;
+                for (const [k, v] of Object.entries(obj)) {
+                  if (k === 'ctwa_clid' && typeof v === 'string') {
+                    console.log(`[ADS LEAD] Deep search found ctwa_clid at ${path}.${k}`);
+                    return v;
+                  }
+                  if (typeof v === 'object' && v !== null) {
+                    const found = findCtwaInObject(v, `${path}.${k}`);
+                    if (found) return found;
+                  }
+                }
+                return null;
+              };
+              const deepCtwa = findCtwaInObject(data, 'data');
+              if (deepCtwa) {
+                ctwaClid = deepCtwa;
+                ctwaSource = 'deep_search';
+              }
+            }
+            
+            // 5. Fallback: Check message content (text) for tracking IDs
+            if (!ctwaClid) {
+              const ctwaMatch = content?.match(/ctwa_clid[=:]\s*([a-zA-Z0-9_-]+)/i);
+              if (ctwaMatch) {
+                ctwaClid = ctwaMatch[1];
+                ctwaSource = 'message_content';
+                console.log(`[ADS LEAD] Extracted ctwa_clid from content: ${ctwaClid}`);
+              }
+            }
+            
+            if (!fbclid) {
+              const fbclidMatch = content?.match(/fbclid[=:]\s*([a-zA-Z0-9_-]+)/i);
+              if (fbclidMatch) {
+                fbclid = fbclidMatch[1];
+                fbclidSource = 'message_content';
+                console.log(`[ADS LEAD] Extracted fbclid from content: ${fbclid}`);
+              }
+            }
+            
+            console.log(`[ADS LEAD] Final extraction: ctwa_clid=${ctwaClid || 'none'} (source: ${ctwaSource}), fbclid=${fbclid || 'none'} (source: ${fbclidSource})`);
+            
+            // Store extraction metadata for debugging
+            const extractionMeta = { ctwaSource, fbclidSource, adTitle: adTitle?.substring(0, 50), adBody: adBody?.substring(0, 50) };
             
             // Check if lead already exists
             const { data: existingLead } = await supabaseClient
