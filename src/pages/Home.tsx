@@ -25,11 +25,12 @@ interface SystemCardProps {
   description: string;
   onClick: () => void;
   isLocked?: boolean;
+  isBeta?: boolean;
   gradient?: string | null;
   glowColor?: 'blue' | 'purple' | 'green' | 'red' | 'orange';
 }
 
-const SystemCard = ({ icon, title, shortTitle, description, onClick, isLocked, gradient, glowColor = 'purple' }: SystemCardProps) => {
+const SystemCard = ({ icon, title, shortTitle, description, onClick, isLocked, isBeta, gradient, glowColor = 'purple' }: SystemCardProps) => {
   return (
     <GlowCard
       glowColor={glowColor}
@@ -42,6 +43,13 @@ const SystemCard = ({ icon, title, shortTitle, description, onClick, isLocked, g
           <div className="w-7 h-7 rounded-full bg-accent/20 flex items-center justify-center">
             <Lock className="w-4 h-4 text-accent" />
           </div>
+        </div>
+      )}
+      {isBeta && (
+        <div className="absolute top-2 left-2 z-10">
+          <span className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-accent/20 text-accent border border-accent/30 rounded-full">
+            Beta
+          </span>
         </div>
       )}
       
@@ -122,6 +130,7 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
     gradient: string | null;
     restricted: boolean;
     glowColor: 'blue' | 'purple' | 'green' | 'red' | 'orange';
+    isBeta?: boolean;
   }> = [
     { 
       path: "/metricas", 
@@ -277,7 +286,8 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
       description: "Sistema para automatizar as conversas do WhatsApp",
       gradient: "from-green-400 to-teal-500",
       restricted: true,
-      glowColor: 'green'
+      glowColor: 'green',
+      isBeta: true
     },
     { 
       path: "/disparador", 
@@ -387,6 +397,7 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
                     description={system.description}
                     onClick={() => handleSystemClick(system)}
                     isLocked={isLocked}
+                    isBeta={system.isBeta}
                     gradient={system.gradient}
                     glowColor={system.glowColor}
                   />
