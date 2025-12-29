@@ -6,6 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Hero SMS API base URL
+const HERO_SMS_API_URL = 'https://hero-sms.com/stubs/handler_api.php';
+
 // Taxa de conversão USD para BRL
 const USD_TO_BRL = 6.10;
 
@@ -33,7 +36,7 @@ const popularServices: Record<string, string> = {
   'py': 'PayPal',
 };
 
-// Países principais com bandeiras - CÓDIGOS SÃO IDs DA API SMS-ACTIVATE, NÃO DDIs
+// Países principais com bandeiras - CÓDIGOS SÃO IDs DA API, NÃO DDIs
 const countries: Record<string, { name: string; flag: string }> = {
   '0': { name: 'Rússia', flag: '🇷🇺' },
   '1': { name: 'Ucrânia', flag: '🇺🇦' },
@@ -88,9 +91,9 @@ serve(async (req) => {
   }
 
   try {
-    const apiKey = Deno.env.get('SMS_ACTIVATE_API_KEY');
+    const apiKey = Deno.env.get('HERO_SMS_API_KEY');
     if (!apiKey) {
-      throw new Error('SMS_ACTIVATE_API_KEY não configurada');
+      throw new Error('HERO_SMS_API_KEY não configurada');
     }
 
     let action = '';
@@ -127,15 +130,15 @@ serve(async (req) => {
       console.log(`Using margin: ${marginPercent}% (multiplier: ${marginMultiplier})`);
       
       const countryCode = country || '73';
-      const url = `https://api.sms-activate.org/stubs/handler_api.php?api_key=${apiKey}&action=getPrices&country=${countryCode}`;
+      const url = `${HERO_SMS_API_URL}?api_key=${apiKey}&action=getPrices&country=${countryCode}`;
       
-      console.log('Fetching prices for country:', countryCode);
+      console.log('Fetching prices from Hero SMS for country:', countryCode);
       
       const response = await fetch(url);
       const responseText = await response.text();
       
       if (!responseText || responseText.trim() === '') {
-        console.error('Empty response from SMS-Activate API');
+        console.error('Empty response from Hero SMS API');
         return new Response(JSON.stringify({ services: [], marginPercent, error: 'API retornou resposta vazia' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -151,7 +154,7 @@ serve(async (req) => {
         });
       }
       
-      console.log('API response:', JSON.stringify(data).substring(0, 500));
+      console.log('Hero SMS API response:', JSON.stringify(data).substring(0, 500));
       
       if (data.error) {
         throw new Error(data.error);

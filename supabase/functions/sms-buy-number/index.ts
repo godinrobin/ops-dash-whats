@@ -6,6 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Hero SMS API base URL
+const HERO_SMS_API_URL = 'https://hero-sms.com/stubs/handler_api.php';
+
 // Taxa de conversão USD para BRL (a API retorna preços em USD)
 const USD_TO_BRL = 6.10;
 
@@ -35,12 +38,12 @@ serve(async (req) => {
   }
 
   try {
-    const apiKey = Deno.env.get('SMS_ACTIVATE_API_KEY');
+    const apiKey = Deno.env.get('HERO_SMS_API_KEY');
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     
     if (!apiKey) {
-      throw new Error('SMS_ACTIVATE_API_KEY não configurada');
+      throw new Error('HERO_SMS_API_KEY não configurada');
     }
 
     const authHeader = req.headers.get('Authorization');
@@ -68,12 +71,12 @@ serve(async (req) => {
     console.log(`User ${user.id} buying ${buyQuantity} number(s) for service ${serviceCode} in country ${countryCode}`);
 
     // Primeiro, busca o preço atual do serviço
-    const priceUrl = `https://api.sms-activate.org/stubs/handler_api.php?api_key=${apiKey}&action=getPrices&country=${countryCode}&service=${serviceCode}`;
-    console.log('Fetching prices from:', priceUrl.replace(apiKey, '***'));
+    const priceUrl = `${HERO_SMS_API_URL}?api_key=${apiKey}&action=getPrices&country=${countryCode}&service=${serviceCode}`;
+    console.log('Fetching prices from Hero SMS...');
     
     const priceResponse = await fetch(priceUrl);
     const priceText = await priceResponse.text();
-    console.log('Price API response:', priceText.substring(0, 500));
+    console.log('Hero SMS Price API response:', priceText.substring(0, 500));
     
     let priceData;
     try {
@@ -145,14 +148,14 @@ serve(async (req) => {
       });
     }
 
-    // Compra os números na API SMS-Activate
+    // Compra os números na API Hero SMS
     const purchasedNumbers = [];
     let successCount = 0;
     let totalCost = 0;
 
     for (let i = 0; i < buyQuantity; i++) {
-      const buyUrl = `https://api.sms-activate.org/stubs/handler_api.php?api_key=${apiKey}&action=getNumber&service=${serviceCode}&country=${countryCode}`;
-      console.log(`Buying number ${i + 1}/${buyQuantity} from SMS-Activate...`);
+      const buyUrl = `${HERO_SMS_API_URL}?api_key=${apiKey}&action=getNumber&service=${serviceCode}&country=${countryCode}`;
+      console.log(`Buying number ${i + 1}/${buyQuantity} from Hero SMS...`);
       
       const buyResponse = await fetch(buyUrl);
       const buyResult = await buyResponse.text();
@@ -199,7 +202,7 @@ serve(async (req) => {
         console.error('Error updating balance:', updateError);
         // Tenta cancelar os números comprados
         for (const num of purchasedNumbers) {
-          await fetch(`https://api.sms-activate.org/stubs/handler_api.php?api_key=${apiKey}&action=setStatus&status=8&id=${num.smsActivateId}`);
+          await fetch(`${HERO_SMS_API_URL}?api_key=${apiKey}&action=setStatus&status=8&id=${num.smsActivateId}`);
         }
         throw new Error('Erro ao debitar saldo');
       }

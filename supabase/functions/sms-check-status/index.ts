@@ -6,18 +6,21 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Hero SMS API base URL
+const HERO_SMS_API_URL = 'https://hero-sms.com/stubs/handler_api.php';
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const apiKey = Deno.env.get('SMS_ACTIVATE_API_KEY');
+    const apiKey = Deno.env.get('HERO_SMS_API_KEY');
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     
     if (!apiKey) {
-      throw new Error('SMS_ACTIVATE_API_KEY não configurada');
+      throw new Error('HERO_SMS_API_KEY não configurada');
     }
 
     const authHeader = req.headers.get('Authorization');
@@ -41,12 +44,12 @@ serve(async (req) => {
 
     console.log(`Checking status for order ${orderId}, smsActivateId: ${smsActivateId}`);
 
-    // Verifica status na API SMS-Activate
-    const statusUrl = `https://api.sms-activate.org/stubs/handler_api.php?api_key=${apiKey}&action=getStatus&id=${smsActivateId}`;
+    // Verifica status na API Hero SMS
+    const statusUrl = `${HERO_SMS_API_URL}?api_key=${apiKey}&action=getStatus&id=${smsActivateId}`;
     const statusResponse = await fetch(statusUrl);
     const statusResult = await statusResponse.text();
     
-    console.log('Status result:', statusResult);
+    console.log('Hero SMS Status result:', statusResult);
 
     let status = 'waiting_sms';
     let smsCode = null;
