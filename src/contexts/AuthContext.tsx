@@ -21,17 +21,56 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        if ((event as any) === "TOKEN_REFRESH_FAILED") {
+          setSession(null);
+          setUser(null);
+          setLoading(false);
+          if (!window.location.hash.includes("/auth")) {
+            window.location.hash = "#/auth";
+          }
+          return;
+        }
+
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
       }
     );
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      // No session stored locally
+      if (!session) {
+        setSession(null);
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      // Validate session with backend; if it's stale/revoked, force logout.
+      const { data: { user }, error } = await supabase.auth.getUser();
+
+      if (error || !user) {
+        try {
+          await supabase.auth.signOut();
+        } catch {
+          // ignore
+        }
+
+        setSession(null);
+        setUser(null);
+        setLoading(false);
+        if (!window.location.hash.includes("/auth")) {
+          window.location.hash = "#/auth";
+        }
+        return;
+      }
+
       setSession(session);
-      setUser(session?.user ?? null);
+      setUser(user);
       setLoading(false);
-    });
+    })();
 
     return () => subscription.unsubscribe();
   }, []);

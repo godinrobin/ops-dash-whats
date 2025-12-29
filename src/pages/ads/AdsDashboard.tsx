@@ -225,7 +225,9 @@ export default function AdsDashboard() {
       // Check for auth errors
       if (error || data?.error === "Unauthorized") {
         if (data?.error === "Unauthorized" || String(error).includes("401")) {
-          splashedToast.error("Sessão expirada. Recarregue a página.");
+          splashedToast.error("Sessão expirada. Faça login novamente.");
+          await supabase.auth.signOut();
+          window.location.hash = "#/auth";
           return;
         }
         throw error;
