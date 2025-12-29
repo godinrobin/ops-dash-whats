@@ -36,6 +36,21 @@ async function getMarginFromDatabase(): Promise<number> {
   }
 }
 
+// Mapa de nomes corrigidos para serviços conhecidos
+const SERVICE_NAME_OVERRIDES: Record<string, string> = {
+  'wa': 'WhatsApp',
+  'wb': 'WeChat',
+  'tg': 'Telegram',
+  'go': 'Google/Gmail',
+  'fb': 'Facebook',
+  'ig': 'Instagram',
+  'tw': 'Twitter/X',
+  'ds': 'Discord',
+  'fu': 'Snapchat',
+  'vi': 'Viber',
+  'ot': 'Outro (Qualquer)',
+};
+
 // Buscar lista de serviços da API Hero SMS
 async function getServicesListFromAPI(apiKey: string, country: string): Promise<Record<string, string>> {
   const url = `${HERO_SMS_API_URL}?api_key=${apiKey}&action=getServicesList&country=${country}&lang=pt`;
@@ -52,7 +67,8 @@ async function getServicesListFromAPI(apiKey: string, country: string): Promise<
       const servicesMap: Record<string, string> = {};
       for (const service of data.services) {
         if (service.code && service.name) {
-          servicesMap[service.code] = service.name;
+          // Usar override se disponível, senão usar nome da API
+          servicesMap[service.code] = SERVICE_NAME_OVERRIDES[service.code] || service.name;
         }
       }
       console.log(`Loaded ${Object.keys(servicesMap).length} services from API`);
@@ -251,8 +267,8 @@ serve(async (req) => {
           const available = sData.count;
           
           if (available > 0) {
-            // Usar nome da API ou código como fallback
-            const serviceName = servicesMap[serviceCode] || serviceCode.toUpperCase();
+            // Usar override, nome da API ou código como fallback
+            const serviceName = SERVICE_NAME_OVERRIDES[serviceCode] || servicesMap[serviceCode] || serviceCode.toUpperCase();
             
             // Preço base em BRL
             const priceBrlBase = priceUsd * USD_TO_BRL;
