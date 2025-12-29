@@ -77,7 +77,6 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
   
   // Flow analytics for node badges
   const { analytics, loading: analyticsLoading } = useFlowAnalytics(flowId || '', 'today');
-  const { screenToFlowPosition } = useReactFlow();
   
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes.length > 0 ? initialNodes : [
     {
