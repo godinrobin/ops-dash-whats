@@ -242,11 +242,12 @@ export const PropertiesPanel = ({
         );
 
       case 'text':
-        // Get available variables from other nodes
+        // Get all available variables: system + custom from DB + custom from nodes
         const getAvailableVariablesForText = () => {
-          const variables: string[] = ['nome', 'telefone'];
-          // This would need access to all nodes - for now we show common ones
-          return variables;
+          const nodeVariables = extractCustomVariablesFromNodes(allNodes);
+          const allVariables = [...SYSTEM_VARIABLES, ...dbCustomVariables, ...nodeVariables];
+          // Remove duplicates and sort
+          return [...new Set(allVariables)].sort();
         };
         const textVariables = getAvailableVariablesForText();
         

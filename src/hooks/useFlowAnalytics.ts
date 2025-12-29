@@ -26,18 +26,36 @@ export const useFlowAnalytics = (flowId: string, dateFilter: DateFilter = 'today
   const [loading, setLoading] = useState(true);
 
   const getDateRange = useCallback((filter: DateFilter): { start: Date; end: Date } => {
-    const now = new Date();
-    const todayStart = startOfDay(now);
+    // Calculate current time in São Paulo timezone (UTC-3)
+    const nowUtc = new Date();
+    
+    // Get São Paulo offset: -3 hours = -180 minutes
+    const SP_OFFSET_MINUTES = -180;
+    
+    // Calculate what time it is in São Paulo right now
+    const browserOffsetMinutes = nowUtc.getTimezoneOffset();
+    const totalOffsetMs = (browserOffsetMinutes - SP_OFFSET_MINUTES) * 60 * 1000;
+    
+    // Create a date object representing São Paulo local time
+    const nowInSaoPaulo = new Date(nowUtc.getTime() + totalOffsetMs);
+    
+    // Get start of day in São Paulo
+    const todayStartSaoPaulo = startOfDay(nowInSaoPaulo);
+    
+    // Convert São Paulo times back to UTC for database queries
+    const todayStartUtc = new Date(todayStartSaoPaulo.getTime() - totalOffsetMs);
     
     switch (filter) {
       case 'today':
-        return { start: todayStart, end: now };
+        return { start: todayStartUtc, end: nowUtc };
       case 'yesterday':
-        return { start: startOfDay(subDays(now, 1)), end: todayStart };
+        const yesterdayStartUtc = new Date(todayStartUtc.getTime() - 24 * 60 * 60 * 1000);
+        return { start: yesterdayStartUtc, end: todayStartUtc };
       case 'last7days':
-        return { start: startOfDay(subDays(now, 7)), end: now };
+        const sevenDaysAgoUtc = new Date(todayStartUtc.getTime() - 7 * 24 * 60 * 60 * 1000);
+        return { start: sevenDaysAgoUtc, end: nowUtc };
       default:
-        return { start: todayStart, end: now };
+        return { start: todayStartUtc, end: nowUtc };
     }
   }, []);
 
