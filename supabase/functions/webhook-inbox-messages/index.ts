@@ -321,11 +321,8 @@ serve(async (req) => {
           console.log(`Created contact with remote_jid: ${remoteJidToStore}`);
         }
       } else {
-        // Update existing contact
-        const updates: Record<string, any> = {
-          last_message_at: new Date().toISOString(),
-          // DO NOT update instance_id - it's now part of the unique key
-        };
+        // Update existing contact - BUT NOT last_message_at yet (will update after message is saved)
+        const updates: Record<string, any> = {};
         
         // Only increment unread for inbound messages (not fromMe)
         if (!isFromMe) {
@@ -348,14 +345,17 @@ serve(async (req) => {
           }
           if (remoteJidToStore) {
             updates.remote_jid = remoteJidToStore;
-            console.log(`Updating contact ${contact.id} with remote_jid: ${remoteJidToStore}`);
+            console.log(`[WEBHOOK] Updating contact ${contact.id} with remote_jid: ${remoteJidToStore}`);
           }
         }
         
-        await supabaseClient
-          .from('inbox_contacts')
-          .update(updates)
-          .eq('id', contact.id);
+        // Only update if there are changes (don't update last_message_at here)
+        if (Object.keys(updates).length > 0) {
+          await supabaseClient
+            .from('inbox_contacts')
+            .update(updates)
+            .eq('id', contact.id);
+        }
       }
 
       // Determine message direction based on fromMe flag
@@ -377,8 +377,9 @@ serve(async (req) => {
         }
       }
       
-      // Save the message usando upsert para evitar duplicação
-      const { error: messageError } = await supabaseClient
+      // Save the message using upsert to avoid duplication
+      // The unique partial index on remote_message_id handles conflicts
+      const { data: savedMessage, error: messageError } = await supabaseClient
         .from('inbox_messages')
         .upsert({
           contact_id: contact.id,
@@ -394,19 +395,30 @@ serve(async (req) => {
         }, {
           onConflict: 'remote_message_id',
           ignoreDuplicates: true
-        });
+        })
+        .select('id')
+        .maybeSingle();
 
       if (messageError) {
-        // Se for erro de duplicação, apenas loga e continua
+        // If it's a duplicate error, just log and continue
         if (messageError.code === '23505') {
-          console.log('Message already exists, skipping:', messageId);
+          console.log('[WEBHOOK] Message already exists (duplicate remote_message_id), skipping:', messageId);
         } else {
-          console.error('Error saving message:', messageError);
+          console.error('[WEBHOOK] Error saving message:', messageError);
           return new Response(JSON.stringify({ success: false, error: 'Failed to save message' }), {
             status: 500,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
+      }
+
+      // Only update contact's last_message_at AFTER message was saved successfully
+      if (savedMessage) {
+        await supabaseClient
+          .from('inbox_contacts')
+          .update({ last_message_at: new Date().toISOString() })
+          .eq('id', contact.id);
+        console.log('[WEBHOOK] Message saved successfully, contact last_message_at updated');
       }
 
       // === ADS LEAD TRACKING ===
@@ -666,8 +678,9 @@ serve(async (req) => {
       }
 
       if (!content || content.trim() === '') {
-        console.log('[FLOW DEBUG] Message has no text content, skipping flow trigger');
-        return new Response(JSON.stringify({ success: true, noContent: true }), {
+        console.log('[FLOW DEBUG] Message has no text content (type=' + messageType + '), skipping keyword flow trigger');
+        console.log('[FLOW DEBUG] Note: Media messages (audio, image, video) without text won\'t trigger keyword-based flows');
+        return new Response(JSON.stringify({ success: true, noContent: true, messageType }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }

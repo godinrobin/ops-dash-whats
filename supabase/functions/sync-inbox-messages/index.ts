@@ -607,38 +607,45 @@ serve(async (req) => {
       });
     }
 
-    // Usa upsert com ON CONFLICT para evitar erros de duplicação
-    const { error: insertError } = await supabaseAdmin
+    // Use upsert with the partial unique index on remote_message_id
+    const { error: insertError, data: insertedData } = await supabaseAdmin
       .from("inbox_messages")
       .upsert(rowsToInsert, { 
         onConflict: 'remote_message_id',
         ignoreDuplicates: true 
-      });
+      })
+      .select('id');
 
     if (insertError) {
-      console.error("Insert inbox_messages failed:", insertError);
-      // Log mas não falha - pode ser duplicação parcial
-      console.warn("Some messages may have been skipped due to duplicates");
+      console.error("[SYNC] Insert inbox_messages failed:", insertError);
+      // Log but don't fail - may be partial duplication
+      console.warn("[SYNC] Some messages may have been skipped due to duplicates");
     }
+    
+    const actuallyInserted = insertedData?.length || 0;
+    console.log(`[SYNC] Actually inserted ${actuallyInserted} of ${rowsToInsert.length} messages`);
 
-    // Update last_message_at with the most recent message timestamp
-    const latestMessage = rowsToInsert.reduce((latest, msg) => {
-      if (!latest) return msg;
-      return new Date(msg.created_at) > new Date(latest.created_at) ? msg : latest;
-    }, null as typeof rowsToInsert[0] | null);
+    // Only update last_message_at if we actually inserted new messages
+    if (actuallyInserted > 0) {
+      const latestMessage = rowsToInsert.reduce((latest, msg) => {
+        if (!latest) return msg;
+        return new Date(msg.created_at) > new Date(latest.created_at) ? msg : latest;
+      }, null as typeof rowsToInsert[0] | null);
 
-    if (latestMessage) {
-      await supabaseAdmin
-        .from("inbox_contacts")
-        .update({
-          last_message_at: latestMessage.created_at,
-        })
-        .eq("id", contact.id);
+      if (latestMessage) {
+        await supabaseAdmin
+          .from("inbox_contacts")
+          .update({
+            last_message_at: latestMessage.created_at,
+          })
+          .eq("id", contact.id);
+        console.log(`[SYNC] Updated contact last_message_at to ${latestMessage.created_at}`);
+      }
     }
 
     const inboundCount = rowsToInsert.filter(r => r.direction === 'inbound').length;
     const outboundCount = rowsToInsert.filter(r => r.direction === 'outbound').length;
-    console.log(`Synced messages for contact ${contact.id}: inserted=${rowsToInsert.length} (inbound=${inboundCount}, outbound=${outboundCount})`);
+    console.log(`[SYNC] Synced messages for contact ${contact.id}: inserted=${actuallyInserted} (requested=${rowsToInsert.length}, inbound=${inboundCount}, outbound=${outboundCount})`);
 
     return new Response(JSON.stringify({ inserted: rowsToInsert.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
