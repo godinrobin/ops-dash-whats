@@ -378,6 +378,22 @@ Regras:
           integration: 'WHATSAPP-BAILEYS',
         });
 
+        // Configure instance settings to ignore groups (messages from groups won't be sent to webhook)
+        try {
+          await callEvolution(`/settings/set/${instanceName}`, 'POST', {
+            rejectCall: false,
+            groupsIgnore: true, // Ignore group messages at Evolution API level
+            alwaysOnline: false,
+            readMessages: false,
+            readStatus: false,
+            syncFullHistory: false,
+          });
+          console.log(`[INSTANCE] Configured ignoreGroups=true for ${instanceName}`);
+        } catch (settingsError) {
+          console.error(`[INSTANCE] Failed to set ignoreGroups for ${instanceName}:`, settingsError);
+          // Continue even if settings fail - instance is still created
+        }
+
         // Save instance to database
         const { error: insertError } = await supabaseClient
           .from('maturador_instances')
@@ -1644,6 +1660,59 @@ Regras IMPORTANTES:
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
+        break;
+      }
+
+      case 'enable-ignore-groups': {
+        // Enable ignoreGroups setting on all existing instances in Evolution API
+        // This prevents group messages from being sent to webhook
+        const { instanceNames } = params;
+        
+        if (!instanceNames || !Array.isArray(instanceNames) || instanceNames.length === 0) {
+          return new Response(JSON.stringify({ error: 'instanceNames array is required' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const results: { instanceName: string; success: boolean; error?: string }[] = [];
+
+        for (const instanceName of instanceNames) {
+          try {
+            await callEvolution(`/settings/set/${instanceName}`, 'POST', {
+              rejectCall: false,
+              groupsIgnore: true, // Ignore group messages at Evolution API level
+              alwaysOnline: false,
+              readMessages: false,
+              readStatus: false,
+              syncFullHistory: false,
+            });
+            console.log(`[IGNORE-GROUPS] Enabled for ${instanceName}`);
+            results.push({ instanceName, success: true });
+          } catch (error) {
+            console.error(`[IGNORE-GROUPS] Failed for ${instanceName}:`, error);
+            results.push({ 
+              instanceName, 
+              success: false, 
+              error: error instanceof Error ? error.message : 'Unknown error'
+            });
+          }
+        }
+
+        const successCount = results.filter(r => r.success).length;
+        const failCount = results.filter(r => !r.success).length;
+        
+        console.log(`[IGNORE-GROUPS] Completed: ${successCount} success, ${failCount} failed`);
+        
+        result = { 
+          success: true, 
+          results,
+          summary: {
+            total: instanceNames.length,
+            success: successCount,
+            failed: failCount
+          }
+        };
         break;
       }
 

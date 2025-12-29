@@ -160,11 +160,37 @@ export default function InboxDashboard() {
     }
   }, [loading, user]);
 
+  // Enable ignoreGroups on all connected instances (silently in background)
+  const enableIgnoreGroupsOnAllInstances = async () => {
+    const connectedInstances = instances.filter(i => i.status === 'connected');
+    if (connectedInstances.length === 0) return;
+
+    try {
+      console.log('[IGNORE-GROUPS] Enabling ignoreGroups for all connected instances');
+      const instanceNames = connectedInstances.map(i => i.instance_name);
+      
+      const { data, error } = await supabase.functions.invoke('maturador-evolution', {
+        body: { action: 'enable-ignore-groups', instanceNames },
+      });
+      
+      if (error) {
+        console.error('[IGNORE-GROUPS] Error:', error);
+        return;
+      }
+      
+      console.log('[IGNORE-GROUPS] Result:', data);
+    } catch (error) {
+      console.error('[IGNORE-GROUPS] Error:', error);
+    }
+  };
+
   // Verify webhooks after data is loaded (em background, não bloqueia UI)
   useEffect(() => {
     if (instances.length > 0 && !loading) {
       // Executa verificação de webhooks de forma assíncrona sem bloquear
       setTimeout(() => verifyWebhooks(), 2000);
+      // Enable ignoreGroups on all connected instances (após webhooks)
+      setTimeout(() => enableIgnoreGroupsOnAllInstances(), 4000);
     }
   }, [instances, loading]);
 
