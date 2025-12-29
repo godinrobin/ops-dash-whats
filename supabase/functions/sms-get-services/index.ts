@@ -199,38 +199,70 @@ serve(async (req) => {
       
       const countryCode = country || '73';
       
-      // Buscar serviços, preços e preço específico do WhatsApp para este país em paralelo
-      const [servicesMap, pricesResponse, whatsappPriceResponse] = await Promise.all([
+      // Buscar serviços, preços e preço específico do WhatsApp em paralelo
+      const [servicesMap, pricesResponse, whatsappPricesResponse] = await Promise.all([
         getServicesListFromAPI(apiKey, countryCode),
         fetch(`${HERO_SMS_API_URL}?api_key=${apiKey}&action=getPrices&country=${countryCode}`),
-        fetch(`${HERO_SMS_API_URL}?api_key=${apiKey}&action=getPrices&service=wa&country=${countryCode}`)
+        // IMPORTANTE: a API costuma retornar disponibilidade correta do WhatsApp apenas no endpoint "service" sem country
+        fetch(`${HERO_SMS_API_URL}?api_key=${apiKey}&action=getPrices&service=wa`),
       ]);
-      
+
       const pricesText = await pricesResponse.text();
-      
+
       // Verificar se WhatsApp está disponível para este país
       let whatsappAvailable = false;
       let whatsappPrice = 0;
       let whatsappCount = 0;
-      
+
       try {
-        const whatsappData = await whatsappPriceResponse.json();
-        console.log('WhatsApp price response for country', countryCode, ':', JSON.stringify(whatsappData).substring(0, 500));
-        
-        // A resposta para getPrices com service específico vem como: {country_id: {wa: {cost, count}}}
-        if (whatsappData && whatsappData[countryCode] && whatsappData[countryCode].wa) {
-          const waData = whatsappData[countryCode].wa;
-          if (waData.count > 0) {
+        const whatsappData = await whatsappPricesResponse.json();
+
+        const wa73 = (whatsappData?.['73'] as any)?.wa;
+        const wa62 = (whatsappData?.['62'] as any)?.wa;
+        console.log(
+          'WhatsApp prices debug (73/62):',
+          JSON.stringify({ wa73, wa62 }).substring(0, 500),
+        );
+
+        // Formatos possíveis:
+        // 1) { "73": { "wa": { cost, count, physicalCount } } }
+        // 2) { "wa": { "73": { cost, count, physicalCount } } }
+        const waCandidate =
+          (whatsappData?.[countryCode] as any)?.wa ??
+          (whatsappData?.wa as any)?.[countryCode] ??
+          null;
+
+        if (waCandidate) {
+          const cost = Number(waCandidate.cost ?? 0);
+          const count = Number(waCandidate.count ?? waCandidate.physicalCount ?? 0);
+
+          console.log(
+            'WhatsApp candidate for country',
+            countryCode,
+            ':',
+            JSON.stringify({ cost, count }).substring(0, 300),
+          );
+
+          if (cost > 0 && count > 0) {
             whatsappAvailable = true;
-            whatsappPrice = waData.cost;
-            whatsappCount = waData.count;
-            console.log(`WhatsApp available for country ${countryCode}: price=${whatsappPrice} USD, count=${whatsappCount}`);
+            whatsappPrice = cost;
+            whatsappCount = count;
+            console.log(
+              `WhatsApp available for country ${countryCode}: price=${whatsappPrice} USD, count=${whatsappCount}`,
+            );
           }
+        } else {
+          console.log(
+            'WhatsApp candidate not found for country',
+            countryCode,
+            'keys=',
+            Object.keys(whatsappData ?? {}).slice(0, 30),
+          );
         }
       } catch (err) {
         console.error('Error fetching WhatsApp price:', err);
       }
-      
+
       if (!pricesText || pricesText.trim() === '') {
         console.error('Empty response from Hero SMS getPrices API');
         return new Response(JSON.stringify({ services: [], marginPercent, error: 'API retornou resposta vazia' }), {

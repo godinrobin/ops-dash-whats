@@ -71,13 +71,17 @@ serve(async (req) => {
     console.log(`User ${user.id} buying ${buyQuantity} number(s) for service ${serviceCode} in country ${countryCode}`);
 
     // Primeiro, busca o preço atual do serviço
-    const priceUrl = `${HERO_SMS_API_URL}?api_key=${apiKey}&action=getPrices&country=${countryCode}&service=${serviceCode}`;
-    console.log('Fetching prices from Hero SMS...');
-    
+    // IMPORTANTE: para WhatsApp (wa) a API costuma retornar disponibilidade correta apenas no endpoint "service" sem country
+    const priceUrl = serviceCode === 'wa'
+      ? `${HERO_SMS_API_URL}?api_key=${apiKey}&action=getPrices&service=wa`
+      : `${HERO_SMS_API_URL}?api_key=${apiKey}&action=getPrices&country=${countryCode}&service=${serviceCode}`;
+
+    console.log('Fetching prices from Hero SMS...', { countryCode, serviceCode });
+
     const priceResponse = await fetch(priceUrl);
     const priceText = await priceResponse.text();
     console.log('Hero SMS Price API response:', priceText.substring(0, 500));
-    
+
     let priceData;
     try {
       priceData = JSON.parse(priceText);
@@ -85,16 +89,29 @@ serve(async (req) => {
       console.error('Failed to parse price response:', priceText);
       throw new Error(`Erro na API de preços: ${priceText.substring(0, 100)}`);
     }
-    
+
     let priceUsd = 0;
     let available = 0;
-    if (priceData[countryCode] && priceData[countryCode][serviceCode]) {
-      priceUsd = priceData[countryCode][serviceCode].cost;
-      available = priceData[countryCode][serviceCode].count;
-      console.log(`Price found: $${priceUsd}, Available: ${available}`);
+
+    if (serviceCode === 'wa') {
+      const waCandidate = (priceData?.[countryCode] as any)?.wa ?? (priceData?.wa as any)?.[countryCode] ?? null;
+      if (!waCandidate) {
+        console.error('WhatsApp not found in response for country:', countryCode, JSON.stringify(priceData).substring(0, 200));
+        throw new Error('WhatsApp não disponível neste país');
+      }
+
+      priceUsd = Number(waCandidate.cost ?? 0);
+      available = Number(waCandidate.count ?? waCandidate.physicalCount ?? 0);
+      console.log(`WhatsApp price found: $${priceUsd}, Available: ${available}`);
     } else {
-      console.error('Service not found in response:', JSON.stringify(priceData).substring(0, 200));
-      throw new Error('Serviço não disponível neste país');
+      if (priceData[countryCode] && priceData[countryCode][serviceCode]) {
+        priceUsd = priceData[countryCode][serviceCode].cost;
+        available = priceData[countryCode][serviceCode].count;
+        console.log(`Price found: $${priceUsd}, Available: ${available}`);
+      } else {
+        console.error('Service not found in response:', JSON.stringify(priceData).substring(0, 200));
+        throw new Error('Serviço não disponível neste país');
+      }
     }
 
     // Verifica disponibilidade
