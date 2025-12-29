@@ -40,6 +40,31 @@ const logIngestEvent = async (
     console.error('[INGEST-LOG] Failed to record:', err);
   }
 };
+
+// Helper function to log webhook diagnostics
+const logWebhookDiagnostic = async (
+  supabaseClient: any,
+  data: {
+    instanceId?: string;
+    instanceName: string;
+    eventType: string;
+    userId?: string;
+    payloadPreview?: string;
+  }
+) => {
+  try {
+    await supabaseClient.from('webhook_diagnostics').insert({
+      instance_id: data.instanceId || null,
+      instance_name: data.instanceName,
+      event_type: data.eventType,
+      user_id: data.userId || null,
+      payload_preview: data.payloadPreview || null,
+    });
+    console.log(`[WEBHOOK-DIAG] Recorded: ${data.instanceName} - ${data.eventType}`);
+  } catch (err) {
+    console.error('[WEBHOOK-DIAG] Failed to record:', err);
+  }
+};
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -84,6 +109,26 @@ serve(async (req) => {
     const event = payload.event || payload.type;
     const instance = payload.instance || payload.instanceName;
     const data = payload.data || payload;
+
+    // Log webhook diagnostic for every event received
+    const instanceName = typeof instance === 'string' ? instance : instance?.instanceName || 'unknown';
+    console.log(`[WEBHOOK] Event: ${event}, Instance: ${instanceName}`);
+    
+    // Fetch instance info for diagnostic logging
+    const { data: instanceData } = await supabaseClient
+      .from('maturador_instances')
+      .select('id, user_id')
+      .eq('instance_name', instanceName)
+      .maybeSingle();
+
+    // Log diagnostic event (async, don't await)
+    logWebhookDiagnostic(supabaseClient, {
+      instanceId: instanceData?.id,
+      instanceName: instanceName,
+      eventType: event || 'unknown',
+      userId: instanceData?.user_id,
+      payloadPreview: JSON.stringify({ event, hasData: !!data }).slice(0, 500)
+    });
 
     // Handle messages.upsert event (new incoming message)
     if (event === 'messages.upsert' || event === 'message' || event === 'MESSAGES_UPSERT') {

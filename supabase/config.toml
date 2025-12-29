@@ -167,3 +167,6 @@ verify_jwt = true
 
 [functions.fix-orphan-contacts]
 verify_jwt = true
+
+[functions.force-reconfigure-webhooks]
+verify_jwt = true
