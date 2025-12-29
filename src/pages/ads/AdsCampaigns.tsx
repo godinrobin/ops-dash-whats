@@ -318,7 +318,7 @@ export default function AdsCampaigns() {
     setSyncing(true);
     try {
       // Sync all three levels
-      await Promise.all([
+      const results = await Promise.all([
         supabase.functions.invoke("facebook-campaigns", { 
           body: { action: "sync_campaigns", datePreset: datePresetMap[dateFilter] } 
         }),
@@ -329,6 +329,16 @@ export default function AdsCampaigns() {
           body: { action: "sync_ads", datePreset: datePresetMap[dateFilter] } 
         }),
       ]);
+      
+      // Check for auth errors
+      const hasAuthError = results.some(r => 
+        r.data?.error === "Unauthorized" || String(r.error).includes("401")
+      );
+      
+      if (hasAuthError) {
+        splashedToast.error("Sessão expirada. Recarregue a página.");
+        return;
+      }
       
       splashedToast.success("Dados sincronizados!");
       await loadData();

@@ -215,13 +215,22 @@ export default function AdsDashboard() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const { error } = await supabase.functions.invoke("facebook-campaigns", { 
+      const { error, data } = await supabase.functions.invoke("facebook-campaigns", { 
         body: { 
           action: "sync_campaigns",
           datePreset: datePresetMap[dateFilter]
         } 
       });
-      if (error) throw error;
+      
+      // Check for auth errors
+      if (error || data?.error === "Unauthorized") {
+        if (data?.error === "Unauthorized" || String(error).includes("401")) {
+          splashedToast.error("Sessão expirada. Recarregue a página.");
+          return;
+        }
+        throw error;
+      }
+      
       splashedToast.success("Dados sincronizados com sucesso!");
       await loadData();
     } catch (error) {
