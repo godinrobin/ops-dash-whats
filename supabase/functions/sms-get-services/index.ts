@@ -148,7 +148,7 @@ async function getCountriesFromAPI(apiKey: string): Promise<Array<{ code: string
     '44': '🇸🇪', '45': '🇳🇱', '46': '🇹🇭', '47': '🇦🇹', '48': '🇦🇺',
     '49': '🇦🇷', '50': '🇨🇱', '51': '🇧🇪', '52': '🇨🇿', '55': '🇭🇺',
     '56': '🇲🇩', '57': '🇳🇵', '58': '🇵🇰', '59': '🇳🇿', '60': '🇨🇦',
-    '61': '🇵🇪', '62': '🇧🇷', '63': '🇮🇹', '64': '🇺🇦', '65': '🇩🇰',
+    '61': '🇵🇪', '62': '🇹🇷', '63': '🇮🇹', '64': '🇺🇦', '65': '🇩🇰',
     '66': '🇫🇮', '67': '🇳🇴', '68': '🇸🇰', '69': '🇸🇮', '70': '🇦🇿',
     '71': '🇬🇪', '72': '🇦🇲', '74': '🇷🇸', '75': '🇬🇷', '76': '🇷🇴',
     '78': '🇪🇪', '79': '🇱🇻', '80': '🇨🇾', '81': '🇧🇬', '82': '🇹🇳',
@@ -259,13 +259,31 @@ serve(async (req) => {
 
         console.log('WhatsApp API raw response keys:', Object.keys(whatsappData ?? {}).slice(0, 20));
 
-        // Formatos possíveis:
-        // 1) { "73": { "wa": { cost, count, physicalCount } } }
-        // 2) { "wa": { "73": { cost, count, physicalCount } } }
-        const waCandidate =
-          (whatsappData?.[countryCode] as any)?.wa ??
+        // Formatos possíveis (variam quando passamos service=wa):
+        // A) { "73": { "wa": { cost, count, physicalCount } } }
+        // B) { "wa": { "73": { cost, count, physicalCount } } }
+        // C) { "73": { cost, count, physicalCount } }   <-- quando o endpoint já filtra o service
+        const countryEntry = (whatsappData?.[countryCode] as any) ?? null;
+
+        let waCandidate: any =
+          countryEntry?.wa ??
           (whatsappData?.wa as any)?.[countryCode] ??
           null;
+
+        // If the API returns { "73": { cost, count, physicalCount } } for service=wa
+        if (!waCandidate && countryEntry && typeof countryEntry === 'object') {
+          const hasPricingKeys =
+            'cost' in countryEntry ||
+            'count' in countryEntry ||
+            'physicalCount' in countryEntry ||
+            'physical_count' in countryEntry ||
+            'physicalTotalCount' in countryEntry ||
+            'physical_total_count' in countryEntry;
+
+          if (hasPricingKeys) {
+            waCandidate = countryEntry;
+          }
+        }
 
         if (waCandidate) {
           const cost = Number(waCandidate.cost ?? 0);
