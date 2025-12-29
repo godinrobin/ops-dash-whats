@@ -39,6 +39,7 @@ async function getMarginFromDatabase(): Promise<number> {
 // Mapa de nomes corrigidos para serviços conhecidos
 const SERVICE_NAME_OVERRIDES: Record<string, string> = {
   'wa': 'WhatsApp',
+  'bex': 'WhatsApp', // Whatnot na API = WhatsApp
   'wb': 'WeChat',
   'tg': 'Telegram',
   'go': 'Google/Gmail',
@@ -52,7 +53,7 @@ const SERVICE_NAME_OVERRIDES: Record<string, string> = {
 };
 
 // Serviços para esconder (têm nomes confusos ou são duplicados)
-const HIDDEN_SERVICES = ['bex']; // Whatnot - não é WhatsApp
+const HIDDEN_SERVICES: string[] = [];
 
 // Buscar lista de serviços da API Hero SMS
 async function getServicesListFromAPI(apiKey: string, country: string): Promise<Record<string, string>> {
