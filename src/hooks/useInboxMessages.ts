@@ -131,21 +131,30 @@ export const useInboxMessages = (contactId: string | null) => {
   }, [user, contactId]);
 
   // Fallback polling: pulls latest inbound messages from Evolution when webhook can't be configured
+  // Otimizado: poll a cada 15s, desativa quando tab não visível
   useEffect(() => {
     if (!user || !contactId) return;
 
     let cancelled = false;
     let inFlight = false;
     let intervalId: ReturnType<typeof setInterval> | undefined;
-    let configMissing = false; // Track if Evolution API is not configured
+    let configMissing = false;
+    let isTabVisible = true;
 
     const stopPolling = () => {
       cancelled = true;
       if (intervalId) clearInterval(intervalId);
     };
 
+    const handleVisibilityChange = () => {
+      isTabVisible = document.visibilityState === 'visible';
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     const tick = async () => {
-      if (cancelled || inFlight || configMissing) return;
+      // Não faz polling se tab não está visível ou já está em andamento
+      if (cancelled || inFlight || configMissing || !isTabVisible) return;
       inFlight = true;
       try {
         const { data, error: syncError } = await supabase.functions.invoke('sync-inbox-messages', {
@@ -156,14 +165,12 @@ export const useInboxMessages = (contactId: string | null) => {
           const errorBody = (syncError as any)?.context?.body;
           const errorStr = typeof errorBody === 'string' ? errorBody : JSON.stringify(errorBody || '');
 
-          // Contact was deleted/cleaned up; stop polling and show a stable UI state.
           if (errorStr.includes('Contact not found')) {
             setError('Contact not found');
             stopPolling();
             return;
           }
 
-          // Evolution API not configured - stop polling silently (user needs to configure in Maturador)
           if (errorStr.includes('Evolution API not configured')) {
             console.info('Evolution API not configured - message sync disabled');
             configMissing = true;
@@ -186,14 +193,16 @@ export const useInboxMessages = (contactId: string | null) => {
       }
     };
 
-    // Trigger initial sync immediately
-    tick();
+    // Trigger initial sync after 1s delay
+    const initialTimeout = setTimeout(tick, 1000);
     
-    // Poll every 5 seconds for faster updates when messages are sent from phone
-    intervalId = setInterval(tick, 5000);
+    // Poll every 15 seconds (otimizado de 5s para 15s)
+    intervalId = setInterval(tick, 15000);
 
     return () => {
+      clearTimeout(initialTimeout);
       stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [user, contactId, fetchMessages]);
 

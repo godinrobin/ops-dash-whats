@@ -87,29 +87,51 @@ export default function InboxDashboard() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
 
-  const fetchData = async () => {
+  // Fase 1: Carrega apenas dados essenciais (instâncias e fluxos)
+  const fetchEssentialData = async () => {
     if (!user) return;
 
     try {
-      const [instancesRes, flowsRes, tagsRes, contactsRes, messagesRes] = await Promise.all([
+      const [instancesRes, flowsRes, tagsRes] = await Promise.all([
         supabase.from('maturador_instances').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
         supabase.from('inbox_flows').select('id, name, is_active, assigned_instances').eq('user_id', user.id),
         supabase.from('inbox_tags').select('*').eq('user_id', user.id),
-        supabase.from('inbox_contacts').select('*').eq('user_id', user.id),
-        supabase.from('inbox_messages').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(500),
       ]);
 
       if (instancesRes.data) setInstances(instancesRes.data);
       if (flowsRes.data) setFlows(flowsRes.data);
       if (tagsRes.data) setTags(tagsRes.data);
-      if (contactsRes.data) setContacts(contactsRes.data);
-      if (messagesRes.data) setMessages(messagesRes.data);
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error fetching essential data:', error);
       toast.error('Erro ao carregar dados');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Fase 2: Carrega dados secundários em background (contatos e mensagens)
+  const fetchSecondaryData = async () => {
+    if (!user) return;
+
+    try {
+      // Limita mensagens para 100 e apenas dos últimos 7 dias
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      
+      const [contactsRes, messagesRes] = await Promise.all([
+        supabase.from('inbox_contacts').select('id, instance_id').eq('user_id', user.id),
+        supabase.from('inbox_messages').select('id, instance_id, contact_id, created_at').eq('user_id', user.id).gte('created_at', sevenDaysAgo.toISOString()).order('created_at', { ascending: false }).limit(100),
+      ]);
+
+      if (contactsRes.data) setContacts(contactsRes.data);
+      if (messagesRes.data) setMessages(messagesRes.data);
+    } catch (error) {
+      console.error('Error fetching secondary data:', error);
+    }
+  };
+
+  const fetchData = async () => {
+    await fetchEssentialData();
   };
 
   // Verify and configure webhooks for connected instances in the background
@@ -131,10 +153,18 @@ export default function InboxDashboard() {
     fetchData();
   }, [user]);
 
-  // Verify webhooks after data is loaded
+  // Carrega dados secundários após o essencial
+  useEffect(() => {
+    if (!loading && user) {
+      fetchSecondaryData();
+    }
+  }, [loading, user]);
+
+  // Verify webhooks after data is loaded (em background, não bloqueia UI)
   useEffect(() => {
     if (instances.length > 0 && !loading) {
-      verifyWebhooks();
+      // Executa verificação de webhooks de forma assíncrona sem bloquear
+      setTimeout(() => verifyWebhooks(), 2000);
     }
   }, [instances, loading]);
 
@@ -425,8 +455,31 @@ export default function InboxDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="h-14 md:h-16" />
+        <div className="container mx-auto px-4 py-8">
+          {/* Skeleton para header */}
+          <div className="flex items-center gap-4 mb-8">
+            <div className="w-10 h-10 bg-muted rounded-full animate-pulse" />
+            <div className="space-y-2">
+              <div className="h-6 w-40 bg-muted rounded animate-pulse" />
+              <div className="h-4 w-60 bg-muted rounded animate-pulse" />
+            </div>
+          </div>
+          {/* Skeleton para cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-32 bg-muted rounded-lg animate-pulse" />
+            ))}
+          </div>
+          {/* Skeleton para stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-24 bg-muted rounded-lg animate-pulse" />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
