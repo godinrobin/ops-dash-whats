@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Plus, Zap, Edit2, Trash2, Copy, ArrowLeft, Smartphone, AlertTriangle } from 'lucide-react';
 import { useInboxFlows } from '@/hooks/useInboxFlows';
@@ -34,6 +35,8 @@ const FlowListPage = () => {
   const [showInstancesDialog, setShowInstancesDialog] = useState(false);
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
   const [selectedInstances, setSelectedInstances] = useState<string[]>([]);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [flowToDelete, setFlowToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -102,15 +105,22 @@ const FlowListPage = () => {
     }
   };
 
-  const handleDeleteFlow = async (flowId: string) => {
-    if (!confirm('Tem certeza que deseja excluir este fluxo?')) return;
+  const openDeleteDialog = (flowId: string) => {
+    setFlowToDelete(flowId);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteFlow = async () => {
+    if (!flowToDelete) return;
     
-    const result = await deleteFlow(flowId);
+    const result = await deleteFlow(flowToDelete);
     if (result.error) {
       toast.error('Erro ao excluir fluxo: ' + result.error);
     } else {
       toast.success('Fluxo excluído com sucesso');
     }
+    setDeleteDialogOpen(false);
+    setFlowToDelete(null);
   };
 
   const handleToggleActive = async (flowId: string, isActive: boolean) => {
@@ -413,7 +423,7 @@ const FlowListPage = () => {
                       variant="ghost" 
                       size="icon" 
                       className="h-8 w-8 text-destructive hover:text-destructive"
-                      onClick={() => handleDeleteFlow(flow.id)}
+                      onClick={() => openDeleteDialog(flow.id)}
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
@@ -424,6 +434,24 @@ const FlowListPage = () => {
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir fluxo</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir este fluxo? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setFlowToDelete(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteFlow} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
