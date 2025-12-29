@@ -107,6 +107,13 @@ serve(async (req) => {
       // Get sender field (some Evolution versions use this for ads)
       const sender = payload.sender || '';
       
+      // Get data.sender field (alternative location in some API versions)
+      const dataSender = data.sender || '';
+      
+      // Get pushName for last-resort phone extraction (some rare cases)
+      const pushNameRaw = data.pushName || '';
+      const pushNamePhone = pushNameRaw.match(/^\+?(\d{10,15})$/)?.[1] || '';
+      
       console.log(`[AD-DEBUG] Checking all JID sources:`);
       console.log(`  remoteJid=${remoteJid}`);
       console.log(`  remoteJidAlt=${remoteJidAlt}`);
@@ -114,6 +121,8 @@ serve(async (req) => {
       console.log(`  participantAlt=${participantAlt}`);
       console.log(`  contextInfo.participant=${contextParticipant}`);
       console.log(`  payload.sender=${sender}`);
+      console.log(`  data.sender=${dataSender}`);
+      console.log(`  pushName=${pushNameRaw} (extracted phone: ${pushNamePhone})`);
       console.log(`  addressingMode=${key.addressingMode || 'none'}`);
       
       // Helper function to validate and extract JID
@@ -150,7 +159,12 @@ serve(async (req) => {
         jidForPhone = contextParticipant;
         phoneSource = 'contextInfo.participant';
       }
-      // 6. Try payload.sender (fallback for some Evolution versions)
+      // 6. Try data.sender (some Evolution versions put it here)
+      else if (isValidPhoneJid(dataSender)) {
+        jidForPhone = dataSender;
+        phoneSource = 'data.sender';
+      }
+      // 7. Try payload.sender (fallback for some Evolution versions)
       else if (isValidPhoneJid(sender)) {
         jidForPhone = sender;
         phoneSource = 'payload.sender';
@@ -189,17 +203,38 @@ serve(async (req) => {
         }
       }
       
+      // 8. Last resort: try to extract phone from pushName if it looks like a phone number
+      if (!jidForPhone && pushNamePhone) {
+        jidForPhone = `${pushNamePhone}@s.whatsapp.net`;
+        phoneSource = 'pushName_extracted';
+        console.log(`[AD-MESSAGE] Last resort: extracted phone from pushName: ${pushNamePhone}`);
+      }
+      
       // If still no valid JID found, log detailed info and skip
       if (!jidForPhone) {
-        console.log(`[SKIP] No valid @s.whatsapp.net found in any field.`);
-        console.log(`  This may be an ad message with missing phone info`);
-        console.log(`  Full payload preview: ${JSON.stringify(payload).substring(0, 1000)}`);
+        // Generate a hash of the payload for later analysis
+        const payloadHash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(payload)));
+        const hashHex = Array.from(new Uint8Array(payloadHash)).map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 16);
+        
+        console.error(`[CRITICAL-SKIP] No valid phone found - hash: ${hashHex}`);
+        console.error(`[CRITICAL-SKIP] All sources checked:`);
+        console.error(`  remoteJid=${remoteJid}`);
+        console.error(`  remoteJidAlt=${remoteJidAlt}`);
+        console.error(`  participant=${participant}`);
+        console.error(`  participantAlt=${participantAlt}`);
+        console.error(`  contextParticipant=${contextParticipant}`);
+        console.error(`  sender=${sender}`);
+        console.error(`  dataSender=${dataSender}`);
+        console.error(`  pushName=${pushNameRaw}`);
+        console.error(`  addressingMode=${key.addressingMode || 'none'}`);
+        console.error(`  Full payload: ${JSON.stringify(payload).substring(0, 2000)}`);
         
         return new Response(JSON.stringify({ 
           success: true, 
           skipped: true, 
           reason: 'no_valid_phone_jid',
-          debug: { remoteJid, remoteJidAlt, participant, participantAlt, contextParticipant, sender, addressingMode: key.addressingMode }
+          hash: hashHex,
+          debug: { remoteJid, remoteJidAlt, participant, participantAlt, contextParticipant, sender, dataSender, pushName: pushNameRaw, addressingMode: key.addressingMode }
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -213,9 +248,8 @@ serve(async (req) => {
       
       console.log(`Phone extraction: jidForPhone=${jidForPhone}, extracted=${phone}`);
       
-      // Validate phone is 10-13 digits (Brazilian numbers are max 13: 55 + 2 DDD + 9 digits)
-      // International numbers are typically 10-13 digits
-      if (!/^\d{10,13}$/.test(phone)) {
+      // Validate phone is 10-15 digits (international numbers can have up to 15 digits per E.164)
+      if (!/^\d{10,15}$/.test(phone)) {
         console.log(`Skipping message with invalid phone length: ${rawPhone} (${phone.length} digits)`);
         return new Response(JSON.stringify({ success: true, skipped: true, reason: 'invalid_phone_length' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -223,14 +257,29 @@ serve(async (req) => {
       }
       
       // Additional validation: reject numbers that don't start with valid country codes
-      // Most common: 55 (Brazil), 1 (US/Canada), 44 (UK), etc.
-      // Numbers starting with unusual patterns are likely internal IDs
-      const validCountryPrefixes = ['55', '1', '44', '49', '33', '34', '39', '351', '54', '52', '56', '57', '58', '51'];
+      // Extended list including:
+      // - Americas: 55 (Brazil), 1 (US/Canada), 54 (Argentina), 52 (Mexico), 56 (Chile), 57 (Colombia), 58 (Venezuela), 51 (Peru), 53 (Cuba), 506 (Costa Rica), 507 (Panama), 593 (Ecuador), 595 (Paraguay), 598 (Uruguay)
+      // - Europe: 44 (UK), 49 (Germany), 33 (France), 34 (Spain), 39 (Italy), 351 (Portugal), 31 (Netherlands), 32 (Belgium), 41 (Switzerland), 43 (Austria), 45 (Denmark), 46 (Sweden), 47 (Norway), 48 (Poland), 420 (Czech), 380 (Ukraine), 7 (Russia)
+      // - Africa: 244 (Angola), 258 (Mozambique), 238 (Cape Verde), 239 (São Tomé), 245 (Guinea-Bissau), 27 (South Africa), 234 (Nigeria), 254 (Kenya), 255 (Tanzania), 256 (Uganda), 20 (Egypt), 212 (Morocco)
+      // - Asia/Middle East: 91 (India), 86 (China), 81 (Japan), 82 (South Korea), 62 (Indonesia), 60 (Malaysia), 63 (Philippines), 66 (Thailand), 84 (Vietnam), 971 (UAE), 966 (Saudi Arabia), 972 (Israel), 90 (Turkey)
+      // - Oceania: 61 (Australia), 64 (New Zealand)
+      const validCountryPrefixes = [
+        // Americas
+        '55', '1', '54', '52', '56', '57', '58', '51', '53', '506', '507', '593', '595', '598',
+        // Europe  
+        '44', '49', '33', '34', '39', '351', '31', '32', '41', '43', '45', '46', '47', '48', '420', '380', '7',
+        // Africa (Portuguese-speaking + major)
+        '244', '258', '238', '239', '245', '27', '234', '254', '255', '256', '20', '212',
+        // Asia/Middle East
+        '91', '86', '81', '82', '62', '60', '63', '66', '84', '971', '966', '972', '90',
+        // Oceania
+        '61', '64'
+      ];
       const hasValidPrefix = validCountryPrefixes.some(prefix => phone.startsWith(prefix));
       
       if (!hasValidPrefix) {
-        console.log(`Skipping message with invalid country prefix: ${phone}`);
-        return new Response(JSON.stringify({ success: true, skipped: true, reason: 'invalid_country_prefix' }), {
+        console.log(`Skipping message with invalid country prefix: ${phone} (first 3 digits: ${phone.substring(0, 3)})`);
+        return new Response(JSON.stringify({ success: true, skipped: true, reason: 'invalid_country_prefix', phone_prefix: phone.substring(0, 3) }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
