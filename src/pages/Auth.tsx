@@ -76,58 +76,100 @@ const Auth = () => {
     }
   }, [user, navigate]);
 
+  const withTimeout = async <T,>(
+    promise: Promise<T>,
+    ms: number,
+    label: string
+  ): Promise<T> => {
+    let timeoutId: number | undefined;
+
+    const timeoutPromise = new Promise<T>((_, reject) => {
+      timeoutId = window.setTimeout(() => {
+        reject(new Error(`${label} demorou demais. Verifique sua conexão e tente novamente.`));
+      }, ms);
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      if (timeoutId) window.clearTimeout(timeoutId);
+    }
+  };
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!loginEmail || !loginPassword) {
       splashedToast.error("Campos obrigatórios", "Por favor, preencha todos os campos");
       return;
     }
 
     setLoading(true);
-    const { error, data } = await signIn(loginEmail, loginPassword);
 
-    if (error) {
-      setLoading(false);
-      splashedToast.error("Erro ao fazer login", error.message);
-      return;
-    }
-
-    const userId = data?.user?.id;
-    setCurrentUserId(userId || null);
-
-    // Check if MFA is required
     try {
-      const { data: factorsData } = await supabase.auth.mfa.listFactors();
-      const totpFactors = factorsData?.totp || [];
-      const verifiedFactor = totpFactors.find(f => (f as any).status === 'verified');
+      const { error, data } = await withTimeout(
+        signIn(loginEmail, loginPassword),
+        15000,
+        "Login"
+      );
 
-      if (verifiedFactor) {
-        // Check if this device is trusted
-        const trustedDevices = JSON.parse(localStorage.getItem('mfa_trusted_devices') || '{}');
-        const deviceToken = trustedDevices[userId || ''];
-        
-        if (deviceToken) {
-          // Device is trusted, skip MFA
-          setLoading(false);
-          splashedToast.success("Sucesso", "Login realizado com sucesso!");
-          navigate("/");
-          return;
-        }
-
-        // MFA is enabled and device not trusted, show the dialog
-        setMfaFactorId(verifiedFactor.id);
-        setShowMfaDialog(true);
-        setLoading(false);
+      if (error) {
+        splashedToast.error("Erro ao fazer login", error.message);
         return;
       }
-    } catch (mfaError) {
-      console.log('No MFA configured:', mfaError);
-    }
 
-    setLoading(false);
-    splashedToast.success("Sucesso", "Login realizado com sucesso!");
-    navigate("/");
+      const userId = data?.user?.id;
+      setCurrentUserId(userId || null);
+
+      // Check if MFA is required (don't let it hang indefinitely)
+      try {
+        const { data: factorsData } = await withTimeout(
+          supabase.auth.mfa.listFactors(),
+          8000,
+          "Verificação 2FA"
+        );
+
+        const totpFactors = factorsData?.totp || [];
+        const verifiedFactor = totpFactors.find((f) => (f as any).status === "verified");
+
+        if (verifiedFactor) {
+          // Check if this device is trusted
+          let trustedDevices: Record<string, string> = {};
+          try {
+            trustedDevices = JSON.parse(localStorage.getItem("mfa_trusted_devices") || "{}");
+          } catch {
+            trustedDevices = {};
+          }
+
+          const deviceToken = trustedDevices[userId || ""];
+
+          if (deviceToken) {
+            // Device is trusted, skip MFA
+            splashedToast.success("Sucesso", "Login realizado com sucesso!");
+            navigate("/");
+            return;
+          }
+
+          // MFA is enabled and device not trusted, show the dialog
+          setMfaFactorId(verifiedFactor.id);
+          setShowMfaDialog(true);
+          return;
+        }
+      } catch (mfaError) {
+        // MFA not configured or transient issue; continue normally
+        console.log("MFA check skipped:", mfaError);
+      }
+
+      splashedToast.success("Sucesso", "Login realizado com sucesso!");
+      navigate("/");
+    } catch (err: any) {
+      splashedToast.error(
+        "Erro ao fazer login",
+        err?.message || "Não foi possível fazer login. Tente novamente."
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleMfaVerify = async () => {
@@ -184,13 +226,13 @@ const Auth = () => {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!signupEmail || !signupPassword || !signupConfirmPassword) {
       splashedToast.error("Campos obrigatórios", "Por favor, preencha todos os campos");
       return;
     }
 
-    if (!signupEmail.includes('@') || !signupEmail.includes('.')) {
+    if (!signupEmail.includes("@") || !signupEmail.includes(".")) {
       splashedToast.error("Email inválido", "Por favor, insira um email válido");
       return;
     }
@@ -206,17 +248,38 @@ const Auth = () => {
     }
 
     setLoading(true);
-    const { error } = await signUp(signupEmail, signupPassword);
-    setLoading(false);
 
-    if (error) {
-      splashedToast.error("Erro ao criar conta", error.message);
-    } else {
+    try {
+      const { error } = await withTimeout(
+        signUp(signupEmail, signupPassword),
+        20000,
+        "Criação de conta"
+      );
+
+      if (error) {
+        splashedToast.error("Erro ao criar conta", error.message);
+        return;
+      }
+
       splashedToast.success("Conta criada!", "Você já pode fazer login");
-      const { error: loginError } = await signIn(signupEmail, signupPassword);
+
+      // Auto-login (with timeout) to avoid infinite loading
+      const { error: loginError } = await withTimeout(
+        signIn(signupEmail, signupPassword),
+        15000,
+        "Login"
+      );
+
       if (!loginError) {
         navigate("/");
       }
+    } catch (err: any) {
+      splashedToast.error(
+        "Erro",
+        err?.message || "Não foi possível concluir o cadastro. Tente novamente."
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
