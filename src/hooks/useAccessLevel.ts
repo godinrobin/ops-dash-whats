@@ -43,7 +43,7 @@ export const useAccessLevel = () => {
             .from("profiles")
             .select("is_full_member")
             .eq("id", user.id)
-            .single(),
+            .maybeSingle(),
           supabase
             .from("user_roles")
             .select("role")
@@ -52,13 +52,8 @@ export const useAccessLevel = () => {
             .maybeSingle()
         ]);
 
-        if (profileResult.error) {
-          console.error("Error fetching membership status:", profileResult.error);
-          // Default to full member if there's an error (fail-safe for existing users)
-          setIsFullMember(true);
-        } else {
-          setIsFullMember(profileResult.data?.is_full_member ?? true);
-        }
+        // Set membership status - default to true if no profile found
+        setIsFullMember(profileResult.data?.is_full_member ?? true);
 
         // Set admin status
         setIsAdmin(!!roleResult.data);
