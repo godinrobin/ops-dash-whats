@@ -7,8 +7,23 @@ const corsHeaders = {
 };
 
 // Helper to get Evolution API config with fallback strategy
-async function getEvolutionConfig(supabaseClient: any, userId: string): Promise<{ baseUrl: string; apiKey: string; source: string } | null> {
-  // 1) Try user's own config
+// PRIORITY: 1) Instance config, 2) User config, 3) Admin config, 4) Global secrets
+async function getEvolutionConfigForInstance(
+  supabaseClient: any, 
+  userId: string, 
+  instanceConfig?: { evolution_base_url?: string; evolution_api_key?: string }
+): Promise<{ baseUrl: string; apiKey: string; source: string } | null> {
+  
+  // 1) Try instance's own config (highest priority)
+  if (instanceConfig?.evolution_base_url && instanceConfig?.evolution_api_key) {
+    return {
+      baseUrl: instanceConfig.evolution_base_url.replace(/\/$/, ''),
+      apiKey: instanceConfig.evolution_api_key,
+      source: 'instance'
+    };
+  }
+
+  // 2) Try user's own config
   const { data: userConfig } = await supabaseClient
     .from('maturador_config')
     .select('evolution_base_url, evolution_api_key')
@@ -16,7 +31,6 @@ async function getEvolutionConfig(supabaseClient: any, userId: string): Promise<
     .maybeSingle();
 
   if (userConfig?.evolution_base_url && userConfig?.evolution_api_key) {
-    console.log('[VERIFY-WEBHOOKS] Using user config');
     return {
       baseUrl: userConfig.evolution_base_url.replace(/\/$/, ''),
       apiKey: userConfig.evolution_api_key,
@@ -24,7 +38,7 @@ async function getEvolutionConfig(supabaseClient: any, userId: string): Promise<
     };
   }
 
-  // 2) Try any admin config (first available)
+  // 3) Try any admin config (first available)
   const { data: adminConfig } = await supabaseClient
     .from('maturador_config')
     .select('evolution_base_url, evolution_api_key')
@@ -32,7 +46,6 @@ async function getEvolutionConfig(supabaseClient: any, userId: string): Promise<
     .maybeSingle();
 
   if (adminConfig?.evolution_base_url && adminConfig?.evolution_api_key) {
-    console.log('[VERIFY-WEBHOOKS] Using admin config (fallback)');
     return {
       baseUrl: adminConfig.evolution_base_url.replace(/\/$/, ''),
       apiKey: adminConfig.evolution_api_key,
@@ -40,12 +53,11 @@ async function getEvolutionConfig(supabaseClient: any, userId: string): Promise<
     };
   }
 
-  // 3) Try global secrets
+  // 4) Try global secrets
   const globalBaseUrl = Deno.env.get('EVOLUTION_BASE_URL');
   const globalApiKey = Deno.env.get('EVOLUTION_API_KEY');
 
   if (globalBaseUrl && globalApiKey) {
-    console.log('[VERIFY-WEBHOOKS] Using global secrets (fallback)');
     return {
       baseUrl: globalBaseUrl.replace(/\/$/, ''),
       apiKey: globalApiKey,
@@ -89,29 +101,10 @@ serve(async (req) => {
 
     console.log(`[VERIFY-WEBHOOKS] Starting webhook verification for user ${user.id}`);
 
-    // Get Evolution API config with fallback strategy
-    const evolutionConfig = await getEvolutionConfig(supabaseClient, user.id);
-
-    if (!evolutionConfig) {
-      console.log('[VERIFY-WEBHOOKS] No Evolution API config available (tried user, admin, global)');
-      return new Response(JSON.stringify({ 
-        success: false, 
-        message: 'No Evolution API configuration available',
-        configured: 0 
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    console.log(`[VERIFY-WEBHOOKS] Using config source: ${evolutionConfig.source}`);
-
-    const EVOLUTION_BASE_URL = evolutionConfig.baseUrl;
-    const EVOLUTION_API_KEY = evolutionConfig.apiKey;
-
-    // Get all connected instances for this user (include 'open' status too)
+    // Get all connected instances for this user (include 'open' status too) WITH evolution config
     const { data: instances, error: instancesError } = await supabaseClient
       .from('maturador_instances')
-      .select('*')
+      .select('*, evolution_base_url, evolution_api_key')
       .eq('user_id', user.id)
       .in('status', ['connected', 'open']);
 
@@ -137,18 +130,36 @@ serve(async (req) => {
     console.log(`[VERIFY-WEBHOOKS] Found ${instances.length} connected/open instances`);
 
     const expectedWebhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/webhook-inbox-messages`;
-    const results: Array<{instance: string, status: string, configured: boolean}> = [];
+    const results: Array<{instance: string, status: string, configured: boolean, configSource?: string, evolutionUrl?: string}> = [];
 
     for (const instance of instances) {
       const instanceName = instance.instance_name;
-      console.log(`[VERIFY-WEBHOOKS] Checking webhook for ${instanceName}`);
+      
+      // Get config for THIS specific instance (may have its own Evolution server)
+      const evolutionConfig = await getEvolutionConfigForInstance(supabaseClient, user.id, {
+        evolution_base_url: instance.evolution_base_url,
+        evolution_api_key: instance.evolution_api_key,
+      });
+
+      if (!evolutionConfig) {
+        console.log(`[VERIFY-WEBHOOKS] No Evolution config available for ${instanceName}`);
+        results.push({ 
+          instance: instanceName, 
+          status: 'no_config', 
+          configured: false,
+          configSource: 'none'
+        });
+        continue;
+      }
+
+      console.log(`[VERIFY-WEBHOOKS] Checking webhook for ${instanceName} using ${evolutionConfig.source} config (${evolutionConfig.baseUrl})`);
 
       try {
         // Check current webhook configuration
-        const findRes = await fetch(`${EVOLUTION_BASE_URL}/webhook/find/${instanceName}`, {
+        const findRes = await fetch(`${evolutionConfig.baseUrl}/webhook/find/${instanceName}`, {
           method: 'GET',
           headers: {
-            apikey: EVOLUTION_API_KEY,
+            apikey: evolutionConfig.apiKey,
             'Content-Type': 'application/json',
           },
         });
@@ -165,7 +176,13 @@ serve(async (req) => {
           
           if (currentUrl === expectedWebhookUrl && isEnabled) {
             console.log(`[VERIFY-WEBHOOKS] Webhook already configured correctly for ${instanceName}`);
-            results.push({ instance: instanceName, status: 'already_configured', configured: true });
+            results.push({ 
+              instance: instanceName, 
+              status: 'already_configured', 
+              configured: true,
+              configSource: evolutionConfig.source,
+              evolutionUrl: evolutionConfig.baseUrl
+            });
             needsConfiguration = false;
           }
         }
@@ -209,10 +226,10 @@ serve(async (req) => {
           let configured = false;
           for (const payload of payloads) {
             try {
-              const setRes = await fetch(`${EVOLUTION_BASE_URL}/webhook/set/${instanceName}`, {
+              const setRes = await fetch(`${evolutionConfig.baseUrl}/webhook/set/${instanceName}`, {
                 method: 'POST',
                 headers: {
-                  apikey: EVOLUTION_API_KEY,
+                  apikey: evolutionConfig.apiKey,
                   'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(payload),
@@ -221,7 +238,13 @@ serve(async (req) => {
               if (setRes.ok) {
                 const result = await setRes.json();
                 console.log(`[VERIFY-WEBHOOKS] Webhook configured successfully for ${instanceName}:`, JSON.stringify(result));
-                results.push({ instance: instanceName, status: 'configured', configured: true });
+                results.push({ 
+                  instance: instanceName, 
+                  status: 'configured', 
+                  configured: true,
+                  configSource: evolutionConfig.source,
+                  evolutionUrl: evolutionConfig.baseUrl
+                });
                 configured = true;
                 break;
               } else {
@@ -235,12 +258,24 @@ serve(async (req) => {
 
           if (!configured) {
             console.error(`[VERIFY-WEBHOOKS] Failed to configure webhook for ${instanceName}`);
-            results.push({ instance: instanceName, status: 'failed', configured: false });
+            results.push({ 
+              instance: instanceName, 
+              status: 'failed', 
+              configured: false,
+              configSource: evolutionConfig.source,
+              evolutionUrl: evolutionConfig.baseUrl
+            });
           }
         }
       } catch (instanceError) {
         console.error(`[VERIFY-WEBHOOKS] Error processing ${instanceName}:`, instanceError);
-        results.push({ instance: instanceName, status: 'error', configured: false });
+        results.push({ 
+          instance: instanceName, 
+          status: 'error', 
+          configured: false,
+          configSource: evolutionConfig.source,
+          evolutionUrl: evolutionConfig.baseUrl
+        });
       }
     }
 
@@ -252,7 +287,6 @@ serve(async (req) => {
       results,
       configured: configuredCount,
       total: instances.length,
-      configSource: evolutionConfig.source
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

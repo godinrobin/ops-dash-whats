@@ -363,7 +363,7 @@ Regras:
       }
 
       case 'create-instance': {
-        const { instanceName } = params;
+        const { instanceName, evolutionConfig } = params;
         if (!instanceName) {
           return new Response(JSON.stringify({ error: 'Nome do número é obrigatório' }), {
             status: 400,
@@ -371,22 +371,55 @@ Regras:
           });
         }
 
-        // Create instance in Evolution API
-        result = await callEvolution('/instance/create', 'POST', {
-          instanceName,
-          qrcode: true,
-          integration: 'WHATSAPP-BAILEYS',
+        // Determine which Evolution API to use for creation
+        // Priority: evolutionConfig from request > user config > admin config > global
+        let createBaseUrl = EVOLUTION_BASE_URL;
+        let createApiKey = EVOLUTION_API_KEY;
+        
+        if (evolutionConfig?.baseUrl && evolutionConfig?.apiKey) {
+          console.log(`[CREATE-INSTANCE] Using custom Evolution config: ${evolutionConfig.baseUrl}`);
+          createBaseUrl = evolutionConfig.baseUrl.replace(/\/$/, '');
+          createApiKey = evolutionConfig.apiKey;
+        }
+
+        // Create instance in Evolution API using the appropriate config
+        const createResponse = await fetch(`${createBaseUrl}/instance/create`, {
+          method: 'POST',
+          headers: {
+            apikey: createApiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            instanceName,
+            qrcode: true,
+            integration: 'WHATSAPP-BAILEYS',
+          }),
         });
+
+        if (!createResponse.ok) {
+          const errorText = await createResponse.text();
+          console.error('[CREATE-INSTANCE] Evolution API error:', errorText);
+          throw new Error(`Evolution API error: ${createResponse.status}`);
+        }
+
+        result = await createResponse.json();
 
         // Configure instance settings to ignore groups (messages from groups won't be sent to webhook)
         try {
-          await callEvolution(`/settings/set/${instanceName}`, 'POST', {
-            rejectCall: false,
-            groupsIgnore: true, // Ignore group messages at Evolution API level
-            alwaysOnline: false,
-            readMessages: false,
-            readStatus: false,
-            syncFullHistory: false,
+          await fetch(`${createBaseUrl}/settings/set/${instanceName}`, {
+            method: 'POST',
+            headers: {
+              apikey: createApiKey,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              rejectCall: false,
+              groupsIgnore: true, // Ignore group messages at Evolution API level
+              alwaysOnline: false,
+              readMessages: false,
+              readStatus: false,
+              syncFullHistory: false,
+            }),
           });
           console.log(`[INSTANCE] Configured ignoreGroups=true for ${instanceName}`);
         } catch (settingsError) {
@@ -394,18 +427,73 @@ Regras:
           // Continue even if settings fail - instance is still created
         }
 
-        // Save instance to database
+        // Save instance to database WITH Evolution config if provided
+        const insertData: any = {
+          user_id: user.id,
+          instance_name: instanceName,
+          status: 'disconnected',
+          qrcode: result.qrcode?.base64 || null,
+        };
+        
+        // Save Evolution config per instance if custom config was provided
+        if (evolutionConfig?.baseUrl && evolutionConfig?.apiKey) {
+          insertData.evolution_base_url = evolutionConfig.baseUrl.replace(/\/$/, '');
+          insertData.evolution_api_key = evolutionConfig.apiKey;
+          console.log(`[CREATE-INSTANCE] Saving custom Evolution config for ${instanceName}`);
+        }
+
         const { error: insertError } = await supabaseClient
           .from('maturador_instances')
-          .insert({
-            user_id: user.id,
-            instance_name: instanceName,
-            status: 'disconnected',
-            qrcode: result.qrcode?.base64 || null,
-          });
+          .insert(insertData);
 
         if (insertError) {
           console.error('Insert instance error:', insertError);
+        }
+        
+        // Configure webhook for this instance immediately
+        try {
+          const webhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/webhook-inbox-messages`;
+          console.log(`[CREATE-INSTANCE] Configuring webhook for ${instanceName} to ${webhookUrl}`);
+          
+          const webhookPayloads = [
+            {
+              url: webhookUrl,
+              enabled: true,
+              webhookByEvents: false,
+              webhookBase64: false,
+              events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'SEND_MESSAGE', 'CONNECTION_UPDATE']
+            },
+            {
+              webhook: {
+                url: webhookUrl,
+                enabled: true,
+                webhookByEvents: false,
+                events: ['messages.upsert', 'messages.update', 'send.message', 'connection.update']
+              }
+            }
+          ];
+
+          for (const payload of webhookPayloads) {
+            try {
+              const webhookRes = await fetch(`${createBaseUrl}/webhook/set/${instanceName}`, {
+                method: 'POST',
+                headers: {
+                  apikey: createApiKey,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
+              });
+              
+              if (webhookRes.ok) {
+                console.log(`[CREATE-INSTANCE] Webhook configured successfully for ${instanceName}`);
+                break;
+              }
+            } catch (webhookError) {
+              console.log(`[CREATE-INSTANCE] Webhook payload failed for ${instanceName}:`, webhookError);
+            }
+          }
+        } catch (webhookError) {
+          console.error(`[CREATE-INSTANCE] Failed to configure webhook for ${instanceName}:`, webhookError);
         }
 
         break;
