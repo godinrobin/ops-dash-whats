@@ -401,23 +401,42 @@ export default function InboxDashboard() {
     setExpandedInstances(newExpanded);
   };
 
-  // Stats calculations - using São Paulo timezone (UTC-3)
+  // Timezone helpers (São Paulo)
+  const SAO_PAULO_TZ = 'America/Sao_Paulo';
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  const formatSaoPauloYmd = (date: Date) =>
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: SAO_PAULO_TZ,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
+
+  const getSaoPauloTodayUtcMidday = () => {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: SAO_PAULO_TZ,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date());
+
+    const year = Number(parts.find((p) => p.type === 'year')?.value);
+    const month = Number(parts.find((p) => p.type === 'month')?.value);
+    const day = Number(parts.find((p) => p.type === 'day')?.value);
+
+    return new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  };
+
+  const formatDdMm = (ymd: string) => `${ymd.slice(8, 10)}/${ymd.slice(5, 7)}`;
+
+  // Stats calculations - São Paulo timezone
   const todayMessages = useMemo(() => {
-    // Calculate São Paulo timezone offset
-    const SP_OFFSET_MINUTES = -180; // UTC-3 = -180 minutes
-    const now = new Date();
-    const browserOffsetMinutes = now.getTimezoneOffset();
-    const totalOffsetMs = (browserOffsetMinutes - SP_OFFSET_MINUTES) * 60 * 1000;
-    
-    // Get current date in São Paulo
-    const nowInSaoPaulo = new Date(now.getTime() + totalOffsetMs);
-    const todaySaoPaulo = nowInSaoPaulo.toISOString().split('T')[0];
-    
-    return messages.filter(m => {
-      // Convert message time to São Paulo timezone
-      const msgTime = new Date(m.created_at);
-      const msgInSaoPaulo = new Date(msgTime.getTime() + totalOffsetMs);
-      return msgInSaoPaulo.toISOString().split('T')[0] === todaySaoPaulo;
+    const todaySp = formatSaoPauloYmd(new Date());
+
+    return messages.filter((m) => {
+      const msgDaySp = formatSaoPauloYmd(new Date(m.created_at));
+      return msgDaySp === todaySp;
     });
   }, [messages]);
 
@@ -425,36 +444,27 @@ export default function InboxDashboard() {
 
   // Calculate conversations (contacts) by day for each instance (last 7 days) - São Paulo timezone
   const conversationsByDay = useMemo(() => {
-    // Calculate São Paulo timezone offset
-    const SP_OFFSET_MINUTES = -180; // UTC-3 = -180 minutes
-    const now = new Date();
-    const browserOffsetMinutes = now.getTimezoneOffset();
-    const totalOffsetMs = (browserOffsetMinutes - SP_OFFSET_MINUTES) * 60 * 1000;
-    
-    // Get current date in São Paulo
-    const nowInSaoPaulo = new Date(now.getTime() + totalOffsetMs);
-    
+    const todayUtcMidday = getSaoPauloTodayUtcMidday();
+
     const last7Days = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(nowInSaoPaulo);
-      d.setDate(d.getDate() - (6 - i));
-      return d.toISOString().split('T')[0];
+      const d = new Date(todayUtcMidday.getTime() - (6 - i) * DAY_MS);
+      return d.toISOString().slice(0, 10);
     });
-    
+
     // Initialize data structure
     const dayMap = new Map<string, Record<string, Set<string>>>();
-    last7Days.forEach(day => dayMap.set(day, {}));
-    
+    last7Days.forEach((day) => dayMap.set(day, {}));
+
     // Count unique contacts (conversations) by day and instance
-    messages.forEach(m => {
-      // Convert message time to São Paulo timezone
-      const msgTime = new Date(m.created_at);
-      const msgInSaoPaulo = new Date(msgTime.getTime() + totalOffsetMs);
-      const day = msgInSaoPaulo.toISOString().split('T')[0];
-      
+    messages.forEach((m) => {
+      const day = formatSaoPauloYmd(new Date(m.created_at));
+
       if (dayMap.has(day) && m.instance_id && m.contact_id) {
-        const instanceName = instances.find(i => i.id === m.instance_id)?.label || 
-                            instances.find(i => i.id === m.instance_id)?.instance_name || 
-                            'Desconhecido';
+        const instanceName =
+          instances.find((i) => i.id === m.instance_id)?.label ||
+          instances.find((i) => i.id === m.instance_id)?.instance_name ||
+          'Desconhecido';
+
         const dayData = dayMap.get(day)!;
         if (!dayData[instanceName]) {
           dayData[instanceName] = new Set<string>();
@@ -462,11 +472,11 @@ export default function InboxDashboard() {
         dayData[instanceName].add(m.contact_id);
       }
     });
-    
-    return last7Days.map(day => {
+
+    return last7Days.map((day) => {
       const dayData = dayMap.get(day)!;
       const result: Record<string, any> = {
-        date: new Date(day + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+        date: formatDdMm(day),
       };
       Object.entries(dayData).forEach(([name, contactSet]) => {
         result[name] = contactSet.size;
