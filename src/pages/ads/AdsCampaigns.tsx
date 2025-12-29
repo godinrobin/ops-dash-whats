@@ -187,8 +187,16 @@ export default function AdsCampaigns() {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [sortField, setSortField] = useState<SortField>('spend');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-  const [dateFilter, setDateFilter] = useState<DateFilter>("7days");
+  const [dateFilter, setDateFilter] = useState<DateFilter>(() => {
+    const saved = localStorage.getItem('ads_campaigns_date_filter');
+    return (saved as DateFilter) || "7days";
+  });
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+
+  // Persist date filter to localStorage
+  useEffect(() => {
+    localStorage.setItem('ads_campaigns_date_filter', dateFilter);
+  }, [dateFilter]);
   const [columns, setColumns] = useState<ColumnConfig[]>(defaultColumns);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [viewLevel, setViewLevel] = useState<ViewLevel>('campaign');
