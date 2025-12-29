@@ -26,13 +26,9 @@ interface PropertiesPanelProps {
 }
 // System variables that are always available (synchronized with backend)
 const SYSTEM_VARIABLES = [
-  'nome', 
-  'telefone', 
-  'resposta', 
-  'lastMessage', 
-  'contactName', 
-  'ultima_mensagem',
-  'saudacao_personalizada' // Dynamic greeting based on time of day (São Paulo timezone)
+  'contactName',
+  'saudacao_personalizada', // Dynamic greeting based on time of day (São Paulo timezone)
+  'telefone'
 ];
 
 // Function to sanitize file names for upload (removes accents and special characters)

@@ -401,18 +401,41 @@ export default function InboxDashboard() {
     setExpandedInstances(newExpanded);
   };
 
-  // Stats calculations
+  // Stats calculations - using São Paulo timezone (UTC-3)
   const todayMessages = useMemo(() => {
-    const today = new Date().toDateString();
-    return messages.filter(m => new Date(m.created_at).toDateString() === today);
+    // Calculate São Paulo timezone offset
+    const SP_OFFSET_MINUTES = -180; // UTC-3 = -180 minutes
+    const now = new Date();
+    const browserOffsetMinutes = now.getTimezoneOffset();
+    const totalOffsetMs = (browserOffsetMinutes - SP_OFFSET_MINUTES) * 60 * 1000;
+    
+    // Get current date in São Paulo
+    const nowInSaoPaulo = new Date(now.getTime() + totalOffsetMs);
+    const todaySaoPaulo = nowInSaoPaulo.toISOString().split('T')[0];
+    
+    return messages.filter(m => {
+      // Convert message time to São Paulo timezone
+      const msgTime = new Date(m.created_at);
+      const msgInSaoPaulo = new Date(msgTime.getTime() + totalOffsetMs);
+      return msgInSaoPaulo.toISOString().split('T')[0] === todaySaoPaulo;
+    });
   }, [messages]);
 
   const CHART_COLORS = ['#f97316', '#3b82f6', '#22c55e', '#a855f7', '#ec4899', '#06b6d4', '#eab308', '#ef4444'];
 
-  // Calculate conversations (contacts) by day for each instance (last 7 days)
+  // Calculate conversations (contacts) by day for each instance (last 7 days) - São Paulo timezone
   const conversationsByDay = useMemo(() => {
+    // Calculate São Paulo timezone offset
+    const SP_OFFSET_MINUTES = -180; // UTC-3 = -180 minutes
+    const now = new Date();
+    const browserOffsetMinutes = now.getTimezoneOffset();
+    const totalOffsetMs = (browserOffsetMinutes - SP_OFFSET_MINUTES) * 60 * 1000;
+    
+    // Get current date in São Paulo
+    const nowInSaoPaulo = new Date(now.getTime() + totalOffsetMs);
+    
     const last7Days = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date();
+      const d = new Date(nowInSaoPaulo);
       d.setDate(d.getDate() - (6 - i));
       return d.toISOString().split('T')[0];
     });
@@ -423,7 +446,11 @@ export default function InboxDashboard() {
     
     // Count unique contacts (conversations) by day and instance
     messages.forEach(m => {
-      const day = m.created_at.split('T')[0];
+      // Convert message time to São Paulo timezone
+      const msgTime = new Date(m.created_at);
+      const msgInSaoPaulo = new Date(msgTime.getTime() + totalOffsetMs);
+      const day = msgInSaoPaulo.toISOString().split('T')[0];
+      
       if (dayMap.has(day) && m.instance_id && m.contact_id) {
         const instanceName = instances.find(i => i.id === m.instance_id)?.label || 
                             instances.find(i => i.id === m.instance_id)?.instance_name || 
