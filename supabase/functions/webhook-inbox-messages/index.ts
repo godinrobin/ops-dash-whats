@@ -114,25 +114,49 @@ serve(async (req) => {
       const remoteJid = key.remoteJid || '';
       const remoteJidAlt = key.remoteJidAlt || '';
       
+      // Get participant fields (used in ads/group-like messages) - need these BEFORE group check
+      const participant = key.participant || '';
+      const participantAlt = key.participantAlt || '';
+      const addressingMode = key.addressingMode || '';
+      
       console.log(`Message JIDs: remoteJid=${remoteJid}, remoteJidAlt=${remoteJidAlt}`);
       
-      // Skip group messages (@g.us)
+      // Helper function to validate phone JID - defined early for use in group check
+      const isValidPhoneJid = (jid: string): boolean => {
+        if (!jid) return false;
+        if (!jid.includes('@s.whatsapp.net')) return false;
+        const phone = jid.split('@')[0].replace(/\D/g, '');
+        // Must be 10-15 digits (international phone numbers)
+        return phone.length >= 10 && phone.length <= 15;
+      };
+      
+      // Skip group messages (@g.us) - BUT check if this is an AD MESSAGE first
+      // Ad messages can have @g.us in remoteJid but have valid phone in participantAlt
       if (remoteJid.includes('@g.us') || remoteJidAlt?.includes('@g.us')) {
-        console.log('Skipping group message');
-        return new Response(JSON.stringify({ success: true, skipped: true, reason: 'group_message' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        // Check if participantAlt has a valid phone (this indicates an ad message, not a real group)
+        const hasValidParticipantAlt = isValidPhoneJid(participantAlt);
+        const isLidAddressingMode = addressingMode === 'lid';
+        
+        if (hasValidParticipantAlt || isLidAddressingMode) {
+          console.log(`[AD-MESSAGE] Detected ad message with @g.us remoteJid but valid participantAlt`);
+          console.log(`  participantAlt: ${participantAlt}`);
+          console.log(`  addressingMode: ${addressingMode}`);
+          // Continue processing - this is an AD message, not a real group
+        } else {
+          // This is a real group message with no valid participant
+          console.log('Skipping group message (no valid participantAlt)');
+          return new Response(JSON.stringify({ success: true, skipped: true, reason: 'group_message' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
       }
       
       // Find valid phone from multiple sources
-      // Priority: remoteJid > remoteJidAlt > participant > participantAlt > contextInfo
+      // Priority: participantAlt > remoteJid > remoteJidAlt > participant > contextInfo
+      // (participantAlt is prioritized as it often has the real phone for ad messages)
       // ONLY accept @s.whatsapp.net format - reject @lid (internal IDs)
       let jidForPhone = '';
       let phoneSource = '';
-      
-      // Get participant fields (used in ads/group-like messages)
-      const participant = key.participant || '';
-      const participantAlt = key.participantAlt || '';
       
       // Get contextInfo fields (often contains real phone for ad messages)
       const contextInfo = data.contextInfo || {};
@@ -159,34 +183,31 @@ serve(async (req) => {
       console.log(`  pushName=${pushNameRaw} (extracted phone: ${pushNamePhone})`);
       console.log(`  addressingMode=${key.addressingMode || 'none'}`);
       
-      // Helper function to validate and extract JID
-      const isValidPhoneJid = (jid: string): boolean => {
-        if (!jid) return false;
-        if (!jid.includes('@s.whatsapp.net')) return false;
-        const phone = jid.split('@')[0].replace(/\D/g, '');
-        // Must be 10-15 digits (international phone numbers)
-        return phone.length >= 10 && phone.length <= 15;
-      };
+      // isValidPhoneJid is defined above (before group check)
       
-      // 1. Try remoteJid with @s.whatsapp.net
-      if (isValidPhoneJid(remoteJid)) {
+      // Priority order: participantAlt > remoteJid > remoteJidAlt > participant > contextInfo
+      // participantAlt is prioritized because it often has the real phone for ad messages
+      
+      // 1. Try participantAlt FIRST (most reliable for Facebook ad messages)
+      if (isValidPhoneJid(participantAlt)) {
+        jidForPhone = participantAlt;
+        phoneSource = 'participantAlt';
+        console.log(`[AD-LEAD] Found phone in participantAlt: ${participantAlt}`);
+      }
+      // 2. Try remoteJid with @s.whatsapp.net
+      else if (isValidPhoneJid(remoteJid)) {
         jidForPhone = remoteJid;
         phoneSource = 'remoteJid';
       } 
-      // 2. Try remoteJidAlt with @s.whatsapp.net
+      // 3. Try remoteJidAlt with @s.whatsapp.net
       else if (isValidPhoneJid(remoteJidAlt)) {
         jidForPhone = remoteJidAlt;
         phoneSource = 'remoteJidAlt';
       }
-      // 3. Try participant (for ads/group-like messages where remoteJid is @lid)
+      // 4. Try participant (for ads/group-like messages where remoteJid is @lid)
       else if (isValidPhoneJid(participant)) {
         jidForPhone = participant;
         phoneSource = 'participant';
-      }
-      // 4. Try participantAlt (commonly used for Facebook ad messages)
-      else if (isValidPhoneJid(participantAlt)) {
-        jidForPhone = participantAlt;
-        phoneSource = 'participantAlt';
       }
       // 5. Try contextInfo.participant (another source for ad messages)
       else if (isValidPhoneJid(contextParticipant)) {
