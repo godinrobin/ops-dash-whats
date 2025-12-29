@@ -24,44 +24,63 @@ const MEMBER_ONLY_SYSTEMS = [
 export const useAccessLevel = () => {
   const { user } = useAuth();
   const [isFullMember, setIsFullMember] = useState<boolean | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkMembershipStatus = async () => {
+    const checkAccessStatus = async () => {
       if (!user) {
         setIsFullMember(null);
+        setIsAdmin(false);
         setLoading(false);
         return;
       }
 
       try {
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("is_full_member")
-          .eq("id", user.id)
-          .single();
+        // Fetch both membership status and admin role in parallel
+        const [profileResult, roleResult] = await Promise.all([
+          supabase
+            .from("profiles")
+            .select("is_full_member")
+            .eq("id", user.id)
+            .single(),
+          supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", user.id)
+            .eq("role", "admin")
+            .maybeSingle()
+        ]);
 
-        if (error) {
-          console.error("Error fetching membership status:", error);
+        if (profileResult.error) {
+          console.error("Error fetching membership status:", profileResult.error);
           // Default to full member if there's an error (fail-safe for existing users)
           setIsFullMember(true);
         } else {
-          setIsFullMember(data?.is_full_member ?? true);
+          setIsFullMember(profileResult.data?.is_full_member ?? true);
         }
+
+        // Set admin status
+        setIsAdmin(!!roleResult.data);
+        
       } catch (error) {
-        console.error("Error checking membership:", error);
+        console.error("Error checking access level:", error);
         setIsFullMember(true);
+        setIsAdmin(false);
       } finally {
         setLoading(false);
       }
     };
 
-    checkMembershipStatus();
+    checkAccessStatus();
   }, [user]);
 
   const canAccessSystem = (systemPath: string): boolean => {
     // If still loading or no user, assume access
     if (loading || isFullMember === null) return true;
+    
+    // Admins can access EVERYTHING
+    if (isAdmin) return true;
     
     // Full members can access everything
     if (isFullMember) return true;
@@ -82,6 +101,7 @@ export const useAccessLevel = () => {
 
   return {
     isFullMember,
+    isAdmin,
     loading,
     canAccessSystem,
     isRestrictedSystem,
