@@ -237,9 +237,10 @@ serve(async (req) => {
     if (userInput !== undefined && userInput !== null) {
       const currentNode = nodes.find(n => n.id === currentNodeId);
       if (currentNode?.type === 'waitInput' && currentNode.data.variableName) {
-        variables[currentNode.data.variableName as string] = userInput;
+        const key = normalizeVarKey(currentNode.data.variableName as string);
+        variables[key] = typeof userInput === 'string' ? userInput.trim() : userInput;
       }
-      
+
       // Find next node
       const nextEdge = edges.find(e => e.source === currentNodeId);
       if (nextEdge) {
@@ -780,7 +781,7 @@ serve(async (req) => {
               .from('inbox_contacts')
               .select('tags')
               .eq('id', contact.id)
-              .single();
+              .maybeSingle();
             
             const contactTags = (freshContact?.tags as string[]) || [];
             console.log(`[${runId}] Condition node: checking ${conditions.length} conditions, contact tags:`, contactTags);
@@ -788,33 +789,37 @@ serve(async (req) => {
             
             const evaluateCondition = (cond: typeof conditions[0]): boolean => {
               if (cond.type === 'tag') {
-                const tagToCheck = (cond.tagName || '').trim();
-                const hasTag = contactTags.some(t => t.toLowerCase() === tagToCheck.toLowerCase());
+                const tagToCheck = normalizeComparable(cond.tagName || '');
+                const hasTag = contactTags.some(t => normalizeComparable(t) === tagToCheck);
                 const result = cond.tagCondition === 'has' ? hasTag : !hasTag;
                 console.log(`[${runId}] Tag condition: "${tagToCheck}" ${cond.tagCondition} -> hasTag=${hasTag}, result=${result}`);
                 return result;
               }
               
               // Variable condition - normalize variable name (remove {{ }})
-              const varName = (cond.variable || '').replace(/\{\{|\}\}/g, '').trim();
-              const varValue = String(variables[varName] || '');
-              const compareValue = cond.value || '';
+              const varName = normalizeVarKey(cond.variable || '');
+              const rawVarValue = variables[varName];
+              const varValueStr = rawVarValue === null || rawVarValue === undefined ? '' : String(rawVarValue).trim();
+              const compareValueStr = String(cond.value || '').trim();
               
-              console.log(`[${runId}] Variable condition: ${varName}="${varValue}" ${cond.operator} "${compareValue}"`);
+              console.log(`[${runId}] Variable condition: ${varName}="${varValueStr}" ${cond.operator} "${compareValueStr}"`);
               
+              const a = normalizeComparable(varValueStr);
+              const b = normalizeComparable(compareValueStr);
+
               let result: boolean;
               switch (cond.operator) {
-                case 'equals': result = varValue.toLowerCase() === compareValue.toLowerCase(); break;
-                case 'not_equals': result = varValue.toLowerCase() !== compareValue.toLowerCase(); break;
-                case 'contains': result = varValue.toLowerCase().includes(compareValue.toLowerCase()); break;
-                case 'not_contains': result = !varValue.toLowerCase().includes(compareValue.toLowerCase()); break;
-                case 'startsWith': result = varValue.toLowerCase().startsWith(compareValue.toLowerCase()); break;
-                case 'endsWith': result = varValue.toLowerCase().endsWith(compareValue.toLowerCase()); break;
-                case 'greater': result = parseFloat(varValue) > parseFloat(compareValue); break;
-                case 'less': result = parseFloat(varValue) < parseFloat(compareValue); break;
-                case 'exists': result = varValue !== '' && varValue !== 'undefined'; break;
-                case 'not_exists': result = varValue === '' || varValue === 'undefined'; break;
-                default: result = varValue.toLowerCase() === compareValue.toLowerCase();
+                case 'equals': result = a === b; break;
+                case 'not_equals': result = a !== b; break;
+                case 'contains': result = a.includes(b); break;
+                case 'not_contains': result = !a.includes(b); break;
+                case 'startsWith': result = a.startsWith(b); break;
+                case 'endsWith': result = a.endsWith(b); break;
+                case 'greater': result = parseFloat(varValueStr) > parseFloat(compareValueStr); break;
+                case 'less': result = parseFloat(varValueStr) < parseFloat(compareValueStr); break;
+                case 'exists': result = varValueStr !== '' && varValueStr !== 'undefined'; break;
+                case 'not_exists': result = varValueStr === '' || varValueStr === 'undefined'; break;
+                default: result = a === b;
               }
               console.log(`[${runId}] Variable condition result: ${result}`);
               return result;
@@ -918,7 +923,7 @@ serve(async (req) => {
             });
 
           case 'setVariable':
-            const varName = currentNode.data.variableName as string || '';
+            const varName = normalizeVarKey(currentNode.data.variableName as string || '');
             const varVal = replaceVariables(currentNode.data.value as string || '', variables);
             if (varName) {
               variables[varName] = varVal;
@@ -1236,7 +1241,24 @@ serve(async (req) => {
 });
 
 function replaceVariables(text: string, variables: Record<string, unknown>): string {
-  return text.replace(/\{\{(\w+)\}\}/g, (_, key) => String(variables[key] || ''));
+  return text.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, rawKey) => {
+    const key = normalizeVarKey(String(rawKey));
+    return String(variables[key] ?? '');
+  });
+}
+
+// Normalize variable keys coming from the builder (e.g. "{{Respondeu}}")
+function normalizeVarKey(input: string): string {
+  return String(input || '').replace(/\{\{|\}\}/g, '').trim();
+}
+
+// Normalize values for comparison (case-insensitive, trims, removes accents)
+function normalizeComparable(input: unknown): string {
+  return String(input ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
 }
 
 // Send presence status (typing, recording) before sending a message
@@ -1249,38 +1271,58 @@ async function sendPresence(
   delayMs: number
 ): Promise<void> {
   const formattedPhone = phone.replace(/\D/g, '');
-  
-  console.log(`Sending ${presenceType} presence to ${formattedPhone} for ${delayMs}ms`);
-  
-  try {
-    const response = await fetch(`${baseUrl}/chat/sendPresence/${instanceName}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': apiKey,
-      },
-      body: JSON.stringify({
-        number: formattedPhone,
-        options: {
-          delay: delayMs,
-          presence: presenceType,
-        }
-      }),
-    });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Failed to send presence:`, errorText);
-    } else {
-      console.log(`Presence ${presenceType} sent successfully`);
+  const presenceCandidates = presenceType === 'composing'
+    ? ['composing', 'typing']
+    : ['recording', 'recording_audio', 'recordingAudio'];
+
+  const headers = {
+    'Content-Type': 'application/json',
+    apikey: apiKey,
+    Authorization: `Bearer ${apiKey}`,
+  };
+
+  console.log(`Sending ${presenceType} presence to ${formattedPhone} for ${delayMs}ms`);
+
+  const payloadsFor = (presence: string) => ([
+    { number: formattedPhone, options: { delay: delayMs, presence } },
+    { number: formattedPhone, options: { delay: Math.ceil(delayMs / 1000), presence } },
+    { number: formattedPhone, delay: delayMs, presence },
+    { number: formattedPhone, delay: Math.ceil(delayMs / 1000), presence },
+  ]);
+
+  let ok = false;
+
+  try {
+    for (const presence of presenceCandidates) {
+      for (const body of payloadsFor(presence)) {
+        console.log('Presence attempt:', { presence, body });
+        const response = await fetch(`${baseUrl}/chat/sendPresence/${instanceName}`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+        });
+
+        if (response.ok) {
+          ok = true;
+          console.log(`Presence ${presence} sent successfully`);
+          break;
+        }
+
+        const errorText = await response.text().catch(() => '');
+        console.warn(`Presence attempt failed (${response.status}):`, errorText);
+      }
+
+      if (ok) break;
     }
-    
-    // Wait for the presence duration before continuing
-    await new Promise(resolve => setTimeout(resolve, delayMs));
-    
+
+    // Only wait if we actually managed to send presence
+    if (ok) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
   } catch (error) {
-    console.error(`Error sending presence:`, error);
-    // Don't throw - presence is optional, continue with sending the message
+    console.error('Error sending presence:', error);
+    // presence is optional, continue with sending the message
   }
 }
 
@@ -1344,7 +1386,8 @@ async function sendMessage(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': apiKey,
+        apikey: apiKey,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
     });
