@@ -611,6 +611,11 @@ export const PropertiesPanel = ({
         const timeoutValue = (nodeData.timeout as number) || 5;
         const timeoutUnit = (nodeData.timeoutUnit as string) || 'minutes';
         
+        // Follow up settings
+        const followUpEnabled = (nodeData.followUpEnabled as boolean) === true;
+        const followUpDelay = (nodeData.followUpDelay as number) || 1;
+        const followUpUnit = (nodeData.followUpUnit as string) || 'minutes';
+        
         return (
           <div className="space-y-4">
             <div className="space-y-2">
@@ -634,7 +639,13 @@ export const PropertiesPanel = ({
                 <Checkbox
                   id="timeoutEnabled"
                   checked={timeoutEnabled}
-                  onCheckedChange={(checked) => onUpdateNode(selectedNode.id, { timeoutEnabled: checked })}
+                  onCheckedChange={(checked) => {
+                    onUpdateNode(selectedNode.id, { 
+                      timeoutEnabled: checked,
+                      // Disable follow up if timeout is disabled
+                      ...(checked === false ? { followUpEnabled: false } : {})
+                    });
+                  }}
                 />
                 <Label htmlFor="timeoutEnabled" className="text-sm cursor-pointer">
                   Definir prazo para responder
@@ -642,37 +653,107 @@ export const PropertiesPanel = ({
               </div>
               
               {timeoutEnabled && (
-                <div className="space-y-2 pl-6 animate-in slide-in-from-top-2 duration-200">
-                  <Label className="text-muted-foreground">Tempo máximo de espera</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      type="number"
-                      min={1}
-                      value={timeoutValue}
-                      onChange={(e) => onUpdateNode(selectedNode.id, { timeout: parseInt(e.target.value) || 1 })}
-                      className="w-20"
-                    />
-                    <Select
-                      value={timeoutUnit}
-                      onValueChange={(value) => onUpdateNode(selectedNode.id, { timeoutUnit: value })}
-                    >
-                      <SelectTrigger className="w-28">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="seconds">Segundos</SelectItem>
-                        <SelectItem value="minutes">Minutos</SelectItem>
-                        <SelectItem value="hours">Horas</SelectItem>
-                        <SelectItem value="days">Dias</SelectItem>
-                      </SelectContent>
-                    </Select>
+                <div className="space-y-4 pl-6 animate-in slide-in-from-top-2 duration-200">
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground">Tempo máximo de espera (Timeout)</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="number"
+                        min={1}
+                        value={timeoutValue}
+                        onChange={(e) => onUpdateNode(selectedNode.id, { timeout: parseInt(e.target.value) || 1 })}
+                        className="w-20"
+                      />
+                      <Select
+                        value={timeoutUnit}
+                        onValueChange={(value) => onUpdateNode(selectedNode.id, { timeoutUnit: value })}
+                      >
+                        <SelectTrigger className="w-28">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="seconds">Segundos</SelectItem>
+                          <SelectItem value="minutes">Minutos</SelectItem>
+                          <SelectItem value="hours">Horas</SelectItem>
+                          <SelectItem value="days">Dias</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      O fluxo seguirá pela saída "Timeout" após este prazo sem resposta.
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    O fluxo continuará automaticamente após este prazo, mesmo sem resposta.
-                  </p>
+                  
+                  {/* Follow Up section */}
+                  <div className="space-y-3 pt-3 border-t border-border/50">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="followUpEnabled"
+                        checked={followUpEnabled}
+                        onCheckedChange={(checked) => onUpdateNode(selectedNode.id, { followUpEnabled: checked })}
+                      />
+                      <Label htmlFor="followUpEnabled" className="text-sm cursor-pointer text-yellow-500">
+                        Habilitar Follow Up
+                      </Label>
+                    </div>
+                    
+                    {followUpEnabled && (
+                      <div className="space-y-2 pl-6 animate-in slide-in-from-top-2 duration-200">
+                        <Label className="text-muted-foreground">Tempo para Follow Up</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            type="number"
+                            min={1}
+                            value={followUpDelay}
+                            onChange={(e) => onUpdateNode(selectedNode.id, { followUpDelay: parseInt(e.target.value) || 1 })}
+                            className="w-20"
+                          />
+                          <Select
+                            value={followUpUnit}
+                            onValueChange={(value) => onUpdateNode(selectedNode.id, { followUpUnit: value })}
+                          >
+                            <SelectTrigger className="w-28">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="seconds">Segundos</SelectItem>
+                              <SelectItem value="minutes">Minutos</SelectItem>
+                              <SelectItem value="hours">Horas</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Se o usuário não responder neste tempo, o fluxo seguirá pela saída "Follow Up" e continuará aguardando até o timeout.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
+            
+            {/* Visual guide for outputs */}
+            {timeoutEnabled && (
+              <div className="pt-2 border-t border-border space-y-1">
+                <Label className="text-xs">Saídas do componente:</Label>
+                <div className="text-xs space-y-1">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-cyan-500"></div>
+                    <span className="text-muted-foreground">Resposta recebida</span>
+                  </div>
+                  {followUpEnabled && (
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
+                      <span className="text-muted-foreground">Follow Up (após {followUpDelay} {followUpUnit === 'seconds' ? 'seg' : followUpUnit === 'minutes' ? 'min' : 'h'})</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+                    <span className="text-muted-foreground">Timeout (após {timeoutValue} {timeoutUnit === 'seconds' ? 'seg' : timeoutUnit === 'minutes' ? 'min' : timeoutUnit === 'hours' ? 'h' : 'd'})</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         );
 
