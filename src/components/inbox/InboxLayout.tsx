@@ -84,135 +84,34 @@ export const InboxLayout = () => {
       return;
     }
 
+    const flowName = flows.find((f) => f.id === flowId)?.name;
+
     try {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error('Usuário não autenticado');
-        return;
-      }
-
-      const nowIso = new Date().toISOString();
-      const baseVariables = {
-        lastMessage: '',
-        contactName: selectedContact.name || selectedContact.phone,
-        _sent_node_ids: [] as string[],
-      };
-
-      // If there's already an active session for this contact, handle it first
-      const { data: existingActiveSession } = await supabase
-        .from('inbox_flow_sessions')
-        .select('id, flow_id')
-        .eq('contact_id', selectedContact.id)
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .order('started_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      let sessionIdToRun: string | null = null;
-
-      if (existingActiveSession) {
-        if (existingActiveSession.flow_id === flowId) {
-          // Same flow already active: reset to start and reuse the session (avoids unique constraint errors)
-          const { error: resetError } = await supabase
-            .from('inbox_flow_sessions')
-            .update({
-              current_node_id: 'start-1',
-              variables: baseVariables,
-              instance_id: selectedContact.instance_id,
-              last_interaction: nowIso,
-              processing: false,
-              processing_started_at: null,
-            })
-            .eq('id', existingActiveSession.id)
-            .eq('user_id', user.id);
-
-          if (resetError) {
-            console.error('Error resetting flow session:', resetError);
-            toast.error('Erro ao reiniciar sessão do fluxo');
-            return;
-          }
-
-          sessionIdToRun = existingActiveSession.id;
-        } else {
-          // Another flow is active for this contact: complete it so we can start the chosen flow
-          const { error: completeError } = await supabase
-            .from('inbox_flow_sessions')
-            .update({ status: 'completed', last_interaction: nowIso })
-            .eq('id', existingActiveSession.id)
-            .eq('user_id', user.id);
-
-          if (completeError) {
-            console.error('Error completing previous flow session:', completeError);
-            // If we fail to complete, we can still try to reuse the existing session as a fallback
-          }
-        }
-      }
-
-      // Create a new flow session if needed
-      if (!sessionIdToRun) {
-        const { data: newSession, error: sessionError } = await supabase
-          .from('inbox_flow_sessions')
-          .insert({
-            flow_id: flowId,
-            contact_id: selectedContact.id,
-            instance_id: selectedContact.instance_id,
-            user_id: user.id,
-            current_node_id: 'start-1',
-            variables: baseVariables,
-            status: 'active',
-          })
-          .select()
-          .single();
-
-        if (sessionError) {
-          // Unique constraint means an active session already exists (race condition)
-          if ((sessionError as any).code === '23505') {
-            const { data: active } = await supabase
-              .from('inbox_flow_sessions')
-              .select('id')
-              .eq('contact_id', selectedContact.id)
-              .eq('user_id', user.id)
-              .eq('status', 'active')
-              .order('started_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
-
-            if (active?.id) {
-              sessionIdToRun = active.id;
-            } else {
-              console.error('Error creating flow session (23505) and could not find active session:', sessionError);
-              toast.error('Erro ao criar sessão do fluxo');
-              return;
-            }
-          } else {
-            console.error('Error creating flow session:', sessionError);
-            toast.error('Erro ao criar sessão do fluxo');
-            return;
-          }
-        } else {
-          sessionIdToRun = newSession.id;
-        }
-      }
-
-      // Call the process-inbox-flow edge function
-      const { error: invokeError } = await supabase.functions.invoke('process-inbox-flow', {
-        body: { sessionId: sessionIdToRun },
+      const { data, error } = await supabase.functions.invoke('trigger-inbox-flow', {
+        body: {
+          flowId,
+          contactId: selectedContact.id,
+        },
       });
 
-      if (invokeError) {
-        console.error('Error invoking flow:', invokeError);
-        toast.error('Erro ao executar fluxo');
+      if (error) {
+        console.error('Error triggering flow:', error);
+        toast.error('Erro ao disparar fluxo');
         return;
       }
 
-      toast.success('Fluxo disparado com sucesso!');
+      if (!(data as any)?.ok) {
+        console.error('Unexpected trigger-inbox-flow response:', data);
+        toast.error('Erro ao disparar fluxo');
+        return;
+      }
+
+      toast.success(flowName ? `Fluxo "${flowName}" disparado!` : 'Fluxo disparado com sucesso!');
     } catch (error) {
       console.error('Error triggering flow:', error);
       toast.error('Erro ao disparar fluxo');
     }
-  }, [selectedContact]);
+  }, [selectedContact, flows]);
 
   // Filter contacts by search query and label
   const filteredContacts = contacts.filter(contact => {
