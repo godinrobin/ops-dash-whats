@@ -6,6 +6,56 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper to get Evolution API config with fallback strategy
+async function getEvolutionConfig(supabaseClient: any, userId: string): Promise<{ baseUrl: string; apiKey: string; source: string } | null> {
+  // 1) Try user's own config
+  const { data: userConfig } = await supabaseClient
+    .from('maturador_config')
+    .select('evolution_base_url, evolution_api_key')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (userConfig?.evolution_base_url && userConfig?.evolution_api_key) {
+    console.log('[VERIFY-WEBHOOKS] Using user config');
+    return {
+      baseUrl: userConfig.evolution_base_url.replace(/\/$/, ''),
+      apiKey: userConfig.evolution_api_key,
+      source: 'user'
+    };
+  }
+
+  // 2) Try any admin config (first available)
+  const { data: adminConfig } = await supabaseClient
+    .from('maturador_config')
+    .select('evolution_base_url, evolution_api_key')
+    .limit(1)
+    .maybeSingle();
+
+  if (adminConfig?.evolution_base_url && adminConfig?.evolution_api_key) {
+    console.log('[VERIFY-WEBHOOKS] Using admin config (fallback)');
+    return {
+      baseUrl: adminConfig.evolution_base_url.replace(/\/$/, ''),
+      apiKey: adminConfig.evolution_api_key,
+      source: 'admin'
+    };
+  }
+
+  // 3) Try global secrets
+  const globalBaseUrl = Deno.env.get('EVOLUTION_BASE_URL');
+  const globalApiKey = Deno.env.get('EVOLUTION_API_KEY');
+
+  if (globalBaseUrl && globalApiKey) {
+    console.log('[VERIFY-WEBHOOKS] Using global secrets (fallback)');
+    return {
+      baseUrl: globalBaseUrl.replace(/\/$/, ''),
+      apiKey: globalApiKey,
+      source: 'global'
+    };
+  }
+
+  return null;
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -39,33 +89,31 @@ serve(async (req) => {
 
     console.log(`[VERIFY-WEBHOOKS] Starting webhook verification for user ${user.id}`);
 
-    // Get user's Evolution API config
-    const { data: config, error: configError } = await supabaseClient
-      .from('maturador_config')
-      .select('*')
-      .eq('user_id', user.id)
-      .maybeSingle();
+    // Get Evolution API config with fallback strategy
+    const evolutionConfig = await getEvolutionConfig(supabaseClient, user.id);
 
-    if (configError || !config) {
-      console.log('[VERIFY-WEBHOOKS] No Evolution API config found for user');
+    if (!evolutionConfig) {
+      console.log('[VERIFY-WEBHOOKS] No Evolution API config available (tried user, admin, global)');
       return new Response(JSON.stringify({ 
-        success: true, 
-        message: 'No Evolution API config found',
+        success: false, 
+        message: 'No Evolution API configuration available',
         configured: 0 
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const EVOLUTION_BASE_URL = config.evolution_base_url.replace(/\/$/, '');
-    const EVOLUTION_API_KEY = config.evolution_api_key;
+    console.log(`[VERIFY-WEBHOOKS] Using config source: ${evolutionConfig.source}`);
 
-    // Get all connected instances for this user
+    const EVOLUTION_BASE_URL = evolutionConfig.baseUrl;
+    const EVOLUTION_API_KEY = evolutionConfig.apiKey;
+
+    // Get all connected instances for this user (include 'open' status too)
     const { data: instances, error: instancesError } = await supabaseClient
       .from('maturador_instances')
       .select('*')
       .eq('user_id', user.id)
-      .eq('status', 'connected');
+      .in('status', ['connected', 'open']);
 
     if (instancesError) {
       console.error('[VERIFY-WEBHOOKS] Error fetching instances:', instancesError);
@@ -86,7 +134,7 @@ serve(async (req) => {
       });
     }
 
-    console.log(`[VERIFY-WEBHOOKS] Found ${instances.length} connected instances`);
+    console.log(`[VERIFY-WEBHOOKS] Found ${instances.length} connected/open instances`);
 
     const expectedWebhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/webhook-inbox-messages`;
     const results: Array<{instance: string, status: string, configured: boolean}> = [];
@@ -203,7 +251,8 @@ serve(async (req) => {
       success: true, 
       results,
       configured: configuredCount,
-      total: instances.length
+      total: instances.length,
+      configSource: evolutionConfig.source
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
