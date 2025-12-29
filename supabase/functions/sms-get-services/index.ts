@@ -12,55 +12,6 @@ const HERO_SMS_API_URL = 'https://hero-sms.com/stubs/handler_api.php';
 // Taxa de conversão USD para BRL
 const USD_TO_BRL = 6.10;
 
-// Serviços mais populares com nomes em português
-const popularServices: Record<string, string> = {
-  'wa': 'WhatsApp',
-  'tg': 'Telegram',
-  'ig': 'Instagram',
-  'go': 'Google/Gmail',
-  'fb': 'Facebook',
-  'tw': 'Twitter/X',
-  'oi': 'Tinder',
-  'am': 'Amazon',
-  'mb': 'Microsoft',
-  'nf': 'Netflix',
-  'ub': 'Uber',
-  'ds': 'Discord',
-  'sp': 'Spotify',
-  'ya': 'Yahoo',
-  'vi': 'Viber',
-  'me': 'Mercado Livre',
-  'sn': 'Snapchat',
-  'tk': 'TikTok',
-  'li': 'LinkedIn',
-  'py': 'PayPal',
-};
-
-// Países principais com bandeiras - CÓDIGOS SÃO IDs DA API, NÃO DDIs
-const countries: Record<string, { name: string; flag: string }> = {
-  '0': { name: 'Rússia', flag: '🇷🇺' },
-  '1': { name: 'Ucrânia', flag: '🇺🇦' },
-  '2': { name: 'Cazaquistão', flag: '🇰🇿' },
-  '3': { name: 'China', flag: '🇨🇳' },
-  '4': { name: 'Filipinas', flag: '🇵🇭' },
-  '6': { name: 'Indonésia', flag: '🇮🇩' },
-  '12': { name: 'Estados Unidos', flag: '🇺🇸' },
-  '16': { name: 'Reino Unido', flag: '🇬🇧' },
-  '19': { name: 'Espanha', flag: '🇪🇸' },
-  '33': { name: 'França', flag: '🇫🇷' },
-  '34': { name: 'México', flag: '🇲🇽' },
-  '39': { name: 'Argentina', flag: '🇦🇷' },
-  '43': { name: 'Alemanha', flag: '🇩🇪' },
-  '54': { name: 'Turquia', flag: '🇹🇷' },
-  '73': { name: 'Brasil', flag: '🇧🇷' },
-  '77': { name: 'Índia', flag: '🇮🇳' },
-  '84': { name: 'Vietnã', flag: '🇻🇳' },
-  '117': { name: 'Portugal', flag: '🇵🇹' },
-  '15': { name: 'Polônia', flag: '🇵🇱' },
-  '53': { name: 'Nigéria', flag: '🇳🇬' },
-  '31': { name: 'África do Sul', flag: '🇿🇦' },
-};
-
 async function getMarginFromDatabase(): Promise<number> {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -81,7 +32,90 @@ async function getMarginFromDatabase(): Promise<number> {
     return data.margin_percent;
   } catch (err) {
     console.error('Error fetching margin:', err);
-    return 30; // Default 30%
+    return 30;
+  }
+}
+
+// Buscar lista de serviços da API Hero SMS
+async function getServicesListFromAPI(apiKey: string, country: string): Promise<Record<string, string>> {
+  const url = `${HERO_SMS_API_URL}?api_key=${apiKey}&action=getServicesList&country=${country}&lang=pt`;
+  
+  console.log('Fetching services list from Hero SMS for country:', country);
+  
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    console.log('Hero SMS getServicesList response:', JSON.stringify(data).substring(0, 500));
+    
+    if (data.status === 'success' && Array.isArray(data.services)) {
+      const servicesMap: Record<string, string> = {};
+      for (const service of data.services) {
+        if (service.code && service.name) {
+          servicesMap[service.code] = service.name;
+        }
+      }
+      console.log(`Loaded ${Object.keys(servicesMap).length} services from API`);
+      return servicesMap;
+    }
+    
+    console.error('Invalid services list response:', data);
+    return {};
+  } catch (err) {
+    console.error('Error fetching services list:', err);
+    return {};
+  }
+}
+
+// Buscar lista de países da API Hero SMS
+async function getCountriesFromAPI(apiKey: string): Promise<Array<{ code: string; name: string; flag: string }>> {
+  const url = `${HERO_SMS_API_URL}?api_key=${apiKey}&action=getCountries`;
+  
+  console.log('Fetching countries from Hero SMS');
+  
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    console.log('Hero SMS getCountries response:', JSON.stringify(data).substring(0, 500));
+    
+    if (Array.isArray(data)) {
+      // Mapa de bandeiras por ID de país
+      const flagMap: Record<string, string> = {
+        '0': '🇷🇺', '1': '🇺🇦', '2': '🇰🇿', '3': '🇨🇳', '4': '🇵🇭',
+        '6': '🇮🇩', '12': '🇺🇸', '16': '🇬🇧', '19': '🇪🇸', '33': '🇫🇷',
+        '34': '🇲🇽', '39': '🇦🇷', '43': '🇩🇪', '54': '🇹🇷', '73': '🇧🇷',
+        '77': '🇮🇳', '84': '🇻🇳', '117': '🇵🇹', '15': '🇵🇱', '53': '🇳🇬',
+        '31': '🇿🇦', '5': '🇧🇾', '7': '🇲🇾', '8': '🇰🇬', '9': '🇨🇦',
+        '10': '🇦🇺', '11': '🇮🇱', '13': '🇦🇪', '14': '🇵🇰', '17': '🇭🇰',
+        '18': '🇧🇩', '20': '🇷🇴', '21': '🇳🇱', '22': '🇪🇬', '23': '🇸🇬',
+        '24': '🇳🇵', '25': '🇵🇪', '26': '🇨🇴', '27': '🇮🇶', '28': '🇸🇦',
+        '29': '🇦🇫', '30': '🇹🇿', '32': '🇰🇪', '35': '🇲🇲', '36': '🇮🇹',
+      };
+      
+      const countries = data
+        .filter((c: any) => c.visible === 1)
+        .map((c: any) => ({
+          code: String(c.id),
+          name: c.eng || c.rus || `Country ${c.id}`,
+          flag: flagMap[String(c.id)] || '🏳️',
+        }))
+        .sort((a: any, b: any) => {
+          // Brasil primeiro
+          if (a.code === '73') return -1;
+          if (b.code === '73') return 1;
+          return a.name.localeCompare(b.name);
+        });
+      
+      console.log(`Loaded ${countries.length} countries from API`);
+      return countries;
+    }
+    
+    console.error('Invalid countries response:', data);
+    return [];
+  } catch (err) {
+    console.error('Error fetching countries:', err);
+    return [];
   }
 }
 
@@ -104,60 +138,56 @@ serve(async (req) => {
       action = body.action || '';
       country = body.country || '73';
     } catch {
-      // If no body or invalid JSON, return empty response for prefetch
       return new Response(JSON.stringify({ prefetch: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     if (action === 'getCountries') {
-      const countryList = Object.entries(countries).map(([code, data]) => ({
-        code,
-        name: data.name,
-        flag: data.flag,
-      }));
+      const countries = await getCountriesFromAPI(apiKey);
       
-      return new Response(JSON.stringify({ countries: countryList }), {
+      return new Response(JSON.stringify({ countries }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     if (action === 'getServices') {
-      // Get margin from database
       const marginPercent = await getMarginFromDatabase();
-      const marginMultiplier = 1 + (marginPercent / 100); // e.g., 30% -> 1.30
+      const marginMultiplier = 1 + (marginPercent / 100);
       
       console.log(`Using margin: ${marginPercent}% (multiplier: ${marginMultiplier})`);
       
       const countryCode = country || '73';
-      const url = `${HERO_SMS_API_URL}?api_key=${apiKey}&action=getPrices&country=${countryCode}`;
       
-      console.log('Fetching prices from Hero SMS for country:', countryCode);
+      // Buscar serviços e preços em paralelo
+      const [servicesMap, pricesResponse] = await Promise.all([
+        getServicesListFromAPI(apiKey, countryCode),
+        fetch(`${HERO_SMS_API_URL}?api_key=${apiKey}&action=getPrices&country=${countryCode}`)
+      ]);
       
-      const response = await fetch(url);
-      const responseText = await response.text();
+      const pricesText = await pricesResponse.text();
       
-      if (!responseText || responseText.trim() === '') {
-        console.error('Empty response from Hero SMS API');
+      if (!pricesText || pricesText.trim() === '') {
+        console.error('Empty response from Hero SMS getPrices API');
         return new Response(JSON.stringify({ services: [], marginPercent, error: 'API retornou resposta vazia' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
       
-      let data;
+      let pricesData;
       try {
-        data = JSON.parse(responseText);
+        pricesData = JSON.parse(pricesText);
       } catch (parseError) {
-        console.error('Failed to parse API response:', responseText.substring(0, 200));
+        console.error('Failed to parse getPrices response:', pricesText.substring(0, 200));
         return new Response(JSON.stringify({ services: [], marginPercent, error: 'Resposta inválida da API' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
       
-      console.log('Hero SMS API response:', JSON.stringify(data).substring(0, 500));
+      console.log('Hero SMS getPrices response:', JSON.stringify(pricesData).substring(0, 500));
       
-      if (data.error) {
-        throw new Error(data.error);
+      if (pricesData.error) {
+        throw new Error(pricesData.error);
       }
 
       const services: Array<{
@@ -169,27 +199,25 @@ serve(async (req) => {
         available: number;
       }> = [];
 
-      const countryData = data[countryCode];
+      const countryData = pricesData[countryCode];
       if (countryData) {
         for (const [serviceCode, serviceData] of Object.entries(countryData)) {
-          // Mostrar apenas serviços com nomes traduzidos
-          if (!popularServices[serviceCode]) {
-            continue;
-          }
-          
           const sData = serviceData as { cost: number; count: number };
           const priceUsd = sData.cost;
           const available = sData.count;
           
           if (available > 0) {
+            // Usar nome da API ou código como fallback
+            const serviceName = servicesMap[serviceCode] || serviceCode.toUpperCase();
+            
             // Preço base em BRL
             const priceBrlBase = priceUsd * USD_TO_BRL;
-            // Preço com margem (exibido ao usuário)
+            // Preço com margem
             const priceWithMarkup = Math.ceil(priceBrlBase * marginMultiplier * 100) / 100;
             
             services.push({
               code: serviceCode,
-              name: popularServices[serviceCode],
+              name: serviceName,
               priceUsd,
               priceBrl: priceBrlBase,
               priceWithMarkup,
@@ -199,12 +227,10 @@ serve(async (req) => {
         }
       }
 
-      services.sort((a, b) => {
-        const aIsPopular = popularServices[a.code] ? 0 : 1;
-        const bIsPopular = popularServices[b.code] ? 0 : 1;
-        if (aIsPopular !== bIsPopular) return aIsPopular - bIsPopular;
-        return a.priceWithMarkup - b.priceWithMarkup;
-      });
+      // Ordenar por preço
+      services.sort((a, b) => a.priceWithMarkup - b.priceWithMarkup);
+
+      console.log(`Returning ${services.length} services for country ${countryCode}`);
 
       return new Response(JSON.stringify({ services, marginPercent }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
