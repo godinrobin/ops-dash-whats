@@ -23,7 +23,10 @@ import {
   RefreshCcw,
   Info,
   Check,
-  Loader2
+  Loader2,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -55,6 +58,18 @@ interface WhatsAppNumber {
   instance_id?: string;
 }
 
+interface IngestLog {
+  id: string;
+  created_at: string;
+  reason: string;
+  phone_prefix?: string;
+  remote_jid?: string;
+  phone_source?: string;
+  ctwa_source?: string;
+  payload_hash?: string;
+  event_type: string;
+}
+
 export default function AdsTracker() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -69,6 +84,9 @@ export default function AdsTracker() {
   const [purchaseValue, setPurchaseValue] = useState("");
   const [sendingPurchase, setSendingPurchase] = useState(false);
   const [newNumber, setNewNumber] = useState({ phone: "", label: "", instance_id: "" });
+  const [ingestLogs, setIngestLogs] = useState<IngestLog[]>([]);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [loadingLogs, setLoadingLogs] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -116,6 +134,33 @@ export default function AdsTracker() {
       console.error("Error loading tracker data:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadIngestLogs = async () => {
+    if (!user) return;
+    setLoadingLogs(true);
+    try {
+      const { data } = await supabase
+        .from("ads_lead_ingest_logs")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      
+      setIngestLogs((data as IngestLog[]) || []);
+    } catch (error) {
+      console.error("Error loading ingest logs:", error);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  const handleToggleDiagnostics = () => {
+    const newValue = !showDiagnostics;
+    setShowDiagnostics(newValue);
+    if (newValue && ingestLogs.length === 0) {
+      loadIngestLogs();
     }
   };
 
@@ -350,6 +395,105 @@ export default function AdsTracker() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Diagnostics Panel */}
+      <Card className="bg-card/50 border-border/50">
+        <CardHeader className="py-3 cursor-pointer" onClick={handleToggleDiagnostics}>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-yellow-500" />
+              Diagnóstico de Captura
+              {ingestLogs.length > 0 && (
+                <Badge variant="outline" className="ml-2 text-yellow-500 border-yellow-500/50">
+                  {ingestLogs.length} eventos
+                </Badge>
+              )}
+            </CardTitle>
+            <Button variant="ghost" size="sm">
+              {showDiagnostics ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </Button>
+          </div>
+        </CardHeader>
+        
+        {showDiagnostics && (
+          <CardContent className="pt-0">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs text-muted-foreground">
+                Eventos de skip/erro na captura de leads (últimos 50)
+              </p>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={loadIngestLogs}
+                disabled={loadingLogs}
+              >
+                {loadingLogs ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCcw className="h-3 w-3" />}
+              </Button>
+            </div>
+            
+            {loadingLogs ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : ingestLogs.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground">
+                <Check className="h-8 w-8 mx-auto mb-2 text-green-500" />
+                <p className="text-sm">Nenhum erro de captura registrado</p>
+                <p className="text-xs mt-1">Todos os leads estão sendo capturados corretamente</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {ingestLogs.map((log) => (
+                  <div 
+                    key={log.id} 
+                    className="p-3 rounded-lg bg-muted/30 border border-border/50 text-xs"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge variant="outline" className={cn(
+                            "text-[10px]",
+                            log.event_type === 'error' ? "text-red-400 border-red-400/50" : "text-yellow-400 border-yellow-400/50"
+                          )}>
+                            {log.event_type === 'error' ? 'ERRO' : 'SKIP'}
+                          </Badge>
+                          <span className="font-medium text-foreground truncate">{log.reason}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground">
+                          {log.phone_prefix && <span>Prefixo: {log.phone_prefix}</span>}
+                          {log.phone_source && <span>Fonte: {log.phone_source}</span>}
+                          {log.ctwa_source && <span>CTWA: {log.ctwa_source}</span>}
+                        </div>
+                        {log.remote_jid && (
+                          <p className="text-muted-foreground mt-1 truncate">JID: {log.remote_jid}</p>
+                        )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-muted-foreground">
+                          {formatDistanceToNow(new Date(log.created_at), { addSuffix: true, locale: ptBR })}
+                        </p>
+                        {log.payload_hash && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-6 px-2 text-[10px]"
+                            onClick={() => {
+                              navigator.clipboard.writeText(log.payload_hash || '');
+                              splashedToast.success("Hash copiado!");
+                            }}
+                          >
+                            #{log.payload_hash.substring(0, 8)}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        )}
+      </Card>
 
       {/* Leads List */}
       <div className="space-y-3">
