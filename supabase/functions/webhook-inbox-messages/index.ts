@@ -377,10 +377,10 @@ serve(async (req) => {
         }
       }
       
-      // Save the message
+      // Save the message usando upsert para evitar duplicação
       const { error: messageError } = await supabaseClient
         .from('inbox_messages')
-        .insert({
+        .upsert({
           contact_id: contact.id,
           instance_id: instanceId,
           user_id: userId,
@@ -391,14 +391,22 @@ serve(async (req) => {
           remote_message_id: messageId,
           status: isFromMe ? 'sent' : 'delivered',
           is_from_flow: false,
+        }, {
+          onConflict: 'remote_message_id',
+          ignoreDuplicates: true
         });
 
       if (messageError) {
-        console.error('Error saving message:', messageError);
-        return new Response(JSON.stringify({ success: false, error: 'Failed to save message' }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        // Se for erro de duplicação, apenas loga e continua
+        if (messageError.code === '23505') {
+          console.log('Message already exists, skipping:', messageId);
+        } else {
+          console.error('Error saving message:', messageError);
+          return new Response(JSON.stringify({ success: false, error: 'Failed to save message' }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
       }
 
       // === ADS LEAD TRACKING ===
