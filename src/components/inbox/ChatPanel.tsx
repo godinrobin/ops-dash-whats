@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
+import { formatPhoneDisplay } from '@/utils/phoneFormatter';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -431,7 +432,7 @@ export const ChatPanel = ({
               ))}
             </div>
             <div className="flex items-center gap-2">
-              <p className="text-sm text-muted-foreground">{contact.phone}</p>
+              <p className="text-sm text-muted-foreground">{formatPhoneDisplay(contact.phone)}</p>
               {instanceName && (
                 <Badge 
                   variant="outline" 

@@ -17,6 +17,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { splashedToast as toast } from "@/hooks/useSplashedToast";
+import { formatPhoneDisplay } from "@/utils/phoneFormatter";
 
 interface Instance {
   id: string;
@@ -51,19 +52,6 @@ interface Stats {
   messagesToday: number;
   messagesThisWeek: number;
 }
-
-// Format phone for display
-const formatPhoneDisplay = (phone: string) => {
-  const cleaned = phone.replace(/\D/g, '');
-  if (cleaned.length === 13) {
-    return `+${cleaned.slice(0,2)} (${cleaned.slice(2,4)}) ${cleaned.slice(4,9)}-${cleaned.slice(9)}`;
-  } else if (cleaned.length === 12) {
-    return `+${cleaned.slice(0,2)} (${cleaned.slice(2,4)}) ${cleaned.slice(4,8)}-${cleaned.slice(8)}`;
-  } else if (cleaned.length === 11) {
-    return `(${cleaned.slice(0,2)}) ${cleaned.slice(2,7)}-${cleaned.slice(7)}`;
-  }
-  return phone;
-};
 
 export default function MaturadorDashboard() {
   useActivityTracker("page_visit", "Maturador de WhatsApp");
