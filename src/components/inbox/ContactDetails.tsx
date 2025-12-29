@@ -23,10 +23,39 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
   const [editingNotes, setEditingNotes] = useState(false);
 
   const getInitials = (name: string | null, phone: string) => {
-    if (name) {
+    if (name && name.trim()) {
       return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
     }
+    // For LID-only contacts (long phone), show "?"
+    if (phone.length > 15) return '?';
     return phone.slice(-2);
+  };
+  
+  // Helper to check if this is a LID-only contact (no real phone)
+  const isLidContact = (phone: string, remoteJid?: string) => {
+    return phone.length > 15 || (remoteJid && remoteJid.includes('@lid'));
+  };
+  
+  // Get display name for contact
+  const getDisplayName = () => {
+    if (contact.name && contact.name.trim()) {
+      return contact.name;
+    }
+    const remoteJid = (contact as any).remote_jid;
+    if (isLidContact(contact.phone, remoteJid)) {
+      return 'Desconhecido';
+    }
+    return 'Sem nome';
+  };
+  
+  // Get subtitle for contact
+  const getContactSubtitle = () => {
+    const remoteJid = (contact as any).remote_jid;
+    if (isLidContact(contact.phone, remoteJid)) {
+      const shortId = contact.phone.slice(-6);
+      return `Lead via anúncio • ID ${shortId}`;
+    }
+    return formatPhoneDisplay(contact.phone);
   };
 
   const handleSaveNotes = async () => {
@@ -65,8 +94,8 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
                 {getInitials(contact.name, contact.phone)}
               </AvatarFallback>
             </Avatar>
-            <h4 className="font-medium mt-3">{contact.name || 'Sem nome'}</h4>
-            <p className="text-sm text-muted-foreground">{formatPhoneDisplay(contact.phone)}</p>
+            <h4 className="font-medium mt-3">{getDisplayName()}</h4>
+            <p className="text-sm text-muted-foreground">{getContactSubtitle()}</p>
           </div>
 
           <Separator />

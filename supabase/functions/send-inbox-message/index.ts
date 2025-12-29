@@ -37,12 +37,12 @@ serve(async (req) => {
       });
     }
 
-    const { contactId, instanceName, phone, content, messageType = 'text', mediaUrl, messageId } = await req.json();
+    const { contactId, instanceName, phone, content, messageType = 'text', mediaUrl, messageId, remoteJid } = await req.json();
     
-    console.log('Sending message:', { contactId, instanceName, phone, messageType, content: content?.substring(0, 50), messageId });
+    console.log('Sending message:', { contactId, instanceName, phone, remoteJid, messageType, content: content?.substring(0, 50), messageId });
 
-    if (!instanceName || !phone) {
-      return new Response(JSON.stringify({ error: 'Missing required fields' }), {
+    if (!instanceName || (!phone && !remoteJid)) {
+      return new Response(JSON.stringify({ error: 'Missing required fields (need phone or remoteJid)' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -82,61 +82,90 @@ serve(async (req) => {
     const EVOLUTION_BASE_URL = config?.evolution_base_url?.replace(/\/$/, '') || 'https://api.chatwp.xyz';
     const EVOLUTION_API_KEY = config?.evolution_api_key || Deno.env.get('EVOLUTION_API_KEY') || '';
 
-    // Format phone number for Evolution API
-    const formattedPhone = phone.replace(/\D/g, '');
+    // Determine how to send: via remoteJid (for @lid contacts) or formatted phone
+    // Priority: remoteJid if it's @lid, otherwise use formatted phone
+    let sendDestination = '';
+    let isLidContact = false;
+    
+    if (remoteJid && remoteJid.includes('@lid')) {
+      // For @lid contacts, send using the full remoteJid
+      sendDestination = remoteJid;
+      isLidContact = true;
+      console.log(`[LID] Sending to @lid contact: ${remoteJid}`);
+    } else if (remoteJid && remoteJid.includes('@s.whatsapp.net')) {
+      // Use remoteJid phone number
+      sendDestination = remoteJid.split('@')[0].replace(/\D/g, '');
+      console.log(`[PHONE] Extracted phone from remoteJid: ${sendDestination}`);
+    } else if (phone) {
+      // Format phone number for Evolution API
+      sendDestination = phone.replace(/\D/g, '');
+      console.log(`[PHONE] Using provided phone: ${sendDestination}`);
+    }
+    
+    if (!sendDestination) {
+      return new Response(JSON.stringify({ error: 'Could not determine send destination' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     let evolutionEndpoint = '';
     let evolutionBody: Record<string, unknown> = {};
 
-    // First, verify if the number exists on WhatsApp
-    console.log('Checking if number exists on WhatsApp...');
-    try {
-      const checkResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/whatsappNumbers/${instanceName}`, {
-        method: 'POST',
-        headers: {
-          'apikey': EVOLUTION_API_KEY,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ numbers: [formattedPhone] }),
-      });
-
-      const checkResult = await checkResponse.json();
-      console.log('WhatsApp number check result:', JSON.stringify(checkResult, null, 2));
-
-      // Check if the number exists on WhatsApp
-      const numberInfo = checkResult?.[0] || checkResult;
-      const exists = numberInfo?.exists === true || numberInfo?.numberExists === true;
-      
-      if (!exists && checkResponse.ok) {
-        console.log('Number does not exist on WhatsApp');
-        
-        // Update message status to failed if we have messageId
-        if (messageId) {
-          await supabaseAdmin
-            .from('inbox_messages')
-            .update({ status: 'failed' })
-            .eq('id', messageId);
-        }
-        
-        return new Response(JSON.stringify({ 
-          error: 'Este número não possui WhatsApp',
-          errorCode: 'NUMBER_NOT_ON_WHATSAPP',
-          details: checkResult 
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    // For @lid contacts, skip the WhatsApp number check (we can't verify LID contacts)
+    // For regular phone contacts, verify if the number exists on WhatsApp
+    if (!isLidContact) {
+      console.log('Checking if number exists on WhatsApp...');
+      try {
+        const checkResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/whatsappNumbers/${instanceName}`, {
+          method: 'POST',
+          headers: {
+            'apikey': EVOLUTION_API_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ numbers: [sendDestination] }),
         });
+
+        const checkResult = await checkResponse.json();
+        console.log('WhatsApp number check result:', JSON.stringify(checkResult, null, 2));
+
+        // Check if the number exists on WhatsApp
+        const numberInfo = checkResult?.[0] || checkResult;
+        const exists = numberInfo?.exists === true || numberInfo?.numberExists === true;
+        
+        if (!exists && checkResponse.ok) {
+          console.log('Number does not exist on WhatsApp');
+          
+          // Update message status to failed if we have messageId
+          if (messageId) {
+            await supabaseAdmin
+              .from('inbox_messages')
+              .update({ status: 'failed' })
+              .eq('id', messageId);
+          }
+          
+          return new Response(JSON.stringify({ 
+            error: 'Este número não possui WhatsApp',
+            errorCode: 'NUMBER_NOT_ON_WHATSAPP',
+            details: checkResult 
+          }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      } catch (checkErr) {
+        // If the check fails, log and continue - the send might still work
+        console.warn('WhatsApp number check failed, continuing with send:', checkErr);
       }
-    } catch (checkErr) {
-      // If the check fails, log and continue - the send might still work
-      console.warn('WhatsApp number check failed, continuing with send:', checkErr);
+    } else {
+      console.log('[LID] Skipping WhatsApp number check for @lid contact');
     }
 
     switch (messageType) {
       case 'text':
         evolutionEndpoint = `/message/sendText/${instanceName}`;
         evolutionBody = {
-          number: formattedPhone,
+          number: sendDestination,
           text: content,
         };
         break;
@@ -144,7 +173,7 @@ serve(async (req) => {
       case 'image':
         evolutionEndpoint = `/message/sendMedia/${instanceName}`;
         evolutionBody = {
-          number: formattedPhone,
+          number: sendDestination,
           mediatype: 'image',
           media: mediaUrl,
           caption: content || '',
@@ -154,7 +183,7 @@ serve(async (req) => {
       case 'audio':
         evolutionEndpoint = `/message/sendWhatsAppAudio/${instanceName}`;
         evolutionBody = {
-          number: formattedPhone,
+          number: sendDestination,
           audio: mediaUrl,
         };
         break;
@@ -162,7 +191,7 @@ serve(async (req) => {
       case 'video':
         evolutionEndpoint = `/message/sendMedia/${instanceName}`;
         evolutionBody = {
-          number: formattedPhone,
+          number: sendDestination,
           mediatype: 'video',
           media: mediaUrl,
           caption: content || '',
@@ -172,7 +201,7 @@ serve(async (req) => {
       case 'document':
         evolutionEndpoint = `/message/sendMedia/${instanceName}`;
         evolutionBody = {
-          number: formattedPhone,
+          number: sendDestination,
           mediatype: 'document',
           media: mediaUrl,
           fileName: content || 'document',
@@ -182,7 +211,7 @@ serve(async (req) => {
       default:
         evolutionEndpoint = `/message/sendText/${instanceName}`;
         evolutionBody = {
-          number: formattedPhone,
+          number: sendDestination,
           text: content,
         };
     }

@@ -265,68 +265,104 @@ serve(async (req) => {
         console.log(`[AD-MESSAGE] Last resort: extracted phone from pushName: ${pushNamePhone}`);
       }
       
-      // If still no valid JID found, log detailed info and skip
+      // === LID-ONLY HANDLING ===
+      // If no valid phone JID found but we have a @lid remoteJid, DON'T skip!
+      // Save the contact using the LID as identifier so messages still appear
+      let phone = '';
+      let useLidAsFallback = false;
+      let lidRemoteJid = '';
+      
       if (!jidForPhone) {
-        // Generate a hash of the payload for later analysis
-        const payloadHash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(payload)));
-        const hashHex = Array.from(new Uint8Array(payloadHash)).map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 16);
+        // Check if this is a @lid message (common for ad leads without phone disclosure)
+        if (remoteJid.includes('@lid') || participant.includes('@lid')) {
+          lidRemoteJid = remoteJid.includes('@lid') ? remoteJid : participant;
+          const lidId = lidRemoteJid.split('@')[0];
+          
+          console.log(`[LID-ONLY] No phone found but have @lid: ${lidRemoteJid}`);
+          console.log(`[LID-ONLY] Using LID as contact identifier: ${lidId}`);
+          
+          // Use the LID as the "phone" - it's a long numeric ID
+          phone = lidId;
+          phoneSource = 'lid_fallback';
+          useLidAsFallback = true;
+          
+          // Log to database for monitoring
+          await logIngestEvent(supabaseClient, {
+            reason: 'lid_only_no_phone',
+            remoteJid: lidRemoteJid,
+            phoneSource: 'lid_fallback',
+            payloadSnippet: { 
+              remoteJid, 
+              remoteJidAlt, 
+              participant, 
+              participantAlt, 
+              addressingMode: key.addressingMode,
+              pushName: pushNameRaw
+            },
+            eventType: 'skip', // logged as skip for tracking but we'll process it
+          });
+        } else {
+          // No @lid either - truly skip
+          const payloadHash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(payload)));
+          const hashHex = Array.from(new Uint8Array(payloadHash)).map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 16);
+          
+          console.error(`[CRITICAL-SKIP] No valid phone found - hash: ${hashHex}`);
+          console.error(`[CRITICAL-SKIP] All sources checked:`);
+          console.error(`  remoteJid=${remoteJid}`);
+          console.error(`  remoteJidAlt=${remoteJidAlt}`);
+          console.error(`  participant=${participant}`);
+          console.error(`  participantAlt=${participantAlt}`);
+          console.error(`  contextParticipant=${contextParticipant}`);
+          console.error(`  sender=${sender}`);
+          console.error(`  dataSender=${dataSender}`);
+          console.error(`  pushName=${pushNameRaw}`);
+          console.error(`  addressingMode=${key.addressingMode || 'none'}`);
+          
+          await logIngestEvent(supabaseClient, {
+            reason: 'no_valid_phone_jid',
+            remoteJid: remoteJid || remoteJidAlt || 'none',
+            phoneSource: 'none',
+            payloadHash: hashHex,
+            payloadSnippet: { remoteJid, remoteJidAlt, participant, participantAlt, addressingMode: key.addressingMode },
+            eventType: 'skip',
+          });
+          
+          return new Response(JSON.stringify({ 
+            success: true, 
+            skipped: true, 
+            reason: 'no_valid_phone_jid',
+            hash: hashHex,
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      } else {
+        // Normal case: we have a valid phone JID
+        const rawPhone = jidForPhone.split('@')[0];
+        phone = rawPhone.replace(/\D/g, '');
         
-        console.error(`[CRITICAL-SKIP] No valid phone found - hash: ${hashHex}`);
-        console.error(`[CRITICAL-SKIP] All sources checked:`);
-        console.error(`  remoteJid=${remoteJid}`);
-        console.error(`  remoteJidAlt=${remoteJidAlt}`);
-        console.error(`  participant=${participant}`);
-        console.error(`  participantAlt=${participantAlt}`);
-        console.error(`  contextParticipant=${contextParticipant}`);
-        console.error(`  sender=${sender}`);
-        console.error(`  dataSender=${dataSender}`);
-        console.error(`  pushName=${pushNameRaw}`);
-        console.error(`  addressingMode=${key.addressingMode || 'none'}`);
-        console.error(`  Full payload: ${JSON.stringify(payload).substring(0, 2000)}`);
+        console.log(`Phone extraction: jidForPhone=${jidForPhone}, extracted=${phone}`);
         
-        // Log to database for UI diagnosis
-        await logIngestEvent(supabaseClient, {
-          reason: 'no_valid_phone_jid',
-          remoteJid: remoteJid || remoteJidAlt || 'none',
-          phoneSource: 'none',
-          payloadHash: hashHex,
-          payloadSnippet: { remoteJid, remoteJidAlt, participant, participantAlt, addressingMode: key.addressingMode },
-          eventType: 'skip',
-        });
-        
-        return new Response(JSON.stringify({ 
-          success: true, 
-          skipped: true, 
-          reason: 'no_valid_phone_jid',
-          hash: hashHex,
-          debug: { remoteJid, remoteJidAlt, participant, participantAlt, contextParticipant, sender, dataSender, pushName: pushNameRaw, addressingMode: key.addressingMode }
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        // Validate phone is 10-15 digits (international numbers can have up to 15 digits per E.164)
+        if (!/^\d{10,15}$/.test(phone)) {
+          console.log(`Skipping message with invalid phone length: ${rawPhone} (${phone.length} digits)`);
+          return new Response(JSON.stringify({ success: true, skipped: true, reason: 'invalid_phone_length' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
       }
       
-      console.log(`[PHONE] Using ${phoneSource} for phone extraction: ${jidForPhone}`);
+      console.log(`[PHONE] Using ${phoneSource} for phone extraction: ${phone}`);
       
-      const rawPhone = jidForPhone.split('@')[0];
-      // Clean and validate phone number
-      const phone = rawPhone.replace(/\D/g, '');
-      
-      console.log(`Phone extraction: jidForPhone=${jidForPhone}, extracted=${phone}`);
-      
-      // Validate phone is 10-15 digits (international numbers can have up to 15 digits per E.164)
-      if (!/^\d{10,15}$/.test(phone)) {
-        console.log(`Skipping message with invalid phone length: ${rawPhone} (${phone.length} digits)`);
-        return new Response(JSON.stringify({ success: true, skipped: true, reason: 'invalid_phone_length' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+      // Phone validation: Accept any valid E.164 format (10-15 digits) or LID
+      if (!useLidAsFallback) {
+        console.log(`[PHONE] Validated international phone: ${phone} (${phone.length} digits, prefix: ${phone.substring(0, 3)})`);
+      } else {
+        console.log(`[LID-ONLY] Using LID as identifier: ${phone} (${phone.length} chars)`);
       }
-      
-      // Phone validation: Accept any valid E.164 format (10-15 digits)
-      // No country prefix restriction - accept international numbers from all countries
-      console.log(`[PHONE] Validated international phone: ${phone} (${phone.length} digits, prefix: ${phone.substring(0, 3)})`);
       
       // Store phone source for debugging
-      const debugPhoneInfo = { phone, phoneSource, length: phone.length, prefix: phone.substring(0, 3) };
+      const debugPhoneInfo = { phone, phoneSource, length: phone.length, prefix: phone.substring(0, 3), isLid: useLidAsFallback };
       
       // Extract message content - Evolution API v2 structure
       // data.message contains the actual message object with conversation/extendedTextMessage/etc
@@ -461,13 +497,26 @@ serve(async (req) => {
       }
 
       if (!contact) {
-        // Determine the best remote_jid to store (prefer remoteJidAlt if it's a valid @s.whatsapp.net)
-        let remoteJidToStore = remoteJid;
-        if (remoteJidAlt && remoteJidAlt.includes('@s.whatsapp.net')) {
+        // Determine the best remote_jid to store
+        // Priority: jidForPhone (if valid @s.whatsapp.net) > participantAlt > remoteJid > lidRemoteJid
+        let remoteJidToStore = '';
+        if (jidForPhone && jidForPhone.includes('@s.whatsapp.net')) {
+          remoteJidToStore = jidForPhone;
+        } else if (participantAlt && participantAlt.includes('@s.whatsapp.net')) {
+          remoteJidToStore = participantAlt;
+        } else if (remoteJidAlt && remoteJidAlt.includes('@s.whatsapp.net')) {
           remoteJidToStore = remoteJidAlt;
-        } else if (!remoteJid.includes('@s.whatsapp.net') && remoteJidAlt) {
-          remoteJidToStore = remoteJidAlt;
+        } else if (remoteJid && remoteJid.includes('@s.whatsapp.net')) {
+          remoteJidToStore = remoteJid;
+        } else if (useLidAsFallback && lidRemoteJid) {
+          // For LID-only contacts, store the @lid as remote_jid for replies
+          remoteJidToStore = lidRemoteJid;
+        } else if (remoteJid) {
+          remoteJidToStore = remoteJid;
         }
+        
+        // For LID-only contacts, name is null (will show as "Desconhecido" in UI)
+        const contactName = useLidAsFallback ? null : validPushName;
 
         // Create new contact using upsert to handle race conditions
         const { data: newContact, error: insertError } = await supabaseClient
@@ -476,11 +525,11 @@ serve(async (req) => {
             user_id: userId,
             instance_id: instanceId,
             phone,
-            name: validPushName,
+            name: contactName,
             status: 'active',
             unread_count: 1,
             last_message_at: new Date().toISOString(),
-            remote_jid: remoteJidToStore,
+            remote_jid: remoteJidToStore || null,
           }, {
             onConflict: 'user_id,instance_id,phone',
             ignoreDuplicates: false,
@@ -509,7 +558,7 @@ serve(async (req) => {
           }
         } else {
           contact = newContact;
-          console.log(`Created contact with remote_jid: ${remoteJidToStore}`);
+          console.log(`Created contact with remote_jid: ${remoteJidToStore}, isLid: ${useLidAsFallback}`);
         }
       } else {
         // Update existing contact - BUT NOT last_message_at yet (will update after message is saved)

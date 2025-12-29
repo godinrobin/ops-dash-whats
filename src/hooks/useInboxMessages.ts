@@ -211,10 +211,10 @@ export const useInboxMessages = (contactId: string | null) => {
     if (!user || !contactId) return { error: 'Not authenticated or no contact selected' };
 
     try {
-      // Get contact info for instance_id and phone
+      // Get contact info for instance_id, phone, and remote_jid
       const { data: contact } = await supabase
         .from('inbox_contacts')
-        .select('instance_id, phone')
+        .select('instance_id, phone, remote_jid')
         .eq('id', contactId)
         .single();
 
@@ -230,6 +230,9 @@ export const useInboxMessages = (contactId: string | null) => {
           .single();
         instanceName = instance?.instance_name || '';
       }
+      
+      // For @lid contacts, we need to use remote_jid for sending
+      const remoteJid = (contact as any).remote_jid || null;
 
       // Insert message with pending status
       const { data: message, error: insertError } = await supabase
@@ -249,12 +252,13 @@ export const useInboxMessages = (contactId: string | null) => {
 
       if (insertError) throw insertError;
 
-      // Call edge function to send via Evolution API - pass the message ID
+      // Call edge function to send via Evolution API - pass the message ID and remote_jid
       const { data: sendResult, error: sendError } = await supabase.functions.invoke('send-inbox-message', {
         body: {
           contactId,
           instanceName,
           phone: contact.phone,
+          remoteJid, // Include remote_jid for @lid contacts
           content,
           messageType,
           mediaUrl,
