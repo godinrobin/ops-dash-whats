@@ -9,18 +9,24 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const EVOLUTION_BASE_URL = 'https://api.chatwp.xyz';
-const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || '';
+// Default Evolution API config - will be overridden by user/admin config
+const DEFAULT_EVOLUTION_BASE_URL = 'https://api.chatwp.xyz';
 
 // Maximum delay we can handle in a single edge function call (20 seconds to be safe)
 const MAX_INLINE_DELAY_MS = 20000;
 // Lock timeout in milliseconds (60 seconds - if a lock is older than this, consider it stale)
 const LOCK_TIMEOUT_MS = 60000;
 
+// Generate a unique run ID for this execution (for debugging/tracing)
+const generateRunId = () => crypto.randomUUID().substring(0, 8);
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const runId = generateRunId();
+  console.log(`[${runId}] === PROCESS-INBOX-FLOW START ===`);
 
   try {
     const supabaseClient = createClient(
@@ -29,8 +35,7 @@ serve(async (req) => {
     );
 
     const { sessionId, userInput, resumeFromDelay, resumeFromTimeout } = await req.json();
-    console.log('=== PROCESS-INBOX-FLOW START ===');
-    console.log('SessionId:', sessionId, 'Input:', userInput, 'ResumeFromDelay:', resumeFromDelay, 'ResumeFromTimeout:', resumeFromTimeout);
+    console.log(`[${runId}] SessionId: ${sessionId}, Input: ${userInput}, ResumeFromDelay: ${resumeFromDelay}, ResumeFromTimeout: ${resumeFromTimeout}`);
 
     // Get session with flow data
     const { data: session, error: sessionError } = await supabaseClient
@@ -44,7 +49,7 @@ serve(async (req) => {
       .single();
 
     if (sessionError || !session) {
-      console.error('Session not found:', sessionError);
+      console.error(`[${runId}] Session not found:`, sessionError);
       return new Response(JSON.stringify({ error: 'Session not found' }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -53,7 +58,7 @@ serve(async (req) => {
 
     // Check if session is already completed - do not process
     if (session.status === 'completed') {
-      console.log('Session already completed, skipping');
+      console.log(`[${runId}] Session already completed, skipping`);
       return new Response(JSON.stringify({ success: true, skipped: true, reason: 'session_completed' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -67,7 +72,7 @@ serve(async (req) => {
         : 0;
       
       if (lockAge < LOCK_TIMEOUT_MS) {
-        console.log(`Session ${sessionId} is locked by another process (lock age: ${lockAge}ms), skipping`);
+        console.log(`[${runId}] Session ${sessionId} is locked by another process (lock age: ${lockAge}ms), skipping`);
         return new Response(JSON.stringify({ 
           success: true, 
           skipped: true, 
@@ -77,8 +82,61 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      console.log(`Session ${sessionId} has stale lock (${lockAge}ms), taking over`);
+      console.log(`[${runId}] Session ${sessionId} has stale lock (${lockAge}ms), taking over`);
     }
+
+    // === GET USER-SPECIFIC API CONFIGURATION ===
+    let evolutionBaseUrl = DEFAULT_EVOLUTION_BASE_URL;
+    let evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY') || '';
+    let configSource = 'global';
+
+    // Strategy 1: User's own maturador_config
+    const { data: userConfig } = await supabaseClient
+      .from('maturador_config')
+      .select('evolution_base_url, evolution_api_key')
+      .eq('user_id', session.user_id)
+      .maybeSingle();
+
+    if (userConfig?.evolution_base_url && userConfig?.evolution_api_key) {
+      evolutionBaseUrl = userConfig.evolution_base_url.replace(/\/$/, '');
+      evolutionApiKey = userConfig.evolution_api_key;
+      configSource = 'user_config';
+      console.log(`[${runId}] Using user Evolution API config`);
+    } else {
+      // Strategy 2: Admin config from database (fallback)
+      const { data: adminConfig } = await supabaseClient
+        .from('maturador_config')
+        .select('evolution_base_url, evolution_api_key')
+        .limit(1)
+        .maybeSingle();
+
+      if (adminConfig?.evolution_base_url && adminConfig?.evolution_api_key) {
+        evolutionBaseUrl = adminConfig.evolution_base_url.replace(/\/$/, '');
+        evolutionApiKey = adminConfig.evolution_api_key;
+        configSource = 'admin_config';
+        console.log(`[${runId}] Using admin Evolution API config as fallback`);
+      } else {
+        // Strategy 3: Global secrets (final fallback)
+        const globalBaseUrl = Deno.env.get('EVOLUTION_BASE_URL');
+        if (globalBaseUrl) {
+          evolutionBaseUrl = globalBaseUrl.replace(/\/$/, '');
+        }
+        console.log(`[${runId}] Using global Evolution API secrets`);
+      }
+    }
+
+    if (!evolutionApiKey) {
+      console.error(`[${runId}] No Evolution API key found! Config source: ${configSource}`);
+      return new Response(JSON.stringify({ 
+        error: 'Evolution API not configured',
+        configSource 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log(`[${runId}] API Config: source=${configSource}, baseUrl=${evolutionBaseUrl}`);
 
     // Acquire lock - if we have userInput, also update variables immediately to prevent re-processing
     const lockUpdate: Record<string, unknown> = {
@@ -102,6 +160,12 @@ serve(async (req) => {
 
     let currentNodeId = session.current_node_id || 'start-1';
     let variables = (session.variables || {}) as Record<string, unknown>;
+
+    // Initialize sent nodes tracking for idempotency
+    if (!variables._sent_node_ids) {
+      variables._sent_node_ids = [] as string[];
+    }
+    const sentNodeIds = variables._sent_node_ids as string[];
 
     // === Generate dynamic system variables ===
     // Helper to generate personalized greeting based on São Paulo timezone (-03:00)
@@ -152,7 +216,7 @@ serve(async (req) => {
 
     // Set system variable for personalized greeting
     variables['saudacao_personalizada'] = generateSaudacaoPersonalizada();
-    console.log(`Generated saudacao_personalizada: ${variables['saudacao_personalizada']}`);
+    console.log(`[${runId}] Generated saudacao_personalizada: ${variables['saudacao_personalizada']}`);
 
     // Helper function to track node analytics
     const trackNodeAnalytics = async (nodeId: string, nodeType: string) => {
@@ -165,7 +229,7 @@ serve(async (req) => {
           user_id: session.user_id,
         });
       } catch (e) {
-        console.error('Error tracking node analytics:', e);
+        console.error(`[${runId}] Error tracking node analytics:`, e);
       }
     };
 
@@ -187,7 +251,7 @@ serve(async (req) => {
       lockUpdate.variables = variables;
       lockUpdate.last_interaction = new Date().toISOString();
       
-      console.log(`Checkpoint saved: moved from ${session.current_node_id} to ${currentNodeId} after receiving input`);
+      console.log(`[${runId}] Checkpoint saved: moved from ${session.current_node_id} to ${currentNodeId} after receiving input`);
     }
 
     // Acquire lock (with checkpoint if userInput was provided)
@@ -197,13 +261,13 @@ serve(async (req) => {
       .eq('id', sessionId);
     
     if (lockError) {
-      console.error('Failed to acquire lock:', lockError);
+      console.error(`[${runId}] Failed to acquire lock:`, lockError);
       return new Response(JSON.stringify({ error: 'Failed to acquire lock' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    console.log(`Lock acquired for session ${sessionId}`);
+    console.log(`[${runId}] Lock acquired for session ${sessionId}`);
 
     // Helper function to release lock
     const releaseLock = async () => {
@@ -211,7 +275,26 @@ serve(async (req) => {
         .from('inbox_flow_sessions')
         .update({ processing: false, processing_started_at: null })
         .eq('id', sessionId);
-      console.log(`Lock released for session ${sessionId}`);
+      console.log(`[${runId}] Lock released for session ${sessionId}`);
+    };
+
+    // Helper function to stop flow on send failure
+    const handleSendFailure = async (nodeId: string, errorDetails: string) => {
+      console.error(`[${runId}] Send failed at node ${nodeId}: ${errorDetails}`);
+      variables._last_send_error = errorDetails;
+      variables._last_failed_node_id = nodeId;
+      variables._last_failed_at = new Date().toISOString();
+      
+      await supabaseClient
+        .from('inbox_flow_sessions')
+        .update({
+          current_node_id: nodeId,
+          variables,
+          last_interaction: new Date().toISOString(),
+          processing: false,
+          processing_started_at: null,
+        })
+        .eq('id', sessionId);
     };
 
     try {
@@ -223,7 +306,7 @@ serve(async (req) => {
           if (now < pendingDelay.resumeAt) {
             // Still waiting - reschedule
             const remainingMs = pendingDelay.resumeAt - now;
-            console.log(`Still waiting for delay, ${remainingMs}ms remaining`);
+            console.log(`[${runId}] Still waiting for delay, ${remainingMs}ms remaining`);
             await releaseLock();
             return new Response(JSON.stringify({ 
               success: true, 
@@ -234,7 +317,7 @@ serve(async (req) => {
             });
           }
           // Delay completed - move to next node
-          console.log('Delay completed, resuming flow from node:', pendingDelay.nodeId);
+          console.log(`[${runId}] Delay completed, resuming flow from node:`, pendingDelay.nodeId);
           const delayEdge = edges.find(e => e.source === pendingDelay.nodeId);
           if (delayEdge) {
             currentNodeId = delayEdge.target;
@@ -254,20 +337,33 @@ serve(async (req) => {
       const instanceName = instance?.instance_name;
       const phone = contact.phone;
 
+      if (!instanceName) {
+        console.error(`[${runId}] Instance not found for session ${sessionId}`);
+        await releaseLock();
+        return new Response(JSON.stringify({ 
+          error: 'Instance not found',
+          instanceId: session.instance_id 
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       // Process nodes until we hit a wait point or end
       let continueProcessing = true;
       const processedActions: string[] = [];
+      let sendFailed = false;
 
-      while (continueProcessing) {
+      while (continueProcessing && !sendFailed) {
         const currentNode = nodes.find(n => n.id === currentNodeId);
         
         if (!currentNode) {
-          console.log('Node not found, ending flow');
+          console.log(`[${runId}] Node not found, ending flow`);
           continueProcessing = false;
           break;
         }
 
-        console.log(`Processing node: ${currentNode.type} (${currentNodeId})`);
+        console.log(`[${runId}] Processing node: ${currentNode.type} (${currentNodeId})`);
 
         // Track analytics for this node (fire and forget)
         trackNodeAnalytics(currentNodeId, currentNode.type);
@@ -284,18 +380,43 @@ serve(async (req) => {
             break;
 
           case 'text':
+            // Check if already sent (idempotency)
+            if (sentNodeIds.includes(currentNodeId)) {
+              console.log(`[${runId}] Node ${currentNodeId} already sent, skipping`);
+              const textEdge = edges.find(e => e.source === currentNodeId);
+              if (textEdge) {
+                currentNodeId = textEdge.target;
+              } else {
+                continueProcessing = false;
+              }
+              break;
+            }
+
             // Send text message
             const message = replaceVariables(currentNode.data.message as string || '', variables);
             if (instanceName && phone && message) {
               // Check if presence (typing) should be shown before sending
               if (currentNode.data.showPresence) {
                 const presenceDelaySeconds = (currentNode.data.presenceDelay as number) || 3;
-                await sendPresence(instanceName, phone, 'composing', presenceDelaySeconds * 1000);
+                await sendPresence(evolutionBaseUrl, evolutionApiKey, instanceName, phone, 'composing', presenceDelaySeconds * 1000);
                 processedActions.push(`Showed typing for ${presenceDelaySeconds}s`);
               }
               
-              const sendResult = await sendMessage(instanceName, phone, message, 'text');
-              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, message, 'text', flow.id, undefined, sendResult.remoteMessageId);
+              const sendResult = await sendMessage(evolutionBaseUrl, evolutionApiKey, instanceName, phone, message, 'text');
+              
+              // Save message with correct status based on send result
+              const messageStatus = sendResult.ok ? 'sent' : 'failed';
+              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, message, 'text', flow.id, undefined, sendResult.remoteMessageId, messageStatus);
+              
+              if (!sendResult.ok) {
+                await handleSendFailure(currentNodeId, sendResult.errorDetails || 'Unknown error');
+                sendFailed = true;
+                processedActions.push(`FAILED to send text: ${message.substring(0, 50)}`);
+                break;
+              }
+              
+              // Mark node as sent for idempotency
+              sentNodeIds.push(currentNodeId);
               processedActions.push(`Sent text: ${message.substring(0, 50)}`);
             }
             
@@ -311,38 +432,62 @@ serve(async (req) => {
           case 'audio':
           case 'video':
           case 'document':
+            // Check if already sent (idempotency)
+            if (sentNodeIds.includes(currentNodeId)) {
+              console.log(`[${runId}] Node ${currentNodeId} already sent, skipping`);
+              const mediaEdge = edges.find(e => e.source === currentNodeId);
+              if (mediaEdge) {
+                currentNodeId = mediaEdge.target;
+              } else {
+                continueProcessing = false;
+              }
+              break;
+            }
+
             const mediaUrl = currentNode.data.mediaUrl as string;
             const caption = replaceVariables(currentNode.data.caption as string || '', variables);
             const fileName = currentNode.data.fileName as string || '';
             
-            console.log(`=== Processing ${currentNode.type} node ===`);
-            console.log('Node data:', JSON.stringify(currentNode.data, null, 2));
-            console.log('mediaUrl:', mediaUrl);
-            console.log('caption:', caption);
-            console.log('fileName:', fileName);
-            console.log('instanceName:', instanceName);
-            console.log('phone:', phone);
+            console.log(`[${runId}] === Processing ${currentNode.type} node ===`);
+            console.log(`[${runId}] Node data:`, JSON.stringify(currentNode.data, null, 2));
+            console.log(`[${runId}] mediaUrl: ${mediaUrl}`);
+            console.log(`[${runId}] caption: ${caption}`);
+            console.log(`[${runId}] fileName: ${fileName}`);
+            console.log(`[${runId}] instanceName: ${instanceName}`);
+            console.log(`[${runId}] phone: ${phone}`);
             
             if (instanceName && phone && mediaUrl) {
               // Check if presence should be shown before sending (audio = recording, others = composing)
               if (currentNode.data.showPresence) {
                 const presenceDelaySeconds = (currentNode.data.presenceDelay as number) || 3;
                 const presenceType = currentNode.type === 'audio' ? 'recording' : 'composing';
-                await sendPresence(instanceName, phone, presenceType, presenceDelaySeconds * 1000);
+                await sendPresence(evolutionBaseUrl, evolutionApiKey, instanceName, phone, presenceType, presenceDelaySeconds * 1000);
                 processedActions.push(`Showed ${presenceType} for ${presenceDelaySeconds}s`);
               }
               
-              console.log(`Sending ${currentNode.type} message...`);
+              console.log(`[${runId}] Sending ${currentNode.type} message...`);
               // For images/videos, send caption. For documents, send fileName.
               // DO NOT send fileName as caption for image/video - that causes the filename to appear to the user
               const contentToSend = currentNode.type === 'document' ? fileName : caption;
-              const mediaSendResult = await sendMessage(instanceName, phone, contentToSend, currentNode.type, mediaUrl, fileName);
-              // Save the caption (not filename) as content for display purposes
-              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, caption || '', currentNode.type, flow.id, mediaUrl, mediaSendResult.remoteMessageId);
+              const mediaSendResult = await sendMessage(evolutionBaseUrl, evolutionApiKey, instanceName, phone, contentToSend, currentNode.type, mediaUrl, fileName);
+              
+              // Save message with correct status based on send result
+              const mediaStatus = mediaSendResult.ok ? 'sent' : 'failed';
+              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, caption || '', currentNode.type, flow.id, mediaUrl, mediaSendResult.remoteMessageId, mediaStatus);
+              
+              if (!mediaSendResult.ok) {
+                await handleSendFailure(currentNodeId, mediaSendResult.errorDetails || 'Unknown error');
+                sendFailed = true;
+                processedActions.push(`FAILED to send ${currentNode.type}: ${caption || fileName || 'media'}`);
+                break;
+              }
+              
+              // Mark node as sent for idempotency
+              sentNodeIds.push(currentNodeId);
               processedActions.push(`Sent ${currentNode.type}: ${caption || fileName || 'media'}`);
-              console.log(`${currentNode.type} sent successfully`);
+              console.log(`[${runId}] ${currentNode.type} sent successfully`);
             } else {
-              console.log(`Skipping ${currentNode.type} - missing required data:`, {
+              console.log(`[${runId}] Skipping ${currentNode.type} - missing required data:`, {
                 hasInstanceName: !!instanceName,
                 hasPhone: !!phone,
                 hasMediaUrl: !!mediaUrl
@@ -366,7 +511,7 @@ serve(async (req) => {
               const minDelay = (currentNode.data.minDelay as number) || 5;
               const maxDelay = (currentNode.data.maxDelay as number) || 15;
               delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
-              console.log(`Variable delay: random value ${delay} between ${minDelay} and ${maxDelay}`);
+              console.log(`[${runId}] Variable delay: random value ${delay} between ${minDelay} and ${maxDelay}`);
             } else {
               delay = (currentNode.data.delay as number) || 5;
             }
@@ -388,7 +533,7 @@ serve(async (req) => {
                 delayMs,
               };
               
-              console.log(`Long delay detected: ${delay} ${unit} (${delayMs}ms). Scheduling resume at ${resumeAt.toISOString()}`);
+              console.log(`[${runId}] Long delay detected: ${delay} ${unit} (${delayMs}ms). Scheduling resume at ${resumeAt.toISOString()}`);
               
               // Update session with pending delay state and release lock
               await supabaseClient
@@ -415,9 +560,9 @@ serve(async (req) => {
                 }, { onConflict: 'session_id' });
               
               if (jobError) {
-                console.error('Error inserting delay job:', jobError);
+                console.error(`[${runId}] Error inserting delay job:`, jobError);
               } else {
-                console.log(`Delay job created for session ${sessionId}, will run at ${resumeAt.toISOString()}`);
+                console.log(`[${runId}] Delay job created for session ${sessionId}, will run at ${resumeAt.toISOString()}`);
               }
               
               processedActions.push(`Scheduled delay: ${delay}${unitLabel} (will resume at ${resumeAt.toLocaleTimeString()})`);
@@ -435,7 +580,7 @@ serve(async (req) => {
             }
             
             // Short delay - execute inline
-            console.log(`Short delay: waiting ${delayMs}ms`);
+            console.log(`[${runId}] Short delay: waiting ${delayMs}ms`);
             await new Promise(resolve => setTimeout(resolve, delayMs));
             processedActions.push(`Waited ${delay}${unitLabel}${delayType === 'variable' ? ' (variable)' : ''}`);
             
@@ -450,7 +595,7 @@ serve(async (req) => {
           case 'waitInput':
             // If resumeFromTimeout, skip waiting and move to next node (with empty variable)
             if (resumeFromTimeout) {
-              console.log('Timeout expired, continuing flow without user input');
+              console.log(`[${runId}] Timeout expired, continuing flow without user input`);
               const varName = currentNode.data.variableName as string;
               if (varName) {
                 variables[varName] = ''; // Empty value for timeout
@@ -481,7 +626,7 @@ serve(async (req) => {
             const timeoutEnabled = currentNode.data.timeoutEnabled === true;
             let timeoutAt: string | null = null;
             
-            console.log(`WaitInput node ${currentNodeId}: timeoutEnabled=${currentNode.data.timeoutEnabled}, timeout=${currentNode.data.timeout}, timeoutUnit=${currentNode.data.timeoutUnit}`);
+            console.log(`[${runId}] WaitInput node ${currentNodeId}: timeoutEnabled=${currentNode.data.timeoutEnabled}, timeout=${currentNode.data.timeout}, timeoutUnit=${currentNode.data.timeoutUnit}`);
             
             if (timeoutEnabled) {
               const timeoutValue = (currentNode.data.timeout as number) || 5;
@@ -494,9 +639,9 @@ serve(async (req) => {
               if (timeoutUnit === 'days') timeoutSeconds *= 86400;
               
               timeoutAt = new Date(Date.now() + timeoutSeconds * 1000).toISOString();
-              console.log(`Timeout configured: ${timeoutValue} ${timeoutUnit} (${timeoutSeconds}s) -> expires at ${timeoutAt}`);
+              console.log(`[${runId}] Timeout configured: ${timeoutValue} ${timeoutUnit} (${timeoutSeconds}s) -> expires at ${timeoutAt}`);
             } else {
-              console.log('Timeout disabled for this waitInput node');
+              console.log(`[${runId}] Timeout disabled for this waitInput node`);
             }
             
             // Stop and wait for user input - save state and release lock
@@ -524,7 +669,7 @@ serve(async (req) => {
                   attempts: 0,
                 }, { onConflict: 'session_id' });
               
-              console.log(`Timeout job created for session ${sessionId}, will expire at ${timeoutAt}`);
+              console.log(`[${runId}] Timeout job created for session ${sessionId}, will expire at ${timeoutAt}`);
             }
             
             processedActions.push(`Waiting for user input${timeoutAt ? ` (timeout: ${timeoutAt})` : ''}`);
@@ -573,15 +718,15 @@ serve(async (req) => {
               .single();
             
             const contactTags = (freshContact?.tags as string[]) || [];
-            console.log(`Condition node: checking ${conditions.length} conditions, contact tags:`, contactTags);
-            console.log(`Session variables:`, variables);
+            console.log(`[${runId}] Condition node: checking ${conditions.length} conditions, contact tags:`, contactTags);
+            console.log(`[${runId}] Session variables:`, variables);
             
             const evaluateCondition = (cond: typeof conditions[0]): boolean => {
               if (cond.type === 'tag') {
                 const tagToCheck = (cond.tagName || '').trim();
                 const hasTag = contactTags.some(t => t.toLowerCase() === tagToCheck.toLowerCase());
                 const result = cond.tagCondition === 'has' ? hasTag : !hasTag;
-                console.log(`Tag condition: "${tagToCheck}" ${cond.tagCondition} -> hasTag=${hasTag}, result=${result}`);
+                console.log(`[${runId}] Tag condition: "${tagToCheck}" ${cond.tagCondition} -> hasTag=${hasTag}, result=${result}`);
                 return result;
               }
               
@@ -590,7 +735,7 @@ serve(async (req) => {
               const varValue = String(variables[varName] || '');
               const compareValue = cond.value || '';
               
-              console.log(`Variable condition: ${varName}="${varValue}" ${cond.operator} "${compareValue}"`);
+              console.log(`[${runId}] Variable condition: ${varName}="${varValue}" ${cond.operator} "${compareValue}"`);
               
               let result: boolean;
               switch (cond.operator) {
@@ -606,7 +751,7 @@ serve(async (req) => {
                 case 'not_exists': result = varValue === '' || varValue === 'undefined'; break;
                 default: result = varValue.toLowerCase() === compareValue.toLowerCase();
               }
-              console.log(`Variable condition result: ${result}`);
+              console.log(`[${runId}] Variable condition result: ${result}`);
               return result;
             };
 
@@ -619,7 +764,7 @@ serve(async (req) => {
               conditionMet = conditions.some(evaluateCondition);
             }
             
-            console.log(`Condition evaluated: ${conditionMet} (${logicOperator}, ${conditions.length} conditions)`);
+            console.log(`[${runId}] Condition evaluated: ${conditionMet} (${logicOperator}, ${conditions.length} conditions)`);
             processedActions.push(`Condition: ${conditionMet ? 'YES' : 'NO'}`);
             
             const conditionEdge = edges.find(e => 
@@ -635,13 +780,51 @@ serve(async (req) => {
             break;
 
           case 'menu':
+            // Check if already sent (idempotency)
+            if (sentNodeIds.includes(currentNodeId)) {
+              console.log(`[${runId}] Menu node ${currentNodeId} already sent, waiting for input`);
+              // Still need to wait for input
+              await supabaseClient
+                .from('inbox_flow_sessions')
+                .update({
+                  current_node_id: currentNodeId,
+                  variables,
+                  last_interaction: new Date().toISOString(),
+                  processing: false,
+                  processing_started_at: null,
+                })
+                .eq('id', sessionId);
+              
+              continueProcessing = false;
+              return new Response(JSON.stringify({ 
+                success: true, 
+                currentNode: currentNodeId,
+                actions: processedActions,
+                waitingForInput: true
+              }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              });
+            }
+
             const menuMessage = replaceVariables(currentNode.data.message as string || '', variables);
             const options = currentNode.data.options as string || '';
             const fullMenuMessage = `${menuMessage}\n\n${options}`;
             
             if (instanceName && phone && fullMenuMessage) {
-              await sendMessage(instanceName, phone, fullMenuMessage, 'text');
-              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, fullMenuMessage, 'text', flow.id);
+              const menuSendResult = await sendMessage(evolutionBaseUrl, evolutionApiKey, instanceName, phone, fullMenuMessage, 'text');
+              
+              const menuStatus = menuSendResult.ok ? 'sent' : 'failed';
+              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, fullMenuMessage, 'text', flow.id, undefined, menuSendResult.remoteMessageId, menuStatus);
+              
+              if (!menuSendResult.ok) {
+                await handleSendFailure(currentNodeId, menuSendResult.errorDetails || 'Unknown error');
+                sendFailed = true;
+                processedActions.push(`FAILED to send menu`);
+                break;
+              }
+              
+              // Mark as sent
+              sentNodeIds.push(currentNodeId);
             }
             
             // Wait for user input after showing menu - save state and release lock
@@ -674,7 +857,7 @@ serve(async (req) => {
             const varVal = replaceVariables(currentNode.data.value as string || '', variables);
             if (varName) {
               variables[varName] = varVal;
-              console.log(`Set variable: ${varName} = ${varVal}`);
+              console.log(`[${runId}] Set variable: ${varName} = ${varVal}`);
             }
             
             const setVarEdge = edges.find(e => e.source === currentNodeId);
@@ -714,7 +897,7 @@ serve(async (req) => {
               // Update local contact reference for subsequent condition checks
               contact = { ...contact, tags: newTags };
               
-              console.log(`Tag ${tagAction}: ${tagName}, new tags:`, newTags);
+              console.log(`[${runId}] Tag ${tagAction}: ${tagName}, new tags:`, newTags);
               processedActions.push(`${tagAction === 'add' ? 'Added' : 'Removed'} tag: ${tagName}`);
             }
             
@@ -727,10 +910,24 @@ serve(async (req) => {
             break;
 
           case 'transfer':
-            const transferMessage = replaceVariables(currentNode.data.message as string || 'Transferindo para atendimento humano...', variables);
-            if (instanceName && phone && transferMessage) {
-              await sendMessage(instanceName, phone, transferMessage, 'text');
-              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, transferMessage, 'text', flow.id);
+            // Check if already sent (idempotency)
+            if (!sentNodeIds.includes(currentNodeId)) {
+              const transferMessage = replaceVariables(currentNode.data.message as string || 'Transferindo para atendimento humano...', variables);
+              if (instanceName && phone && transferMessage) {
+                const transferSendResult = await sendMessage(evolutionBaseUrl, evolutionApiKey, instanceName, phone, transferMessage, 'text');
+                
+                const transferStatus = transferSendResult.ok ? 'sent' : 'failed';
+                await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, transferMessage, 'text', flow.id, undefined, transferSendResult.remoteMessageId, transferStatus);
+                
+                if (!transferSendResult.ok) {
+                  await handleSendFailure(currentNodeId, transferSendResult.errorDetails || 'Unknown error');
+                  sendFailed = true;
+                  processedActions.push(`FAILED to send transfer message`);
+                  break;
+                }
+                
+                sentNodeIds.push(currentNodeId);
+              }
             }
             
             // Mark session as completed and release lock
@@ -772,7 +969,7 @@ serve(async (req) => {
               try {
                 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
                 if (!LOVABLE_API_KEY) {
-                  console.error('LOVABLE_API_KEY not configured');
+                  console.error(`[${runId}] LOVABLE_API_KEY not configured`);
                   processedActions.push('AI error: API key not configured');
                 } else {
                   const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -794,15 +991,15 @@ serve(async (req) => {
                     const aiData = await aiResponse.json();
                     const aiContent = aiData.choices?.[0]?.message?.content || '';
                     variables[saveToVariable] = aiContent;
-                    console.log(`AI response saved to ${saveToVariable}: ${aiContent.substring(0, 100)}`);
+                    console.log(`[${runId}] AI response saved to ${saveToVariable}: ${aiContent.substring(0, 100)}`);
                     processedActions.push(`AI generated response (${aiContent.length} chars)`);
                   } else {
-                    console.error('AI API error:', await aiResponse.text());
+                    console.error(`[${runId}] AI API error:`, await aiResponse.text());
                     processedActions.push('AI error: API request failed');
                   }
                 }
               } catch (aiError) {
-                console.error('AI node error:', aiError);
+                console.error(`[${runId}] AI node error:`, aiError);
                 processedActions.push('AI error: Exception');
               }
             }
@@ -821,10 +1018,11 @@ serve(async (req) => {
             const webhookMethod = (currentNode.data.method as string) || 'POST';
             const webhookHeaders = currentNode.data.headers as Record<string, string> || {};
             const webhookBody = replaceVariables(currentNode.data.body as string || '', variables);
-            const saveResponseTo = currentNode.data.saveResponseTo as string || '';
+            const webhookSaveToVariable = currentNode.data.saveToVariable as string || '';
             
             if (webhookUrl) {
               try {
+                console.log(`[${runId}] Calling webhook: ${webhookMethod} ${webhookUrl}`);
                 const webhookResponse = await fetch(webhookUrl, {
                   method: webhookMethod,
                   headers: {
@@ -833,19 +1031,21 @@ serve(async (req) => {
                   },
                   body: webhookMethod !== 'GET' ? webhookBody : undefined,
                 });
+
+                const webhookData = await webhookResponse.text();
+                console.log(`[${runId}] Webhook response (${webhookResponse.status}): ${webhookData.substring(0, 200)}`);
                 
-                const responseText = await webhookResponse.text();
-                if (saveResponseTo) {
+                if (webhookSaveToVariable) {
                   try {
-                    variables[saveResponseTo] = JSON.parse(responseText);
+                    variables[webhookSaveToVariable] = JSON.parse(webhookData);
                   } catch {
-                    variables[saveResponseTo] = responseText;
+                    variables[webhookSaveToVariable] = webhookData;
                   }
                 }
-                console.log(`Webhook ${webhookMethod} ${webhookUrl}: ${webhookResponse.status}`);
-                processedActions.push(`Webhook called: ${webhookResponse.status}`);
+                
+                processedActions.push(`Webhook called: ${webhookUrl}`);
               } catch (webhookError) {
-                console.error('Webhook error:', webhookError);
+                console.error(`[${runId}] Webhook error:`, webhookError);
                 processedActions.push('Webhook error');
               }
             }
@@ -859,48 +1059,56 @@ serve(async (req) => {
             break;
 
           case 'randomizer':
-            // Randomizer node - select a split based on percentages
-            const randSplits = currentNode.data.splits as Array<{
-              id: string;
-              name: string;
-              percentage: number;
-            }> || [
-              { id: 'A', name: 'A', percentage: 50 },
-              { id: 'B', name: 'B', percentage: 50 },
-            ];
-
-            // Generate random number between 0-100
-            const randomValue = Math.random() * 100;
-            let cumulativePercentage = 0;
-            let selectedSplitId = randSplits[0]?.id || 'A';
-
-            for (const split of randSplits) {
-              cumulativePercentage += split.percentage;
-              if (randomValue <= cumulativePercentage) {
-                selectedSplitId = split.id;
-                break;
+            // Randomizer node - pick a random path
+            const paths = (currentNode.data.paths as Array<{ id: string; percentage: number }>) || [];
+            if (paths.length > 0) {
+              // Calculate total percentage
+              const totalPercentage = paths.reduce((sum, p) => sum + (p.percentage || 0), 0);
+              const randomValue = Math.random() * totalPercentage;
+              
+              let cumulative = 0;
+              let selectedPathId = paths[0]?.id;
+              
+              for (const path of paths) {
+                cumulative += path.percentage || 0;
+                if (randomValue <= cumulative) {
+                  selectedPathId = path.id;
+                  break;
+                }
               }
-            }
-
-            console.log(`Randomizer: random=${randomValue.toFixed(2)}, selected split=${selectedSplitId}`);
-            processedActions.push(`Randomizer: Split ${selectedSplitId}`);
-
-            // Find the edge for the selected split
-            const randEdge = edges.find(e => 
-              e.source === currentNodeId && 
-              e.sourceHandle === `split-${selectedSplitId}`
-            );
-            
-            if (randEdge) {
-              currentNodeId = randEdge.target;
+              
+              console.log(`[${runId}] Randomizer: selected path ${selectedPathId} (random: ${randomValue.toFixed(2)}/${totalPercentage})`);
+              processedActions.push(`Randomizer: path ${selectedPathId}`);
+              
+              // Find edge with matching sourceHandle
+              const randomEdge = edges.find(e => 
+                e.source === currentNodeId && 
+                e.sourceHandle === selectedPathId
+              );
+              
+              if (randomEdge) {
+                currentNodeId = randomEdge.target;
+              } else {
+                // Fallback to first edge if no matching handle
+                const fallbackEdge = edges.find(e => e.source === currentNodeId);
+                if (fallbackEdge) {
+                  currentNodeId = fallbackEdge.target;
+                } else {
+                  continueProcessing = false;
+                }
+              }
             } else {
-              console.log(`No edge found for split ${selectedSplitId}`);
-              continueProcessing = false;
+              const randEdge = edges.find(e => e.source === currentNodeId);
+              if (randEdge) {
+                currentNodeId = randEdge.target;
+              } else {
+                continueProcessing = false;
+              }
             }
             break;
 
           default:
-            console.log(`Unknown node type: ${currentNode.type}`);
+            console.log(`[${runId}] Unknown node type: ${currentNode.type}`);
             const defaultEdge = edges.find(e => e.source === currentNodeId);
             if (defaultEdge) {
               currentNodeId = defaultEdge.target;
@@ -908,6 +1116,21 @@ serve(async (req) => {
               continueProcessing = false;
             }
         }
+      }
+
+      // If send failed, return error response
+      if (sendFailed) {
+        console.log(`[${runId}] === PROCESS-INBOX-FLOW END (SEND FAILED) ===`);
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: 'Message send failed',
+          currentNode: currentNodeId,
+          actions: processedActions,
+          lastError: variables._last_send_error
+        }), {
+          status: 200, // Still 200 to not trigger retries
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
       // Update session with final state and release lock
@@ -922,7 +1145,7 @@ serve(async (req) => {
         })
         .eq('id', sessionId);
 
-      console.log('=== PROCESS-INBOX-FLOW END ===');
+      console.log(`[${runId}] === PROCESS-INBOX-FLOW END ===`);
       return new Response(JSON.stringify({ 
         success: true, 
         currentNode: currentNodeId,
@@ -939,7 +1162,7 @@ serve(async (req) => {
 
   } catch (err) {
     const error = err as Error;
-    console.error('Process flow error:', error);
+    console.error(`[${runId}] Process flow error:`, error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -953,6 +1176,8 @@ function replaceVariables(text: string, variables: Record<string, unknown>): str
 
 // Send presence status (typing, recording) before sending a message
 async function sendPresence(
+  baseUrl: string,
+  apiKey: string,
   instanceName: string,
   phone: string,
   presenceType: 'composing' | 'recording',
@@ -963,11 +1188,11 @@ async function sendPresence(
   console.log(`Sending ${presenceType} presence to ${formattedPhone} for ${delayMs}ms`);
   
   try {
-    const response = await fetch(`${EVOLUTION_BASE_URL}/chat/sendPresence/${instanceName}`, {
+    const response = await fetch(`${baseUrl}/chat/sendPresence/${instanceName}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': EVOLUTION_API_KEY,
+        'apikey': apiKey,
       },
       body: JSON.stringify({
         number: formattedPhone,
@@ -1001,6 +1226,8 @@ interface SendMessageResult {
 }
 
 async function sendMessage(
+  baseUrl: string,
+  apiKey: string,
   instanceName: string, 
   phone: string, 
   content: string, 
@@ -1048,11 +1275,11 @@ async function sendMessage(
   console.log('Request body:', JSON.stringify(body, null, 2));
 
   try {
-    const response = await fetch(`${EVOLUTION_BASE_URL}${endpoint}`, {
+    const response = await fetch(`${baseUrl}${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': EVOLUTION_API_KEY,
+        'apikey': apiKey,
       },
       body: JSON.stringify(body),
     });
@@ -1092,7 +1319,8 @@ async function saveOutboundMessage(
   messageType: string,
   flowId: string,
   mediaUrl?: string,
-  remoteMessageId?: string | null
+  remoteMessageId?: string | null,
+  status: 'sent' | 'failed' | 'pending' = 'sent'
 ) {
   // If we have a remoteMessageId, check if message already exists (to prevent duplicates)
   if (remoteMessageId) {
@@ -1118,7 +1346,7 @@ async function saveOutboundMessage(
       message_type: messageType,
       content,
       media_url: mediaUrl || null,
-      status: 'sent',
+      status,
       is_from_flow: true,
       flow_id: flowId,
       remote_message_id: remoteMessageId || null,

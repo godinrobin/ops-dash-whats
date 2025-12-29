@@ -269,6 +269,41 @@ serve(async (req) => {
         .eq('phone', phone)
         .maybeSingle();
 
+      // === HEALING: Check for orphan contact with null instance_id ===
+      if (!contact) {
+        const { data: orphanContact } = await supabaseClient
+          .from('inbox_contacts')
+          .select('*')
+          .eq('user_id', userId)
+          .is('instance_id', null)
+          .eq('phone', phone)
+          .maybeSingle();
+        
+        if (orphanContact) {
+          console.log(`[HEALING] Found orphan contact ${orphanContact.id} with null instance_id, adopting to instance ${instanceId}`);
+          
+          // Determine the best remote_jid to store
+          let remoteJidToStore = remoteJid;
+          if (remoteJidAlt && remoteJidAlt.includes('@s.whatsapp.net')) {
+            remoteJidToStore = remoteJidAlt;
+          } else if (!remoteJid.includes('@s.whatsapp.net') && remoteJidAlt) {
+            remoteJidToStore = remoteJidAlt;
+          }
+          
+          // Update the orphan contact with instance_id
+          await supabaseClient
+            .from('inbox_contacts')
+            .update({ 
+              instance_id: instanceId,
+              remote_jid: remoteJidToStore || orphanContact.remote_jid
+            })
+            .eq('id', orphanContact.id);
+          
+          contact = { ...orphanContact, instance_id: instanceId, remote_jid: remoteJidToStore || orphanContact.remote_jid };
+          console.log(`[HEALING] Orphan contact ${contact.id} adopted successfully`);
+        }
+      }
+
       if (!contact) {
         // Determine the best remote_jid to store (prefer remoteJidAlt if it's a valid @s.whatsapp.net)
         let remoteJidToStore = remoteJid;
