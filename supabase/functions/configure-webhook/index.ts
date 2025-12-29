@@ -6,6 +6,56 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper to get Evolution API config with fallback strategy
+async function getEvolutionConfig(supabaseClient: any, userId: string): Promise<{ baseUrl: string; apiKey: string; source: string } | null> {
+  // 1) Try user's own config
+  const { data: userConfig } = await supabaseClient
+    .from('maturador_config')
+    .select('evolution_base_url, evolution_api_key')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (userConfig?.evolution_base_url && userConfig?.evolution_api_key) {
+    console.log('[CONFIGURE-WEBHOOK] Using user config');
+    return {
+      baseUrl: userConfig.evolution_base_url.replace(/\/$/, ''),
+      apiKey: userConfig.evolution_api_key,
+      source: 'user'
+    };
+  }
+
+  // 2) Try any admin config (first available)
+  const { data: adminConfig } = await supabaseClient
+    .from('maturador_config')
+    .select('evolution_base_url, evolution_api_key')
+    .limit(1)
+    .maybeSingle();
+
+  if (adminConfig?.evolution_base_url && adminConfig?.evolution_api_key) {
+    console.log('[CONFIGURE-WEBHOOK] Using admin config (fallback)');
+    return {
+      baseUrl: adminConfig.evolution_base_url.replace(/\/$/, ''),
+      apiKey: adminConfig.evolution_api_key,
+      source: 'admin'
+    };
+  }
+
+  // 3) Try global secrets
+  const globalBaseUrl = Deno.env.get('EVOLUTION_BASE_URL');
+  const globalApiKey = Deno.env.get('EVOLUTION_API_KEY');
+
+  if (globalBaseUrl && globalApiKey) {
+    console.log('[CONFIGURE-WEBHOOK] Using global secrets (fallback)');
+    return {
+      baseUrl: globalBaseUrl.replace(/\/$/, ''),
+      apiKey: globalApiKey,
+      source: 'global'
+    };
+  }
+
+  return null;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -14,16 +64,21 @@ serve(async (req) => {
   try {
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
-        },
-      }
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Verify user is authenticated
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    // Get the authenticated user from Authorization header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
+    
     if (authError || !user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
@@ -32,7 +87,7 @@ serve(async (req) => {
     }
 
     const { instanceId } = await req.json();
-    console.log('Configuring webhook for instance:', instanceId);
+    console.log(`[CONFIGURE-WEBHOOK] Configuring webhook for instance: ${instanceId}, user: ${user.id}`);
 
     // Get instance info
     const { data: instance, error: instanceError } = await supabaseClient
@@ -43,36 +98,35 @@ serve(async (req) => {
       .single();
 
     if (instanceError || !instance) {
-      console.error('Instance not found:', instanceError);
+      console.error('[CONFIGURE-WEBHOOK] Instance not found:', instanceError);
       return new Response(JSON.stringify({ error: 'Instance not found' }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Get user's Evolution API config
-    const { data: config } = await supabaseClient
-      .from('maturador_config')
-      .select('*')
-      .eq('user_id', user.id)
-      .single();
+    // Get Evolution API config with fallback strategy
+    const evolutionConfig = await getEvolutionConfig(supabaseClient, user.id);
 
-    if (!config) {
+    if (!evolutionConfig) {
+      console.error('[CONFIGURE-WEBHOOK] No Evolution API configuration available');
       return new Response(JSON.stringify({ error: 'Evolution API not configured' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const EVOLUTION_BASE_URL = config.evolution_base_url.replace(/\/$/, '');
-    const EVOLUTION_API_KEY = config.evolution_api_key;
+    console.log(`[CONFIGURE-WEBHOOK] Using config source: ${evolutionConfig.source}`);
+
+    const EVOLUTION_BASE_URL = evolutionConfig.baseUrl;
+    const EVOLUTION_API_KEY = evolutionConfig.apiKey;
     const instanceName = instance.instance_name;
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
     
     // Webhook URL for receiving messages
     const webhookUrl = `${SUPABASE_URL}/functions/v1/webhook-inbox-messages`;
     
-    console.log(`Configuring webhook for ${instanceName} to ${webhookUrl}`);
+    console.log(`[CONFIGURE-WEBHOOK] Configuring webhook for ${instanceName} to ${webhookUrl}`);
 
     // Evolution API v2 format - POST /webhook/set/{instanceName}
     // The body needs the 'webhook' property with the configuration
@@ -91,7 +145,7 @@ serve(async (req) => {
       }
     };
 
-    console.log('Webhook body:', JSON.stringify(webhookBody, null, 2));
+    console.log('[CONFIGURE-WEBHOOK] Webhook body:', JSON.stringify(webhookBody, null, 2));
 
     const webhookResponse = await fetch(`${EVOLUTION_BASE_URL}/webhook/set/${instanceName}`, {
       method: 'POST',
@@ -103,12 +157,12 @@ serve(async (req) => {
     });
 
     const responseText = await webhookResponse.text();
-    console.log('Webhook response status:', webhookResponse.status);
-    console.log('Webhook response:', responseText);
+    console.log('[CONFIGURE-WEBHOOK] Webhook response status:', webhookResponse.status);
+    console.log('[CONFIGURE-WEBHOOK] Webhook response:', responseText);
 
     if (!webhookResponse.ok) {
       // Try alternative format without nested webhook property (older versions)
-      console.log('First format failed, trying alternative format...');
+      console.log('[CONFIGURE-WEBHOOK] First format failed, trying alternative format...');
       
       const altBody = {
         enabled: true,
@@ -133,12 +187,12 @@ serve(async (req) => {
       });
 
       const altText = await altResponse.text();
-      console.log('Alternative response status:', altResponse.status);
-      console.log('Alternative response:', altText);
+      console.log('[CONFIGURE-WEBHOOK] Alternative response status:', altResponse.status);
+      console.log('[CONFIGURE-WEBHOOK] Alternative response:', altText);
 
       if (!altResponse.ok) {
         // Try third format - Evolution API v1 style
-        console.log('Second format failed, trying v1 format...');
+        console.log('[CONFIGURE-WEBHOOK] Second format failed, trying v1 format...');
         
         const v1Body = {
           url: webhookUrl,
@@ -156,8 +210,8 @@ serve(async (req) => {
         });
 
         const v1Text = await v1Response.text();
-        console.log('V1 response status:', v1Response.status);
-        console.log('V1 response:', v1Text);
+        console.log('[CONFIGURE-WEBHOOK] V1 response status:', v1Response.status);
+        console.log('[CONFIGURE-WEBHOOK] V1 response:', v1Text);
 
         if (!v1Response.ok) {
           return new Response(JSON.stringify({ 
@@ -166,6 +220,7 @@ serve(async (req) => {
             altDetails: altText,
             v1Details: v1Text,
             webhookUrl,
+            configSource: evolutionConfig.source,
             tip: 'You may need to configure the webhook manually in your Evolution API dashboard'
           }), {
             status: 500,
@@ -185,7 +240,8 @@ serve(async (req) => {
           webhookUrl,
           instanceName,
           result: v1Result,
-          format: 'v1'
+          format: 'v1',
+          configSource: evolutionConfig.source
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -203,7 +259,8 @@ serve(async (req) => {
         webhookUrl,
         instanceName,
         result: altResult,
-        format: 'alternative'
+        format: 'alternative',
+        configSource: evolutionConfig.source
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -216,21 +273,22 @@ serve(async (req) => {
       result = { raw: responseText };
     }
 
-    console.log('Webhook configured successfully');
+    console.log('[CONFIGURE-WEBHOOK] Webhook configured successfully');
 
     return new Response(JSON.stringify({ 
       success: true, 
       webhookUrl,
       instanceName,
       result,
-      format: 'v2'
+      format: 'v2',
+      configSource: evolutionConfig.source
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (err) {
     const error = err as Error;
-    console.error('Configure webhook error:', error);
+    console.error('[CONFIGURE-WEBHOOK] Error:', error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
