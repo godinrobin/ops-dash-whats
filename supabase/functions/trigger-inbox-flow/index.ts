@@ -127,8 +127,8 @@ serve(async (req) => {
       _sent_node_ids: [] as string[],
     };
 
-    // Find existing active session
-    const { data: existingActiveSession } = await serviceClient
+    // If another flow is active for this contact, complete it so we can start/restart the chosen flow
+    const { data: otherActiveSession } = await serviceClient
       .from("inbox_flow_sessions")
       .select("id, flow_id")
       .eq("contact_id", contactId)
@@ -138,46 +138,24 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
-    let sessionIdToRun: string | null = null;
+    if (otherActiveSession && otherActiveSession.flow_id !== flowId) {
+      const { error: completeError } = await serviceClient
+        .from("inbox_flow_sessions")
+        .update({ status: "completed", last_interaction: nowIso })
+        .eq("id", otherActiveSession.id)
+        .eq("user_id", user.id);
 
-    if (existingActiveSession) {
-      if (existingActiveSession.flow_id === flowId) {
-        const { error: resetError } = await serviceClient
-          .from("inbox_flow_sessions")
-          .update({
-            current_node_id: startNodeId,
-            variables: baseVariables,
-            instance_id: contact.instance_id,
-            last_interaction: nowIso,
-            processing: false,
-            processing_started_at: null,
-          })
-          .eq("id", existingActiveSession.id)
-          .eq("user_id", user.id);
-
-        if (resetError) {
-          console.error(`[${runId}] Reset session error:`, resetError);
-          return jsonResponse({ error: "Failed to reset flow session" }, 500);
-        }
-
-        sessionIdToRun = existingActiveSession.id;
-      } else {
-        const { error: completeError } = await serviceClient
-          .from("inbox_flow_sessions")
-          .update({ status: "completed", last_interaction: nowIso })
-          .eq("id", existingActiveSession.id)
-          .eq("user_id", user.id);
-
-        if (completeError) {
-          console.warn(`[${runId}] Could not complete previous session (continuing):`, completeError);
-        }
+      if (completeError) {
+        console.warn(`[${runId}] Could not complete previous session (continuing):`, completeError);
       }
     }
 
-    if (!sessionIdToRun) {
-      const { data: newSession, error: sessionError } = await serviceClient
-        .from("inbox_flow_sessions")
-        .insert({
+    // IMPORTANT: The DB has a unique constraint for (flow_id, contact_id).
+    // So we must UPSERT (create or restart) the single session for this pair.
+    const { data: sessionRow, error: sessionError } = await serviceClient
+      .from("inbox_flow_sessions")
+      .upsert(
+        {
           flow_id: flowId,
           contact_id: contactId,
           instance_id: contact.instance_id,
@@ -187,37 +165,38 @@ serve(async (req) => {
           status: "active",
           started_at: nowIso,
           last_interaction: nowIso,
-        })
+          processing: false,
+          processing_started_at: null,
+        },
+        { onConflict: "flow_id,contact_id" },
+      )
+      .select("id")
+      .maybeSingle();
+
+    if (sessionError) {
+      const code = (sessionError as any)?.code;
+      console.error(`[${runId}] Upsert session error:`, { code, message: sessionError.message });
+      return jsonResponse({ error: "Failed to create flow session" }, 500);
+    }
+
+    let sessionIdToRun: string | null = sessionRow?.id ?? null;
+
+    if (!sessionIdToRun) {
+      // Extremely defensive fallback: fetch the session id
+      const { data: existing } = await serviceClient
+        .from("inbox_flow_sessions")
         .select("id")
-        .single();
+        .eq("contact_id", contactId)
+        .eq("flow_id", flowId)
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle();
 
-      if (sessionError) {
-        // If there's a unique/race issue, try to reuse the most recent active session
-        const code = (sessionError as any)?.code;
-        console.error(`[${runId}] Create session error:`, { code, message: sessionError.message });
+      sessionIdToRun = existing?.id ?? null;
+    }
 
-        if (code === "23505") {
-          const { data: active } = await serviceClient
-            .from("inbox_flow_sessions")
-            .select("id")
-            .eq("contact_id", contactId)
-            .eq("user_id", user.id)
-            .eq("status", "active")
-            .order("started_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-          if (active?.id) {
-            sessionIdToRun = active.id;
-          } else {
-            return jsonResponse({ error: "Failed to create flow session" }, 500);
-          }
-        } else {
-          return jsonResponse({ error: "Failed to create flow session" }, 500);
-        }
-      } else {
-        sessionIdToRun = newSession.id;
-      }
+    if (!sessionIdToRun) {
+      return jsonResponse({ error: "Failed to create flow session" }, 500);
     }
 
     // Process flow
