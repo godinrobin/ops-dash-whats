@@ -86,7 +86,206 @@ const getEvolutionConfig = async (
   return null;
 };
 
-// Delete existing webhook configuration
+// Build headers with both apikey and Authorization
+const buildHeaders = (apiKey: string) => ({
+  'Content-Type': 'application/json',
+  'apikey': apiKey,
+  'Authorization': `Bearer ${apiKey}`,
+});
+
+interface AttemptResult {
+  attemptNumber: number;
+  endpoint: string;
+  method: string;
+  status: number;
+  responseBody: string;
+  success: boolean;
+}
+
+// Configure new webhook - tries multiple payload formats
+const configureWebhook = async (
+  baseUrl: string, 
+  apiKey: string, 
+  instanceName: string
+): Promise<{ success: boolean; attemptResults: AttemptResult[] }> => {
+  const webhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/webhook-inbox-messages`;
+  const headers = buildHeaders(apiKey);
+  const attemptResults: AttemptResult[] = [];
+  
+  // Events in different formats for compatibility
+  const eventsUppercase = ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE', 'SEND_MESSAGE'];
+  const eventsLowercase = ['messages.upsert', 'messages.update', 'connection.update', 'send.message'];
+  
+  // Different endpoint/payload combinations to try (based on observed API error patterns)
+  const attempts = [
+    // Attempt 1: webhook object format (for "instance requires property webhook" error)
+    {
+      endpoint: `/webhook/set/${instanceName}`,
+      method: 'POST',
+      payload: {
+        webhook: {
+          enabled: true,
+          url: webhookUrl,
+          headers: {},
+          byEvents: false,
+          base64: false,
+          events: eventsUppercase
+        }
+      }
+    },
+    // Attempt 2: instance.webhook wrapper (alternative structure)
+    {
+      endpoint: `/webhook/set/${instanceName}`,
+      method: 'POST',
+      payload: {
+        instance: {
+          webhook: {
+            enabled: true,
+            url: webhookUrl,
+            headers: {},
+            byEvents: false,
+            base64: false,
+            events: eventsUppercase
+          }
+        }
+      }
+    },
+    // Attempt 3: webhookByEvents/webhookBase64 naming (some servers use this)
+    {
+      endpoint: `/webhook/set/${instanceName}`,
+      method: 'POST',
+      payload: {
+        webhook: {
+          enabled: true,
+          url: webhookUrl,
+          headers: {},
+          webhookByEvents: false,
+          webhookBase64: false,
+          events: eventsUppercase
+        }
+      }
+    },
+    // Attempt 4: Flat structure with lowercase events
+    {
+      endpoint: `/webhook/set/${instanceName}`,
+      method: 'POST',
+      payload: {
+        url: webhookUrl,
+        enabled: true,
+        webhookByEvents: false,
+        webhookBase64: false,
+        events: eventsLowercase
+      }
+    },
+    // Attempt 5: Flat structure with uppercase events
+    {
+      endpoint: `/webhook/set/${instanceName}`,
+      method: 'POST',
+      payload: {
+        url: webhookUrl,
+        enabled: true,
+        webhookByEvents: false,
+        webhookBase64: false,
+        events: eventsUppercase
+      }
+    },
+    // Attempt 6: Minimal webhook object
+    {
+      endpoint: `/webhook/set/${instanceName}`,
+      method: 'POST',
+      payload: {
+        webhook: {
+          url: webhookUrl,
+          enabled: true
+        }
+      }
+    },
+    // Attempt 7: PUT method (some servers require PUT for update)
+    {
+      endpoint: `/webhook/set/${instanceName}`,
+      method: 'PUT',
+      payload: {
+        webhook: {
+          enabled: true,
+          url: webhookUrl,
+          headers: {},
+          byEvents: false,
+          base64: false,
+          events: eventsUppercase
+        }
+      }
+    },
+    // Attempt 8: Legacy v1 endpoint style
+    {
+      endpoint: `/webhook/instance/${instanceName}`,
+      method: 'POST',
+      payload: {
+        webhook: {
+          url: webhookUrl,
+          enabled: true,
+          events: eventsLowercase
+        }
+      }
+    },
+    // Attempt 9: Just URL at root level with webhook=true flag
+    {
+      endpoint: `/webhook/set/${instanceName}`,
+      method: 'POST',
+      payload: {
+        url: webhookUrl,
+        webhook: true,
+        events: ['all']
+      }
+    }
+  ];
+
+  for (let i = 0; i < attempts.length; i++) {
+    const attempt = attempts[i];
+    const attemptResult: AttemptResult = {
+      attemptNumber: i + 1,
+      endpoint: attempt.endpoint,
+      method: attempt.method,
+      status: 0,
+      responseBody: '',
+      success: false
+    };
+
+    try {
+      const url = `${baseUrl}${attempt.endpoint}`;
+      console.log(`[CONFIGURE-WEBHOOK] Attempt ${i + 1}/${attempts.length} for ${instanceName}: ${attempt.method} ${url}`);
+      console.log(`[CONFIGURE-WEBHOOK] Payload:`, JSON.stringify(attempt.payload));
+      
+      const response = await fetch(url, {
+        method: attempt.method,
+        headers,
+        body: JSON.stringify(attempt.payload),
+      });
+
+      attemptResult.status = response.status;
+      attemptResult.responseBody = await response.text();
+      
+      console.log(`[CONFIGURE-WEBHOOK] Response: ${response.status} - ${attemptResult.responseBody.substring(0, 500)}`);
+      
+      if (response.ok) {
+        attemptResult.success = true;
+        attemptResults.push(attemptResult);
+        console.log(`[CONFIGURE-WEBHOOK] SUCCESS with attempt ${i + 1} for ${instanceName}`);
+        return { success: true, attemptResults };
+      }
+      
+    } catch (error) {
+      attemptResult.responseBody = `Error: ${error instanceof Error ? error.message : String(error)}`;
+      console.error(`[CONFIGURE-WEBHOOK] Attempt ${i + 1} error:`, error);
+    }
+
+    attemptResults.push(attemptResult);
+  }
+
+  console.error(`[CONFIGURE-WEBHOOK] All ${attempts.length} attempts failed for ${instanceName}`);
+  return { success: false, attemptResults };
+};
+
+// Delete existing webhook configuration (optional step, only if needed)
 const deleteWebhook = async (baseUrl: string, apiKey: string, instanceName: string): Promise<boolean> => {
   try {
     const url = `${baseUrl}/webhook/set/${instanceName}`;
@@ -94,10 +293,7 @@ const deleteWebhook = async (baseUrl: string, apiKey: string, instanceName: stri
     
     const response = await fetch(url, {
       method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': apiKey,
-      },
+      headers: buildHeaders(apiKey),
     });
 
     const responseText = await response.text();
@@ -110,126 +306,6 @@ const deleteWebhook = async (baseUrl: string, apiKey: string, instanceName: stri
   }
 };
 
-// Configure new webhook
-const configureWebhook = async (baseUrl: string, apiKey: string, instanceName: string): Promise<boolean> => {
-  const webhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/webhook-inbox-messages`;
-  
-  // Different endpoint/payload combinations to try
-  const attempts = [
-    // Attempt 1: Evolution API v2 - POST /webhook/set/{instanceName}
-    {
-      endpoint: `/webhook/set/${instanceName}`,
-      method: 'POST',
-      payload: {
-        url: webhookUrl,
-        enabled: true,
-        webhookByEvents: false,
-        webhookBase64: false,
-        events: [
-          'MESSAGES_UPSERT',
-          'MESSAGES_UPDATE', 
-          'CONNECTION_UPDATE',
-          'SEND_MESSAGE'
-        ]
-      }
-    },
-    // Attempt 2: Evolution API v2 - PUT /webhook/set/{instanceName}
-    {
-      endpoint: `/webhook/set/${instanceName}`,
-      method: 'PUT',
-      payload: {
-        url: webhookUrl,
-        enabled: true,
-        webhookByEvents: false,
-        webhookBase64: false,
-        events: [
-          'MESSAGES_UPSERT',
-          'MESSAGES_UPDATE', 
-          'CONNECTION_UPDATE',
-          'SEND_MESSAGE'
-        ]
-      }
-    },
-    // Attempt 3: Evolution API v1 style - POST /webhook/instance/{instanceName}
-    {
-      endpoint: `/webhook/instance/${instanceName}`,
-      method: 'POST',
-      payload: {
-        webhook: {
-          url: webhookUrl,
-          enabled: true,
-          events: [
-            'messages.upsert',
-            'messages.update',
-            'connection.update',
-            'send.message'
-          ]
-        }
-      }
-    },
-    // Attempt 4: Simpler payload format
-    {
-      endpoint: `/webhook/set/${instanceName}`,
-      method: 'POST',
-      payload: {
-        webhook: {
-          url: webhookUrl,
-          enabled: true
-        },
-        events: ['all']
-      }
-    },
-    // Attempt 5: Direct URL only
-    {
-      endpoint: `/webhook/set/${instanceName}`,
-      method: 'POST',
-      payload: {
-        url: webhookUrl,
-        webhook: true
-      }
-    }
-  ];
-
-  for (let i = 0; i < attempts.length; i++) {
-    const attempt = attempts[i];
-    try {
-      const url = `${baseUrl}${attempt.endpoint}`;
-      console.log(`[CONFIGURE-WEBHOOK] Attempt ${i + 1} for ${instanceName}: ${attempt.method} ${url}`);
-      console.log(`[CONFIGURE-WEBHOOK] Payload:`, JSON.stringify(attempt.payload));
-      
-      const response = await fetch(url, {
-        method: attempt.method,
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': apiKey,
-        },
-        body: JSON.stringify(attempt.payload),
-      });
-
-      const responseText = await response.text();
-      console.log(`[CONFIGURE-WEBHOOK] Response: ${response.status} - ${responseText}`);
-      
-      if (response.ok) {
-        console.log(`[CONFIGURE-WEBHOOK] Success with attempt ${i + 1}`);
-        return true;
-      }
-      
-      // Try to parse error for better logging
-      try {
-        const errorJson = JSON.parse(responseText);
-        console.log(`[CONFIGURE-WEBHOOK] Error details:`, errorJson);
-      } catch {
-        // Not JSON, already logged raw text
-      }
-    } catch (error) {
-      console.error(`[CONFIGURE-WEBHOOK] Attempt ${i + 1} error:`, error);
-    }
-  }
-
-  console.error(`[CONFIGURE-WEBHOOK] All ${attempts.length} attempts failed for ${instanceName}`);
-  return false;
-};
-
 // Restart instance to ensure webhook is active
 const restartInstance = async (baseUrl: string, apiKey: string, instanceName: string): Promise<boolean> => {
   try {
@@ -238,10 +314,7 @@ const restartInstance = async (baseUrl: string, apiKey: string, instanceName: st
     
     const response = await fetch(url, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': apiKey,
-      },
+      headers: buildHeaders(apiKey),
     });
 
     const responseText = await response.text();
@@ -335,8 +408,9 @@ serve(async (req) => {
         instanceId: string;
         instanceName: string;
         success: boolean;
-        steps: { configFound: boolean; deleted: boolean; configured: boolean; restarted: boolean };
+        steps: { configFound: boolean; configured: boolean; deletedThenRetried: boolean; restarted: boolean };
         configSource: string;
+        attemptDetails: AttemptResult[];
         error: string | null;
       } = {
         instanceId: instance.id,
@@ -344,11 +418,12 @@ serve(async (req) => {
         success: false,
         steps: {
           configFound: false,
-          deleted: false,
           configured: false,
+          deletedThenRetried: false,
           restarted: false
         },
         configSource: '',
+        attemptDetails: [],
         error: null
       };
 
@@ -366,25 +441,42 @@ serve(async (req) => {
         instanceResult.steps.configFound = true;
         instanceResult.configSource = config.source;
 
-        // Step 1: Delete existing webhook
-        const deleted = await deleteWebhook(config.baseUrl, config.apiKey, instance.instance_name);
-        instanceResult.steps.deleted = deleted;
+        // Step 1: Try to configure webhook directly (avoid downtime)
+        console.log(`[FORCE-RECONFIGURE] Attempting direct configuration for ${instance.instance_name}`);
+        let configResult = await configureWebhook(config.baseUrl, config.apiKey, instance.instance_name);
+        instanceResult.attemptDetails = configResult.attemptResults;
 
-        // Step 2: Configure new webhook
-        const configured = await configureWebhook(config.baseUrl, config.apiKey, instance.instance_name);
-        instanceResult.steps.configured = configured;
+        if (configResult.success) {
+          instanceResult.steps.configured = true;
+        } else {
+          // Step 2: If direct config failed, try delete + configure
+          console.log(`[FORCE-RECONFIGURE] Direct config failed, trying delete + reconfigure for ${instance.instance_name}`);
+          const deleted = await deleteWebhook(config.baseUrl, config.apiKey, instance.instance_name);
+          
+          if (deleted) {
+            // Wait a bit after delete
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            configResult = await configureWebhook(config.baseUrl, config.apiKey, instance.instance_name);
+            instanceResult.attemptDetails = [...instanceResult.attemptDetails, ...configResult.attemptResults];
+            instanceResult.steps.deletedThenRetried = true;
+            
+            if (configResult.success) {
+              instanceResult.steps.configured = true;
+            }
+          }
+        }
 
-        // Step 3: Restart instance (optional, helps ensure webhook is active)
-        if (configured) {
-          // Wait a bit before restart
+        // Step 3: Restart instance if configured successfully
+        if (instanceResult.steps.configured) {
           await new Promise(resolve => setTimeout(resolve, 500));
           const restarted = await restartInstance(config.baseUrl, config.apiKey, instance.instance_name);
           instanceResult.steps.restarted = restarted;
         }
 
-        instanceResult.success = configured;
+        instanceResult.success = instanceResult.steps.configured;
 
-        // Log diagnostic event
+        // Log diagnostic event with detailed attempt info
         await supabaseClient.from('webhook_diagnostics').insert({
           instance_id: instance.id,
           instance_name: instance.instance_name,
@@ -392,8 +484,15 @@ serve(async (req) => {
           user_id: user.id,
           payload_preview: JSON.stringify({
             configSource: config.source,
-            steps: instanceResult.steps
-          })
+            steps: instanceResult.steps,
+            totalAttempts: instanceResult.attemptDetails.length,
+            successfulAttempt: instanceResult.attemptDetails.find(a => a.success) || null,
+            lastFailedAttempts: instanceResult.attemptDetails.filter(a => !a.success).slice(-3).map(a => ({
+              attempt: a.attemptNumber,
+              status: a.status,
+              response: a.responseBody.substring(0, 200)
+            }))
+          }).substring(0, 2000)
         });
 
       } catch (error) {
