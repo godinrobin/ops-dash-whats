@@ -66,6 +66,35 @@ const logWebhookDiagnostic = async (
   }
 };
 
+// Helper function to save failed/discarded webhook messages for debugging
+const saveFailedMessage = async (
+  supabaseClient: any,
+  data: {
+    instanceName: string;
+    eventType: string;
+    discardReason: string;
+    payload: any;
+    phoneExtracted?: string;
+    remoteJid?: string;
+    userId?: string;
+  }
+) => {
+  try {
+    await supabaseClient.from('webhook_failed_messages').insert({
+      instance_name: data.instanceName,
+      event_type: data.eventType,
+      discard_reason: data.discardReason,
+      payload: data.payload,
+      phone_extracted: data.phoneExtracted || null,
+      remote_jid: data.remoteJid || null,
+      user_id: data.userId || null,
+    });
+    console.log(`[FAILED-MSG] Saved failed message: ${data.discardReason}`);
+  } catch (err) {
+    console.error('[FAILED-MSG] Failed to save:', err);
+  }
+};
+
 const INBOX_MEDIA_BUCKET = 'video-clips';
 
 const isStoredMediaUrl = (url: string) => {
@@ -895,7 +924,7 @@ serve(async (req) => {
             eventType: 'skip', // logged as skip for tracking but we'll process it
           });
         } else {
-          // No @lid either - truly skip
+          // No @lid either - save the full payload for debugging and continue trying
           const payloadHash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(payload)));
           const hashHex = Array.from(new Uint8Array(payloadHash)).map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 16);
           
@@ -910,6 +939,15 @@ serve(async (req) => {
           console.error(`  dataSender=${dataSender}`);
           console.error(`  pushName=${pushNameRaw}`);
           console.error(`  addressingMode=${key.addressingMode || 'none'}`);
+          
+          // SAVE TO webhook_failed_messages for debugging
+          await saveFailedMessage(supabaseClient, {
+            instanceName: instanceName,
+            eventType: event || 'messages.upsert',
+            discardReason: 'no_valid_phone_jid',
+            payload: payload,
+            remoteJid: remoteJid || remoteJidAlt || 'none',
+          });
           
           await logIngestEvent(supabaseClient, {
             reason: 'no_valid_phone_jid',
@@ -938,7 +976,18 @@ serve(async (req) => {
         
         // Validate phone is 10-15 digits (international numbers can have up to 15 digits per E.164)
         if (!/^\d{10,15}$/.test(phone)) {
-          console.log(`Skipping message with invalid phone length: ${rawPhone} (${phone.length} digits)`);
+          console.log(`[WARN] Message with invalid phone length: ${rawPhone} (${phone.length} digits)`);
+          
+          // SAVE TO webhook_failed_messages for debugging invalid phone lengths
+          await saveFailedMessage(supabaseClient, {
+            instanceName: instanceName,
+            eventType: event || 'messages.upsert',
+            discardReason: `invalid_phone_length_${phone.length}`,
+            payload: payload,
+            phoneExtracted: phone,
+            remoteJid: jidForPhone,
+          });
+          
           return new Response(JSON.stringify({ success: true, skipped: true, reason: 'invalid_phone_length' }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });

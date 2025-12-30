@@ -2833,6 +2833,42 @@ export type Database = {
           },
         ]
       }
+      webhook_failed_messages: {
+        Row: {
+          created_at: string
+          discard_reason: string
+          event_type: string
+          id: string
+          instance_name: string
+          payload: Json
+          phone_extracted: string | null
+          remote_jid: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          discard_reason: string
+          event_type: string
+          id?: string
+          instance_name: string
+          payload: Json
+          phone_extracted?: string | null
+          remote_jid?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          discard_reason?: string
+          event_type?: string
+          id?: string
+          instance_name?: string
+          payload?: Json
+          phone_extracted?: string | null
+          remote_jid?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       webhook_history: {
         Row: {
           created_at: string | null
