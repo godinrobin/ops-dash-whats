@@ -115,9 +115,6 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
         <div className="flex flex-col flex-1">
           <span className="text-sm font-medium text-muted-foreground">{labels[type]}</span>
           <span className="text-xs text-muted-foreground/70">{descriptions[type]}</span>
-          {isTemporary && (
-            <span className="text-[10px] text-amber-500 mt-1">URL temporária do WhatsApp</span>
-          )}
         </div>
       </div>
     );
