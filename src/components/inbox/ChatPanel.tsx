@@ -405,16 +405,13 @@ export const ChatPanel = ({
     return phone.length > 15 || (remoteJid && remoteJid.includes('@lid'));
   };
   
-  // Get display name for contact
+  // Get display name for contact - ONLY show phone numbers
   const getDisplayName = () => {
-    if (contact.name && contact.name.trim()) {
-      return contact.name;
-    }
     const remoteJid = (contact as any).remote_jid;
     if (isLidContact(contact.phone, remoteJid)) {
       return 'Desconhecido';
     }
-    return contact.phone;
+    return formatPhoneDisplay(contact.phone);
   };
   
   // Get subtitle for contact
@@ -424,7 +421,7 @@ export const ChatPanel = ({
       const shortId = contact.phone.slice(-6);
       return `Lead via anúncio • ID ${shortId}`;
     }
-    return formatPhoneDisplay(contact.phone);
+    return null;
   };
 
   const instanceColor = contact.instance_id 
