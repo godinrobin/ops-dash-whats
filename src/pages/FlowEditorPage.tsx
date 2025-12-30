@@ -78,6 +78,14 @@ const FlowEditorPage = () => {
     fetchInstances();
   }, [user]);
 
+  // Determine the back route based on where we came from
+  const getBackRoute = () => {
+    if (location.pathname.startsWith('/inbox')) {
+      return '/inbox/fluxos';
+    }
+    return '/disparador';
+  };
+
   useEffect(() => {
     const fetchOrCreateFlow = async () => {
       if (!user) return;
@@ -103,13 +111,14 @@ const FlowEditorPage = () => {
 
           if (error) throw error;
 
-          // Navigate to the new flow
-          navigate(`/disparazap/fluxos/${data.id}`, { replace: true });
+          // Navigate to the new flow - preserve the context (inbox vs disparazap)
+          const basePath = location.pathname.startsWith('/inbox') ? '/inbox/fluxos' : '/disparazap/fluxos';
+          navigate(`${basePath}/${data.id}`, { replace: true });
           return;
         } catch (error: unknown) {
           console.error('Error creating flow:', error);
           toast.error('Erro ao criar fluxo');
-          navigate('/disparador');
+          navigate(getBackRoute());
           return;
         }
       }
@@ -145,14 +154,14 @@ const FlowEditorPage = () => {
       } catch (error: unknown) {
         console.error('Error fetching flow:', error);
         toast.error('Erro ao carregar fluxo');
-        navigate('/disparador');
+        navigate(getBackRoute());
       } finally {
         setLoading(false);
       }
     };
 
     fetchOrCreateFlow();
-  }, [id, user, navigate]);
+  }, [id, user, navigate, location.pathname]);
 
   const handleSave = async (nodes: FlowNode[], edges: FlowEdge[]) => {
     if (!id || !user) return;
@@ -228,7 +237,7 @@ const FlowEditorPage = () => {
       
       <div className="border-b border-border px-4 py-2 flex items-center justify-between bg-card shrink-0">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/disparador')} title="Voltar para DisparaZap">
+          <Button variant="ghost" size="icon" onClick={() => navigate(getBackRoute())} title={isAutomatiZap ? "Voltar para AutomatiZap" : "Voltar para DisparaZap"}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <Input
