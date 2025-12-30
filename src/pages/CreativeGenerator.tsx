@@ -349,7 +349,7 @@ const CreativeGenerator = () => {
                 
                 <p className="text-xs text-muted-foreground text-center flex items-center justify-center gap-1.5 pt-2">
                   <Info className="h-3 w-3" />
-                  Quanto mais específico for o nome do produto/tema, melhor será o resultado gerado.
+                  Quanto mais informações der para criação da imagem, mais assertivo será o resultado.
                 </p>
               </CardContent>
             </Card>
