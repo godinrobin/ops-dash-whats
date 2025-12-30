@@ -140,11 +140,8 @@ export const ConversationList = ({
     return phone.length > 15 || (remoteJid && remoteJid.includes('@lid'));
   };
   
-  // Helper to format display name
+  // Helper to format display name - ONLY show phone numbers
   const getDisplayName = (contact: InboxContact) => {
-    if (contact.name && contact.name.trim()) {
-      return contact.name;
-    }
     const remoteJid = (contact as any).remote_jid;
     if (isLidContact(contact.phone, remoteJid)) {
       return 'Desconhecido';
@@ -159,9 +156,6 @@ export const ConversationList = ({
       // Show last 6 chars of LID as identifier
       const shortId = contact.phone.slice(-6);
       return `Lead via anúncio • ID ${shortId}`;
-    }
-    if (contact.name && contact.name.trim()) {
-      return formatPhoneDisplay(contact.phone);
     }
     return null;
   };
