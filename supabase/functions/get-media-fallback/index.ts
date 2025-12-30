@@ -39,13 +39,23 @@ const downloadMediaViaEvolutionAPI = async (
   evolutionBaseUrl?: string,
   evolutionApiKey?: string
 ): Promise<{ base64: string; mimetype: string } | null> => {
-  const baseUrl = evolutionBaseUrl || Deno.env.get('EVOLUTION_BASE_URL')?.replace(/\/$/, '');
+  let baseUrl = evolutionBaseUrl || Deno.env.get('EVOLUTION_BASE_URL') || '';
   const apiKey = evolutionApiKey || Deno.env.get('EVOLUTION_API_KEY');
+  
+  // Ensure baseUrl has protocol
+  baseUrl = baseUrl.replace(/\/$/, ''); // Remove trailing slash
+  if (baseUrl && !baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+    baseUrl = `https://${baseUrl}`;
+  }
   
   if (!baseUrl || !apiKey) {
     console.log('[MEDIA-FALLBACK] No Evolution API config available');
+    console.log(`  baseUrl: ${baseUrl ? baseUrl.substring(0, 30) + '...' : 'MISSING'}`);
+    console.log(`  apiKey: ${apiKey ? 'present' : 'MISSING'}`);
     return null;
   }
+  
+  console.log(`[MEDIA-FALLBACK] Using Evolution API: ${baseUrl.substring(0, 40)}...`);
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
