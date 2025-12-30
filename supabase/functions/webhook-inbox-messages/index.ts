@@ -89,6 +89,160 @@ const guessExtension = (contentType: string | null, fallback: string) => {
   return fallback;
 };
 
+// Unwrap nested message containers (common in ads/CTWA messages)
+// Evolution API can wrap messages in ephemeralMessage, viewOnceMessage, etc.
+const unwrapMessageContainer = (data: any): any => {
+  if (!data || typeof data !== 'object') return data;
+  
+  const msg = data.message || data;
+  
+  // If message has key + message structure (double wrapped), get inner message
+  if (msg && msg.key && msg.message) {
+    return unwrapMessageContainer({ message: msg.message });
+  }
+  
+  // Common wrapper types in ad/CTWA messages
+  const wrapperTypes = [
+    'ephemeralMessage',
+    'viewOnceMessage', 
+    'viewOnceMessageV2',
+    'viewOnceMessageV2Extension',
+    'documentWithCaptionMessage',
+    'protocolMessage',
+  ];
+  
+  for (const wrapperType of wrapperTypes) {
+    if (msg && msg[wrapperType]?.message) {
+      console.log(`[UNWRAP] Found ${wrapperType} wrapper, unwrapping...`);
+      return unwrapMessageContainer({ message: msg[wrapperType].message });
+    }
+  }
+  
+  return msg;
+};
+
+// Extract content from various message formats
+const extractMessageContent = (msgContent: any): { content: string; messageType: string; mediaUrl: string | null } => {
+  if (!msgContent || typeof msgContent !== 'object') {
+    return { content: '', messageType: 'text', mediaUrl: null };
+  }
+  
+  // Standard text messages
+  if (msgContent.conversation) {
+    return { content: msgContent.conversation, messageType: 'text', mediaUrl: null };
+  }
+  
+  if (msgContent.extendedTextMessage?.text) {
+    return { content: msgContent.extendedTextMessage.text, messageType: 'text', mediaUrl: null };
+  }
+  
+  // Interactive button/list responses (common in ad flows)
+  if (msgContent.buttonsResponseMessage) {
+    const btn = msgContent.buttonsResponseMessage;
+    return { 
+      content: btn.selectedDisplayText || btn.selectedButtonId || '[Resposta de botão]', 
+      messageType: 'text', 
+      mediaUrl: null 
+    };
+  }
+  
+  if (msgContent.listResponseMessage) {
+    const list = msgContent.listResponseMessage;
+    return { 
+      content: list.title || list.singleSelectReply?.selectedRowId || '[Resposta de lista]', 
+      messageType: 'text', 
+      mediaUrl: null 
+    };
+  }
+  
+  if (msgContent.templateButtonReplyMessage) {
+    const tpl = msgContent.templateButtonReplyMessage;
+    return { 
+      content: tpl.selectedDisplayText || tpl.selectedId || '[Resposta de template]', 
+      messageType: 'text', 
+      mediaUrl: null 
+    };
+  }
+  
+  // Media messages
+  if (msgContent.imageMessage) {
+    return { 
+      content: msgContent.imageMessage.caption || '', 
+      messageType: 'image', 
+      mediaUrl: msgContent.imageMessage.url || null 
+    };
+  }
+  
+  if (msgContent.audioMessage) {
+    return { 
+      content: '', 
+      messageType: 'audio', 
+      mediaUrl: msgContent.audioMessage.url || null 
+    };
+  }
+  
+  if (msgContent.videoMessage) {
+    return { 
+      content: msgContent.videoMessage.caption || '', 
+      messageType: 'video', 
+      mediaUrl: msgContent.videoMessage.url || null 
+    };
+  }
+  
+  if (msgContent.documentMessage) {
+    return { 
+      content: msgContent.documentMessage.fileName || '', 
+      messageType: 'document', 
+      mediaUrl: msgContent.documentMessage.url || null 
+    };
+  }
+  
+  if (msgContent.stickerMessage) {
+    return { 
+      content: '', 
+      messageType: 'sticker', 
+      mediaUrl: msgContent.stickerMessage.url || null 
+    };
+  }
+  
+  // Location messages
+  if (msgContent.locationMessage) {
+    const loc = msgContent.locationMessage;
+    return { 
+      content: `📍 ${loc.name || 'Localização'}: ${loc.degreesLatitude}, ${loc.degreesLongitude}`, 
+      messageType: 'text', 
+      mediaUrl: null 
+    };
+  }
+  
+  // Contact messages  
+  if (msgContent.contactMessage) {
+    return { 
+      content: `👤 Contato: ${msgContent.contactMessage.displayName || 'Desconhecido'}`, 
+      messageType: 'text', 
+      mediaUrl: null 
+    };
+  }
+  
+  // Reactions
+  if (msgContent.reactionMessage) {
+    return { 
+      content: msgContent.reactionMessage.text || '👍', 
+      messageType: 'text', 
+      mediaUrl: null 
+    };
+  }
+  
+  // Log unknown message type for debugging
+  const knownKeys = Object.keys(msgContent).filter(k => !['messageContextInfo', 'messageSecret'].includes(k));
+  if (knownKeys.length > 0) {
+    console.log(`[PARSER] Unknown message type, keys: ${knownKeys.join(', ')}`);
+  }
+  
+  // Return placeholder for unsupported formats (so they still appear in chat)
+  return { content: '[Mensagem não suportada]', messageType: 'text', mediaUrl: null };
+};
+
 const persistMediaToStorage = async (
   supabaseClient: any,
   params: {
@@ -132,8 +286,15 @@ const persistMediaToStorage = async (
       return null;
     }
 
-    const contentType = res.headers.get('content-type');
+    let contentType = res.headers.get('content-type');
     const arrayBuffer = await res.arrayBuffer();
+    
+    // Force correct content-type for audio if generic
+    if (params.messageType === 'audio' && (!contentType || contentType === 'application/octet-stream')) {
+      contentType = 'audio/ogg';
+      console.log('[MEDIA] Forcing audio/ogg content-type for audio message');
+    }
+    
     const blob = new Blob([arrayBuffer], { type: contentType || 'application/octet-stream' });
 
     const ext = guessExtension(contentType, fallbackExt);
@@ -534,35 +695,17 @@ serve(async (req) => {
       const debugPhoneInfo = { phone, phoneSource, length: phone.length, prefix: phone.substring(0, 3), isLid: useLidAsFallback };
       
       // Extract message content - Evolution API v2 structure
-      // data.message contains the actual message object with conversation/extendedTextMessage/etc
-      const msgContent = data.message || {};
-      let content = '';
-      let messageType = 'text';
-      let mediaUrl = null;
-
-      if (msgContent.conversation) {
-        content = msgContent.conversation;
-      } else if (msgContent.extendedTextMessage?.text) {
-        content = msgContent.extendedTextMessage.text;
-      } else if (msgContent.imageMessage) {
-        messageType = 'image';
-        content = msgContent.imageMessage.caption || '';
-        mediaUrl = msgContent.imageMessage.url || null;
-      } else if (msgContent.audioMessage) {
-        messageType = 'audio';
-        mediaUrl = msgContent.audioMessage.url || null;
-      } else if (msgContent.videoMessage) {
-        messageType = 'video';
-        content = msgContent.videoMessage.caption || '';
-        mediaUrl = msgContent.videoMessage.url || null;
-      } else if (msgContent.documentMessage) {
-        messageType = 'document';
-        content = msgContent.documentMessage.fileName || '';
-        mediaUrl = msgContent.documentMessage.url || null;
-      } else if (msgContent.stickerMessage) {
-        messageType = 'sticker';
-        mediaUrl = msgContent.stickerMessage.url || null;
-      }
+      // Use unwrapMessageContainer to handle nested wrappers (ephemeral, viewOnce, etc.)
+      // and extractMessageContent to get content from various message formats
+      const rawMsgContent = data.message || {};
+      const msgContent = unwrapMessageContainer({ message: rawMsgContent });
+      
+      console.log(`[PARSER] Message keys after unwrap: ${Object.keys(msgContent || {}).filter(k => !['messageContextInfo', 'messageSecret'].includes(k)).join(', ')}`);
+      
+      const extracted = extractMessageContent(msgContent);
+      let content = extracted.content;
+      let messageType = extracted.messageType;
+      let mediaUrl = extracted.mediaUrl;
       
       // pushName is at data root level in Evolution API v2
       // CRITICAL: For outbound messages (fromMe=true), pushName is the SENDER's name (the instance)
