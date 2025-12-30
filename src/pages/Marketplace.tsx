@@ -855,6 +855,134 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
   );
 };
 
+// Hook para calcular tempo restante
+const useCountdownEmbed = (expiresAt: string | null) => {
+  const [timeLeft, setTimeLeft] = useState<number>(0);
+  
+  useEffect(() => {
+    if (!expiresAt) return;
+    
+    const calculateTimeLeft = () => {
+      const now = new Date().getTime();
+      const expiry = new Date(expiresAt).getTime();
+      const diff = Math.max(0, expiry - now);
+      setTimeLeft(diff);
+    };
+    
+    calculateTimeLeft();
+    const interval = setInterval(calculateTimeLeft, 1000);
+    
+    return () => clearInterval(interval);
+  }, [expiresAt]);
+  
+  const minutes = Math.floor(timeLeft / 60000);
+  const seconds = Math.floor((timeLeft % 60000) / 1000);
+  const isExpired = timeLeft === 0;
+  
+  return { minutes, seconds, isExpired, timeLeft };
+};
+
+// Componente do card de pedido com timer para o Marketplace embed
+interface OrderCardEmbedProps {
+  order: any;
+  pollingOrders: Set<string>;
+  onCheckStatus: (order: any) => void;
+  onCancelOrder: (order: any) => void;
+  onCopy: (text: string, message: string) => void;
+}
+
+const OrderCardEmbed = ({ order, pollingOrders, onCheckStatus, onCancelOrder, onCopy }: OrderCardEmbedProps) => {
+  const { minutes, seconds, isExpired } = useCountdownEmbed(
+    order.status === 'waiting_sms' ? order.expires_at : null
+  );
+  
+  // Se expirou e ainda está como waiting_sms, mostrar como expirado
+  const displayStatus = order.status === 'waiting_sms' && isExpired ? 'expired' : order.status;
+  
+  const getStatusBadge = () => {
+    switch (displayStatus) {
+      case 'waiting_sms':
+        return (
+          <Badge className="bg-yellow-500 text-black">
+            <Clock className="h-3 w-3 mr-1" />
+            {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+          </Badge>
+        );
+      case 'received':
+        return <Badge className="bg-green-500 text-white">Recebido</Badge>;
+      case 'cancelled':
+        return <Badge className="bg-red-500 text-white">Cancelado</Badge>;
+      case 'expired':
+        return <Badge className="bg-orange-500 text-white">Expirado</Badge>;
+      default:
+        return <Badge className="bg-muted">{order.status}</Badge>;
+    }
+  };
+  
+  const getBorderClass = () => {
+    switch (displayStatus) {
+      case 'received':
+        return 'border-green-500/50 bg-green-500/5';
+      case 'cancelled':
+        return 'border-red-500/50 bg-red-500/5';
+      case 'expired':
+        return 'border-orange-500/50 bg-orange-500/5';
+      default:
+        return 'border-accent/50 bg-accent/5';
+    }
+  };
+  
+  return (
+    <div className={`p-3 rounded-lg border-2 ${getBorderClass()}`}>
+      <div className="flex justify-between items-start mb-2">
+        <div>
+          <p className="font-medium">{order.service_name}</p>
+          <div 
+            className="flex items-center gap-2 text-lg font-mono cursor-pointer hover:text-accent"
+            onClick={() => order.phone_number && onCopy(order.phone_number, "Número copiado!")}
+          >
+            {order.phone_number || "Aguardando..."}
+            {order.phone_number && <span className="text-xs">📋</span>}
+          </div>
+        </div>
+        {getStatusBadge()}
+      </div>
+      {order.sms_code && (
+        <div 
+          className="bg-green-500/20 p-2 rounded mb-2 cursor-pointer hover:bg-green-500/30"
+          onClick={() => onCopy(order.sms_code!, "Código SMS copiado!")}
+        >
+          <p className="text-sm text-muted-foreground">Código SMS:</p>
+          <p className="text-xl font-bold text-green-500 flex items-center gap-2">
+            {order.sms_code}
+            <span className="text-sm">📋 Copiar</span>
+          </p>
+        </div>
+      )}
+      {order.status === 'received' && order.phone_number && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="mb-2 text-xs"
+          onClick={() => onCopy(order.phone_number!, "Número copiado!")}
+        >
+          📋 Copiar Número
+        </Button>
+      )}
+      <div className="flex gap-2">
+        {displayStatus === 'waiting_sms' && !isExpired && (
+          <>
+            <Button size="sm" variant="outline" onClick={() => onCheckStatus(order)} disabled={pollingOrders.has(order.id)}>
+              {pollingOrders.has(order.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verificar"}
+            </Button>
+            <Button size="sm" variant="destructive" onClick={() => onCancelOrder(order)}>Cancelar</Button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // Embedded SMS Bot component (without header and wallet)
 const SMSBotEmbed = () => {
   const { user } = useAuth();
@@ -1139,86 +1267,17 @@ const SMSBotEmbed = () => {
               ) : (
                 <div className="space-y-3">
                   {orders.map(order => (
-                    <div key={order.id} className={`p-3 rounded-lg border-2 ${
-                      order.status === 'received' 
-                        ? 'border-green-500/50 bg-green-500/5' 
-                        : order.status === 'cancelled'
-                        ? 'border-red-500/50 bg-red-500/5'
-                        : 'border-accent/50 bg-accent/5'
-                    }`}>
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <p className="font-medium">{order.service_name}</p>
-                          <div 
-                            className="flex items-center gap-2 text-lg font-mono cursor-pointer hover:text-accent"
-                            onClick={() => {
-                              if (order.phone_number) {
-                                navigator.clipboard.writeText(order.phone_number);
-                                toast.success("Número copiado!");
-                              }
-                            }}
-                          >
-                            {order.phone_number || "Aguardando..."}
-                            {order.phone_number && <span className="text-xs">📋</span>}
-                          </div>
-                        </div>
-                        <Badge className={
-                          order.status === 'received' 
-                            ? 'bg-green-500 text-white' 
-                            : order.status === 'waiting_sms' 
-                            ? 'bg-yellow-500 text-black' 
-                            : order.status === 'cancelled'
-                            ? 'bg-red-500 text-white'
-                            : 'bg-muted'
-                        }>
-                          {order.status === 'received' 
-                            ? 'Recebido' 
-                            : order.status === 'waiting_sms' 
-                            ? 'Aguardando' 
-                            : order.status === 'cancelled'
-                            ? 'Cancelado'
-                            : order.status}
-                        </Badge>
-                      </div>
-                      {order.sms_code && (
-                        <div 
-                          className="bg-green-500/20 p-2 rounded mb-2 cursor-pointer hover:bg-green-500/30"
-                          onClick={() => {
-                            navigator.clipboard.writeText(order.sms_code!);
-                            toast.success("Código SMS copiado!");
-                          }}
-                        >
-                          <p className="text-sm text-muted-foreground">Código SMS:</p>
-                          <p className="text-xl font-bold text-green-500 flex items-center gap-2">
-                            {order.sms_code}
-                            <span className="text-sm">📋 Copiar</span>
-                          </p>
-                        </div>
-                      )}
-                      {order.status === 'received' && order.phone_number && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="mb-2 text-xs"
-                          onClick={() => {
-                            navigator.clipboard.writeText(order.phone_number!);
-                            toast.success("Número copiado!");
-                          }}
-                        >
-                          📋 Copiar Número
-                        </Button>
-                      )}
-                      <div className="flex gap-2">
-                        {order.status === 'waiting_sms' && (
-                          <>
-                            <Button size="sm" variant="outline" onClick={() => checkStatus(order)} disabled={pollingOrders.has(order.id)}>
-                              {pollingOrders.has(order.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verificar"}
-                            </Button>
-                            <Button size="sm" variant="destructive" onClick={() => cancelOrder(order)}>Cancelar</Button>
-                          </>
-                        )}
-                      </div>
-                    </div>
+                    <OrderCardEmbed 
+                      key={order.id}
+                      order={order}
+                      pollingOrders={pollingOrders}
+                      onCheckStatus={checkStatus}
+                      onCancelOrder={cancelOrder}
+                      onCopy={(text, message) => {
+                        navigator.clipboard.writeText(text);
+                        toast.success(message);
+                      }}
+                    />
                   ))}
                 </div>
               )}
