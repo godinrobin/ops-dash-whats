@@ -81,7 +81,7 @@ const FlowEditorPage = () => {
   // Determine the back route based on where we came from
   const getBackRoute = () => {
     if (location.pathname.startsWith('/inbox')) {
-      return '/inbox/fluxos';
+      return '/inbox/flows';
     }
     return '/disparador';
   };
@@ -112,7 +112,7 @@ const FlowEditorPage = () => {
           if (error) throw error;
 
           // Navigate to the new flow - preserve the context (inbox vs disparazap)
-          const basePath = location.pathname.startsWith('/inbox') ? '/inbox/fluxos' : '/disparazap/fluxos';
+          const basePath = location.pathname.startsWith('/inbox') ? '/inbox/flows' : '/disparazap/fluxos';
           navigate(`${basePath}/${data.id}`, { replace: true });
           return;
         } catch (error: unknown) {
