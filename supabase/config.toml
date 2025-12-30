@@ -173,3 +173,6 @@ verify_jwt = true
 
 [functions.get-media-fallback]
 verify_jwt = true
+
+[functions.reprocess-pending-media]
+verify_jwt = true
