@@ -84,19 +84,37 @@ serve(async (req) => {
           continue;
         }
         
+        // Skip if session is already completed
+        if (session.status === 'completed') {
+          console.log(`[process-delay-queue] Session ${job.session_id} already completed, marking job as done`);
+          await supabase
+            .from("inbox_flow_delay_jobs")
+            .update({ status: "done", updated_at: new Date().toISOString() })
+            .eq("session_id", job.session_id);
+          continue;
+        }
+        
+        // Check session variables for pending delay info
+        const sessionVars = (session.variables || {}) as Record<string, unknown>;
+        const pendingDelay = sessionVars._pendingDelay as { nodeId: string; resumeAt: number } | undefined;
+        
         // Determine if this is a timeout or a delay job
         const isTimeoutJob = session.timeout_at !== null;
         const flowNodes = (session.flow?.nodes || []) as Array<{ id: string; type: string }>;
         const currentNode = flowNodes.find(n => n.id === session.current_node_id);
         const isWaitingForInput = currentNode?.type === 'waitInput' || currentNode?.type === 'menu';
+        const isDelayNode = currentNode?.type === 'delay';
         
-        console.log(`[process-delay-queue] Session status: isTimeoutJob=${isTimeoutJob}, isWaitingForInput=${isWaitingForInput}, nodeType=${currentNode?.type}`);
+        // More robust detection: check if we have a pending delay in variables
+        const hasValidPendingDelay = pendingDelay && pendingDelay.resumeAt <= Date.now();
+        
+        console.log(`[process-delay-queue] Session ${job.session_id}: isTimeoutJob=${isTimeoutJob}, isWaitingForInput=${isWaitingForInput}, isDelayNode=${isDelayNode}, hasValidPendingDelay=${hasValidPendingDelay}, nodeType=${currentNode?.type}`);
         
         // If this is a timeout job and session is still waiting for input, trigger timeout
         if (isTimeoutJob && isWaitingForInput) {
           console.log(`[process-delay-queue] Timeout expired for session ${job.session_id}, continuing flow`);
           
-          const { error: invokeError } = await supabase.functions.invoke("process-inbox-flow", {
+          const { data: invokeResult, error: invokeError } = await supabase.functions.invoke("process-inbox-flow", {
             body: {
               sessionId: job.session_id,
               resumeFromTimeout: true,
@@ -117,9 +135,13 @@ serve(async (req) => {
             failed++;
             continue;
           }
-        } else {
-          // This is a regular delay job, call process-inbox-flow to resume
-          const { error: invokeError } = await supabase.functions.invoke("process-inbox-flow", {
+          
+          console.log(`[process-delay-queue] Timeout job result for ${job.session_id}:`, invokeResult);
+        } else if (hasValidPendingDelay || isDelayNode) {
+          // This is a delay job (either has pending delay or current node is delay)
+          console.log(`[process-delay-queue] Delay completed for session ${job.session_id}, resuming flow`);
+          
+          const { data: invokeResult, error: invokeError } = await supabase.functions.invoke("process-inbox-flow", {
             body: {
               sessionId: job.session_id,
               resumeFromDelay: true,
@@ -127,7 +149,7 @@ serve(async (req) => {
           });
           
           if (invokeError) {
-            console.error(`[process-delay-queue] Error invoking process-inbox-flow for ${job.session_id}:`, invokeError);
+            console.error(`[process-delay-queue] Error invoking process-inbox-flow for delay ${job.session_id}:`, invokeError);
             
             // Mark as failed if max attempts reached, otherwise back to scheduled
             const newStatus = job.attempts >= 2 ? "failed" : "scheduled";
@@ -143,6 +165,10 @@ serve(async (req) => {
             failed++;
             continue;
           }
+          
+          console.log(`[process-delay-queue] Delay job result for ${job.session_id}:`, invokeResult);
+        } else {
+          console.log(`[process-delay-queue] Job ${job.session_id} doesn't match timeout or delay criteria, marking as done (node: ${currentNode?.type})`);
         }
         
         // Mark job as done
