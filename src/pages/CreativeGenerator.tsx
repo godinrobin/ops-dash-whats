@@ -17,6 +17,12 @@ import creativeModel2 from "@/assets/creative-model-2.png";
 import creativeModel3 from "@/assets/creative-model-3.png";
 import creativeModel4 from "@/assets/creative-model-4.png";
 import creativeModel5 from "@/assets/creative-model-5.png";
+import creativeModel6 from "@/assets/creative-model-6.png";
+import creativeModel7 from "@/assets/creative-model-7.png";
+import creativeModel8 from "@/assets/creative-model-8.png";
+import creativeModel9 from "@/assets/creative-model-9.png";
+import creativeModel10 from "@/assets/creative-model-10.png";
+import creativeModel11 from "@/assets/creative-model-11.png";
 
 const modelOptions = [
   {
@@ -48,6 +54,42 @@ const modelOptions = [
     name: "Modelo 5 - Vintage Religioso",
     description: "Arte promocional estilo vintage com estética bíblica dourada",
     preview: creativeModel5,
+  },
+  {
+    id: "calistenia-urbano",
+    name: "Modelo 6 - Calistenia Urbano",
+    description: "Estilo anúncio fitness com pessoa em exercício e visual impactante",
+    preview: creativeModel6,
+  },
+  {
+    id: "curso-tecnico-cartoon",
+    name: "Modelo 7 - Curso Técnico Cartoon",
+    description: "Ilustração vetorial semi-realista estilo infográfico educativo",
+    preview: creativeModel7,
+  },
+  {
+    id: "curso-tecnico-realista",
+    name: "Modelo 8 - Curso Técnico Realista",
+    description: "Anúncio profissional com personagem realista e visual tecnológico",
+    preview: creativeModel8,
+  },
+  {
+    id: "fitness-urgente",
+    name: "Modelo 9 - Fitness Urgente",
+    description: "Estilo urgência com transformação, fogo e apelo emocional forte",
+    preview: creativeModel9,
+  },
+  {
+    id: "whatsapp-mobile",
+    name: "Modelo 10 - WhatsApp Mobile",
+    description: "Mockup de celular com biblioteca de conteúdos e entrega por WhatsApp",
+    preview: creativeModel10,
+  },
+  {
+    id: "fitness-energetico",
+    name: "Modelo 11 - Fitness Energético",
+    description: "Visual energético com personagem fitness e benefícios destacados",
+    preview: creativeModel11,
   },
 ];
 
