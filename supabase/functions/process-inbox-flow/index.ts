@@ -301,30 +301,64 @@ serve(async (req) => {
     try {
       // Check if we're resuming from a scheduled delay
       if (resumeFromDelay) {
-        const pendingDelay = variables._pendingDelay as { nodeId: string; resumeAt: number } | undefined;
+        const pendingDelay = variables._pendingDelay as { nodeId: string; resumeAt: number; delayMs?: number } | undefined;
         if (pendingDelay) {
           const now = Date.now();
-          if (now < pendingDelay.resumeAt) {
-            // Still waiting - reschedule
-            const remainingMs = pendingDelay.resumeAt - now;
-            console.log(`[${runId}] Still waiting for delay, ${remainingMs}ms remaining`);
+          const remainingMs = pendingDelay.resumeAt - now;
+          
+          console.log(`[${runId}] Checking delay: resumeAt=${new Date(pendingDelay.resumeAt).toISOString()}, now=${new Date(now).toISOString()}, remaining=${remainingMs}ms`);
+          
+          if (remainingMs > 5000) { // 5 second buffer to avoid race conditions
+            // Still waiting - reschedule the job (shouldn't happen if cron is correct, but safety)
+            console.log(`[${runId}] Still waiting for delay, ${remainingMs}ms remaining - rescheduling`);
+            
+            // Update the job to run at correct time
+            await supabaseClient
+              .from('inbox_flow_delay_jobs')
+              .update({
+                run_at: new Date(pendingDelay.resumeAt).toISOString(),
+                status: 'scheduled',
+                updated_at: new Date().toISOString(),
+              })
+              .eq('session_id', sessionId);
+            
             await releaseLock();
             return new Response(JSON.stringify({ 
               success: true, 
               waiting: true, 
-              remainingMs 
+              remainingMs,
+              rescheduled: true
             }), {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
           }
+          
           // Delay completed - move to next node
-          console.log(`[${runId}] Delay completed, resuming flow from node:`, pendingDelay.nodeId);
+          console.log(`[${runId}] ✅ Delay completed! Moving from node ${pendingDelay.nodeId} to next node`);
           const delayEdge = edges.find(e => e.source === pendingDelay.nodeId);
           if (delayEdge) {
             currentNodeId = delayEdge.target;
+            console.log(`[${runId}] Next node after delay: ${currentNodeId}`);
+          } else {
+            console.log(`[${runId}] No edge found from delay node ${pendingDelay.nodeId}, ending flow`);
           }
-          // Clear pending delay
+          
+          // CRITICAL: Clear pending delay from variables
           delete variables._pendingDelay;
+          
+          // Immediately save the cleared state to prevent duplicate processing
+          await supabaseClient
+            .from('inbox_flow_sessions')
+            .update({
+              current_node_id: currentNodeId,
+              variables,
+              last_interaction: new Date().toISOString(),
+            })
+            .eq('id', sessionId);
+          
+          console.log(`[${runId}] Cleared _pendingDelay and updated session to node ${currentNodeId}`);
+        } else {
+          console.log(`[${runId}] resumeFromDelay=true but no _pendingDelay found in variables, continuing from current node`);
         }
       }
 
