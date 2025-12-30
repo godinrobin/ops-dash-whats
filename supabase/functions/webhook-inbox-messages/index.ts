@@ -899,10 +899,17 @@ serve(async (req) => {
           updates.unread_count = (contact.unread_count || 0) + 1;
         }
         
-        // Only update name if we have a valid (non-suspicious) pushName and contact doesn't have a name yet
-        // or if the new pushName is different and valid
-        if (validPushName && validPushName.trim() && (!contact.name || contact.name !== validPushName)) {
+        // Only update name for INBOUND messages (not fromMe)
+        // For outbound, pushName is the sender (our chip), not the contact
+        if (!isFromMe && validPushName && validPushName.trim() && (!contact.name || contact.name !== validPushName)) {
           updates.name = validPushName;
+        }
+        
+        // LID Healing: If contact has LID-like phone and we now have a real phone from participantAlt, update it
+        const contactPhoneLooksLikeLid = contact.phone && (contact.phone.length < 10 || /^\d{15,}$/.test(contact.phone));
+        if (contactPhoneLooksLikeLid && phone && phone.length >= 10 && phone.length <= 15) {
+          console.log(`[LID-HEALING] Updating contact ${contact.id} phone from ${contact.phone} to ${phone}`);
+          updates.phone = phone;
         }
 
         // Update remote_jid if not already set
@@ -1294,7 +1301,7 @@ serve(async (req) => {
       // This prevents duplicate flows from triggering
       const { data: allActiveSessions } = await supabaseClient
         .from('inbox_flow_sessions')
-        .select('id, started_at, current_node_id, flow_id')
+        .select('id, started_at, current_node_id, flow_id, variables')
         .eq('contact_id', contact.id)
         .eq('status', 'active')
         .order('started_at', { ascending: false });
@@ -1318,19 +1325,31 @@ serve(async (req) => {
 
       if (anyActiveSession) {
         const sessionAge = Date.now() - new Date(anyActiveSession.started_at).getTime();
+        // Check if session has a pending delay - these should NOT be marked as stale
+        const sessionVars = (anyActiveSession.variables || {}) as Record<string, unknown>;
+        const hasPendingDelay = !!(sessionVars._pendingDelay);
+        
         // If there's an active session (regardless of age), don't trigger new flow
         // This prevents duplicate flows when user sends multiple messages quickly
         // The existing session will handle the messages through waitInput/menu nodes
-        console.log(`Active session ${anyActiveSession.id} exists (${sessionAge}ms old, at node: ${anyActiveSession.current_node_id})`);
+        console.log(`Active session ${anyActiveSession.id} exists (${sessionAge}ms old, at node: ${anyActiveSession.current_node_id}, hasPendingDelay: ${hasPendingDelay})`);
         
-        // Only allow new flow trigger if session is older than 1 hour (stale session)
-        if (sessionAge < 3600000) {
+        // NEVER mark session as stale if it has a pending delay
+        // For sessions without delay, use 24 hours as stale threshold (instead of 1 hour)
+        const staleThreshold = 86400000; // 24 hours in ms
+        
+        if (hasPendingDelay) {
+          console.log(`Skipping flow trigger - session has pending delay, not stale`);
+          return new Response(JSON.stringify({ success: true, skipped: true, reason: 'session_has_pending_delay' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        } else if (sessionAge < staleThreshold) {
           console.log(`Skipping flow trigger - active session exists and is not stale`);
           return new Response(JSON.stringify({ success: true, skipped: true, reason: 'active_session_exists' }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         } else {
-          console.log(`Session is stale (${sessionAge}ms), marking as completed and allowing new flow`);
+          console.log(`Session is stale (${sessionAge}ms, no pending delay), marking as completed and allowing new flow`);
           await supabaseClient
             .from('inbox_flow_sessions')
             .update({ status: 'completed' })
