@@ -124,8 +124,13 @@ const unwrapMessageContainer = (data: any): any => {
 // Extract content from various message formats
 const extractMessageContent = (msgContent: any): { content: string; messageType: string; mediaUrl: string | null } => {
   if (!msgContent || typeof msgContent !== 'object') {
+    console.log('[PARSER] Empty or invalid msgContent');
     return { content: '', messageType: 'text', mediaUrl: null };
   }
+  
+  // Log all keys for debugging
+  const allKeys = Object.keys(msgContent);
+  console.log(`[PARSER] Processing message with keys: ${allKeys.join(', ')}`);
   
   // Standard text messages
   if (msgContent.conversation) {
@@ -136,7 +141,96 @@ const extractMessageContent = (msgContent: any): { content: string; messageType:
     return { content: msgContent.extendedTextMessage.text, messageType: 'text', mediaUrl: null };
   }
   
-  // Interactive button/list responses (common in ad flows)
+  // Interactive messages (common in WhatsApp Business API / ads)
+  if (msgContent.interactiveMessage) {
+    const interactive = msgContent.interactiveMessage;
+    console.log('[PARSER] Found interactiveMessage:', JSON.stringify(interactive).substring(0, 200));
+    
+    // Body text is the main content
+    if (interactive.body?.text) {
+      return { content: interactive.body.text, messageType: 'text', mediaUrl: null };
+    }
+    
+    // Header can have text too
+    if (interactive.header?.title) {
+      return { content: interactive.header.title, messageType: 'text', mediaUrl: null };
+    }
+    
+    // Native flow response
+    if (interactive.nativeFlowResponseMessage?.paramsJson) {
+      try {
+        const params = JSON.parse(interactive.nativeFlowResponseMessage.paramsJson);
+        const responseText = params.flow_token || params.response || JSON.stringify(params);
+        return { content: `[Resposta de fluxo]: ${responseText}`, messageType: 'text', mediaUrl: null };
+      } catch {
+        return { content: '[Resposta de fluxo nativo]', messageType: 'text', mediaUrl: null };
+      }
+    }
+    
+    return { content: '[Mensagem interativa]', messageType: 'text', mediaUrl: null };
+  }
+  
+  // Interactive button/list responses (user clicked a button/list item)
+  if (msgContent.interactiveResponseMessage) {
+    const response = msgContent.interactiveResponseMessage;
+    console.log('[PARSER] Found interactiveResponseMessage:', JSON.stringify(response).substring(0, 200));
+    
+    // Button response
+    if (response.nativeFlowResponseMessage?.paramsJson) {
+      try {
+        const params = JSON.parse(response.nativeFlowResponseMessage.paramsJson);
+        return { content: params.id || params.flow_token || '[Resposta de botão]', messageType: 'text', mediaUrl: null };
+      } catch {
+        return { content: '[Resposta de botão]', messageType: 'text', mediaUrl: null };
+      }
+    }
+    
+    return { content: response.body?.text || '[Resposta interativa]', messageType: 'text', mediaUrl: null };
+  }
+  
+  // Template messages (business templates)
+  if (msgContent.templateMessage) {
+    const tpl = msgContent.templateMessage;
+    console.log('[PARSER] Found templateMessage:', JSON.stringify(tpl).substring(0, 200));
+    
+    // Hydratable 4-column template
+    if (tpl.hydratedFourRowTemplate) {
+      const h = tpl.hydratedFourRowTemplate;
+      const content = h.hydratedContentText || h.hydratedTitleText || '';
+      return { content: content || '[Template de negócio]', messageType: 'text', mediaUrl: null };
+    }
+    
+    // Standard template with body
+    if (tpl.hydratedTemplate?.hydratedContentText) {
+      return { content: tpl.hydratedTemplate.hydratedContentText, messageType: 'text', mediaUrl: null };
+    }
+    
+    return { content: '[Template de mensagem]', messageType: 'text', mediaUrl: null };
+  }
+  
+  // Native flow messages (WhatsApp Flows)
+  if (msgContent.nativeFlowMessage) {
+    const flow = msgContent.nativeFlowMessage;
+    console.log('[PARSER] Found nativeFlowMessage:', JSON.stringify(flow).substring(0, 200));
+    return { content: flow.messageText || '[Fluxo nativo do WhatsApp]', messageType: 'text', mediaUrl: null };
+  }
+  
+  // Product messages (catalog)
+  if (msgContent.productMessage) {
+    const prod = msgContent.productMessage;
+    console.log('[PARSER] Found productMessage');
+    const productName = prod.product?.productId || prod.product?.title || 'Produto';
+    return { content: `🛒 Produto: ${productName}`, messageType: 'text', mediaUrl: null };
+  }
+  
+  // Order messages
+  if (msgContent.orderMessage) {
+    const order = msgContent.orderMessage;
+    console.log('[PARSER] Found orderMessage');
+    return { content: `📦 Pedido: ${order.orderId || order.status || 'Novo pedido'}`, messageType: 'text', mediaUrl: null };
+  }
+  
+  // Button response messages (legacy)
   if (msgContent.buttonsResponseMessage) {
     const btn = msgContent.buttonsResponseMessage;
     return { 
@@ -162,6 +256,18 @@ const extractMessageContent = (msgContent: any): { content: string; messageType:
       messageType: 'text', 
       mediaUrl: null 
     };
+  }
+  
+  // Request phone number message (business API)
+  if (msgContent.requestPhoneNumberMessage) {
+    return { content: '[Solicitação de número de telefone]', messageType: 'text', mediaUrl: null };
+  }
+  
+  // High structured message (complex business message)
+  if (msgContent.highlyStructuredMessage) {
+    const hsm = msgContent.highlyStructuredMessage;
+    console.log('[PARSER] Found highlyStructuredMessage');
+    return { content: hsm.fallbackLg || '[Mensagem estruturada]', messageType: 'text', mediaUrl: null };
   }
   
   // Media messages
@@ -215,10 +321,31 @@ const extractMessageContent = (msgContent: any): { content: string; messageType:
     };
   }
   
+  // Live location
+  if (msgContent.liveLocationMessage) {
+    const loc = msgContent.liveLocationMessage;
+    return { 
+      content: `📍 Localização ao vivo: ${loc.degreesLatitude}, ${loc.degreesLongitude}`, 
+      messageType: 'text', 
+      mediaUrl: null 
+    };
+  }
+  
   // Contact messages  
   if (msgContent.contactMessage) {
     return { 
       content: `👤 Contato: ${msgContent.contactMessage.displayName || 'Desconhecido'}`, 
+      messageType: 'text', 
+      mediaUrl: null 
+    };
+  }
+  
+  // Contacts array message
+  if (msgContent.contactsArrayMessage) {
+    const contacts = msgContent.contactsArrayMessage.contacts || [];
+    const names = contacts.map((c: any) => c.displayName).filter(Boolean).join(', ');
+    return { 
+      content: `👥 Contatos: ${names || 'Múltiplos contatos'}`, 
       messageType: 'text', 
       mediaUrl: null 
     };
@@ -233,14 +360,42 @@ const extractMessageContent = (msgContent: any): { content: string; messageType:
     };
   }
   
-  // Log unknown message type for debugging
+  // Poll messages
+  if (msgContent.pollCreationMessage || msgContent.pollCreationMessageV3) {
+    const poll = msgContent.pollCreationMessage || msgContent.pollCreationMessageV3;
+    return { 
+      content: `📊 Enquete: ${poll.name || 'Nova enquete'}`, 
+      messageType: 'text', 
+      mediaUrl: null 
+    };
+  }
+  
+  // Poll vote
+  if (msgContent.pollUpdateMessage) {
+    return { content: '[Voto em enquete]', messageType: 'text', mediaUrl: null };
+  }
+  
+  // Pin message
+  if (msgContent.pinInChatMessage) {
+    return { content: '[Mensagem fixada]', messageType: 'text', mediaUrl: null };
+  }
+  
+  // Event message (community events)
+  if (msgContent.eventMessage) {
+    const event = msgContent.eventMessage;
+    return { content: `📅 Evento: ${event.name || 'Novo evento'}`, messageType: 'text', mediaUrl: null };
+  }
+  
+  // Log unknown message type for debugging with full details
   const knownKeys = Object.keys(msgContent).filter(k => !['messageContextInfo', 'messageSecret'].includes(k));
   if (knownKeys.length > 0) {
     console.log(`[PARSER] Unknown message type, keys: ${knownKeys.join(', ')}`);
+    console.log(`[PARSER] First unknown key content: ${JSON.stringify(msgContent[knownKeys[0]]).substring(0, 300)}`);
   }
   
-  // Return placeholder for unsupported formats (so they still appear in chat)
-  return { content: '[Mensagem não suportada]', messageType: 'text', mediaUrl: null };
+  // Return placeholder with detected type (so messages still appear in chat)
+  const detectedType = knownKeys.find(k => k.endsWith('Message')) || knownKeys[0] || 'desconhecido';
+  return { content: `[Mensagem recebida - tipo: ${detectedType}]`, messageType: 'text', mediaUrl: null };
 };
 
 const persistMediaToStorage = async (
