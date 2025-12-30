@@ -435,20 +435,26 @@ const downloadMediaViaEvolutionAPI = async (
   messageId: string
 ): Promise<{ base64: string; mimetype: string } | null> => {
   try {
-    const EVOLUTION_BASE_URL = Deno.env.get('EVOLUTION_BASE_URL')?.replace(/\/$/, '');
-    const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY');
+    let baseUrl = Deno.env.get('EVOLUTION_BASE_URL') || '';
+    const apiKey = Deno.env.get('EVOLUTION_API_KEY');
     
-    if (!EVOLUTION_BASE_URL || !EVOLUTION_API_KEY) {
+    // Ensure baseUrl has protocol
+    baseUrl = baseUrl.replace(/\/$/, '');
+    if (baseUrl && !baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+      baseUrl = `https://${baseUrl}`;
+    }
+    
+    if (!baseUrl || !apiKey) {
       console.log('[MEDIA-EVOLUTION] No Evolution API config available');
       return null;
     }
     
     console.log(`[MEDIA-EVOLUTION] Fetching media via Evolution API: instance=${instanceName}, messageId=${messageId}`);
     
-    const response = await fetch(`${EVOLUTION_BASE_URL}/chat/getBase64FromMediaMessage/${instanceName}`, {
+    const response = await fetch(`${baseUrl}/chat/getBase64FromMediaMessage/${instanceName}`, {
       method: 'POST',
       headers: {
-        'apikey': EVOLUTION_API_KEY,
+        'apikey': apiKey,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -1044,23 +1050,104 @@ serve(async (req) => {
       const userId = instanceData.user_id;
       const instanceId = instanceData.id;
 
-      // Persist WhatsApp media URLs (they expire quickly)
-      // Pass instanceName and remoteJid for Evolution API fallback
+      // === CRITICAL: Download media via Evolution API ===
+      // WhatsApp NEVER sends media URL in the payload - only metadata (mediaKey, fileSha256, etc.)
+      // We MUST actively download the media using Evolution API's getBase64FromMediaMessage
       const remoteJidForMedia = jidForPhone || (useLidAsFallback ? lidRemoteJid : `${phone}@s.whatsapp.net`);
+      const isMediaMessage = ['image', 'audio', 'video', 'document', 'sticker'].includes(messageType);
+      let mediaPending = false;
       
-      if (mediaUrl && ['image', 'audio', 'video', 'document', 'sticker'].includes(messageType)) {
-        const persistedUrl = await persistMediaToStorage(supabaseClient, {
-          url: mediaUrl,
-          userId,
-          instanceId,
-          messageType,
-          messageId,
-          fileName: messageType === 'document' ? content : null,
-          instanceName: instance,
-          remoteJid: remoteJidForMedia,
-        });
-        if (persistedUrl) {
-          mediaUrl = persistedUrl;
+      if (isMediaMessage) {
+        console.log(`[MEDIA] Detected ${messageType} message, attempting to download...`);
+        
+        // ALWAYS try Evolution API first (most reliable method for WhatsApp media)
+        if (instance && remoteJidForMedia && messageId) {
+          console.log(`[MEDIA] Calling Evolution API getBase64FromMediaMessage: instance=${instance}, remoteJid=${remoteJidForMedia}, messageId=${messageId}`);
+          
+          const evolutionResult = await downloadMediaViaEvolutionAPI(
+            instance,
+            remoteJidForMedia,
+            messageId
+          );
+          
+          if (evolutionResult) {
+            console.log(`[MEDIA] Evolution API SUCCESS: mimetype=${evolutionResult.mimetype}, size=${evolutionResult.base64.length} chars`);
+            
+            // Decode base64 and upload to storage
+            try {
+              const binaryString = atob(evolutionResult.base64);
+              const bytes = new Uint8Array(binaryString.length);
+              for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+              }
+              const arrayBuffer = bytes.buffer;
+              
+              // Determine extension from mimetype
+              const ext = guessExtension(evolutionResult.mimetype, (() => {
+                switch (messageType) {
+                  case 'image': return 'jpg';
+                  case 'audio': return 'ogg';
+                  case 'video': return 'mp4';
+                  case 'sticker': return 'webp';
+                  case 'document': return 'bin';
+                  default: return 'bin';
+                }
+              })());
+              
+              const objectPath = `inbox-media/${userId}/${instanceId}/${messageType}/${messageId}.${ext}`;
+              const blob = new Blob([arrayBuffer], { type: evolutionResult.mimetype || 'application/octet-stream' });
+              
+              console.log(`[MEDIA] Uploading to storage: ${objectPath}`);
+              
+              const { error: uploadError } = await supabaseClient
+                .storage
+                .from(INBOX_MEDIA_BUCKET)
+                .upload(objectPath, blob, {
+                  contentType: evolutionResult.mimetype || undefined,
+                  upsert: true,
+                  cacheControl: '31536000',
+                });
+              
+              if (!uploadError) {
+                const { data: urlData } = await supabaseClient.storage.from(INBOX_MEDIA_BUCKET).getPublicUrl(objectPath);
+                if (urlData?.publicUrl) {
+                  mediaUrl = urlData.publicUrl;
+                  console.log(`[MEDIA] SUCCESS: ${mediaUrl}`);
+                }
+              } else {
+                console.error(`[MEDIA] Upload error:`, uploadError);
+                mediaPending = true;
+              }
+            } catch (decodeErr) {
+              console.error(`[MEDIA] Base64 decode error:`, decodeErr);
+              mediaPending = true;
+            }
+          } else {
+            console.log(`[MEDIA] Evolution API FAILED - marking as pending for later retry`);
+            mediaPending = true;
+          }
+        } else {
+          console.log(`[MEDIA] Missing params for Evolution API: instance=${instance}, remoteJid=${remoteJidForMedia}, messageId=${messageId}`);
+          mediaPending = true;
+        }
+        
+        // Fallback: try direct download if we have a URL (rare but possible)
+        if (!mediaUrl && extracted.mediaUrl) {
+          console.log(`[MEDIA] Fallback: trying direct download from ${extracted.mediaUrl.substring(0, 50)}...`);
+          const persistedUrl = await persistMediaToStorage(supabaseClient, {
+            url: extracted.mediaUrl,
+            userId,
+            instanceId,
+            messageType,
+            messageId,
+            fileName: messageType === 'document' ? content : null,
+            instanceName: instance,
+            remoteJid: remoteJidForMedia,
+          });
+          if (persistedUrl) {
+            mediaUrl = persistedUrl;
+            mediaPending = false;
+          }
         }
       }
       
@@ -1298,6 +1385,7 @@ serve(async (req) => {
           message_type: messageType,
           content,
           media_url: mediaUrl,
+          media_pending: mediaPending, // Flag for later retry if media download failed
           remote_message_id: messageId,
           status: isFromMe ? 'sent' : 'delivered',
           is_from_flow: false,

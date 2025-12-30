@@ -42,10 +42,16 @@ const downloadMediaViaEvolutionAPI = async (
   messageId: string,
   convertToMp4: boolean = false
 ): Promise<{ base64: string; mimetype: string } | null> => {
-  const EVOLUTION_BASE_URL = Deno.env.get('EVOLUTION_BASE_URL')?.replace(/\/$/, '');
-  const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY');
+  let baseUrl = Deno.env.get('EVOLUTION_BASE_URL') || '';
+  const apiKey = Deno.env.get('EVOLUTION_API_KEY');
   
-  if (!EVOLUTION_BASE_URL || !EVOLUTION_API_KEY) {
+  // Ensure baseUrl has protocol
+  baseUrl = baseUrl.replace(/\/$/, '');
+  if (baseUrl && !baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+    baseUrl = `https://${baseUrl}`;
+  }
+  
+  if (!baseUrl || !apiKey) {
     console.log('[EVOLUTION] No Evolution API config available');
     return null;
   }
@@ -57,10 +63,10 @@ const downloadMediaViaEvolutionAPI = async (
     try {
       console.log(`[EVOLUTION] Attempt ${attempt + 1}/${maxRetries}: instance=${instanceName}, messageId=${messageId}`);
       
-      const response = await fetch(`${EVOLUTION_BASE_URL}/chat/getBase64FromMediaMessage/${instanceName}`, {
+      const response = await fetch(`${baseUrl}/chat/getBase64FromMediaMessage/${instanceName}`, {
         method: 'POST',
         headers: {
-          'apikey': EVOLUTION_API_KEY,
+          'apikey': apiKey,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
