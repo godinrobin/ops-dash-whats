@@ -1392,6 +1392,7 @@ export type Database = {
           id: string
           instance_id: string | null
           is_from_flow: boolean
+          media_pending: boolean | null
           media_url: string | null
           message_type: string
           remote_message_id: string | null
@@ -1407,6 +1408,7 @@ export type Database = {
           id?: string
           instance_id?: string | null
           is_from_flow?: boolean
+          media_pending?: boolean | null
           media_url?: string | null
           message_type?: string
           remote_message_id?: string | null
@@ -1422,6 +1424,7 @@ export type Database = {
           id?: string
           instance_id?: string | null
           is_from_flow?: boolean
+          media_pending?: boolean | null
           media_url?: string | null
           message_type?: string
           remote_message_id?: string | null

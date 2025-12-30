@@ -25,7 +25,13 @@ const guessExtension = (contentType: string | null, fallback: string) => {
   return fallback;
 };
 
-// Download media via Evolution API getBase64FromMediaMessage endpoint
+// Retry configuration
+const MAX_RETRIES = 3;
+const RETRY_DELAYS = [1000, 2000, 4000]; // exponential backoff in ms
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Download media via Evolution API getBase64FromMediaMessage endpoint with retry
 const downloadMediaViaEvolutionAPI = async (
   instanceName: string,
   remoteJid: string,
@@ -33,53 +39,67 @@ const downloadMediaViaEvolutionAPI = async (
   evolutionBaseUrl?: string,
   evolutionApiKey?: string
 ): Promise<{ base64: string; mimetype: string } | null> => {
-  try {
-    const baseUrl = evolutionBaseUrl || Deno.env.get('EVOLUTION_BASE_URL')?.replace(/\/$/, '');
-    const apiKey = evolutionApiKey || Deno.env.get('EVOLUTION_API_KEY');
-    
-    if (!baseUrl || !apiKey) {
-      console.log('[MEDIA-FALLBACK] No Evolution API config available');
-      return null;
-    }
-    
-    console.log(`[MEDIA-FALLBACK] Fetching media via Evolution API: instance=${instanceName}, messageId=${messageId}`);
-    
-    const response = await fetch(`${baseUrl}/chat/getBase64FromMediaMessage/${instanceName}`, {
-      method: 'POST',
-      headers: {
-        'apikey': apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        message: {
-          key: {
-            remoteJid: remoteJid,
-            id: messageId,
-          }
-        },
-        convertToMp4: false,
-      }),
-    });
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.log(`[MEDIA-FALLBACK] API error: status=${response.status}, body=${errorText.substring(0, 200)}`);
-      return null;
-    }
-    
-    const result = await response.json();
-    
-    if (result.base64 && result.mimetype) {
-      console.log(`[MEDIA-FALLBACK] Success! mimetype=${result.mimetype}, size=${result.base64.length} chars`);
-      return { base64: result.base64, mimetype: result.mimetype };
-    }
-    
-    console.log(`[MEDIA-FALLBACK] No base64 in response:`, JSON.stringify(result).substring(0, 200));
-    return null;
-  } catch (err) {
-    console.error('[MEDIA-FALLBACK] Error:', err);
+  const baseUrl = evolutionBaseUrl || Deno.env.get('EVOLUTION_BASE_URL')?.replace(/\/$/, '');
+  const apiKey = evolutionApiKey || Deno.env.get('EVOLUTION_API_KEY');
+  
+  if (!baseUrl || !apiKey) {
+    console.log('[MEDIA-FALLBACK] No Evolution API config available');
     return null;
   }
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      console.log(`[MEDIA-FALLBACK] Attempt ${attempt + 1}/${MAX_RETRIES}: instance=${instanceName}, messageId=${messageId}`);
+      
+      const response = await fetch(`${baseUrl}/chat/getBase64FromMediaMessage/${instanceName}`, {
+        method: 'POST',
+        headers: {
+          'apikey': apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: {
+            key: {
+              remoteJid: remoteJid,
+              id: messageId,
+            }
+          },
+          convertToMp4: false,
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.log(`[MEDIA-FALLBACK] API error: status=${response.status}, body=${errorText.substring(0, 200)}`);
+        
+        // Retry on server errors (5xx) or rate limits (429)
+        if ((response.status >= 500 || response.status === 429) && attempt < MAX_RETRIES - 1) {
+          console.log(`[MEDIA-FALLBACK] Retrying in ${RETRY_DELAYS[attempt]}ms...`);
+          await sleep(RETRY_DELAYS[attempt]);
+          continue;
+        }
+        return null;
+      }
+      
+      const result = await response.json();
+      
+      if (result.base64 && result.mimetype) {
+        console.log(`[MEDIA-FALLBACK] Success! mimetype=${result.mimetype}, size=${result.base64.length} chars`);
+        return { base64: result.base64, mimetype: result.mimetype };
+      }
+      
+      console.log(`[MEDIA-FALLBACK] No base64 in response:`, JSON.stringify(result).substring(0, 200));
+      return null;
+    } catch (err) {
+      console.error(`[MEDIA-FALLBACK] Attempt ${attempt + 1} error:`, err);
+      if (attempt < MAX_RETRIES - 1) {
+        console.log(`[MEDIA-FALLBACK] Retrying in ${RETRY_DELAYS[attempt]}ms...`);
+        await sleep(RETRY_DELAYS[attempt]);
+      }
+    }
+  }
+  
+  return null;
 };
 
 serve(async (req) => {
