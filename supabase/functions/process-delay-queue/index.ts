@@ -84,19 +84,31 @@ serve(async (req) => {
           continue;
         }
         
-        // Skip if session is already completed
-        if (session.status === 'completed') {
-          console.log(`[process-delay-queue] Session ${job.session_id} already completed, marking job as done`);
-          await supabase
-            .from("inbox_flow_delay_jobs")
-            .update({ status: "done", updated_at: new Date().toISOString() })
-            .eq("session_id", job.session_id);
-          continue;
-        }
-        
         // Check session variables for pending delay info
         const sessionVars = (session.variables || {}) as Record<string, unknown>;
         const pendingDelay = sessionVars._pendingDelay as { nodeId: string; resumeAt: number } | undefined;
+        
+        // If session is completed BUT has pending delay, try to reactivate it
+        if (session.status === 'completed') {
+          if (pendingDelay) {
+            console.log(`[process-delay-queue] Session ${job.session_id} was prematurely completed but has pending delay, reactivating`);
+            // Reactivate the session so the delay can be processed
+            await supabase
+              .from("inbox_flow_sessions")
+              .update({ 
+                status: "active", 
+                updated_at: new Date().toISOString() 
+              })
+              .eq("id", job.session_id);
+          } else {
+            console.log(`[process-delay-queue] Session ${job.session_id} already completed (no pending delay), marking job as done`);
+            await supabase
+              .from("inbox_flow_delay_jobs")
+              .update({ status: "done", updated_at: new Date().toISOString() })
+              .eq("session_id", job.session_id);
+            continue;
+          }
+        }
         
         // Determine if this is a timeout or a delay job
         const isTimeoutJob = session.timeout_at !== null;

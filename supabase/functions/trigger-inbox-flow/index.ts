@@ -128,9 +128,10 @@ serve(async (req) => {
     };
 
     // If another flow is active for this contact, complete it so we can start/restart the chosen flow
+    // BUT: check if it has a pending delay - if so, cancel the delay job first
     const { data: otherActiveSession } = await serviceClient
       .from("inbox_flow_sessions")
-      .select("id, flow_id")
+      .select("id, flow_id, variables")
       .eq("contact_id", contactId)
       .eq("user_id", user.id)
       .eq("status", "active")
@@ -139,6 +140,19 @@ serve(async (req) => {
       .maybeSingle();
 
     if (otherActiveSession && otherActiveSession.flow_id !== flowId) {
+      const sessionVars = (otherActiveSession.variables || {}) as Record<string, unknown>;
+      const hasPendingDelay = !!(sessionVars._pendingDelay);
+      
+      if (hasPendingDelay) {
+        console.log(`[${runId}] Previous session ${otherActiveSession.id} has pending delay, cancelling delay job`);
+        // Cancel any pending delay jobs for this session
+        await serviceClient
+          .from("inbox_flow_delay_jobs")
+          .update({ status: "cancelled", updated_at: nowIso })
+          .eq("session_id", otherActiveSession.id)
+          .eq("status", "scheduled");
+      }
+      
       const { error: completeError } = await serviceClient
         .from("inbox_flow_sessions")
         .update({ status: "completed", last_interaction: nowIso })
