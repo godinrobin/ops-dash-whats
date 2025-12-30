@@ -82,6 +82,12 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
     }
   };
 
+  // Check if media URL is from WhatsApp (temporary) vs our storage (permanent)
+  const isTemporaryUrl = (url: string | null) => {
+    if (!url) return false;
+    return url.includes('mmg.whatsapp.net') || url.includes('cdn.whatsapp.net');
+  };
+
   const renderExpiredMedia = (type: 'image' | 'audio' | 'video') => {
     const icons = {
       image: <ImageOff className="h-6 w-6" />,
@@ -89,19 +95,29 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
       video: <AlertCircle className="h-6 w-6" />,
     };
     const labels = {
-      image: 'Imagem expirada',
-      audio: 'Áudio expirado',
-      video: 'Vídeo expirado',
+      image: 'Imagem indisponível',
+      audio: 'Áudio indisponível',
+      video: 'Vídeo indisponível',
+    };
+    const descriptions = {
+      image: 'A mídia expirou ou não pôde ser carregada',
+      audio: 'A mídia expirou ou não pôde ser carregada',
+      video: 'A mídia expirou ou não pôde ser carregada',
     };
 
+    const isTemporary = isTemporaryUrl(message.media_url);
+
     return (
-      <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg border border-border/50 min-w-[180px]">
+      <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg border border-border/50 min-w-[200px]">
         <div className="text-muted-foreground">
           {icons[type]}
         </div>
-        <div className="flex flex-col">
+        <div className="flex flex-col flex-1">
           <span className="text-sm font-medium text-muted-foreground">{labels[type]}</span>
-          <span className="text-xs text-muted-foreground/70">Mídia não disponível</span>
+          <span className="text-xs text-muted-foreground/70">{descriptions[type]}</span>
+          {isTemporary && (
+            <span className="text-[10px] text-amber-500 mt-1">URL temporária do WhatsApp</span>
+          )}
         </div>
       </div>
     );
