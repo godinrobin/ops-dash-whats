@@ -170,3 +170,6 @@ verify_jwt = true
 
 [functions.force-reconfigure-webhooks]
 verify_jwt = true
+
+[functions.get-media-fallback]
+verify_jwt = true

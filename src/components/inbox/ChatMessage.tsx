@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import { InboxMessage } from '@/types/inbox';
 import { format } from 'date-fns';
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ChatMessageProps {
   message: InboxMessage;
@@ -20,8 +21,60 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
   const [audioLoading, setAudioLoading] = useState(true);
   const [audioRetryCount, setAudioRetryCount] = useState(0);
   const [videoError, setVideoError] = useState(false);
+  
+  // Media fallback recovery states
+  const [isRecoveringMedia, setIsRecoveringMedia] = useState(false);
+  const [recoveredMediaUrl, setRecoveredMediaUrl] = useState<string | null>(null);
+  const [recoveryFailed, setRecoveryFailed] = useState(false);
 
   const MAX_AUDIO_RETRIES = 3;
+  
+  // Get the effective media URL (recovered or original)
+  const effectiveMediaUrl = recoveredMediaUrl || message.media_url;
+  
+  // Check if URL is temporary (WhatsApp CDN) - these expire quickly
+  const isTemporaryMediaUrl = useCallback((url: string | null) => {
+    if (!url) return false;
+    return url.includes('mmg.whatsapp.net') || url.includes('cdn.whatsapp.net');
+  }, []);
+  
+  // Function to recover media via fallback endpoint
+  const recoverMedia = useCallback(async () => {
+    if (isRecoveringMedia || recoveryFailed || recoveredMediaUrl) return;
+    
+    setIsRecoveringMedia(true);
+    console.log(`[ChatMessage] Attempting to recover media for message: ${message.id}`);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('get-media-fallback', {
+        body: { messageId: message.id }
+      });
+      
+      if (error) {
+        console.error('[ChatMessage] Media recovery error:', error);
+        setRecoveryFailed(true);
+        return;
+      }
+      
+      if (data?.success && data?.media_url) {
+        console.log(`[ChatMessage] Media recovered: ${data.media_url}`);
+        setRecoveredMediaUrl(data.media_url);
+        // Reset error states since we have a new URL
+        setImageError(false);
+        setAudioError(false);
+        setVideoError(false);
+        setAudioRetryCount(0);
+      } else {
+        console.log('[ChatMessage] Media recovery failed:', data?.error);
+        setRecoveryFailed(true);
+      }
+    } catch (err) {
+      console.error('[ChatMessage] Media recovery exception:', err);
+      setRecoveryFailed(true);
+    } finally {
+      setIsRecoveringMedia(false);
+    }
+  }, [message.id, isRecoveringMedia, recoveryFailed, recoveredMediaUrl]);
 
   const retryAudio = useCallback(() => {
     if (audioRef.current && audioRetryCount < MAX_AUDIO_RETRIES) {
@@ -167,24 +220,46 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
       audio: <Volume2 className="h-6 w-6" />,
       video: <AlertCircle className="h-6 w-6" />,
     };
+    
+    // Show recovering state
+    if (isRecoveringMedia) {
+      return (
+        <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg border border-border/50 min-w-[200px]">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          <div className="flex flex-col flex-1">
+            <span className="text-sm font-medium text-muted-foreground">Recuperando mídia...</span>
+            <span className="text-xs text-muted-foreground/70">Aguarde um momento</span>
+          </div>
+        </div>
+      );
+    }
+    
     const labels = {
-      image: 'Imagem indisponível',
-      audio: 'Áudio indisponível',
-      video: 'Vídeo indisponível',
+      image: recoveryFailed ? 'Imagem não recuperável' : 'Imagem indisponível',
+      audio: recoveryFailed ? 'Áudio não recuperável' : 'Áudio indisponível',
+      video: recoveryFailed ? 'Vídeo não recuperável' : 'Vídeo indisponível',
     };
     const descriptions = {
-      image: 'A mídia expirou ou não pôde ser carregada',
-      audio: 'Toque para tentar novamente',
-      video: 'A mídia expirou ou não pôde ser carregada',
+      image: recoveryFailed ? 'A mídia não pôde ser recuperada' : 'Toque para tentar recuperar',
+      audio: recoveryFailed ? 'A mídia não pôde ser recuperada' : 'Toque para tentar recuperar',
+      video: recoveryFailed ? 'A mídia não pôde ser recuperada' : 'Toque para tentar recuperar',
+    };
+
+    const handleClick = () => {
+      if (!recoveryFailed) {
+        recoverMedia();
+      } else if (onRetry) {
+        onRetry();
+      }
     };
 
     return (
       <div 
         className={cn(
           "flex items-center gap-3 p-4 bg-muted/30 rounded-lg border border-border/50 min-w-[200px]",
-          onRetry && "cursor-pointer hover:bg-muted/50 transition-colors"
+          !recoveryFailed && "cursor-pointer hover:bg-muted/50 transition-colors"
         )}
-        onClick={onRetry}
+        onClick={handleClick}
       >
         <div className="text-muted-foreground">
           {icons[type]}
@@ -193,7 +268,7 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
           <span className="text-sm font-medium text-muted-foreground">{labels[type]}</span>
           <span className="text-xs text-muted-foreground/70">{descriptions[type]}</span>
         </div>
-        {onRetry && (
+        {!recoveryFailed && (
           <RefreshCw className="h-4 w-4 text-muted-foreground" />
         )}
       </div>
@@ -221,12 +296,19 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
               </div>
             )}
             <img 
-              src={message.media_url || ''} 
+              src={effectiveMediaUrl || ''} 
               alt="Image" 
               className={cn("rounded-lg max-w-full cursor-pointer hover:opacity-90 transition-opacity", (!imageLoaded || imageError) && "hidden")}
               onLoad={() => { setImageLoaded(true); setImageError(false); }}
-              onError={() => { setImageError(true); setImageLoaded(false); }}
-              onClick={() => !imageError && window.open(message.media_url || '', '_blank')}
+              onError={() => { 
+                setImageError(true); 
+                setImageLoaded(false);
+                // Auto-trigger recovery for temporary URLs
+                if (isTemporaryMediaUrl(effectiveMediaUrl) && !recoveredMediaUrl && !recoveryFailed) {
+                  recoverMedia();
+                }
+              }}
+              onClick={() => !imageError && window.open(effectiveMediaUrl || '', '_blank')}
             />
             {message.content && (
               <p className="mt-2 text-sm">{message.content}</p>
@@ -276,11 +358,17 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
             </div>
             <audio 
               ref={audioRef} 
-              src={message.media_url || ''} 
+              src={effectiveMediaUrl || ''} 
               preload="auto"
               onEnded={() => {
                 setIsPlaying(false);
                 setAudioProgress(0);
+              }}
+              onError={() => {
+                // Auto-trigger recovery for temporary URLs
+                if (isTemporaryMediaUrl(effectiveMediaUrl) && !recoveredMediaUrl && !recoveryFailed && audioRetryCount >= MAX_AUDIO_RETRIES) {
+                  recoverMedia();
+                }
               }}
             />
           </div>
@@ -300,11 +388,17 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
         return (
           <div className="max-w-xs">
             <video 
-              src={message.media_url || ''} 
+              src={effectiveMediaUrl || ''} 
               controls 
               className="rounded-lg max-w-full"
               preload="metadata"
-              onError={() => setVideoError(true)}
+              onError={() => {
+                setVideoError(true);
+                // Auto-trigger recovery for temporary URLs
+                if (isTemporaryMediaUrl(effectiveMediaUrl) && !recoveredMediaUrl && !recoveryFailed) {
+                  recoverMedia();
+                }
+              }}
             />
             {message.content && (
               <p className="mt-2 text-sm">{message.content}</p>
@@ -315,9 +409,9 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
       case 'document':
         // Extrair nome do arquivo da URL se content estiver vazio
         let fileName = message.content;
-        if (!fileName && message.media_url) {
+        if (!fileName && effectiveMediaUrl) {
           try {
-            const urlParts = message.media_url.split('/');
+            const urlParts = effectiveMediaUrl.split('/');
             const lastPart = urlParts[urlParts.length - 1];
             fileName = decodeURIComponent(lastPart.split('?')[0]);
           } catch {
@@ -331,7 +425,7 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
         
         return (
           <a 
-            href={message.media_url || ''} 
+            href={effectiveMediaUrl || ''} 
             target="_blank" 
             rel="noopener noreferrer"
             className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors min-w-[200px]"
@@ -353,11 +447,15 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
       case 'sticker':
         return (
           <img 
-            src={message.media_url || ''} 
+            src={effectiveMediaUrl || ''} 
             alt="Sticker" 
             className="h-24 w-24"
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = 'none';
+              // Auto-trigger recovery for temporary URLs
+              if (isTemporaryMediaUrl(effectiveMediaUrl) && !recoveredMediaUrl && !recoveryFailed) {
+                recoverMedia();
+              }
             }}
           />
         );
