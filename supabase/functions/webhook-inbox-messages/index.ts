@@ -1185,15 +1185,109 @@ serve(async (req) => {
       // Validate pushName - only use it if it's not suspicious
       const validPushName = pushName && !isSuspiciousPushName(pushName) ? pushName : null;
 
-      // Find or create contact - search by user_id + instance_id + phone
+      // === BRAZILIAN PHONE NUMBER NORMALIZATION ===
+      // Brazilian mobile numbers can have 11 digits (with the extra 9) or 10 digits (without)
+      // DDDs are 2 digits (11-99), and mobile numbers after DDD can be 8 or 9 digits
+      // We need to search for both variations to handle inconsistencies
+      const validBrazilianDDDs = [
+        '11', '12', '13', '14', '15', '16', '17', '18', '19', // São Paulo
+        '21', '22', '24', // Rio de Janeiro
+        '27', '28', // Espírito Santo
+        '31', '32', '33', '34', '35', '37', '38', // Minas Gerais
+        '41', '42', '43', '44', '45', '46', // Paraná
+        '47', '48', '49', // Santa Catarina
+        '51', '53', '54', '55', // Rio Grande do Sul
+        '61', // Distrito Federal
+        '62', '64', // Goiás
+        '63', // Tocantins
+        '65', '66', // Mato Grosso
+        '67', // Mato Grosso do Sul
+        '68', // Acre
+        '69', // Rondônia
+        '71', '73', '74', '75', '77', // Bahia
+        '79', // Sergipe
+        '81', '87', // Pernambuco
+        '82', // Alagoas
+        '83', // Paraíba
+        '84', // Rio Grande do Norte
+        '85', '88', // Ceará
+        '86', '89', // Piauí
+        '91', '93', '94', // Pará
+        '92', '97', // Amazonas
+        '95', // Roraima
+        '96', // Amapá
+        '98', '99', // Maranhão
+      ];
+      
+      // Generate phone variations for Brazilian numbers
+      const getPhoneVariations = (phoneNum: string): string[] => {
+        const variations: string[] = [phoneNum];
+        
+        // Only process Brazilian numbers (starting with 55)
+        if (!phoneNum.startsWith('55')) {
+          return variations;
+        }
+        
+        const withoutCountry = phoneNum.slice(2); // Remove '55'
+        const ddd = withoutCountry.slice(0, 2);
+        const restOfNumber = withoutCountry.slice(2);
+        
+        // Check if it's a valid Brazilian DDD
+        if (!validBrazilianDDDs.includes(ddd)) {
+          return variations;
+        }
+        
+        // If number has 9 digits after DDD (total 13 with 55), try without the 9
+        // Format: 55 + DDD(2) + 9 + number(8) = 13 digits
+        if (phoneNum.length === 13 && restOfNumber.startsWith('9')) {
+          const without9 = '55' + ddd + restOfNumber.slice(1);
+          variations.push(without9);
+          console.log(`[PHONE-NORM] Brazilian number with 9: ${phoneNum} -> also try: ${without9}`);
+        }
+        
+        // If number has 8 digits after DDD (total 12 with 55), try with the 9
+        // Format: 55 + DDD(2) + number(8) = 12 digits
+        if (phoneNum.length === 12 && !restOfNumber.startsWith('9')) {
+          const with9 = '55' + ddd + '9' + restOfNumber;
+          variations.push(with9);
+          console.log(`[PHONE-NORM] Brazilian number without 9: ${phoneNum} -> also try: ${with9}`);
+        }
+        
+        return variations;
+      };
+      
+      const phoneVariations = getPhoneVariations(phone);
+      console.log(`[PHONE-NORM] Searching for contact with variations: ${phoneVariations.join(', ')}`);
+
+      // Find or create contact - search by user_id + instance_id + phone variations
       // This allows SEPARATE chats per instance for the same phone number
-      let { data: contact, error: contactError } = await supabaseClient
+      let contact: any = null;
+      let contactError: any = null;
+      
+      // Search with all phone variations
+      const { data: contactResults, error: searchError } = await supabaseClient
         .from('inbox_contacts')
         .select('*')
         .eq('user_id', userId)
         .eq('instance_id', instanceId)
-        .eq('phone', phone)
-        .maybeSingle();
+        .in('phone', phoneVariations);
+      
+      contactError = searchError;
+      
+      if (contactResults && contactResults.length > 0) {
+        // If found, use the first match
+        contact = contactResults[0];
+        
+        // If the stored phone is different from the incoming phone, update it
+        if (contact.phone !== phone) {
+          console.log(`[PHONE-NORM] Updating contact ${contact.id} phone from ${contact.phone} to ${phone}`);
+          await supabaseClient
+            .from('inbox_contacts')
+            .update({ phone })
+            .eq('id', contact.id);
+          contact.phone = phone;
+        }
+      }
 
       // === HEALING: Check for orphan contact with null instance_id ===
       if (!contact) {
