@@ -8,10 +8,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Download, ArrowLeft, Image as ImageIcon, Check, Sparkles, Send, Info } from "lucide-react";
+import { Loader2, Download, ArrowLeft, Image as ImageIcon, Check, Sparkles, Send, Info, Clock } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useNavigate } from "react-router-dom";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
+import { useGenerationCooldown } from "@/hooks/useGenerationCooldown";
 import {
   Carousel,
   CarouselContent,
@@ -103,6 +104,7 @@ const modelOptions = [
 const CreativeGenerator = () => {
   useActivityTracker("page_visit", "Gerador de Criativo");
   const navigate = useNavigate();
+  const { canGenerate, formattedTime, startCooldown, isAdmin } = useGenerationCooldown("creative_last_generation");
   const [selectedModel, setSelectedModel] = useState("calm-beige");
   const [productName, setProductName] = useState("");
   const [includePrice, setIncludePrice] = useState(false);
@@ -115,6 +117,11 @@ const CreativeGenerator = () => {
   const [isEditingWithAI, setIsEditingWithAI] = useState(false);
 
   const handleGenerate = async () => {
+    if (!canGenerate) {
+      toast.error(`Aguarde ${formattedTime} para gerar uma nova imagem`);
+      return;
+    }
+
     if (!productName.trim()) {
       toast.error("Por favor, informe o nome do produto");
       return;
@@ -143,6 +150,7 @@ const CreativeGenerator = () => {
 
       if (data.success && data.image) {
         setGeneratedImage(data.image);
+        startCooldown();
         toast.success("Criativo gerado com sucesso!");
       } else {
         throw new Error(data.error || "Erro ao gerar imagem");
@@ -330,7 +338,7 @@ const CreativeGenerator = () => {
 
                 <Button
                   onClick={handleGenerate}
-                  disabled={isGenerating || !productName.trim()}
+                  disabled={isGenerating || !productName.trim() || !canGenerate}
                   className="w-full bg-green-600 hover:bg-green-700 text-white"
                   size="lg"
                 >
@@ -338,6 +346,11 @@ const CreativeGenerator = () => {
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       Gerando criativo...
+                    </>
+                  ) : !canGenerate ? (
+                    <>
+                      <Clock className="h-4 w-4 mr-2" />
+                      Aguarde {formattedTime}
                     </>
                   ) : (
                     <>
