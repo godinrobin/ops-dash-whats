@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,13 +8,15 @@ import { useToast } from "@/hooks/useSplashedToast";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Download, Play, Pause, Volume2, Clock } from "lucide-react";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
-import { useGenerationCooldown } from "@/hooks/useGenerationCooldown";
+import { useMultiGenerationCooldown } from "@/hooks/useMultiGenerationCooldown";
 
 interface Voice {
   id: string;
   name: string;
   category: 'mulher' | 'homem' | 'crianca' | 'bonus';
 }
+
+const PREVIEW_TEXT = "Esta é a voz selecionada, gostou?";
 
 const voices: Voice[] = [
   // Mulher
@@ -46,7 +48,7 @@ const voices: Voice[] = [
 const AudioGenerator = () => {
   useActivityTracker("page_visit", "Gerador de Áudio");
   const { toast } = useToast();
-  const { canGenerate, formattedTime, startCooldown, isAdmin } = useGenerationCooldown("audio_last_generation");
+  const { canGenerate, formattedTime, startCooldown, isAdmin, generationsLeft } = useMultiGenerationCooldown("audio_generations", 3);
   const [text, setText] = useState("");
   const [selectedVoice, setSelectedVoice] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -54,11 +56,102 @@ const AudioGenerator = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
 
+  // Voice preview states
+  const [voicePreviews, setVoicePreviews] = useState<Record<string, string>>({});
+  const [loadingVoicePreview, setLoadingVoicePreview] = useState<string | null>(null);
+  const [playingVoicePreview, setPlayingVoicePreview] = useState<string | null>(null);
+  const voicePreviewAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Load cached previews from Supabase
+  useEffect(() => {
+    const loadCachedPreviews = async () => {
+      const { data } = await supabase
+        .from("voice_previews")
+        .select("voice_id, audio_base64");
+      
+      if (data) {
+        const previews: Record<string, string> = {};
+        data.forEach((item: any) => {
+          previews[item.voice_id] = item.audio_base64;
+        });
+        setVoicePreviews(previews);
+      }
+    };
+    loadCachedPreviews();
+  }, []);
+
+  const playVoicePreview = async (voiceId: string) => {
+    // Stop current preview if playing
+    if (voicePreviewAudioRef.current) {
+      voicePreviewAudioRef.current.pause();
+      voicePreviewAudioRef.current = null;
+    }
+
+    // If same voice is playing, just stop
+    if (playingVoicePreview === voiceId) {
+      setPlayingVoicePreview(null);
+      return;
+    }
+
+    // Check cache first
+    if (voicePreviews[voiceId]) {
+      const audioBlob = base64ToBlob(voicePreviews[voiceId], "audio/mpeg");
+      const url = URL.createObjectURL(audioBlob);
+      const audio = new Audio(url);
+      audio.onended = () => setPlayingVoicePreview(null);
+      voicePreviewAudioRef.current = audio;
+      audio.play();
+      setPlayingVoicePreview(voiceId);
+      return;
+    }
+
+    // Generate preview
+    setLoadingVoicePreview(voiceId);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-audio", {
+        body: { text: PREVIEW_TEXT, voiceId },
+      });
+
+      if (error) throw error;
+
+      if (data.audioContent) {
+        // Cache the preview
+        setVoicePreviews((prev) => ({ ...prev, [voiceId]: data.audioContent }));
+
+        // Save to database for other users
+        const voiceName = voices.find(v => v.id === voiceId)?.name || voiceId;
+        await supabase.from("voice_previews").upsert({
+          voice_id: voiceId,
+          voice_name: voiceName,
+          audio_base64: data.audioContent,
+        }, { onConflict: 'voice_id' });
+
+        // Play the audio
+        const audioBlob = base64ToBlob(data.audioContent, "audio/mpeg");
+        const url = URL.createObjectURL(audioBlob);
+        const audio = new Audio(url);
+        audio.onended = () => setPlayingVoicePreview(null);
+        voicePreviewAudioRef.current = audio;
+        audio.play();
+        setPlayingVoicePreview(voiceId);
+      }
+    } catch (error: any) {
+      console.error("Error generating voice preview:", error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível gerar o preview da voz.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingVoicePreview(null);
+    }
+  };
+
   const handleGenerate = async () => {
     if (!canGenerate) {
       toast({
         title: "Aguarde",
-        description: `Você poderá gerar um novo áudio em ${formattedTime}`,
+        description: `Você atingiu o limite de 3 gerações. Aguarde ${formattedTime} para gerar novamente.`,
         variant: "destructive",
       });
       return;
@@ -177,45 +270,71 @@ const AudioGenerator = () => {
             <CardContent className="space-y-6">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Selecione a Voz</label>
-                <Select value={selectedVoice} onValueChange={setSelectedVoice}>
-                  <SelectTrigger className="border-accent/50">
-                    <SelectValue placeholder="Escolha uma voz..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectLabel>👩 Mulher</SelectLabel>
-                      {voices.filter(v => v.category === 'mulher').map((voice) => (
-                        <SelectItem key={voice.id} value={voice.id}>
-                          {voice.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                    <SelectGroup>
-                      <SelectLabel>👨 Homem</SelectLabel>
-                      {voices.filter(v => v.category === 'homem').map((voice) => (
-                        <SelectItem key={voice.id} value={voice.id}>
-                          {voice.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                    <SelectGroup>
-                      <SelectLabel>👶 Criança</SelectLabel>
-                      {voices.filter(v => v.category === 'crianca').map((voice) => (
-                        <SelectItem key={voice.id} value={voice.id}>
-                          {voice.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                    <SelectGroup>
-                      <SelectLabel>🎁 Bônus</SelectLabel>
-                      {voices.filter(v => v.category === 'bonus').map((voice) => (
-                        <SelectItem key={voice.id} value={voice.id}>
-                          {voice.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select value={selectedVoice} onValueChange={setSelectedVoice}>
+                    <SelectTrigger className="border-accent/50 flex-1">
+                      <SelectValue placeholder="Escolha uma voz..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectLabel>👩 Mulher</SelectLabel>
+                        {voices.filter(v => v.category === 'mulher').map((voice) => (
+                          <SelectItem key={voice.id} value={voice.id}>
+                            {voice.name}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                      <SelectGroup>
+                        <SelectLabel>👨 Homem</SelectLabel>
+                        {voices.filter(v => v.category === 'homem').map((voice) => (
+                          <SelectItem key={voice.id} value={voice.id}>
+                            {voice.name}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                      <SelectGroup>
+                        <SelectLabel>👶 Criança</SelectLabel>
+                        {voices.filter(v => v.category === 'crianca').map((voice) => (
+                          <SelectItem key={voice.id} value={voice.id}>
+                            {voice.name}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                      <SelectGroup>
+                        <SelectLabel>🎁 Bônus</SelectLabel>
+                        {voices.filter(v => v.category === 'bonus').map((voice) => (
+                          <SelectItem key={voice.id} value={voice.id}>
+                            {voice.name}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  {selectedVoice && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => playVoicePreview(selectedVoice)}
+                      disabled={loadingVoicePreview === selectedVoice}
+                      className="border-accent/50 hover:bg-accent/10"
+                      title="Testar voz"
+                    >
+                      {loadingVoicePreview === selectedVoice ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : playingVoicePreview === selectedVoice ? (
+                        <Pause className="w-4 h-4" />
+                      ) : (
+                        <Play className="w-4 h-4" />
+                      )}
+                    </Button>
+                  )}
+                </div>
+                {selectedVoice && (
+                  <p className="text-xs text-muted-foreground">
+                    Clique no botão ao lado para testar a voz selecionada
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -250,7 +369,7 @@ const AudioGenerator = () => {
                 ) : (
                   <>
                     <Volume2 className="w-4 h-4 mr-2" />
-                    Gerar Áudio
+                    Gerar Áudio {!isAdmin && `(${generationsLeft}/3)`}
                   </>
                 )}
               </Button>
