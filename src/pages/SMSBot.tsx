@@ -6,13 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { AnimatedTabs, AnimatedTabsList, AnimatedTabsTrigger, AnimatedTabsContent } from "@/components/ui/animated-tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Copy, RefreshCw, X, CheckCircle2, Clock, XCircle, Wallet, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, Copy, RefreshCw, X, CheckCircle2, Clock, XCircle, Wallet, ChevronDown, ChevronUp, AlertTriangle, Info } from "lucide-react";
 import { useToast } from "@/hooks/useSplashedToast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { RechargeModal } from "@/components/RechargeModal";
 import { AnimatedSearchBar } from "@/components/ui/animated-search-bar";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface Country {
   code: string;
@@ -43,6 +44,33 @@ interface Order {
   expires_at: string;
 }
 
+// Hook para calcular tempo restante
+const useCountdown = (expiresAt: string | null) => {
+  const [timeLeft, setTimeLeft] = useState<number>(0);
+  
+  useEffect(() => {
+    if (!expiresAt) return;
+    
+    const calculateTimeLeft = () => {
+      const now = new Date().getTime();
+      const expiry = new Date(expiresAt).getTime();
+      const diff = Math.max(0, expiry - now);
+      setTimeLeft(diff);
+    };
+    
+    calculateTimeLeft();
+    const interval = setInterval(calculateTimeLeft, 1000);
+    
+    return () => clearInterval(interval);
+  }, [expiresAt]);
+  
+  const minutes = Math.floor(timeLeft / 60000);
+  const seconds = Math.floor((timeLeft % 60000) / 1000);
+  const isExpired = timeLeft === 0;
+  
+  return { minutes, seconds, isExpired, timeLeft };
+};
+
 const SMSBot = () => {
   useActivityTracker("sms_bot", "SMS Bot");
   
@@ -64,6 +92,149 @@ const SMSBot = () => {
   const [showRechargeModal, setShowRechargeModal] = useState(false);
   const [serviceQuantities, setServiceQuantities] = useState<Record<string, number>>({});
   const [countriesExpanded, setCountriesExpanded] = useState(false);
+
+// Componente do card de pedido com timer
+interface OrderCardProps {
+  order: Order;
+  pollingOrders: Set<string>;
+  onCheckStatus: (order: Order) => void;
+  onCancelOrder: (order: Order) => void;
+  onCopy: (text: string) => void;
+}
+
+const OrderCard = ({ order, pollingOrders, onCheckStatus, onCancelOrder, onCopy }: OrderCardProps) => {
+  const { minutes, seconds, isExpired } = useCountdown(
+    order.status === 'waiting_sms' ? order.expires_at : null
+  );
+  
+  // Se expirou e ainda está como waiting_sms, mostrar como expirado
+  const displayStatus = order.status === 'waiting_sms' && isExpired ? 'expired' : order.status;
+  
+  const getStatusBadge = () => {
+    switch (displayStatus) {
+      case 'waiting_sms':
+        return (
+          <Badge variant="secondary" className="bg-accent/20">
+            <Clock className="h-3 w-3 mr-1" />
+            {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+          </Badge>
+        );
+      case 'received':
+        return (
+          <Badge variant="secondary" className="bg-green-500/20 text-green-500">
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Recebido
+          </Badge>
+        );
+      case 'cancelled':
+        return (
+          <Badge variant="secondary" className="bg-red-500/20 text-red-500">
+            <XCircle className="h-3 w-3 mr-1" />
+            Cancelado
+          </Badge>
+        );
+      case 'expired':
+        return (
+          <Badge variant="secondary" className="bg-orange-500/20 text-orange-500">
+            <AlertTriangle className="h-3 w-3 mr-1" />
+            Expirado
+          </Badge>
+        );
+      default:
+        return <Badge variant="secondary">{order.status}</Badge>;
+    }
+  };
+  
+  const getBorderClass = () => {
+    switch (displayStatus) {
+      case 'received':
+        return 'border-green-500/50 bg-green-500/5';
+      case 'cancelled':
+        return 'border-red-500/50 bg-red-500/5';
+      case 'expired':
+        return 'border-orange-500/50 bg-orange-500/5';
+      default:
+        return 'border-accent/50 bg-accent/5';
+    }
+  };
+  
+  return (
+    <div className={`p-4 rounded-lg border-2 ${getBorderClass()}`}>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-medium">{order.service_name}</span>
+            {getStatusBadge()}
+          </div>
+          
+          <div 
+            className="flex items-center gap-2 text-lg font-mono cursor-pointer hover:text-accent"
+            onClick={() => onCopy(order.phone_number)}
+            title="Clique para copiar"
+          >
+            +{order.phone_number}
+            <Copy className="h-4 w-4" />
+          </div>
+
+          {order.status === 'received' && order.phone_number && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-1 text-xs"
+              onClick={() => onCopy(order.phone_number)}
+            >
+              <Copy className="h-3 w-3 mr-1" />
+              Copiar Número
+            </Button>
+          )}
+
+          {order.sms_code && (
+            <div 
+              className="mt-2 p-2 bg-green-500/10 rounded border border-green-500/30 cursor-pointer hover:bg-green-500/20"
+              onClick={() => onCopy(order.sms_code!)}
+            >
+              <p className="text-sm text-muted-foreground">Código SMS:</p>
+              <p className="text-xl font-bold text-green-500 flex items-center gap-2">
+                {order.sms_code}
+                <Copy className="h-4 w-4" />
+              </p>
+            </div>
+          )}
+
+          <p className="text-xs text-muted-foreground mt-2">
+            {new Date(order.created_at).toLocaleString('pt-BR')}
+            {" • "}
+            R$ {Number(order.price).toFixed(2)}
+          </p>
+        </div>
+
+        {displayStatus === 'waiting_sms' && !isExpired && (
+          <div className="flex flex-col gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onCheckStatus(order)}
+              disabled={pollingOrders.has(order.id)}
+            >
+              {pollingOrders.has(order.id) ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => onCancelOrder(order)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
   // Carrega saldo do usuário
   const loadBalance = useCallback(async () => {
@@ -297,6 +468,35 @@ const SMSBot = () => {
     return () => clearInterval(interval);
   }, [orders, pollingOrders]);
 
+  // Verificar pedidos expirados e atualizar status localmente
+  useEffect(() => {
+    const checkExpiredOrders = async () => {
+      const now = new Date().getTime();
+      const expiredOrders = orders.filter(o => 
+        o.status === 'waiting_sms' && 
+        o.expires_at && 
+        new Date(o.expires_at).getTime() <= now
+      );
+      
+      if (expiredOrders.length > 0) {
+        // Atualizar status para expirado no banco
+        for (const order of expiredOrders) {
+          await supabase
+            .from('sms_orders')
+            .update({ status: 'expired' })
+            .eq('id', order.id);
+        }
+        // Recarregar pedidos
+        loadOrders();
+      }
+    };
+    
+    const interval = setInterval(checkExpiredOrders, 5000);
+    checkExpiredOrders(); // Verificar imediatamente
+    
+    return () => clearInterval(interval);
+  }, [orders, loadOrders]);
+
   // Filtra serviços pela busca
   const filteredServices = services.filter(s => 
     s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -514,6 +714,28 @@ const SMSBot = () => {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Tutorial WhatsApp */}
+              <Alert className="border-accent/50 bg-accent/5">
+                <Info className="h-5 w-5 text-accent" />
+                <AlertTitle className="text-accent font-semibold">
+                  Como receber SMS do número virtual no WhatsApp
+                </AlertTitle>
+                <AlertDescription className="mt-2 space-y-3 text-sm">
+                  <div className="flex items-start gap-2">
+                    <span className="bg-accent text-accent-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shrink-0">1</span>
+                    <span>
+                      Copie o número adquirido e solicite o SMS de verificação diretamente pelo app do WhatsApp (na tela de login/cadastro).
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="bg-accent text-accent-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shrink-0">2</span>
+                    <span>
+                      Se o WhatsApp mostrar um aviso para tentar novamente em 1 hora, <strong>cancele o número dentro do prazo de 20 minutos</strong> (antes de expirar) para receber o reembolso e compre um novo número.
+                    </span>
+                  </div>
+                </AlertDescription>
+              </Alert>
             </AnimatedTabsContent>
 
             <AnimatedTabsContent value="orders">
@@ -539,108 +761,14 @@ const SMSBot = () => {
                     <ScrollArea className="h-[500px]">
                       <div className="space-y-3">
                         {orders.map(order => (
-                          <div
-                            key={order.id}
-                            className={`p-4 rounded-lg border-2 ${
-                              order.status === 'received' 
-                                ? 'border-green-500/50 bg-green-500/5' 
-                                : order.status === 'cancelled'
-                                ? 'border-red-500/50 bg-red-500/5'
-                                : 'border-accent/50 bg-accent/5'
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-4">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className="font-medium">{order.service_name}</span>
-                                  {order.status === 'waiting_sms' ? (
-                                    <Badge variant="secondary" className="bg-accent/20">
-                                      <Clock className="h-3 w-3 mr-1" />
-                                      Aguardando
-                                    </Badge>
-                                  ) : order.status === 'received' ? (
-                                    <Badge variant="secondary" className="bg-green-500/20 text-green-500">
-                                      <CheckCircle2 className="h-3 w-3 mr-1" />
-                                      Recebido
-                                    </Badge>
-                                  ) : order.status === 'cancelled' ? (
-                                    <Badge variant="secondary" className="bg-red-500/20 text-red-500">
-                                      <XCircle className="h-3 w-3 mr-1" />
-                                      Cancelado
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant="secondary">
-                                      {order.status}
-                                    </Badge>
-                                  )}
-                                </div>
-                                
-                                <div 
-                                  className="flex items-center gap-2 text-lg font-mono cursor-pointer hover:text-accent"
-                                  onClick={() => copyToClipboard(order.phone_number)}
-                                  title="Clique para copiar"
-                                >
-                                  +{order.phone_number}
-                                  <Copy className="h-4 w-4" />
-                                </div>
-
-                                {order.status === 'received' && order.phone_number && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="mt-1 text-xs"
-                                    onClick={() => copyToClipboard(order.phone_number)}
-                                  >
-                                    <Copy className="h-3 w-3 mr-1" />
-                                    Copiar Número
-                                  </Button>
-                                )}
-
-                                {order.sms_code && (
-                                  <div 
-                                    className="mt-2 p-2 bg-green-500/10 rounded border border-green-500/30 cursor-pointer hover:bg-green-500/20"
-                                    onClick={() => copyToClipboard(order.sms_code!)}
-                                  >
-                                    <p className="text-sm text-muted-foreground">Código SMS:</p>
-                                    <p className="text-xl font-bold text-green-500 flex items-center gap-2">
-                                      {order.sms_code}
-                                      <Copy className="h-4 w-4" />
-                                    </p>
-                                  </div>
-                                )}
-
-                                <p className="text-xs text-muted-foreground mt-2">
-                                  {new Date(order.created_at).toLocaleString('pt-BR')}
-                                  {" • "}
-                                  R$ {Number(order.price).toFixed(2)}
-                                </p>
-                              </div>
-
-                              {order.status === 'waiting_sms' && (
-                                <div className="flex flex-col gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => checkStatus(order)}
-                                    disabled={pollingOrders.has(order.id)}
-                                  >
-                                    {pollingOrders.has(order.id) ? (
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <RefreshCw className="h-4 w-4" />
-                                    )}
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    onClick={() => cancelOrder(order)}
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
+                          <OrderCard 
+                            key={order.id} 
+                            order={order} 
+                            pollingOrders={pollingOrders}
+                            onCheckStatus={checkStatus}
+                            onCancelOrder={cancelOrder}
+                            onCopy={copyToClipboard}
+                          />
                         ))}
                       </div>
                     </ScrollArea>
