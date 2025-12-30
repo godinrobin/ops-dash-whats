@@ -77,13 +77,9 @@ export const useInboxConversations = (instanceId?: string) => {
 
       if (fetchError) throw fetchError;
 
-      // Filter contacts to only show those from connected instances
-      const filteredData = (data || []).filter((contact) => {
-        // If no instance_id, hide the contact (orphaned)
-        if (!contact.instance_id) return false;
-        // Only show contacts from connected instances
-        return connectedInstanceIds.size === 0 || connectedInstanceIds.has(contact.instance_id);
-      });
+      // Show all contacts - don't filter by instance connection status
+      // This ensures users can always see their conversations
+      const filteredData = data || [];
 
       setContacts(
         filteredData.map((contact) => ({
@@ -97,7 +93,7 @@ export const useInboxConversations = (instanceId?: string) => {
     } finally {
       setLoading(false);
     }
-  }, [user, instanceId, connectedInstanceIds]);
+  }, [user, instanceId]);
 
   useEffect(() => {
     fetchContacts();
