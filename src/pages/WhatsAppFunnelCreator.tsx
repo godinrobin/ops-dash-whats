@@ -112,6 +112,9 @@ const WhatsAppFunnelCreator = () => {
   const [aiEditRequest, setAiEditRequest] = useState("");
   const [isEditingWithAI, setIsEditingWithAI] = useState(false);
   
+  // Validation state
+  const [validationErrors, setValidationErrors] = useState<Record<string, boolean>>({});
+  
   const [formData, setFormData] = useState({
     niche: "",
     customNiche: "",
@@ -157,10 +160,25 @@ const WhatsAppFunnelCreator = () => {
   };
 
   const handleGenerateFunnel = async () => {
-    if (!formData.niche || !formData.product || !formData.expertName || !formData.angle || ticketsList.length === 0) {
+    // Clear previous errors
+    setValidationErrors({});
+    
+    const errors: Record<string, boolean> = {};
+    
+    if (!formData.niche) errors.niche = true;
+    if (!formData.product && formData.niche !== "Outro") errors.product = true;
+    if (formData.niche === "Outro" && !formData.customNiche) errors.customNiche = true;
+    if (formData.product === "Outro" && !formData.customProduct) errors.customProduct = true;
+    if (!formData.expertName) errors.expertName = true;
+    if (!formData.angle) errors.angle = true;
+    if (formData.angle === "Outro" && !formData.customAngle) errors.customAngle = true;
+    if (ticketsList.length === 0) errors.tickets = true;
+    
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
       toast({
         title: "Campos obrigatórios",
-        description: "Por favor, preencha todos os campos obrigatórios.",
+        description: "Por favor, preencha todos os campos destacados em vermelho.",
         variant: "destructive",
       });
       return;
@@ -769,12 +787,17 @@ const WhatsAppFunnelCreator = () => {
               <CardContent className="space-y-6">
                 {/* Nicho */}
                 <div className="space-y-2">
-                  <Label htmlFor="niche">Qual nicho? *</Label>
+                  <Label htmlFor="niche" className={validationErrors.niche ? "text-destructive" : ""}>
+                    Qual nicho? *
+                  </Label>
                   <Select
                     value={formData.niche}
-                    onValueChange={(value) => setFormData({ ...formData, niche: value, product: "" })}
+                    onValueChange={(value) => {
+                      setFormData({ ...formData, niche: value, product: "" });
+                      setValidationErrors(prev => ({ ...prev, niche: false }));
+                    }}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className={validationErrors.niche ? "border-destructive ring-destructive" : ""}>
                       <SelectValue placeholder="Selecione o nicho" />
                     </SelectTrigger>
                     <SelectContent>
@@ -789,21 +812,29 @@ const WhatsAppFunnelCreator = () => {
                     <Input
                       placeholder="Digite o nicho"
                       value={formData.customNiche}
-                      onChange={(e) => setFormData({ ...formData, customNiche: e.target.value })}
-                      className="mt-2"
+                      onChange={(e) => {
+                        setFormData({ ...formData, customNiche: e.target.value });
+                        setValidationErrors(prev => ({ ...prev, customNiche: false }));
+                      }}
+                      className={`mt-2 ${validationErrors.customNiche ? "border-destructive ring-destructive" : ""}`}
                     />
                   )}
                 </div>
 
                 {/* Produto */}
                 <div className="space-y-2">
-                  <Label htmlFor="product">Qual é o produto? *</Label>
+                  <Label htmlFor="product" className={validationErrors.product ? "text-destructive" : ""}>
+                    Qual é o produto? *
+                  </Label>
                   {formData.niche && formData.niche !== "Outro" && productExamples[formData.niche]?.length > 0 ? (
                     <Select
                       value={formData.product}
-                      onValueChange={(value) => setFormData({ ...formData, product: value })}
+                      onValueChange={(value) => {
+                        setFormData({ ...formData, product: value });
+                        setValidationErrors(prev => ({ ...prev, product: false }));
+                      }}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className={validationErrors.product ? "border-destructive ring-destructive" : ""}>
                         <SelectValue placeholder="Selecione o produto" />
                       </SelectTrigger>
                       <SelectContent>
@@ -819,37 +850,55 @@ const WhatsAppFunnelCreator = () => {
                     <Input
                       placeholder="Ex: Curso de Crochê, Ebook de Receitas..."
                       value={formData.product}
-                      onChange={(e) => setFormData({ ...formData, product: e.target.value })}
+                      onChange={(e) => {
+                        setFormData({ ...formData, product: e.target.value });
+                        setValidationErrors(prev => ({ ...prev, product: false }));
+                      }}
+                      className={validationErrors.product ? "border-destructive ring-destructive" : ""}
                     />
                   )}
                   {formData.product === "Outro" && (
                     <Input
                       placeholder="Digite o nome do produto"
                       value={formData.customProduct}
-                      onChange={(e) => setFormData({ ...formData, customProduct: e.target.value })}
-                      className="mt-2"
+                      onChange={(e) => {
+                        setFormData({ ...formData, customProduct: e.target.value });
+                        setValidationErrors(prev => ({ ...prev, customProduct: false }));
+                      }}
+                      className={`mt-2 ${validationErrors.customProduct ? "border-destructive ring-destructive" : ""}`}
                     />
                   )}
                 </div>
 
                 {/* Nome da Expert */}
                 <div className="space-y-2">
-                  <Label htmlFor="expertName">Qual o nome da(o) expert? *</Label>
+                  <Label htmlFor="expertName" className={validationErrors.expertName ? "text-destructive" : ""}>
+                    Qual o nome da(o) expert? *
+                  </Label>
                   <Input
                     placeholder="Ex: Maria, João, Ana..."
                     value={formData.expertName}
-                    onChange={(e) => setFormData({ ...formData, expertName: e.target.value })}
+                    onChange={(e) => {
+                      setFormData({ ...formData, expertName: e.target.value });
+                      setValidationErrors(prev => ({ ...prev, expertName: false }));
+                    }}
+                    className={validationErrors.expertName ? "border-destructive ring-destructive" : ""}
                   />
                 </div>
 
                 {/* Ângulo */}
                 <div className="space-y-2">
-                  <Label htmlFor="angle">Qual o ângulo? *</Label>
+                  <Label htmlFor="angle" className={validationErrors.angle ? "text-destructive" : ""}>
+                    Qual o ângulo? *
+                  </Label>
                   <Select
                     value={formData.angle}
-                    onValueChange={(value) => setFormData({ ...formData, angle: value })}
+                    onValueChange={(value) => {
+                      setFormData({ ...formData, angle: value });
+                      setValidationErrors(prev => ({ ...prev, angle: false }));
+                    }}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className={validationErrors.angle ? "border-destructive ring-destructive" : ""}>
                       <SelectValue placeholder="Selecione o ângulo" />
                     </SelectTrigger>
                     <SelectContent>
@@ -864,8 +913,11 @@ const WhatsAppFunnelCreator = () => {
                     <Input
                       placeholder="Digite o ângulo"
                       value={formData.customAngle}
-                      onChange={(e) => setFormData({ ...formData, customAngle: e.target.value })}
-                      className="mt-2"
+                      onChange={(e) => {
+                        setFormData({ ...formData, customAngle: e.target.value });
+                        setValidationErrors(prev => ({ ...prev, customAngle: false }));
+                      }}
+                      className={`mt-2 ${validationErrors.customAngle ? "border-destructive ring-destructive" : ""}`}
                     />
                   )}
                 </div>
@@ -914,11 +966,20 @@ const WhatsAppFunnelCreator = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="tickets">Qual ticket de venda? *</Label>
-                  <TicketTagInput
-                    tickets={ticketsList}
-                    onChange={setTicketsList}
-                  />
+                  <Label htmlFor="tickets" className={validationErrors.tickets ? "text-destructive" : ""}>
+                    Qual ticket de venda? *
+                  </Label>
+                  <div className={validationErrors.tickets ? "ring-1 ring-destructive rounded-md" : ""}>
+                    <TicketTagInput
+                      tickets={ticketsList}
+                      onChange={(tickets) => {
+                        setTicketsList(tickets);
+                        if (tickets.length > 0) {
+                          setValidationErrors(prev => ({ ...prev, tickets: false }));
+                        }
+                      }}
+                    />
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     Pressione espaço para adicionar. Arraste para reordenar.
                   </p>
