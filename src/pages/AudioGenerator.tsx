@@ -6,8 +6,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGr
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/useSplashedToast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Download, Play, Pause, Volume2 } from "lucide-react";
+import { Loader2, Download, Play, Pause, Volume2, Clock } from "lucide-react";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
+import { useGenerationCooldown } from "@/hooks/useGenerationCooldown";
 
 interface Voice {
   id: string;
@@ -45,6 +46,7 @@ const voices: Voice[] = [
 const AudioGenerator = () => {
   useActivityTracker("page_visit", "Gerador de Áudio");
   const { toast } = useToast();
+  const { canGenerate, formattedTime, startCooldown, isAdmin } = useGenerationCooldown("audio_last_generation");
   const [text, setText] = useState("");
   const [selectedVoice, setSelectedVoice] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -53,6 +55,15 @@ const AudioGenerator = () => {
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
 
   const handleGenerate = async () => {
+    if (!canGenerate) {
+      toast({
+        title: "Aguarde",
+        description: `Você poderá gerar um novo áudio em ${formattedTime}`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!text.trim()) {
       toast({
         title: "Erro",
@@ -90,6 +101,7 @@ const AudioGenerator = () => {
         audio.onended = () => setIsPlaying(false);
         setAudioElement(audio);
 
+        startCooldown();
         toast({
           title: "Sucesso",
           description: "Áudio gerado com sucesso!",
@@ -222,13 +234,18 @@ const AudioGenerator = () => {
 
               <Button
                 onClick={handleGenerate}
-                disabled={isGenerating || !text.trim() || !selectedVoice}
+                disabled={isGenerating || !text.trim() || !selectedVoice || !canGenerate}
                 className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
               >
                 {isGenerating ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     Gerando áudio...
+                  </>
+                ) : !canGenerate ? (
+                  <>
+                    <Clock className="w-4 h-4 mr-2" />
+                    Aguarde {formattedTime}
                   </>
                 ) : (
                   <>
