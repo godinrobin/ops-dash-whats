@@ -17,8 +17,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { 
   Wallet, Phone, BarChart3, ShoppingBag, ArrowLeft, Shield, Truck, CreditCard, 
-  Check, Minus, Plus, Clock, X, Loader2, ClipboardList, Globe, ChevronDown, ChevronUp
+  Check, Minus, Plus, Clock, X, Loader2, ClipboardList, Globe, ChevronDown, ChevronUp, Info
 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -1104,6 +1105,28 @@ const SMSBotEmbed = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* Tutorial WhatsApp */}
+          <Alert className="border-accent/50 bg-accent/5 mt-4">
+            <Info className="h-5 w-5 text-accent" />
+            <AlertTitle className="text-accent font-semibold">
+              Como receber SMS do número virtual no WhatsApp
+            </AlertTitle>
+            <AlertDescription className="mt-2 space-y-3 text-sm">
+              <div className="flex items-start gap-2">
+                <span className="bg-accent text-accent-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shrink-0">1</span>
+                <span>
+                  Copie o número adquirido e solicite o SMS de verificação diretamente pelo app do WhatsApp (na tela de login/cadastro).
+                </span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="bg-accent text-accent-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shrink-0">2</span>
+                <span>
+                  Se o WhatsApp mostrar um aviso para tentar novamente em 1 hora, <strong>cancele o número dentro do prazo de 20 minutos</strong> (antes de expirar) para receber o reembolso e compre um novo número.
+                </span>
+              </div>
+            </AlertDescription>
+          </Alert>
         </TabsContent>
 
         <TabsContent value="orders">
