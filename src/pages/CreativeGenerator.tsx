@@ -8,10 +8,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Download, ArrowLeft, Image as ImageIcon, Check, Sparkles, Send } from "lucide-react";
+import { Loader2, Download, ArrowLeft, Image as ImageIcon, Check, Sparkles, Send, Info } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useNavigate } from "react-router-dom";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
 import creativeModel1 from "@/assets/creative-model-1.png";
 import creativeModel2 from "@/assets/creative-model-2.png";
 import creativeModel3 from "@/assets/creative-model-3.png";
@@ -226,35 +233,47 @@ const CreativeGenerator = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Model Selection */}
+                {/* Model Selection - Carousel */}
                 <div className="space-y-3">
                   <Label>Modelo *</Label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                    {modelOptions.map((model) => (
-                      <div
-                        key={model.id}
-                        onClick={() => !isGenerating && setSelectedModel(model.id)}
-                        className={`relative cursor-pointer rounded-lg border-2 p-2 transition-all ${
-                          selectedModel === model.id
-                            ? "border-accent bg-accent/10"
-                            : "border-border hover:border-accent/50"
-                        } ${isGenerating ? "opacity-50 cursor-not-allowed" : ""}`}
-                      >
-                        {selectedModel === model.id && (
-                          <div className="absolute top-1 right-1 bg-accent text-accent-foreground rounded-full p-0.5 z-10">
-                            <Check className="h-2.5 w-2.5" />
+                  <p className="text-xs text-muted-foreground -mt-1">Arraste para o lado para ver mais opções</p>
+                  <Carousel
+                    opts={{
+                      align: "start",
+                      loop: false,
+                    }}
+                    className="w-full"
+                  >
+                    <CarouselContent className="-ml-2 md:-ml-4">
+                      {modelOptions.map((model) => (
+                        <CarouselItem key={model.id} className="pl-2 md:pl-4 basis-1/2 md:basis-1/3 lg:basis-1/4">
+                          <div
+                            onClick={() => !isGenerating && setSelectedModel(model.id)}
+                            className={`relative cursor-pointer rounded-lg border-2 p-2 transition-all h-full ${
+                              selectedModel === model.id
+                                ? "border-accent bg-accent/10"
+                                : "border-border hover:border-accent/50"
+                            } ${isGenerating ? "opacity-50 cursor-not-allowed" : ""}`}
+                          >
+                            {selectedModel === model.id && (
+                              <div className="absolute top-1 right-1 bg-accent text-accent-foreground rounded-full p-0.5 z-10">
+                                <Check className="h-2.5 w-2.5" />
+                              </div>
+                            )}
+                            <img
+                              src={model.preview}
+                              alt={model.name}
+                              className="w-full aspect-square object-cover rounded-md mb-1.5"
+                            />
+                            <p className="font-medium text-xs leading-tight">{model.name}</p>
+                            <p className="text-[10px] text-muted-foreground leading-tight mt-0.5 line-clamp-2">{model.description}</p>
                           </div>
-                        )}
-                        <img
-                          src={model.preview}
-                          alt={model.name}
-                          className="w-full aspect-square object-cover rounded-md mb-1.5"
-                        />
-                        <p className="font-medium text-xs leading-tight">{model.name}</p>
-                        <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{model.description}</p>
-                      </div>
-                    ))}
-                  </div>
+                        </CarouselItem>
+                      ))}
+                    </CarouselContent>
+                    <CarouselPrevious className="hidden md:flex -left-4" />
+                    <CarouselNext className="hidden md:flex -right-4" />
+                  </Carousel>
                 </div>
 
                 <div className="space-y-2">
@@ -327,6 +346,11 @@ const CreativeGenerator = () => {
                     </>
                   )}
                 </Button>
+                
+                <p className="text-xs text-muted-foreground text-center flex items-center justify-center gap-1.5 pt-2">
+                  <Info className="h-3 w-3" />
+                  Quanto mais específico for o nome do produto/tema, melhor será o resultado gerado.
+                </p>
               </CardContent>
             </Card>
 
