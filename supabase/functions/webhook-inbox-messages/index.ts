@@ -65,6 +65,109 @@ const logWebhookDiagnostic = async (
     console.error('[WEBHOOK-DIAG] Failed to record:', err);
   }
 };
+
+const INBOX_MEDIA_BUCKET = 'video-clips';
+
+const isStoredMediaUrl = (url: string) => {
+  return url.includes('/storage/v1/object/public/');
+};
+
+const guessExtension = (contentType: string | null, fallback: string) => {
+  const ct = (contentType || '').toLowerCase();
+
+  if (ct.includes('image/')) {
+    const ext = ct.split('image/')[1]?.split(';')[0] || 'jpg';
+    return ext === 'jpeg' ? 'jpg' : ext;
+  }
+  if (ct.includes('audio/')) {
+    return ct.split('audio/')[1]?.split(';')[0] || fallback;
+  }
+  if (ct.includes('video/')) {
+    return ct.split('video/')[1]?.split(';')[0] || fallback;
+  }
+  if (ct.includes('application/pdf')) return 'pdf';
+  return fallback;
+};
+
+const persistMediaToStorage = async (
+  supabaseClient: any,
+  params: {
+    url: string;
+    userId: string;
+    instanceId: string;
+    messageType: string;
+    messageId?: string | null;
+    fileName?: string | null;
+  }
+): Promise<string | null> => {
+  try {
+    if (!params.url || isStoredMediaUrl(params.url)) return null;
+
+    const fallbackExtFromName = params.fileName?.includes('.')
+      ? params.fileName.split('.').pop()?.toLowerCase()
+      : undefined;
+
+    const fallbackExtFromType = (() => {
+      switch (params.messageType) {
+        case 'image':
+          return 'jpg';
+        case 'audio':
+          return 'ogg';
+        case 'video':
+          return 'mp4';
+        case 'sticker':
+          return 'webp';
+        case 'document':
+          return 'bin';
+        default:
+          return 'bin';
+      }
+    })();
+
+    const fallbackExt = fallbackExtFromName || fallbackExtFromType;
+
+    const res = await fetch(params.url);
+    if (!res.ok) {
+      console.log(`[MEDIA] Download failed: status=${res.status} url=${params.url}`);
+      return null;
+    }
+
+    const contentType = res.headers.get('content-type');
+    const arrayBuffer = await res.arrayBuffer();
+    const blob = new Blob([arrayBuffer], { type: contentType || 'application/octet-stream' });
+
+    const ext = guessExtension(contentType, fallbackExt);
+    const id = params.messageId || crypto.randomUUID();
+    const objectPath = `inbox-media/${params.userId}/${params.instanceId}/${params.messageType}/${id}.${ext}`;
+
+    const { error: uploadError } = await supabaseClient
+      .storage
+      .from(INBOX_MEDIA_BUCKET)
+      .upload(objectPath, blob, {
+        contentType: contentType || undefined,
+        upsert: true,
+        cacheControl: '3600',
+      });
+
+    if (uploadError) {
+      console.error('[MEDIA] Upload failed:', uploadError);
+      return null;
+    }
+
+    const { data } = await supabaseClient.storage.from(INBOX_MEDIA_BUCKET).getPublicUrl(objectPath);
+    const publicUrl = data?.publicUrl || null;
+
+    if (publicUrl) {
+      console.log(`[MEDIA] Persisted ${params.messageType}: ${objectPath}`);
+    }
+
+    return publicUrl;
+  } catch (err) {
+    console.error('[MEDIA] Persist error:', err);
+    return null;
+  }
+};
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -136,7 +239,12 @@ serve(async (req) => {
       // Fallback to old structure (data.message.key) for backwards compatibility
       const key = data.key || data.message?.key || {};
       const messageId = key.id;
-      const isFromMe = key.fromMe === true;
+      const fromMeRaw = (key as any).fromMe;
+      const isFromMe =
+        fromMeRaw === true ||
+        fromMeRaw === 'true' ||
+        fromMeRaw === 1 ||
+        fromMeRaw === '1';
       
       // Check if this outgoing message was sent by our platform
       if (isFromMe && messageId) {
@@ -480,6 +588,21 @@ serve(async (req) => {
 
       const userId = instanceData.user_id;
       const instanceId = instanceData.id;
+
+      // Persist WhatsApp media URLs (they expire quickly)
+      if (mediaUrl && ['image', 'audio', 'video', 'document', 'sticker'].includes(messageType)) {
+        const persistedUrl = await persistMediaToStorage(supabaseClient, {
+          url: mediaUrl,
+          userId,
+          instanceId,
+          messageType,
+          messageId,
+          fileName: messageType === 'document' ? content : null,
+        });
+        if (persistedUrl) {
+          mediaUrl = persistedUrl;
+        }
+      }
       
       // Get instance identifiers to check for suspicious pushName
       const normalizeComparable = (value: string): string => {
