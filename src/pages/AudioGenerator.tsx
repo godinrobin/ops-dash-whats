@@ -369,7 +369,7 @@ const AudioGenerator = () => {
                 ) : (
                   <>
                     <Volume2 className="w-4 h-4 mr-2" />
-                    Gerar Áudio {!isAdmin && `(${generationsLeft}/3)`}
+                    Gerar Áudio
                   </>
                 )}
               </Button>
