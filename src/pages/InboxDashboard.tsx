@@ -119,13 +119,13 @@ export default function InboxDashboard() {
     if (!user) return;
 
     try {
-      // Limita mensagens para 100 e apenas dos últimos 7 dias
+      // Pega mensagens dos últimos 7 dias SEM limite para contagem correta
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       
       const [contactsRes, messagesRes] = await Promise.all([
-        supabase.from('inbox_contacts').select('id, instance_id').eq('user_id', user.id),
-        supabase.from('inbox_messages').select('id, instance_id, contact_id, created_at').eq('user_id', user.id).gte('created_at', sevenDaysAgo.toISOString()).order('created_at', { ascending: false }).limit(100),
+        supabase.from('inbox_contacts').select('id, instance_id, created_at').eq('user_id', user.id),
+        supabase.from('inbox_messages').select('id, instance_id, contact_id, created_at, direction').eq('user_id', user.id).gte('created_at', sevenDaysAgo.toISOString()).order('created_at', { ascending: false }),
       ]);
 
       if (contactsRes.data) setContacts(contactsRes.data);
@@ -510,9 +510,18 @@ export default function InboxDashboard() {
       return d.toISOString().slice(0, 10);
     });
 
-    // Initialize data structure
+    // Get all instance names first
+    const allInstanceNames = instances.map(i => i.label || i.instance_name || i.phone_number || 'Desconhecido');
+
+    // Initialize data structure with ALL instances and 0 values
     const dayMap = new Map<string, Record<string, Set<string>>>();
-    last7Days.forEach((day) => dayMap.set(day, {}));
+    last7Days.forEach((day) => {
+      const dayData: Record<string, Set<string>> = {};
+      allInstanceNames.forEach(name => {
+        dayData[name] = new Set<string>();
+      });
+      dayMap.set(day, dayData);
+    });
 
     // Count unique contacts (conversations) by day and instance
     messages.forEach((m) => {
@@ -522,6 +531,7 @@ export default function InboxDashboard() {
         const instanceName =
           instances.find((i) => i.id === m.instance_id)?.label ||
           instances.find((i) => i.id === m.instance_id)?.instance_name ||
+          instances.find((i) => i.id === m.instance_id)?.phone_number ||
           'Desconhecido';
 
         const dayData = dayMap.get(day)!;
@@ -532,13 +542,15 @@ export default function InboxDashboard() {
       }
     });
 
+    // Return data with ALL instances, showing 0 for empty days
     return last7Days.map((day) => {
       const dayData = dayMap.get(day)!;
       const result: Record<string, any> = {
         date: formatDdMm(day),
       };
-      Object.entries(dayData).forEach(([name, contactSet]) => {
-        result[name] = contactSet.size;
+      // Add all instance names with their count (0 if no data)
+      allInstanceNames.forEach(name => {
+        result[name] = dayData[name]?.size || 0;
       });
       return result;
     });
@@ -546,7 +558,7 @@ export default function InboxDashboard() {
 
   // Get unique instance names for chart lines
   const instanceNames = useMemo(() => {
-    return instances.map(i => i.label || i.instance_name);
+    return instances.map(i => i.label || i.instance_name || i.phone_number || 'Desconhecido');
   }, [instances]);
 
   if (loading) {
@@ -729,7 +741,7 @@ export default function InboxDashboard() {
         </div>
 
         {/* Chart - Conversations by Day per Instance */}
-        {contacts.length > 0 && (
+        {instances.length > 0 && (
           <Card className="mb-8">
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
@@ -748,6 +760,7 @@ export default function InboxDashboard() {
                   <YAxis 
                     tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} 
                     allowDecimals={false}
+                    domain={[0, 'auto']}
                   />
                   <Tooltip 
                     contentStyle={{ 
@@ -755,6 +768,8 @@ export default function InboxDashboard() {
                       border: '1px solid hsl(var(--border))',
                       borderRadius: '8px'
                     }}
+                    formatter={(value: number, name: string) => [value, name]}
+                    labelFormatter={(label) => `Data: ${label}`}
                   />
                   <Legend />
                   {instanceNames.map((name, idx) => (
@@ -766,6 +781,7 @@ export default function InboxDashboard() {
                       strokeWidth={2}
                       dot={{ r: 4, fill: CHART_COLORS[idx % CHART_COLORS.length] }}
                       activeDot={{ r: 6 }}
+                      connectNulls={false}
                     />
                   ))}
                 </LineChart>
