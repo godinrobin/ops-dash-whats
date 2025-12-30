@@ -398,6 +398,62 @@ const extractMessageContent = (msgContent: any): { content: string; messageType:
   return { content: `[Mensagem recebida - tipo: ${detectedType}]`, messageType: 'text', mediaUrl: null };
 };
 
+// Download media via Evolution API getBase64FromMediaMessage endpoint
+// This is more reliable than direct download as it works even after the message is sent
+const downloadMediaViaEvolutionAPI = async (
+  instanceName: string,
+  remoteJid: string,
+  messageId: string
+): Promise<{ base64: string; mimetype: string } | null> => {
+  try {
+    const EVOLUTION_BASE_URL = Deno.env.get('EVOLUTION_BASE_URL')?.replace(/\/$/, '');
+    const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY');
+    
+    if (!EVOLUTION_BASE_URL || !EVOLUTION_API_KEY) {
+      console.log('[MEDIA-EVOLUTION] No Evolution API config available');
+      return null;
+    }
+    
+    console.log(`[MEDIA-EVOLUTION] Fetching media via Evolution API: instance=${instanceName}, messageId=${messageId}`);
+    
+    const response = await fetch(`${EVOLUTION_BASE_URL}/chat/getBase64FromMediaMessage/${instanceName}`, {
+      method: 'POST',
+      headers: {
+        'apikey': EVOLUTION_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: {
+          key: {
+            remoteJid: remoteJid,
+            id: messageId,
+          }
+        },
+        convertToMp4: false,
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log(`[MEDIA-EVOLUTION] API error: status=${response.status}, body=${errorText.substring(0, 200)}`);
+      return null;
+    }
+    
+    const result = await response.json();
+    
+    if (result.base64 && result.mimetype) {
+      console.log(`[MEDIA-EVOLUTION] Success! mimetype=${result.mimetype}, size=${result.base64.length} chars`);
+      return { base64: result.base64, mimetype: result.mimetype };
+    }
+    
+    console.log(`[MEDIA-EVOLUTION] No base64 in response:`, JSON.stringify(result).substring(0, 200));
+    return null;
+  } catch (err) {
+    console.error('[MEDIA-EVOLUTION] Error:', err);
+    return null;
+  }
+};
+
 const persistMediaToStorage = async (
   supabaseClient: any,
   params: {
@@ -407,10 +463,25 @@ const persistMediaToStorage = async (
     messageType: string;
     messageId?: string | null;
     fileName?: string | null;
+    instanceName?: string | null;
+    remoteJid?: string | null;
   }
 ): Promise<string | null> => {
+  const logPrefix = `[MEDIA-PERSIST] [${params.messageType}] [${params.messageId || 'no-id'}]`;
+  
   try {
-    if (!params.url || isStoredMediaUrl(params.url)) return null;
+    // Skip if already stored or no URL
+    if (!params.url) {
+      console.log(`${logPrefix} No URL provided, skipping`);
+      return null;
+    }
+    
+    if (isStoredMediaUrl(params.url)) {
+      console.log(`${logPrefix} Already persisted: ${params.url.substring(0, 60)}...`);
+      return null;
+    }
+    
+    console.log(`${logPrefix} Starting download from: ${params.url.substring(0, 100)}...`);
 
     const fallbackExtFromName = params.fileName?.includes('.')
       ? params.fileName.split('.').pop()?.toLowerCase()
@@ -418,43 +489,80 @@ const persistMediaToStorage = async (
 
     const fallbackExtFromType = (() => {
       switch (params.messageType) {
-        case 'image':
-          return 'jpg';
-        case 'audio':
-          return 'ogg';
-        case 'video':
-          return 'mp4';
-        case 'sticker':
-          return 'webp';
-        case 'document':
-          return 'bin';
-        default:
-          return 'bin';
+        case 'image': return 'jpg';
+        case 'audio': return 'ogg';
+        case 'video': return 'mp4';
+        case 'sticker': return 'webp';
+        case 'document': return 'bin';
+        default: return 'bin';
       }
     })();
 
     const fallbackExt = fallbackExtFromName || fallbackExtFromType;
+    let arrayBuffer: ArrayBuffer | null = null;
+    let contentType: string | null = null;
 
-    const res = await fetch(params.url);
-    if (!res.ok) {
-      console.log(`[MEDIA] Download failed: status=${res.status} url=${params.url}`);
-      return null;
+    // === METHOD 1: Direct download (fastest if URL is still valid) ===
+    try {
+      console.log(`${logPrefix} Attempting direct download...`);
+      const res = await fetch(params.url, { 
+        signal: AbortSignal.timeout(15000) // 15s timeout
+      });
+      
+      if (res.ok) {
+        contentType = res.headers.get('content-type');
+        arrayBuffer = await res.arrayBuffer();
+        console.log(`${logPrefix} Direct download SUCCESS: size=${arrayBuffer.byteLength}, contentType=${contentType}`);
+      } else {
+        console.log(`${logPrefix} Direct download FAILED: status=${res.status} ${res.statusText}`);
+      }
+    } catch (fetchErr) {
+      const errMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+      console.log(`${logPrefix} Direct download ERROR: ${errMsg}`);
     }
 
-    let contentType = res.headers.get('content-type');
-    const arrayBuffer = await res.arrayBuffer();
+    // === METHOD 2: Evolution API getBase64 (fallback for expired URLs) ===
+    if (!arrayBuffer && params.instanceName && params.remoteJid && params.messageId) {
+      console.log(`${logPrefix} Trying Evolution API getBase64...`);
+      const evolutionResult = await downloadMediaViaEvolutionAPI(
+        params.instanceName,
+        params.remoteJid,
+        params.messageId
+      );
+      
+      if (evolutionResult) {
+        // Decode base64 to ArrayBuffer
+        const binaryString = atob(evolutionResult.base64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        arrayBuffer = bytes.buffer;
+        contentType = evolutionResult.mimetype;
+        console.log(`${logPrefix} Evolution API SUCCESS: size=${arrayBuffer.byteLength}, mimetype=${contentType}`);
+      } else {
+        console.log(`${logPrefix} Evolution API FAILED`);
+      }
+    }
+
+    // === No data obtained ===
+    if (!arrayBuffer) {
+      console.log(`${logPrefix} FAILED: Could not download media from any source`);
+      return null;
+    }
     
     // Force correct content-type for audio if generic
     if (params.messageType === 'audio' && (!contentType || contentType === 'application/octet-stream')) {
       contentType = 'audio/ogg';
-      console.log('[MEDIA] Forcing audio/ogg content-type for audio message');
+      console.log(`${logPrefix} Forcing audio/ogg content-type`);
     }
     
     const blob = new Blob([arrayBuffer], { type: contentType || 'application/octet-stream' });
-
     const ext = guessExtension(contentType, fallbackExt);
     const id = params.messageId || crypto.randomUUID();
     const objectPath = `inbox-media/${params.userId}/${params.instanceId}/${params.messageType}/${id}.${ext}`;
+
+    console.log(`${logPrefix} Uploading to storage: ${objectPath}`);
 
     const { error: uploadError } = await supabaseClient
       .storage
@@ -462,11 +570,11 @@ const persistMediaToStorage = async (
       .upload(objectPath, blob, {
         contentType: contentType || undefined,
         upsert: true,
-        cacheControl: '3600',
+        cacheControl: '31536000', // 1 year cache
       });
 
     if (uploadError) {
-      console.error('[MEDIA] Upload failed:', uploadError);
+      console.error(`${logPrefix} Upload FAILED:`, uploadError);
       return null;
     }
 
@@ -474,12 +582,12 @@ const persistMediaToStorage = async (
     const publicUrl = data?.publicUrl || null;
 
     if (publicUrl) {
-      console.log(`[MEDIA] Persisted ${params.messageType}: ${objectPath}`);
+      console.log(`${logPrefix} SUCCESS: ${publicUrl}`);
     }
 
     return publicUrl;
   } catch (err) {
-    console.error('[MEDIA] Persist error:', err);
+    console.error(`${logPrefix} UNEXPECTED ERROR:`, err);
     return null;
   }
 };
@@ -888,6 +996,9 @@ serve(async (req) => {
       const instanceId = instanceData.id;
 
       // Persist WhatsApp media URLs (they expire quickly)
+      // Pass instanceName and remoteJid for Evolution API fallback
+      const remoteJidForMedia = jidForPhone || (useLidAsFallback ? lidRemoteJid : `${phone}@s.whatsapp.net`);
+      
       if (mediaUrl && ['image', 'audio', 'video', 'document', 'sticker'].includes(messageType)) {
         const persistedUrl = await persistMediaToStorage(supabaseClient, {
           url: mediaUrl,
@@ -896,6 +1007,8 @@ serve(async (req) => {
           messageType,
           messageId,
           fileName: messageType === 'document' ? content : null,
+          instanceName: instance,
+          remoteJid: remoteJidForMedia,
         });
         if (persistedUrl) {
           mediaUrl = persistedUrl;
@@ -1880,14 +1993,38 @@ serve(async (req) => {
       const remoteMessageId = key.id;
       
       if (remoteMessageId) {
-        // Update message status to sent
-        await supabaseClient
+        // First, check if this message already exists with a persisted media_url
+        // We do NOT want to overwrite a supabase.co URL with a temporary mmg.whatsapp.net URL
+        const { data: existingMessage } = await supabaseClient
           .from('inbox_messages')
-          .update({ 
-            status: 'sent',
-            remote_message_id: remoteMessageId 
-          })
-          .eq('remote_message_id', remoteMessageId);
+          .select('id, media_url')
+          .eq('remote_message_id', remoteMessageId)
+          .maybeSingle();
+        
+        if (existingMessage) {
+          const hasPersistedMedia = existingMessage.media_url && isStoredMediaUrl(existingMessage.media_url);
+          
+          if (hasPersistedMedia) {
+            console.log(`[SEND-ACK] Message ${remoteMessageId} already has persisted media, only updating status`);
+            await supabaseClient
+              .from('inbox_messages')
+              .update({ status: 'sent' })
+              .eq('id', existingMessage.id);
+          } else {
+            // No persisted media - safe to update normally
+            await supabaseClient
+              .from('inbox_messages')
+              .update({ 
+                status: 'sent',
+                remote_message_id: remoteMessageId 
+              })
+              .eq('id', existingMessage.id);
+          }
+        } else {
+          // Message doesn't exist yet - this shouldn't happen normally
+          // but log it for debugging
+          console.log(`[SEND-ACK] Message ${remoteMessageId} not found in database`);
+        }
           
         console.log(`Send message acknowledged: ${remoteMessageId}`);
       }
