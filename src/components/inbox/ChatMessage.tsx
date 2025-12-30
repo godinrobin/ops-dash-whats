@@ -253,8 +253,15 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
         );
 
       default:
+        // Handle empty content gracefully
+        const displayContent = message.content?.trim() || '[Mensagem vazia]';
         return (
-          <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+          <p className={cn(
+            "text-sm whitespace-pre-wrap break-words",
+            !message.content?.trim() && "italic text-muted-foreground"
+          )}>
+            {displayContent}
+          </p>
         );
     }
   };

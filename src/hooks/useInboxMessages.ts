@@ -27,12 +27,8 @@ export const useInboxMessages = (contactId: string | null) => {
 
       if (fetchError) throw fetchError;
       
-      // Filter out empty messages (no content and no media)
-      const validMessages = (data || []).filter(msg => 
-        (msg.content && msg.content.trim().length > 0) || msg.media_url
-      );
-      
-      setMessages(validMessages.map(msg => ({
+      // Show ALL messages - don't filter empty ones (they may be placeholders for unsupported formats)
+      setMessages((data || []).map(msg => ({
         ...msg,
         direction: msg.direction as 'inbound' | 'outbound',
         message_type: msg.message_type as InboxMessage['message_type'],
