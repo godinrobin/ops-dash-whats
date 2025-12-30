@@ -6,6 +6,90 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper to persist media to Supabase Storage
+async function persistMediaToStorage(
+  supabaseAdmin: any,
+  mediaUrl: string,
+  userId: string,
+  instanceId: string | null,
+  mediaType: string
+): Promise<string | null> {
+  try {
+    // Skip if already a Supabase URL
+    if (mediaUrl.includes('supabase.co/storage')) {
+      console.log('[MEDIA] Already a Supabase URL, skipping persistence');
+      return mediaUrl;
+    }
+
+    console.log(`[MEDIA] Downloading media from: ${mediaUrl.substring(0, 100)}...`);
+    
+    const response = await fetch(mediaUrl);
+    if (!response.ok) {
+      console.error(`[MEDIA] Failed to download media: ${response.status}`);
+      return null;
+    }
+
+    const contentType = response.headers.get('content-type') || 'application/octet-stream';
+    const blob = await response.blob();
+    const arrayBuffer = await blob.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+
+    // Determine file extension based on content type
+    const extensionMap: Record<string, string> = {
+      'audio/ogg': 'ogg',
+      'audio/opus': 'ogg',
+      'audio/mpeg': 'mp3',
+      'audio/mp4': 'm4a',
+      'audio/wav': 'wav',
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
+      'video/mp4': 'mp4',
+      'video/quicktime': 'mov',
+      'application/pdf': 'pdf',
+    };
+
+    let extension = extensionMap[contentType] || 'bin';
+    
+    // Try to get extension from URL if not found
+    if (extension === 'bin') {
+      const urlExtension = mediaUrl.split('?')[0].split('.').pop()?.toLowerCase();
+      if (urlExtension && urlExtension.length <= 4) {
+        extension = urlExtension;
+      }
+    }
+
+    const fileName = `${Date.now()}-${crypto.randomUUID()}.${extension}`;
+    const folderPath = `inbox-media/${userId}/${instanceId || 'unknown'}/${mediaType}`;
+    const filePath = `${folderPath}/${fileName}`;
+
+    console.log(`[MEDIA] Uploading to storage: ${filePath} (${contentType}, ${uint8Array.length} bytes)`);
+
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from('video-clips')
+      .upload(filePath, uint8Array, {
+        contentType,
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error('[MEDIA] Upload error:', uploadError);
+      return null;
+    }
+
+    const { data: publicUrl } = supabaseAdmin.storage
+      .from('video-clips')
+      .getPublicUrl(filePath);
+
+    console.log(`[MEDIA] Successfully persisted: ${publicUrl.publicUrl}`);
+    return publicUrl.publicUrl;
+  } catch (err) {
+    console.error('[MEDIA] Error persisting media:', err);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -151,6 +235,39 @@ serve(async (req) => {
       });
     }
 
+    // Persist media to storage if this is a media message
+    let persistedMediaUrl = mediaUrl;
+    if (mediaUrl && messageType !== 'text') {
+      console.log(`[MEDIA] Attempting to persist ${messageType} media before sending...`);
+      const storedUrl = await persistMediaToStorage(
+        supabaseAdmin,
+        mediaUrl,
+        user.id,
+        instanceId,
+        messageType
+      );
+      
+      if (storedUrl) {
+        persistedMediaUrl = storedUrl;
+        
+        // Update the message record with the persisted URL
+        if (messageId) {
+          const { error: updateMediaError } = await supabaseAdmin
+            .from('inbox_messages')
+            .update({ media_url: persistedMediaUrl })
+            .eq('id', messageId);
+          
+          if (updateMediaError) {
+            console.warn('[MEDIA] Failed to update message with persisted URL:', updateMediaError);
+          } else {
+            console.log(`[MEDIA] Updated message ${messageId} with persisted URL`);
+          }
+        }
+      } else {
+        console.warn('[MEDIA] Could not persist media, using original URL');
+      }
+    }
+
     let evolutionEndpoint = '';
     let evolutionBody: Record<string, unknown> = {};
 
@@ -203,6 +320,9 @@ serve(async (req) => {
       console.log('[LID] Skipping WhatsApp number check for @lid contact');
     }
 
+    // Use the persisted URL for sending
+    const urlToSend = persistedMediaUrl || mediaUrl;
+
     switch (messageType) {
       case 'text':
         evolutionEndpoint = `/message/sendText/${instanceName}`;
@@ -217,7 +337,7 @@ serve(async (req) => {
         evolutionBody = {
           number: sendDestination,
           mediatype: 'image',
-          media: mediaUrl,
+          media: urlToSend,
           caption: content || '',
         };
         break;
@@ -226,7 +346,7 @@ serve(async (req) => {
         evolutionEndpoint = `/message/sendWhatsAppAudio/${instanceName}`;
         evolutionBody = {
           number: sendDestination,
-          audio: mediaUrl,
+          audio: urlToSend,
         };
         break;
 
@@ -235,7 +355,7 @@ serve(async (req) => {
         evolutionBody = {
           number: sendDestination,
           mediatype: 'video',
-          media: mediaUrl,
+          media: urlToSend,
           caption: content || '',
         };
         break;
@@ -245,7 +365,7 @@ serve(async (req) => {
         evolutionBody = {
           number: sendDestination,
           mediatype: 'document',
-          media: mediaUrl,
+          media: urlToSend,
           fileName: content || 'document',
         };
         break;

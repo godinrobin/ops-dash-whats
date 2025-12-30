@@ -1,8 +1,8 @@
-import { Check, CheckCheck, Clock, XCircle, Play, Pause, Download, Loader2, FileText, ImageOff, AlertCircle, Volume2 } from 'lucide-react';
+import { Check, CheckCheck, Clock, XCircle, Play, Pause, Download, Loader2, FileText, ImageOff, AlertCircle, Volume2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { InboxMessage } from '@/types/inbox';
 import { format } from 'date-fns';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 interface ChatMessageProps {
   message: InboxMessage;
@@ -17,7 +17,29 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [audioError, setAudioError] = useState(false);
+  const [audioLoading, setAudioLoading] = useState(true);
+  const [audioRetryCount, setAudioRetryCount] = useState(0);
   const [videoError, setVideoError] = useState(false);
+
+  const MAX_AUDIO_RETRIES = 3;
+
+  const retryAudio = useCallback(() => {
+    if (audioRef.current && audioRetryCount < MAX_AUDIO_RETRIES) {
+      setAudioError(false);
+      setAudioLoading(true);
+      setAudioRetryCount(prev => prev + 1);
+      
+      // Force reload by resetting src
+      const currentSrc = audioRef.current.src;
+      audioRef.current.src = '';
+      setTimeout(() => {
+        if (audioRef.current) {
+          audioRef.current.src = currentSrc;
+          audioRef.current.load();
+        }
+      }, 100);
+    }
+  }, [audioRetryCount]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -32,31 +54,82 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
     const handleLoadedMetadata = () => {
       setAudioDuration(audio.duration);
       setAudioError(false);
+      setAudioLoading(false);
+    };
+
+    const handleCanPlay = () => {
+      setAudioLoading(false);
+      setAudioError(false);
     };
 
     const handleError = () => {
-      setAudioError(true);
+      // Only mark as error after loading state completes
+      setAudioLoading(false);
+      
+      // Auto-retry if we haven't exceeded max retries
+      if (audioRetryCount < MAX_AUDIO_RETRIES) {
+        console.log(`[Audio] Retrying load (attempt ${audioRetryCount + 1}/${MAX_AUDIO_RETRIES})`);
+        setTimeout(retryAudio, 1000 * (audioRetryCount + 1)); // Exponential backoff
+      } else {
+        setAudioError(true);
+      }
+    };
+
+    const handleWaiting = () => {
+      setAudioLoading(true);
+    };
+
+    const handlePlaying = () => {
+      setAudioLoading(false);
+      setIsPlaying(true);
     };
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('canplay', handleCanPlay);
     audio.addEventListener('error', handleError);
+    audio.addEventListener('waiting', handleWaiting);
+    audio.addEventListener('playing', handlePlaying);
 
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('canplay', handleCanPlay);
       audio.removeEventListener('error', handleError);
+      audio.removeEventListener('waiting', handleWaiting);
+      audio.removeEventListener('playing', handlePlaying);
     };
-  }, []);
+  }, [audioRetryCount, retryAudio]);
 
   const toggleAudio = () => {
-    if (!audioRef.current || audioError) return;
+    if (!audioRef.current) return;
+    
+    // If there was an error, try to retry
+    if (audioError) {
+      setAudioRetryCount(0);
+      retryAudio();
+      return;
+    }
+    
     if (isPlaying) {
       audioRef.current.pause();
+      setIsPlaying(false);
     } else {
-      audioRef.current.play().catch(() => setAudioError(true));
+      setAudioLoading(true);
+      audioRef.current.play()
+        .then(() => {
+          setAudioLoading(false);
+          setIsPlaying(true);
+        })
+        .catch(() => {
+          setAudioLoading(false);
+          if (audioRetryCount < MAX_AUDIO_RETRIES) {
+            retryAudio();
+          } else {
+            setAudioError(true);
+          }
+        });
     }
-    setIsPlaying(!isPlaying);
   };
 
   const formatDuration = (seconds: number) => {
@@ -88,7 +161,7 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
     return url.includes('mmg.whatsapp.net') || url.includes('cdn.whatsapp.net');
   };
 
-  const renderExpiredMedia = (type: 'image' | 'audio' | 'video') => {
+  const renderExpiredMedia = (type: 'image' | 'audio' | 'video', onRetry?: () => void) => {
     const icons = {
       image: <ImageOff className="h-6 w-6" />,
       audio: <Volume2 className="h-6 w-6" />,
@@ -101,14 +174,18 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
     };
     const descriptions = {
       image: 'A mídia expirou ou não pôde ser carregada',
-      audio: 'A mídia expirou ou não pôde ser carregada',
+      audio: 'Toque para tentar novamente',
       video: 'A mídia expirou ou não pôde ser carregada',
     };
 
-    const isTemporary = isTemporaryUrl(message.media_url);
-
     return (
-      <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg border border-border/50 min-w-[200px]">
+      <div 
+        className={cn(
+          "flex items-center gap-3 p-4 bg-muted/30 rounded-lg border border-border/50 min-w-[200px]",
+          onRetry && "cursor-pointer hover:bg-muted/50 transition-colors"
+        )}
+        onClick={onRetry}
+      >
         <div className="text-muted-foreground">
           {icons[type]}
         </div>
@@ -116,6 +193,9 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
           <span className="text-sm font-medium text-muted-foreground">{labels[type]}</span>
           <span className="text-xs text-muted-foreground/70">{descriptions[type]}</span>
         </div>
+        {onRetry && (
+          <RefreshCw className="h-4 w-4 text-muted-foreground" />
+        )}
       </div>
     );
   };
@@ -155,16 +235,33 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
         );
 
       case 'audio':
+        // Show error state with retry option
         if (audioError) {
-          return renderExpiredMedia('audio');
+          return renderExpiredMedia('audio', () => {
+            setAudioRetryCount(0);
+            retryAudio();
+          });
         }
+        
         return (
           <div className="flex items-center gap-3 min-w-[200px]">
             <button 
               onClick={toggleAudio}
-              className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground hover:bg-primary/90 transition-colors"
+              disabled={audioLoading && !audioError}
+              className={cn(
+                "h-10 w-10 rounded-full flex items-center justify-center transition-colors",
+                audioLoading && !audioError
+                  ? "bg-muted cursor-wait"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90"
+              )}
             >
-              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
+              {audioLoading && !audioError ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : isPlaying ? (
+                <Pause className="h-4 w-4" />
+              ) : (
+                <Play className="h-4 w-4 ml-0.5" />
+              )}
             </button>
             <div className="flex-1 flex flex-col gap-1">
               <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -174,17 +271,17 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
                 />
               </div>
               <span className="text-[10px] text-muted-foreground">
-                {formatDuration(audioDuration)}
+                {audioLoading ? 'Carregando...' : formatDuration(audioDuration)}
               </span>
             </div>
             <audio 
               ref={audioRef} 
               src={message.media_url || ''} 
+              preload="auto"
               onEnded={() => {
                 setIsPlaying(false);
                 setAudioProgress(0);
               }}
-              onError={() => setAudioError(true)}
             />
           </div>
         );
