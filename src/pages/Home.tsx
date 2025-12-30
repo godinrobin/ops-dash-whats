@@ -9,7 +9,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAccessLevel } from "@/hooks/useAccessLevel";
 import { RestrictedFeatureModal } from "@/components/RestrictedFeatureModal";
-import { Lock } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Lock, Clock } from "lucide-react";
 import { BackgroundBeams } from "@/components/ui/background-beams";
 import { GlowCard } from "@/components/ui/spotlight-card";
 import { cn } from "@/lib/utils";
@@ -26,26 +28,38 @@ interface SystemCardProps {
   onClick: () => void;
   isLocked?: boolean;
   isBeta?: boolean;
+  isComingSoon?: boolean;
   gradient?: string | null;
   glowColor?: 'blue' | 'purple' | 'green' | 'red' | 'orange';
 }
 
-const SystemCard = ({ icon, title, shortTitle, description, onClick, isLocked, isBeta, gradient, glowColor = 'purple' }: SystemCardProps) => {
+const SystemCard = ({ icon, title, shortTitle, description, onClick, isLocked, isBeta, isComingSoon, gradient, glowColor = 'purple' }: SystemCardProps) => {
   return (
     <GlowCard
       glowColor={glowColor}
       customSize
-      className="h-full w-full cursor-pointer flex flex-col transition-all duration-300 hover:scale-[1.02] hover:-translate-y-1 hover:shadow-xl hover:shadow-primary/10"
+      className={cn(
+        "h-full w-full cursor-pointer flex flex-col transition-all duration-300 hover:scale-[1.02] hover:-translate-y-1 hover:shadow-xl hover:shadow-primary/10",
+        isComingSoon && "opacity-70"
+      )}
       onClick={onClick}
     >
-      {isLocked && (
+      {isLocked && !isComingSoon && (
         <div className="absolute top-3 right-3 z-10">
           <div className="w-7 h-7 rounded-full bg-accent/20 flex items-center justify-center">
             <Lock className="w-4 h-4 text-accent" />
           </div>
         </div>
       )}
-      {isBeta && (
+      {isComingSoon && (
+        <div className="absolute top-2 left-2 z-10">
+          <span className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-yellow-500/20 text-yellow-500 border border-yellow-500/30 rounded-full flex items-center gap-1">
+            <Clock className="w-3 h-3" />
+            Em breve
+          </span>
+        </div>
+      )}
+      {isBeta && !isComingSoon && (
         <div className="absolute top-2 left-2 z-10">
           <span className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-accent/20 text-accent border border-accent/30 rounded-full">
             Beta
@@ -87,6 +101,7 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
   const { isFullMember, loading: accessLoading } = useAccessLevel();
   const [restrictedModalOpen, setRestrictedModalOpen] = useState(false);
   const [selectedFeatureName, setSelectedFeatureName] = useState<string>("");
+  const [comingSoonModalOpen, setComingSoonModalOpen] = useState(false);
   
   const autoplayPlugin = useRef(
     Autoplay({ delay: 3000, stopOnInteraction: true })
@@ -131,6 +146,7 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
     restricted: boolean;
     glowColor: 'blue' | 'purple' | 'green' | 'red' | 'orange';
     isBeta?: boolean;
+    comingSoon?: boolean;
   }> = [
     { 
       path: "/metricas", 
@@ -267,7 +283,8 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
       description: "Aqueça seus chips com conversas naturais entre instâncias",
       gradient: "from-green-400 to-emerald-500",
       restricted: true,
-      glowColor: 'green'
+      glowColor: 'green',
+      comingSoon: true
     },
     { 
       path: "/save-whatsapp", 
@@ -287,7 +304,7 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
       gradient: "from-green-400 to-teal-500",
       restricted: true,
       glowColor: 'green',
-      isBeta: true
+      comingSoon: true
     },
     { 
       path: "/disparador", 
@@ -296,11 +313,18 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
       description: "Envie mensagens em massa para múltiplos contatos",
       gradient: "from-blue-500 to-indigo-600",
       restricted: true,
-      glowColor: 'blue'
+      glowColor: 'blue',
+      comingSoon: true
     }
   ];
 
   const handleSystemClick = (system: typeof systems[0]) => {
+    // Check if system is coming soon
+    if (system.comingSoon) {
+      setComingSoonModalOpen(true);
+      return;
+    }
+    
     if (isFullMember || !system.restricted) {
       navigate(system.path);
       return;
@@ -398,6 +422,7 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
                     onClick={() => handleSystemClick(system)}
                     isLocked={isLocked}
                     isBeta={system.isBeta}
+                    isComingSoon={system.comingSoon}
                     gradient={system.gradient}
                     glowColor={system.glowColor}
                   />
@@ -458,6 +483,39 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
         onOpenChange={setRestrictedModalOpen}
         featureName={selectedFeatureName}
       />
+
+      {/* Coming Soon Modal */}
+      <Dialog open={comingSoonModalOpen} onOpenChange={setComingSoonModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-12 h-12 rounded-full bg-accent/20 flex items-center justify-center">
+                <Clock className="w-6 h-6 text-accent" />
+              </div>
+              <DialogTitle className="text-xl">Em breve!</DialogTitle>
+            </div>
+            <DialogDescription asChild>
+              <div className="text-left space-y-4 pt-2">
+                <p className="font-semibold text-foreground">Recado pessoal do João!</p>
+                <p className="text-muted-foreground">
+                  Prezando pela sua experiência, este sistema está em atualização para um servidor mais potente. Não estava esperando tantos números conectados em tão pouco tempo de atividade.
+                </p>
+                <p className="text-muted-foreground">
+                  Eu João Lucas, peço desculpa pelo inconveniente, e prometo ativar este sistema o mais rápido possível com a melhor experiência que possa trazer para você!
+                </p>
+                <p className="text-muted-foreground">
+                  Desfrute dos outros sistemas disponíveis para sua operação enquanto está sendo feita a atualização deste sistema!
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setComingSoonModalOpen(false)}>
+              Entendi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };
