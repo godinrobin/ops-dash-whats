@@ -193,6 +193,364 @@ ${priceInstruction}
 ${observationInstruction}
 
 Produce in high resolution (4K), vintage illustration style, square format 1:1 aspect ratio.`;
+    } else if (modelType === 'calistenia-urbano') {
+      // Model 6 - Calistenia Urbano (based on image-546)
+      prompt = `Create a highly impactful advertising image, in square format (1:1), professional digital ad style, focused on conversion, following these guidelines:
+
+MAIN CONCEPT:
+The image must clearly communicate the theme "${productName}", conveying transformation, power, results, simplicity and autonomy, in a visually intense and emotional way.
+
+MAIN CHARACTER:
+- A main character representing the fitness/calisthenics target audience
+- Athletic appearance, disciplined, focused, confident, determined
+- Strong and expressive body posture, demonstrating action, effort or mastery
+- Doing a push-up or similar bodyweight exercise
+- Dramatic lighting with well-defined shadows creating depth and impact
+- Urban outdoor setting (park, city, bench nearby)
+- Warm color palette with reds, oranges and dark tones
+
+SCENARIO:
+- Urban outdoor environment (park with city skyline silhouette in background)
+- Slightly blurred background to highlight the character
+- Sunset/dramatic lighting atmosphere
+- Color palette: deep reds, oranges, blacks
+
+VISUAL STYLE:
+- Digital realistic or semi-realistic illustration
+- High contrast
+- Strong and emotional colors
+- Modern, clean and aggressive visual
+- Ultra HD quality, 4K, cinematic lighting
+- Professional paid ads creative appearance
+
+TEXT IN IMAGE (STRONG AND LEGIBLE TYPOGRAPHY):
+
+MAIN TITLE (TOP):
+Large text, uppercase, attention-grabbing and direct:
+"SEM ACADEMIA. SEM DESCULPAS."
+
+BENEFITS LIST (with prohibition icons ⊘):
+- Sem pesos
+- Sem máquinas  
+- Sem mensalidades
+
+SUPPORT PHRASE with fire emoji 🔥:
+"Só você e seu corpo"
+
+CHECKLIST with checkmarks ✅:
+- +519 exercícios em vídeo
+- Plano de 4 semanas
+
+CTA (bottom right):
+"Acesse agora"
+${priceInstruction}
+${observationInstruction}
+
+IMPORTANT RULES:
+- Do NOT include real brands
+- Do NOT visually pollute
+- Do NOT use long texts
+
+Produce in ultra HD, 4K resolution, extreme sharpness, perfectly legible texts, no distortions, square format 1:1 aspect ratio.`;
+    } else if (modelType === 'curso-tecnico-cartoon') {
+      // Model 7 - Curso Técnico Cartoon (based on image-547)
+      prompt = `Create a highly professional digital advertising image, in square format (1:1), modern semi-realistic vector illustration style, with educational and commercial aesthetic, ideal for social media ads.
+
+MAIN THEME: ${productName}
+
+SCENARIO:
+Visual environment related to the theme "${productName}", with graphic elements and objects that clearly represent the product niche. The background should be clean, with smooth gradients or modern solid colors, conveying authority, clarity and professionalism.
+- Dark teal/green background with gradient
+
+MAIN CHARACTER:
+A friendly and confident illustrated character (man), in modern and well-detailed cartoon style, looking at the camera, smiling slightly, conveying confidence, mastery and didactics.
+- Wearing a work uniform/polo shirt (green/teal color)
+- Holding or interacting with elements directly linked to the product (wires, cables, electrical tools)
+- Professional appearance, friendly smile
+- "APOSTILA" written on a workbook he's carrying
+
+COMPLEMENTARY VISUAL ELEMENTS:
+- Floating icons or objects related to the content (laptop showing diagrams, car engine in background)
+- Visual details reinforcing learning, method, practice or transformation
+- Clean, well-lit illustration with defined contours and harmonic colors
+- Flat + depth style (soft shadows and slight depth)
+- Electrical wires/cables in red, yellow, green colors
+
+TEXT IN IMAGE (STRONG AND LEGIBLE TYPOGRAPHY):
+
+MAIN TITLE (LARGE, IN HIGHLIGHT):
+"ELÉTRICA AUTOMOTIVA"
+
+EXPLANATORY SUBTITLE:
+"+200 TIPOS DE REPAROS EM PLACAS, MÓDULOS, CHICOTES E TODA LINHA LEVE"
+
+BOTTOM CTA:
+"AULAS AO VIVO DIRETO NO" with WhatsApp icon
+${priceInstruction}
+${observationInstruction}
+
+IMPORTANT:
+- Do NOT include price or monetary values unless specified
+- Texts should be short, impactful and highly legible
+- Use high contrast between text and background
+- Visual language compatible with high conversion ads
+
+GRAPHIC STYLE:
+Professional digital illustration, premium infographic style, clean stroke, vibrant but balanced colors, modern and reliable appearance, similar to educational materials and ads for courses, training or digital products.
+
+QUALITY:
+Ultra high resolution, extremely sharp, perfect lighting, balanced composition, ready for Instagram, Facebook and WhatsApp ads, square format 1:1 aspect ratio.`;
+    } else if (modelType === 'curso-tecnico-realista') {
+      // Model 8 - Curso Técnico Realista (based on image-548)
+      prompt = `Create a highly professional, modern and persuasive digital advertising image, in square format (1:1), high conversion ad style for social media, with premium, technological and reliable aesthetic, focused on education, training or practical solution.
+
+MAIN THEME: ${productName}
+
+MAIN CHARACTER:
+Include a realistic or semi-realistic human character, with professional and reliable appearance, related to the theme, demonstrating mastery, concentration or practical teaching.
+- Middle-aged man with gray/salt-pepper beard
+- Professional appearance, focused expression
+- Working with electronic equipment, multimeter, cables
+- Wearing work clothes
+
+VISUAL ELEMENTS:
+Add objects related to the product/theme:
+- Tablet/screen showing video call or online class
+- Workbook/apostila with "+200 TIPOS DE REPAROS" visible
+- Multimeter displaying readings
+- Colored electrical wires and cables
+- Spark/particle effects in background
+
+VISUAL STYLE:
+- Cinematic lighting
+- Background with particle effects, lights, gradients or technological texture
+- Dominant color palette: GREEN and BLACK
+- High contrast, extreme sharpness, premium appearance
+- Modern, clean, eye-catching and reliable style
+
+TEXT IN IMAGE (STRONG AND LEGIBLE TYPOGRAPHY):
+
+MAIN TITLE (TOP - LARGE LETTERS):
+"ELÉTRICA AUTOMOTIVA"
+
+BENEFITS CHECKLIST with green checkmarks ✅:
+- VÍDEO AULA
+- APOSTILA +200 TIPOS DE REPAROS
+- CHICOTE, LINHA LEVE E MAIS
+
+CTA (BOTTOM):
+Visual button or highlight with WhatsApp icon:
+"RECEBA NO WhatsApp"
+${priceInstruction}
+${observationInstruction}
+
+COMPOSITION:
+- Character on right side or center
+- Text organized on left or top
+- Balanced elements, no visual pollution
+- Clear reading even on small screens (mobile first)
+
+IMPORTANT RESTRICTIONS:
+- Do NOT use real brands
+- Do NOT pollute with long texts
+- Do NOT use hard-to-read fonts
+
+FINAL QUALITY:
+Ultra-realistic, high resolution, professional ad style, ready for Facebook Ads, Instagram, WhatsApp and Stories, square format 1:1 aspect ratio.`;
+    } else if (modelType === 'fitness-urgente') {
+      // Model 9 - Fitness Urgente (based on image-549)
+      prompt = `Create a highly persuasive vertical advertising image (1:1 or 4:5 format), with urgent offer aesthetic, quick transformation and high visual impact, focused on the theme "${productName}".
+
+CENTRAL CONCEPT:
+The image must convey:
+- Urgency
+- Immediate transformation
+- Overcoming / visible result
+- Authority and confidence
+- Action now
+
+The visual should resemble high conversion ads used in Facebook Ads, Instagram Ads and WhatsApp, with cinematic + commercial style.
+
+MAIN CHARACTER:
+- A realistic, expressive and charismatic person representing the fitness target audience
+- Athletic woman in workout clothes (red/black)
+- Facial expression of effort, focus, achievement, satisfaction
+- Active and dynamic pose (doing squats or similar exercise)
+- Sweaty, intense workout appearance
+- Big genuine smile showing determination
+
+SCENARIO:
+- Indoor environment (home, apartment with window view of city)
+- Dramatic and contrasted lighting
+- Fire/flame effects on the borders
+- Slightly blurred background to highlight character
+
+VISUAL STYLE:
+- Hyper-realistic photo or ultra realistic illustration
+- Vibrant and contrasting colors
+- Effects of: fire, flames, sparks, dynamic lights
+- Sensation of energy, movement and impact
+
+TEXTS IN IMAGE:
+
+URGENCY BANNER (TOP - red/orange):
+"🏆 SÓ HOJE - ÚLTIMA CHANCE"
+
+MAIN PROMISE (large golden text):
+"15 MIN = CORPO NOVO"
+with timer icon showing "15:00"
+
+TRANSFORMATION PHRASE:
+"CHEGA DE DESCULPAS!"
+
+BEFORE/AFTER small frames on the left side
+
+URGENCY TEXT:
+"HOJE" with time indicator
+"ACABA ÀS 23:59"
+"ÚLTIMAS VAGAS!"
+
+WhatsApp icon floating
+
+CTA BUTTONS (BOTTOM):
+"CLIQUE AGORA!" and "COMECE HOJE EM CASA!"
+${priceInstruction}
+${observationInstruction}
+
+EXTRA ELEMENTS:
+- Fire/energy effect borders
+- Metallic or urban textures
+- Strong, modern and legible typography
+- Aggressive high conversion ad style
+
+TECHNICAL SETTINGS:
+High resolution, ultra quality, professional lighting, maximum sharpness, focus on conversion, square format 1:1 aspect ratio.`;
+    } else if (modelType === 'whatsapp-mobile') {
+      // Model 10 - WhatsApp Mobile (based on image-550)
+      prompt = `Create an ultra-realistic, highly persuasive advertising image focused on conversion, in square format (1:1), optimized for ads on Instagram, Facebook and WhatsApp, with modern, clean and professional aesthetic.
+
+MAIN SCENE:
+A realistic human hand holding a modern smartphone in the foreground, with the phone screen clearly displaying a digital library/app interface related to the theme "${productName}".
+
+On the phone screen should appear:
+- Content thumbnails related to "${productName}" (exercise videos, tutorials)
+- "Play" buttons, "view" or "access" buttons
+- Layout similar to an organized digital content library
+- "Biblioteca: 519 Vídeos" header
+- Simple and intuitive icons
+- Grid of video thumbnails with exercise/content previews
+
+Next to or slightly overlapping the phone, add a large eye-catching icon: a flexed bicep muscle with fire emoji 🔥
+
+CONTEXT / ENVIRONMENT:
+- Blurred background (bokeh) of modern, clean and cozy domestic environment
+- Living room with blue/gray couch, plant, modern decor
+- Soft natural lighting, sensation of comfort and practicality
+- Realistic lifestyle style, without artificial exaggerations
+
+HIGHLIGHTED VISUAL ELEMENTS:
+- Floating visual icons reinforcing the main benefit (💪🔥)
+- Vivid and contrasting colors on important elements
+- Well-defined depth of field (phone in focus, background blurred)
+- Professional photographic quality, premium advertising level
+
+TEXTS IN IMAGE:
+
+MAIN TEXT (TOP - LARGE AND IMPACTFUL):
+"Receba +519 Treinos de ${productName} no Seu WhatsApp Agora."
+
+Font: Bold, modern, legible
+White or light color with dark background/gradient for contrast
+
+SECONDARY TEXT (OPTIONAL):
+"*acesso imediato pelo WhatsApp"
+
+CTA (FOOTER OR VISUAL HIGHLIGHT):
+Crossed out "DE R$97" and "POR R$10" if price included, or just "Receba agora no WhatsApp"
+Green button (WhatsApp style), rounded edges, clickable appearance
+${priceInstruction}
+${observationInstruction}
+
+COLOR PALETTE:
+- Blue/teal accents
+- Black, dark gray or dark blue for background
+- White for texts
+- Orange/fire accent color
+
+STYLE AND ART DIRECTION:
+- High conversion ad style
+- Clean visual, no pollution
+- Focus on clarity, immediate benefit and ease
+- "Tap → receive now" sensation
+- No values, prices or numerical promotions unless specified
+
+IMPORTANT RULES:
+- Do NOT mention values or discounts unless specified
+- Do NOT use real registered brands
+- Do NOT visually pollute
+
+Produce in high resolution, 4K quality, realistic style, square format 1:1 aspect ratio.`;
+    } else if (modelType === 'fitness-energetico') {
+      // Model 11 - Fitness Energético (based on image-551)
+      prompt = `Create a high conversion digital advertising image, professional ad style for social media (Instagram Ads / Facebook Ads / WhatsApp Ads), focused on the theme "${productName}".
+
+GENERAL COMPOSITION:
+- Vertical format (1:1 or 4:5), optimized for ads
+- Impactful, energetic and eye-catching visual style, with sensation of transformation, result and urgency
+- Ultra realistic quality / hyper detailed illustration, 4K resolution, cinematic lighting, high contrast
+- Intense and strategic color palette: RED, YELLOW, ORANGE on dark background
+- Dynamic background with visual effects like:
+  - Energy rays, particles, sparks, glow, lightning
+  - Red/orange gradient atmosphere
+
+MAIN CHARACTER:
+- Central character representing fitness/calisthenics target audience
+- Athletic shirtless man with defined muscles
+- Victory pose with arms raised, screaming/shouting with intensity
+- Confident appearance, determined or motivated expression
+- Body and posture consistent with the theme (strength, power, energy)
+- Aspirational, inspiring style, "result achieved" sensation
+
+PRODUCT VISUAL ELEMENTS:
+- Insert visual representations like:
+  - Floating icons (check ✔️, fire 🔥, lightning ⚡)
+  - Energy/lightning effects around the character
+- Elements should appear digital, modern and professional
+
+TEXTS IN IMAGE (STRONG TYPOGRAPHY):
+
+Top of image (large headline, bold font):
+"+519 TREINOS DE CALISTENIA"
+
+Side blocks or secondary (in boxes or seals):
+- "TREINOS INSANOS PARA FAZER EM CASA OU NA RUA"
+- "TUDO EM VÍDEOS"
+- "4 BÔNUS EXCLUSIVOS"
+- "EVOLUA EM 4 SEMANAS"
+- "ACESSO VITALÍCIO"
+
+Visual CTA (button or bottom highlight):
+"Acesse agora" or similar
+Eye-catching button style with glow, shadow and contrast
+${priceInstruction}
+${observationInstruction}
+
+GRAPHIC STYLE:
+- Large, legible typography with clear hierarchy
+- Highlighted elements with boxes, stripes or seals
+- "Viral ads" effect, champion infoproduct aesthetic
+- Professional, modern and persuasive appearance
+- No visual pollution, everything organized and strategic
+
+IMPORTANT RESTRICTIONS:
+- Do NOT use real brands
+- Do NOT include small illegible texts
+- Do NOT look like generic stock image
+
+EXPECTED FINAL RESULT:
+An extremely eye-catching, professional and persuasive image, with appearance of ad that generates clicks, curiosity and immediate conversion, adaptable for any niche, product or theme.
+
+Produce in high resolution (4K), realistic style, square format 1:1 aspect ratio.`;
     } else {
       // Model 1 - Calm Beige Editorial (default)
       prompt = `Create a highly realistic product photography advertisement image with the following specifications:
