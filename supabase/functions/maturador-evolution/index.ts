@@ -751,7 +751,7 @@ Regras:
           let webhookConfigured = false;
           
           if (apiProvider === 'uazapi') {
-            // UazAPI v2 webhook: POST /webhook/set with token header (per OpenAPI spec)
+            // UazAPI webhook: POST /instance/setWebhooks with token header
             try {
               // Get the instance token from the response (varies by UazAPI version)
               const instanceToken = result.token || result.instanceToken || result.instance?.token || createApiKey;
@@ -766,13 +766,21 @@ Regras:
                 console.log(`[CREATE-INSTANCE] Saved UazAPI instance token`);
               }
               
+              // UazAPI webhook payload per documentation screenshot:
+              // - URL: webhook URL
+              // - Events: "messages" 
+              // - Exclude Messages: "wasSentByApi" (avoid loop), "isGroupYes" (ignore groups)
               const uazapiWebhookPayload = {
                 url: webhookUrl,
-                enabled: true,
-                events: ['messages', 'status', 'connection']
+                addUrlEvents: true,
+                addUrlTypesMessages: true,
+                events: 'messages',
+                excludeMessages: 'wasSentByApi,isGroupYes'
               };
               
-              const webhookRes = await fetch(`${createBaseUrl}/webhook/set`, {
+              console.log(`[CREATE-INSTANCE] UazAPI webhook payload:`, JSON.stringify(uazapiWebhookPayload));
+              
+              const webhookRes = await fetch(`${createBaseUrl}/instance/setWebhooks`, {
                 method: 'POST',
                 headers: {
                   'token': instanceToken,
