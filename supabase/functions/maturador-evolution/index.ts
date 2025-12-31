@@ -40,7 +40,7 @@ async function getGlobalApiConfig(supabaseClient: any) {
         uazapiConfig: {
           prefix: data.uazapi_api_prefix || '',
           adminHeader: data.uazapi_admin_header || 'admintoken',
-          listInstancesPath: data.uazapi_list_instances_path || '/admin/listInstances',
+          listInstancesPath: data.uazapi_list_instances_path || '/instance/all',
           listInstancesMethod: data.uazapi_list_instances_method || 'GET',
         },
       };
@@ -199,29 +199,43 @@ async function callWhatsAppApi(
 }
 
 // UazAPI endpoint mapping - translates Evolution endpoints to UazAPI equivalents
+// Based on UazAPI v2 OpenAPI documentation:
+// - Admin endpoints require header "admintoken": POST /instance/init, GET /instance/all
+// - Instance endpoints require header "token": GET /instance/status, POST /instance/connect, etc.
 function getUazApiEndpoint(evolutionEndpoint: string, instanceName?: string): { endpoint: string; isAdmin: boolean } {
   // Remove instance name from Evolution-style endpoints
   const cleanEndpoint = evolutionEndpoint.replace(`/${instanceName}`, '');
   
-  // Map common Evolution endpoints to UazAPI
+  // Map common Evolution endpoints to UazAPI (per OpenAPI spec)
   const mappings: Record<string, { endpoint: string; isAdmin: boolean }> = {
-    '/instance/fetchInstances': { endpoint: '/admin/listInstances', isAdmin: true },
-    '/instance/create': { endpoint: '/admin/createInstance', isAdmin: true },
-    '/instance/connect': { endpoint: '/instance/qrcode', isAdmin: false },
+    // Admin endpoints (require admintoken header)
+    '/instance/fetchInstances': { endpoint: '/instance/all', isAdmin: true },
+    '/instance/create': { endpoint: '/instance/init', isAdmin: true },
+    '/instance/delete': { endpoint: '/instance/delete', isAdmin: true },
+    
+    // Instance endpoints (require token header)
+    '/instance/connect': { endpoint: '/instance/connect', isAdmin: false },
     '/instance/connectionState': { endpoint: '/instance/status', isAdmin: false },
-    '/instance/logout': { endpoint: '/instance/logout', isAdmin: false },
-    '/instance/delete': { endpoint: '/admin/deleteInstance', isAdmin: true },
+    '/instance/logout': { endpoint: '/instance/disconnect', isAdmin: false },
     '/instance/restart': { endpoint: '/instance/restart', isAdmin: false },
+    
+    // Message endpoints (require token header)
     '/message/sendText': { endpoint: '/message/sendText', isAdmin: false },
     '/message/sendMedia': { endpoint: '/message/sendMedia', isAdmin: false },
     '/message/sendWhatsAppAudio': { endpoint: '/message/sendAudio', isAdmin: false },
+    
+    // Webhook endpoints (require token header)
     '/webhook/set': { endpoint: '/webhook/set', isAdmin: false },
     '/webhook/find': { endpoint: '/webhook/get', isAdmin: false },
-    '/chat/fetchProfilePictureUrl': { endpoint: '/contact/profilePicture', isAdmin: false },
-    '/chat/fetchProfile': { endpoint: '/contact/info', isAdmin: false },
-    '/chat/fetchBusinessProfile': { endpoint: '/contact/businessProfile', isAdmin: false },
-    '/label/findLabels': { endpoint: '/labels/list', isAdmin: false },
-    '/label/handleLabel': { endpoint: '/labels/set', isAdmin: false },
+    
+    // Contact endpoints (require token header)
+    '/chat/fetchProfilePictureUrl': { endpoint: '/chat/getProfilePicture', isAdmin: false },
+    '/chat/fetchProfile': { endpoint: '/chat/getContact', isAdmin: false },
+    '/chat/fetchBusinessProfile': { endpoint: '/business/profile', isAdmin: false },
+    
+    // Label endpoints (require token header)
+    '/label/findLabels': { endpoint: '/labels', isAdmin: false },
+    '/label/handleLabel': { endpoint: '/label/edit', isAdmin: false },
   };
   
   // Try to find a match
