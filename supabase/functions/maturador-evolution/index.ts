@@ -727,12 +727,13 @@ Regras:
         
         // Save API config per instance
         if (apiProvider === 'uazapi') {
-          insertData.uazapi_token = createApiKey;
+          // IMPORTANT: store the INSTANCE token (not the admin token)
+          const instanceToken = result?.token || result?.instanceToken || result?.instance?.token || null;
+          insertData.uazapi_token = instanceToken;
         } else if (evolutionConfig?.baseUrl && evolutionConfig?.apiKey) {
           insertData.evolution_base_url = evolutionConfig.baseUrl.replace(/\/$/, '');
           insertData.evolution_api_key = evolutionConfig.apiKey;
         }
-
         const { error: insertError } = await supabaseClient
           .from('maturador_instances')
           .insert(insertData);
@@ -869,13 +870,22 @@ Regras:
           .single();
 
         if (inst?.api_provider === 'uazapi') {
-          // UazAPI: use /instance/qrcode endpoint
+          // UazAPI: initiate connection to generate QR
           const config = await getInstanceApiConfig(supabaseClient, inst.id);
-          result = await callWhatsAppApi(config, '/instance/qrcode', 'GET', undefined, false, inst.uazapi_token || undefined);
+          try {
+            result = await callWhatsAppApi(config, '/instance/connect', 'POST', undefined, false, inst.uazapi_token || undefined);
+          } catch (e: any) {
+            // Some UazAPI deployments expose QR via a different path
+            if (e?.status === 404) {
+              console.log('[UAZAPI] /instance/connect not found, trying /instance/qrcode');
+              result = await callWhatsAppApi(config, '/instance/qrcode', 'GET', undefined, false, inst.uazapi_token || undefined);
+            } else {
+              throw e;
+            }
+          }
         } else {
           result = await callEvolution(`/instance/connect/${instanceName}`, 'GET');
         }
-
         // Update QR code in database - handle different response formats
         const qrcode = result.base64 || result.qrcode || result.qr?.base64 || null;
         if (qrcode) {
@@ -909,11 +919,20 @@ Regras:
         // First attempt to get QR code
         if (inst?.api_provider === 'uazapi') {
           const config = await getInstanceApiConfig(supabaseClient, inst.id);
-          result = await callWhatsAppApi(config, '/instance/qrcode', 'GET', undefined, false, inst.uazapi_token || undefined);
+          try {
+            // Prefer /instance/connect (generates QR in many UazAPI deployments)
+            result = await callWhatsAppApi(config, '/instance/connect', 'POST', undefined, false, inst.uazapi_token || undefined);
+          } catch (e: any) {
+            if (e?.status === 404) {
+              console.log('[UAZAPI] /instance/connect not found, trying /instance/qrcode');
+              result = await callWhatsAppApi(config, '/instance/qrcode', 'GET', undefined, false, inst.uazapi_token || undefined);
+            } else {
+              throw e;
+            }
+          }
         } else {
           result = await callEvolution(`/instance/connect/${instanceName}`, 'GET');
         }
-        
         // Handle different QR response formats
         let qrcode = result.base64 || result.qrcode || result.qr?.base64 || null;
         
@@ -954,9 +973,39 @@ Regras:
           });
         }
 
+        // If this is a UazAPI instance, use /instance/status and skip Evolution-only logic
+        const { data: inst } = await supabaseClient
+          .from('maturador_instances')
+          .select('id, api_provider, uazapi_token')
+          .eq('instance_name', instanceName)
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (inst?.api_provider === 'uazapi') {
+          const config = await getInstanceApiConfig(supabaseClient, inst.id);
+          result = await callWhatsAppApi(config, '/instance/status', 'GET', undefined, false, inst.uazapi_token || undefined);
+          console.log('UazAPI status result:', JSON.stringify(result, null, 2));
+
+          const isConnected = Boolean(
+            result?.connected ??
+            result?.status?.connected ??
+            result?.instance?.connected ??
+            result?.data?.connected ??
+            false
+          );
+
+          const newStatus = isConnected ? 'connected' : 'disconnected';
+          await supabaseClient
+            .from('maturador_instances')
+            .update({ status: newStatus })
+            .eq('instance_name', instanceName)
+            .eq('user_id', user.id);
+
+          break;
+        }
+
         result = await callEvolution(`/instance/connectionState/${instanceName}`, 'GET');
         console.log('Connection state result:', JSON.stringify(result, null, 2));
-
         // Update status in database
         const newStatus = result.instance?.state === 'open' ? 'connected' : 'disconnected';
 
