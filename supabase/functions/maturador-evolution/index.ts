@@ -780,7 +780,7 @@ Regras:
               
               console.log(`[CREATE-INSTANCE] UazAPI webhook payload:`, JSON.stringify(uazapiWebhookPayload));
               
-              const webhookRes = await fetch(`${createBaseUrl}/instance/setWebhooks`, {
+              let webhookRes = await fetch(`${createBaseUrl}/instance/setWebhooks`, {
                 method: 'POST',
                 headers: {
                   'token': instanceToken,
@@ -788,13 +788,31 @@ Regras:
                 },
                 body: JSON.stringify(uazapiWebhookPayload),
               });
-              
+
+              let resText = await webhookRes.text();
+
+              // Some UazAPI deployments use PUT for webhook config; if POST returns 405, retry with PUT.
+              if (!webhookRes.ok && webhookRes.status === 405) {
+                const allow = webhookRes.headers.get('allow') || webhookRes.headers.get('Allow');
+                console.log(`[CREATE-INSTANCE] UazAPI webhook returned 405. Allow=${allow ?? 'unknown'}. Retrying with PUT...`);
+
+                webhookRes = await fetch(`${createBaseUrl}/instance/setWebhooks`, {
+                  method: 'PUT',
+                  headers: {
+                    'token': instanceToken,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(uazapiWebhookPayload),
+                });
+
+                resText = await webhookRes.text();
+              }
+
               if (webhookRes.ok) {
                 console.log(`[CREATE-INSTANCE] UazAPI Webhook configured successfully for ${instanceName}`);
                 webhookConfigured = true;
               } else {
-                const errText = await webhookRes.text();
-                console.log(`[CREATE-INSTANCE] UazAPI Webhook failed: ${errText}`);
+                console.log(`[CREATE-INSTANCE] UazAPI Webhook failed: ${resText}`);
               }
             } catch (webhookError) {
               console.log(`[CREATE-INSTANCE] UazAPI webhook error:`, webhookError);
@@ -878,24 +896,103 @@ Regras:
           .single();
 
         if (inst?.api_provider === 'uazapi') {
-          // UazAPI: initiate connection to generate QR
+          // UazAPI: generate QR requires initiating connect AND then fetching the QR
           const config = await getInstanceApiConfig(supabaseClient, inst.id);
+
+          let connectResult: any = null;
           try {
-            result = await callWhatsAppApi(config, '/instance/connect', 'POST', undefined, false, inst.uazapi_token || undefined);
+            connectResult = await callWhatsAppApi(
+              config,
+              '/instance/connect',
+              'POST',
+              undefined,
+              false,
+              inst.uazapi_token || undefined
+            );
+            console.log('[UAZAPI] connect response:', JSON.stringify(connectResult).substring(0, 800));
           } catch (e: any) {
-            // Some UazAPI deployments expose QR via a different path
-            if (e?.status === 404) {
-              console.log('[UAZAPI] /instance/connect not found, trying /instance/qrcode');
-              result = await callWhatsAppApi(config, '/instance/qrcode', 'GET', undefined, false, inst.uazapi_token || undefined);
+            // Some deployments may require a payload
+            if (e?.status === 400) {
+              const msg = (e?.message || '').toString().toLowerCase();
+              if (msg.includes('name') || msg.includes('instancename')) {
+                try {
+                  connectResult = await callWhatsAppApi(
+                    config,
+                    '/instance/connect',
+                    'POST',
+                    { instanceName },
+                    false,
+                    inst.uazapi_token || undefined
+                  );
+                } catch {
+                  connectResult = await callWhatsAppApi(
+                    config,
+                    '/instance/connect',
+                    'POST',
+                    { Name: instanceName },
+                    false,
+                    inst.uazapi_token || undefined
+                  );
+                }
+              } else {
+                throw e;
+              }
+            } else if (e?.status === 404) {
+              // Some deployments expose QR directly
+              console.log('[UAZAPI] /instance/connect not found, will try /instance/qrcode');
             } else {
               throw e;
+            }
+          }
+
+          // Fetch QR after connect (this is what the UI expects)
+          try {
+            result = await callWhatsAppApi(
+              config,
+              '/instance/qrcode',
+              'GET',
+              undefined,
+              false,
+              inst.uazapi_token || undefined
+            );
+            console.log('[UAZAPI] qrcode response:', JSON.stringify(result).substring(0, 800));
+          } catch (e: any) {
+            if (e?.status === 405) {
+              const allow = e?.details?.allow || e?.details?.Allow;
+              console.log(`[UAZAPI] /instance/qrcode returned 405. Allow=${allow ?? 'unknown'}. Retrying with POST...`);
+              result = await callWhatsAppApi(
+                config,
+                '/instance/qrcode',
+                'POST',
+                undefined,
+                false,
+                inst.uazapi_token || undefined
+              );
+            } else {
+              // Fallback to whatever connect returned
+              result = connectResult ?? {};
             }
           }
         } else {
           result = await callEvolution(`/instance/connect/${instanceName}`, 'GET');
         }
+
         // Update QR code in database - handle different response formats
-        const qrcode = result.base64 || result.qrcode || result.qr?.base64 || null;
+        const candidate: any =
+          result?.base64 ||
+          result?.qrcode ||
+          result?.qr?.base64 ||
+          result?.qrCode ||
+          result?.instance?.qrcode ||
+          result?.instance?.qrCode ||
+          result?.data?.qrcode ||
+          null;
+
+        const qrcode =
+          typeof candidate === 'string'
+            ? candidate
+            : candidate?.base64 || candidate?.qrcode || null;
+
         if (qrcode) {
           await supabaseClient
             .from('maturador_instances')
@@ -903,6 +1000,8 @@ Regras:
             .eq('instance_name', instanceName)
             .eq('user_id', user.id);
         }
+
+        result = { base64: qrcode };
 
         break;
       }
@@ -925,41 +1024,117 @@ Regras:
           .single();
 
         // First attempt to get QR code
+        let qrcode: string | null = null;
+
         if (inst?.api_provider === 'uazapi') {
           const config = await getInstanceApiConfig(supabaseClient, inst.id);
+
+          // 1) initiate connect (required to generate/refresh QR)
           try {
-            // Prefer /instance/connect (generates QR in many UazAPI deployments)
-            result = await callWhatsAppApi(config, '/instance/connect', 'POST', undefined, false, inst.uazapi_token || undefined);
+            const connectRes = await callWhatsAppApi(
+              config,
+              '/instance/connect',
+              'POST',
+              undefined,
+              false,
+              inst.uazapi_token || undefined
+            );
+            console.log('[UAZAPI] connect response:', JSON.stringify(connectRes).substring(0, 800));
           } catch (e: any) {
-            if (e?.status === 404) {
-              console.log('[UAZAPI] /instance/connect not found, trying /instance/qrcode');
-              result = await callWhatsAppApi(config, '/instance/qrcode', 'GET', undefined, false, inst.uazapi_token || undefined);
+            if (e?.status === 400) {
+              const msg = (e?.message || '').toString().toLowerCase();
+              if (msg.includes('name') || msg.includes('instancename')) {
+                try {
+                  await callWhatsAppApi(
+                    config,
+                    '/instance/connect',
+                    'POST',
+                    { instanceName },
+                    false,
+                    inst.uazapi_token || undefined
+                  );
+                } catch {
+                  await callWhatsAppApi(
+                    config,
+                    '/instance/connect',
+                    'POST',
+                    { Name: instanceName },
+                    false,
+                    inst.uazapi_token || undefined
+                  );
+                }
+              } else {
+                throw e;
+              }
+            } else if (e?.status !== 404) {
+              throw e;
+            }
+          }
+
+          // 2) fetch QR
+          let qrApiResult: any = null;
+          try {
+            qrApiResult = await callWhatsAppApi(
+              config,
+              '/instance/qrcode',
+              'GET',
+              undefined,
+              false,
+              inst.uazapi_token || undefined
+            );
+          } catch (e: any) {
+            if (e?.status === 405) {
+              console.log('[UAZAPI] /instance/qrcode GET returned 405, retrying with POST...');
+              qrApiResult = await callWhatsAppApi(
+                config,
+                '/instance/qrcode',
+                'POST',
+                undefined,
+                false,
+                inst.uazapi_token || undefined
+              );
             } else {
               throw e;
             }
           }
+
+          console.log('[UAZAPI] qrcode response:', JSON.stringify(qrApiResult).substring(0, 800));
+
+          const candidate: any =
+            qrApiResult?.base64 ||
+            qrApiResult?.qrcode ||
+            qrApiResult?.qr?.base64 ||
+            qrApiResult?.qrCode ||
+            qrApiResult?.instance?.qrcode ||
+            qrApiResult?.instance?.qrCode ||
+            qrApiResult?.data?.qrcode ||
+            null;
+
+          qrcode =
+            typeof candidate === 'string'
+              ? candidate
+              : candidate?.base64 || candidate?.qrcode || null;
         } else {
           result = await callEvolution(`/instance/connect/${instanceName}`, 'GET');
-        }
-        // Handle different QR response formats
-        let qrcode = result.base64 || result.qrcode || result.qr?.base64 || null;
-        
-        // If QR code not available, try logout and retry (Evolution only)
-        if (!qrcode && inst?.api_provider !== 'uazapi') {
-          console.log(`QR code not available for ${instanceName}, attempting logout and retry...`);
-          
-          try {
-            await callEvolution(`/instance/logout/${instanceName}`, 'DELETE');
-            console.log(`Logout successful for ${instanceName}`);
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            result = await callEvolution(`/instance/connect/${instanceName}`, 'GET');
-            qrcode = result.base64 || result.qrcode || null;
-            console.log(`Retry result for ${instanceName}:`, qrcode ? 'QR available' : 'QR still not available');
-          } catch (logoutError) {
-            console.error(`Logout error for ${instanceName}:`, logoutError);
+          qrcode = result?.base64 || result?.qrcode || result?.qr?.base64 || null;
+
+          // If QR code not available, try logout and retry (Evolution only)
+          if (!qrcode) {
+            console.log(`QR code not available for ${instanceName}, attempting logout and retry...`);
+
+            try {
+              await callEvolution(`/instance/logout/${instanceName}`, 'DELETE');
+              console.log(`Logout successful for ${instanceName}`);
+              await new Promise((resolve) => setTimeout(resolve, 1500));
+              result = await callEvolution(`/instance/connect/${instanceName}`, 'GET');
+              qrcode = result?.base64 || result?.qrcode || null;
+              console.log(`Retry result for ${instanceName}:`, qrcode ? 'QR available' : 'QR still not available');
+            } catch (logoutError) {
+              console.error(`Logout error for ${instanceName}:`, logoutError);
+            }
           }
         }
-        
+
         // Update QR code in database
         if (qrcode) {
           await supabaseClient
@@ -968,6 +1143,9 @@ Regras:
             .eq('instance_name', instanceName)
             .eq('user_id', user.id);
         }
+
+        // Normalize response shape for frontend
+        result = { base64: qrcode };
 
         break;
       }
