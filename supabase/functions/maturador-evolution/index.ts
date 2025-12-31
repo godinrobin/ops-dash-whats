@@ -108,7 +108,8 @@ async function callWhatsAppApi(
   config: { provider: 'evolution' | 'uazapi'; baseUrl: string; apiKey: string },
   endpoint: string,
   method: string = 'GET',
-  body?: any
+  body?: any,
+  isAdminEndpoint: boolean = false
 ) {
   const url = `${config.baseUrl}${endpoint}`;
   console.log(`[API-CALL] ${config.provider}: ${method} ${url}`);
@@ -116,8 +117,20 @@ async function callWhatsAppApi(
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'apikey': config.apiKey,
   };
+
+  // Set appropriate auth header based on provider
+  if (config.provider === 'uazapi') {
+    // UazAPI uses 'admintoken' for admin endpoints and 'token' for instance endpoints
+    if (isAdminEndpoint) {
+      headers['admintoken'] = config.apiKey;
+    } else {
+      headers['token'] = config.apiKey;
+    }
+  } else {
+    // Evolution uses 'apikey' for all endpoints
+    headers['apikey'] = config.apiKey;
+  }
 
   const options: RequestInit = { method, headers };
   if (body) {
@@ -489,27 +502,31 @@ Regras:
         // Create instance using the chosen API
         let createEndpoint: string;
         let createBody: any;
+        let authHeader: Record<string, string> = {};
 
         if (apiProvider === 'uazapi') {
-          createEndpoint = `${createBaseUrl}/instance/create`;
+          // UazAPI uses /admin/createInstance with admintoken header
+          createEndpoint = `${createBaseUrl}/admin/createInstance`;
           createBody = {
             instanceName,
-            qrcode: true,
           };
+          authHeader = { 'admintoken': createApiKey };
         } else {
+          // Evolution uses /instance/create with apikey header
           createEndpoint = `${createBaseUrl}/instance/create`;
           createBody = {
             instanceName,
             qrcode: true,
             integration: 'WHATSAPP-BAILEYS',
           };
+          authHeader = { 'apikey': createApiKey };
         }
 
         console.log(`[CREATE-INSTANCE] Calling ${createEndpoint}`);
         const createResponse = await fetch(createEndpoint, {
           method: 'POST',
           headers: {
-            'apikey': createApiKey,
+            ...authHeader,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(createBody),
@@ -580,51 +597,90 @@ Regras:
         try {
           const webhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/webhook-inbox-messages`;
           console.log(`[CREATE-INSTANCE] Configuring webhook for ${instanceName} to ${webhookUrl}`);
+
+          // Different webhook endpoints and formats for different APIs
+          let webhookConfigured = false;
           
-          // Different webhook payload formats for different API versions
-          const webhookPayloads = [
-            {
-              url: webhookUrl,
-              enabled: true,
-              webhookByEvents: false,
-              webhookBase64: false,
-              events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'SEND_MESSAGE', 'CONNECTION_UPDATE']
-            },
-            {
-              webhook: {
-                url: webhookUrl,
-                enabled: true,
-                webhookByEvents: false,
-                events: ['messages.upsert', 'messages.update', 'send.message', 'connection.update']
-              }
-            }
-          ];
-
-          const webhookEndpoint = apiProvider === 'uazapi' 
-            ? `${createBaseUrl}/webhook/set`
-            : `${createBaseUrl}/webhook/set/${instanceName}`;
-
-          for (const payload of webhookPayloads) {
+          if (apiProvider === 'uazapi') {
+            // UazAPI webhook configuration - uses instance token
             try {
-              const webhookRes = await fetch(webhookEndpoint, {
+              // Get the instance token from the response
+              const instanceToken = result.token || result.instanceToken || createApiKey;
+              
+              const uazapiWebhookPayload = {
+                webhookUrl: webhookUrl,
+                enabled: true,
+                events: ['messages', 'status', 'connection']
+              };
+              
+              const webhookRes = await fetch(`${createBaseUrl}/webhook/set`, {
                 method: 'POST',
                 headers: {
-                  'apikey': createApiKey,
+                  'token': instanceToken,
                   'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(apiProvider === 'uazapi' ? { ...payload, instanceName } : payload),
+                body: JSON.stringify(uazapiWebhookPayload),
               });
               
               if (webhookRes.ok) {
-                console.log(`[CREATE-INSTANCE] Webhook configured successfully for ${instanceName}`);
-                break;
+                console.log(`[CREATE-INSTANCE] UazAPI Webhook configured successfully for ${instanceName}`);
+                webhookConfigured = true;
+              } else {
+                const errText = await webhookRes.text();
+                console.log(`[CREATE-INSTANCE] UazAPI Webhook failed: ${errText}`);
               }
             } catch (webhookError) {
-              console.log(`[CREATE-INSTANCE] Webhook payload failed:`, webhookError);
+              console.log(`[CREATE-INSTANCE] UazAPI webhook error:`, webhookError);
+            }
+          } else {
+            // Evolution API webhook configuration
+            const webhookPayloads = [
+              {
+                url: webhookUrl,
+                enabled: true,
+                webhookByEvents: false,
+                webhookBase64: false,
+                events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'SEND_MESSAGE', 'CONNECTION_UPDATE']
+              },
+              {
+                webhook: {
+                  url: webhookUrl,
+                  enabled: true,
+                  webhookByEvents: false,
+                  events: ['messages.upsert', 'messages.update', 'send.message', 'connection.update']
+                }
+              }
+            ];
+
+            const webhookEndpoint = `${createBaseUrl}/webhook/set/${instanceName}`;
+
+            for (const payload of webhookPayloads) {
+              try {
+                const webhookRes = await fetch(webhookEndpoint, {
+                  method: 'POST',
+                  headers: {
+                    'apikey': createApiKey,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(payload),
+                });
+                
+                if (webhookRes.ok) {
+                  console.log(`[CREATE-INSTANCE] Evolution Webhook configured successfully for ${instanceName}`);
+                  webhookConfigured = true;
+                  break;
+                }
+              } catch (webhookError) {
+                console.log(`[CREATE-INSTANCE] Evolution Webhook payload failed:`, webhookError);
+              }
             }
           }
+          
+          if (!webhookConfigured) {
+            console.error(`[CREATE-INSTANCE] Failed to configure webhook for ${instanceName}`);
+          }
         } catch (webhookError) {
-          console.error(`[CREATE-INSTANCE] Failed to configure webhook:`, webhookError);
+          console.error(`[CREATE-INSTANCE] Error configuring webhook:`, webhookError);
         }
 
         // Return result with QR code
