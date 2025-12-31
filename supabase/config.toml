@@ -176,3 +176,6 @@ verify_jwt = true
 
 [functions.reprocess-pending-media]
 verify_jwt = true
+
+[functions.uazapi-probe]
+verify_jwt = true

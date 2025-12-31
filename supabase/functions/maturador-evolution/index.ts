@@ -11,7 +11,7 @@ const corsHeaders = {
 const EVOLUTION_BASE_URL = 'https://api.chatwp.xyz';
 const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || '';
 
-// Helper to get global WhatsApp API configuration
+// Helper to get global WhatsApp API configuration (includes detected UazAPI paths)
 async function getGlobalApiConfig(supabaseClient: any) {
   try {
     const { data, error } = await supabaseClient
@@ -26,6 +26,7 @@ async function getGlobalApiConfig(supabaseClient: any) {
         provider: 'evolution' as const,
         baseUrl: EVOLUTION_BASE_URL,
         apiKey: EVOLUTION_API_KEY,
+        uazapiConfig: null,
       };
     }
 
@@ -36,6 +37,12 @@ async function getGlobalApiConfig(supabaseClient: any) {
         provider: 'uazapi' as const,
         baseUrl: data.uazapi_base_url.replace(/\/$/, ''),
         apiKey: data.uazapi_api_token,
+        uazapiConfig: {
+          prefix: data.uazapi_api_prefix || '',
+          adminHeader: data.uazapi_admin_header || 'admintoken',
+          listInstancesPath: data.uazapi_list_instances_path || '/admin/listInstances',
+          listInstancesMethod: data.uazapi_list_instances_method || 'GET',
+        },
       };
     }
 
@@ -44,6 +51,7 @@ async function getGlobalApiConfig(supabaseClient: any) {
         provider: 'evolution' as const,
         baseUrl: data.evolution_base_url.replace(/\/$/, ''),
         apiKey: data.evolution_api_key,
+        uazapiConfig: null,
       };
     }
 
@@ -51,6 +59,7 @@ async function getGlobalApiConfig(supabaseClient: any) {
       provider: 'evolution' as const,
       baseUrl: EVOLUTION_BASE_URL,
       apiKey: EVOLUTION_API_KEY,
+      uazapiConfig: null,
     };
   } catch (err) {
     console.error('[API-CONFIG] Error fetching config:', err);
@@ -58,6 +67,7 @@ async function getGlobalApiConfig(supabaseClient: any) {
       provider: 'evolution' as const,
       baseUrl: EVOLUTION_BASE_URL,
       apiKey: EVOLUTION_API_KEY,
+      uazapiConfig: null,
     };
   }
 }
@@ -78,12 +88,13 @@ async function getInstanceApiConfig(supabaseClient: any, instanceId: string) {
 
     // If instance has its own config, use it
     if (instance.api_provider === 'uazapi' && instance.uazapi_token) {
-      // Get global uazapi base URL
+      // Get global uazapi base URL and detected config
       const globalConfig = await getGlobalApiConfig(supabaseClient);
       return {
         provider: 'uazapi' as const,
         baseUrl: globalConfig.provider === 'uazapi' ? globalConfig.baseUrl : 'https://zapdata.uazapi.com',
         apiKey: instance.uazapi_token,
+        uazapiConfig: globalConfig.uazapiConfig || null,
       };
     }
 
@@ -92,6 +103,7 @@ async function getInstanceApiConfig(supabaseClient: any, instanceId: string) {
         provider: 'evolution' as const,
         baseUrl: instance.evolution_base_url.replace(/\/$/, ''),
         apiKey: instance.evolution_api_key,
+        uazapiConfig: null,
       };
     }
 
@@ -105,14 +117,30 @@ async function getInstanceApiConfig(supabaseClient: any, instanceId: string) {
 
 // Helper to call API with provider abstraction
 async function callWhatsAppApi(
-  config: { provider: 'evolution' | 'uazapi'; baseUrl: string; apiKey: string },
+  config: { 
+    provider: 'evolution' | 'uazapi'; 
+    baseUrl: string; 
+    apiKey: string;
+    uazapiConfig?: {
+      prefix: string;
+      adminHeader: string;
+      listInstancesPath: string;
+      listInstancesMethod: string;
+    } | null;
+  },
   endpoint: string,
   method: string = 'GET',
   body?: any,
   isAdminEndpoint: boolean = false,
   instanceToken?: string // For UazAPI instance-specific calls
 ) {
-  const url = `${config.baseUrl}${endpoint}`;
+  // Apply prefix for UazAPI if configured
+  let fullEndpoint = endpoint;
+  if (config.provider === 'uazapi' && config.uazapiConfig?.prefix) {
+    fullEndpoint = `${config.uazapiConfig.prefix}${endpoint}`;
+  }
+  
+  const url = `${config.baseUrl}${fullEndpoint}`;
   console.log(`[API-CALL] ${config.provider}: ${method} ${url}`);
   if (body) console.log('[API-CALL] Body:', JSON.stringify(body));
 
@@ -122,12 +150,16 @@ async function callWhatsAppApi(
 
   // Set appropriate auth header based on provider
   if (config.provider === 'uazapi') {
-    // UazAPI uses 'admintoken' for admin endpoints and 'token' for instance endpoints
+    // Use detected header name or default to 'admintoken'/'token'
+    const adminHeaderName = config.uazapiConfig?.adminHeader || 'admintoken';
+    
     if (isAdminEndpoint) {
-      headers['admintoken'] = config.apiKey;
+      headers[adminHeaderName] = config.apiKey;
+      console.log(`[API-CALL] Using admin header: ${adminHeaderName}`);
     } else {
       // Use instance-specific token if provided, otherwise use the config apiKey
       headers['token'] = instanceToken || config.apiKey;
+      console.log(`[API-CALL] Using instance header: token`);
     }
   } else {
     // Evolution uses 'apikey' for all endpoints
@@ -152,7 +184,7 @@ async function callWhatsAppApi(
   }
 
   if (!response.ok) {
-    console.error('[API-CALL] Error:', { status: response.status, endpoint, response: data });
+    console.error('[API-CALL] Error:', { status: response.status, endpoint: fullEndpoint, response: data });
     const err = new Error(
       (data?.message && Array.isArray(data.message) ? data.message.join(' | ') : data?.message) ||
       data?.error ||
