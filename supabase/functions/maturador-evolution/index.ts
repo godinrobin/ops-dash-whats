@@ -109,7 +109,8 @@ async function callWhatsAppApi(
   endpoint: string,
   method: string = 'GET',
   body?: any,
-  isAdminEndpoint: boolean = false
+  isAdminEndpoint: boolean = false,
+  instanceToken?: string // For UazAPI instance-specific calls
 ) {
   const url = `${config.baseUrl}${endpoint}`;
   console.log(`[API-CALL] ${config.provider}: ${method} ${url}`);
@@ -125,7 +126,8 @@ async function callWhatsAppApi(
     if (isAdminEndpoint) {
       headers['admintoken'] = config.apiKey;
     } else {
-      headers['token'] = config.apiKey;
+      // Use instance-specific token if provided, otherwise use the config apiKey
+      headers['token'] = instanceToken || config.apiKey;
     }
   } else {
     // Evolution uses 'apikey' for all endpoints
@@ -164,6 +166,43 @@ async function callWhatsAppApi(
   return data;
 }
 
+// UazAPI endpoint mapping - translates Evolution endpoints to UazAPI equivalents
+function getUazApiEndpoint(evolutionEndpoint: string, instanceName?: string): { endpoint: string; isAdmin: boolean } {
+  // Remove instance name from Evolution-style endpoints
+  const cleanEndpoint = evolutionEndpoint.replace(`/${instanceName}`, '');
+  
+  // Map common Evolution endpoints to UazAPI
+  const mappings: Record<string, { endpoint: string; isAdmin: boolean }> = {
+    '/instance/fetchInstances': { endpoint: '/admin/listInstances', isAdmin: true },
+    '/instance/create': { endpoint: '/admin/createInstance', isAdmin: true },
+    '/instance/connect': { endpoint: '/instance/qrcode', isAdmin: false },
+    '/instance/connectionState': { endpoint: '/instance/status', isAdmin: false },
+    '/instance/logout': { endpoint: '/instance/logout', isAdmin: false },
+    '/instance/delete': { endpoint: '/admin/deleteInstance', isAdmin: true },
+    '/instance/restart': { endpoint: '/instance/restart', isAdmin: false },
+    '/message/sendText': { endpoint: '/message/sendText', isAdmin: false },
+    '/message/sendMedia': { endpoint: '/message/sendMedia', isAdmin: false },
+    '/message/sendWhatsAppAudio': { endpoint: '/message/sendAudio', isAdmin: false },
+    '/webhook/set': { endpoint: '/webhook/set', isAdmin: false },
+    '/webhook/find': { endpoint: '/webhook/get', isAdmin: false },
+    '/chat/fetchProfilePictureUrl': { endpoint: '/contact/profilePicture', isAdmin: false },
+    '/chat/fetchProfile': { endpoint: '/contact/info', isAdmin: false },
+    '/chat/fetchBusinessProfile': { endpoint: '/contact/businessProfile', isAdmin: false },
+    '/label/findLabels': { endpoint: '/labels/list', isAdmin: false },
+    '/label/handleLabel': { endpoint: '/labels/set', isAdmin: false },
+  };
+  
+  // Try to find a match
+  for (const [evoPattern, uazConfig] of Object.entries(mappings)) {
+    if (cleanEndpoint.includes(evoPattern) || evolutionEndpoint.includes(evoPattern)) {
+      return uazConfig;
+    }
+  }
+  
+  // Default: assume it's an instance endpoint
+  return { endpoint: cleanEndpoint, isAdmin: false };
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -194,17 +233,78 @@ serve(async (req) => {
     const { action, ...params } = await req.json();
     console.log(`Maturador action: ${action}`, params);
 
-    // Helper function to call Evolution API (backward compatibility wrapper)
+    // Helper function to call WhatsApp API with auto-detection of provider
+    // Uses global config by default, can be overridden with instanceId
+    const callApi = async (
+      endpoint: string, 
+      method: string = 'GET', 
+      body?: any,
+      instanceId?: string,
+      instanceToken?: string
+    ) => {
+      let config;
+      if (instanceId) {
+        config = await getInstanceApiConfig(supabaseClient, instanceId);
+      } else {
+        config = await getGlobalApiConfig(supabaseClient);
+      }
+      
+      // For UazAPI, translate endpoint if needed
+      if (config.provider === 'uazapi') {
+        const uazEndpoint = getUazApiEndpoint(endpoint);
+        return callWhatsAppApi(config, uazEndpoint.endpoint, method, body, uazEndpoint.isAdmin, instanceToken);
+      }
+      
+      return callWhatsAppApi(config, endpoint, method, body, false);
+    };
+    
+    // Legacy helper function to call Evolution API (backward compatibility wrapper)
+    // DEPRECATED: Use callApi instead for new code
     const callEvolution = async (endpoint: string, method: string = 'GET', body?: any) => {
       const config = {
         provider: 'evolution' as const,
         baseUrl: EVOLUTION_BASE_URL,
         apiKey: EVOLUTION_API_KEY,
       };
-      return callWhatsAppApi(config, endpoint, method, body);
+      return callWhatsAppApi(config, endpoint, method, body, false);
+    };
+    
+    // Helper to call API for a specific instance by name (fetches instance config automatically)
+    const callApiForInstance = async (
+      instanceName: string,
+      evolutionEndpoint: string,
+      method: string = 'GET',
+      body?: any
+    ) => {
+      // Fetch instance to get its API provider config
+      const { data: instance } = await supabaseClient
+        .from('maturador_instances')
+        .select('id, api_provider, evolution_base_url, evolution_api_key, uazapi_token')
+        .eq('instance_name', instanceName)
+        .eq('user_id', user.id)
+        .single();
+      
+      if (!instance) {
+        // Fallback to global config
+        console.log(`[callApiForInstance] Instance ${instanceName} not found, using global config`);
+        return callApi(evolutionEndpoint, method, body);
+      }
+      
+      console.log(`[callApiForInstance] Instance ${instanceName} uses ${instance.api_provider || 'evolution'}`);
+      
+      const config = await getInstanceApiConfig(supabaseClient, instance.id);
+      
+      if (config.provider === 'uazapi') {
+        // Translate endpoint for UazAPI
+        const uazMapping = getUazApiEndpoint(evolutionEndpoint, instanceName);
+        console.log(`[callApiForInstance] UazAPI endpoint: ${uazMapping.endpoint} (isAdmin: ${uazMapping.isAdmin})`);
+        return callWhatsAppApi(config, uazMapping.endpoint, method, body, uazMapping.isAdmin, instance.uazapi_token || undefined);
+      }
+      
+      // Evolution API - use endpoint as-is
+      return callWhatsAppApi(config, evolutionEndpoint, method, body, false);
     };
 
-    // Helper to extract phone number from Evolution instance data
     const extractPhoneFromInstance = (instanceData: any): string | null => {
       // Log the full structure for debugging
       console.log('Instance data structure:', JSON.stringify(instanceData, null, 2));
@@ -702,13 +802,28 @@ Regras:
           });
         }
 
-        result = await callEvolution(`/instance/connect/${instanceName}`, 'GET');
+        // Get instance config first
+        const { data: inst } = await supabaseClient
+          .from('maturador_instances')
+          .select('id, api_provider, uazapi_token')
+          .eq('instance_name', instanceName)
+          .eq('user_id', user.id)
+          .single();
 
-        // Update QR code in database
-        if (result.base64) {
+        if (inst?.api_provider === 'uazapi') {
+          // UazAPI: use /instance/qrcode endpoint
+          const config = await getInstanceApiConfig(supabaseClient, inst.id);
+          result = await callWhatsAppApi(config, '/instance/qrcode', 'GET', undefined, false, inst.uazapi_token || undefined);
+        } else {
+          result = await callEvolution(`/instance/connect/${instanceName}`, 'GET');
+        }
+
+        // Update QR code in database - handle different response formats
+        const qrcode = result.base64 || result.qrcode || result.qr?.base64 || null;
+        if (qrcode) {
           await supabaseClient
             .from('maturador_instances')
-            .update({ qrcode: result.base64, status: 'connecting' })
+            .update({ qrcode: qrcode, status: 'connecting' })
             .eq('instance_name', instanceName)
             .eq('user_id', user.id);
         }
@@ -725,35 +840,46 @@ Regras:
           });
         }
 
+        // Get instance config
+        const { data: inst } = await supabaseClient
+          .from('maturador_instances')
+          .select('id, api_provider, uazapi_token')
+          .eq('instance_name', instanceName)
+          .eq('user_id', user.id)
+          .single();
+
         // First attempt to get QR code
-        result = await callEvolution(`/instance/connect/${instanceName}`, 'GET');
+        if (inst?.api_provider === 'uazapi') {
+          const config = await getInstanceApiConfig(supabaseClient, inst.id);
+          result = await callWhatsAppApi(config, '/instance/qrcode', 'GET', undefined, false, inst.uazapi_token || undefined);
+        } else {
+          result = await callEvolution(`/instance/connect/${instanceName}`, 'GET');
+        }
         
-        // If QR code not available, try logout and retry
-        if (!result.base64) {
+        // Handle different QR response formats
+        let qrcode = result.base64 || result.qrcode || result.qr?.base64 || null;
+        
+        // If QR code not available, try logout and retry (Evolution only)
+        if (!qrcode && inst?.api_provider !== 'uazapi') {
           console.log(`QR code not available for ${instanceName}, attempting logout and retry...`);
           
           try {
-            // Logout from Evolution API to clear old session
             await callEvolution(`/instance/logout/${instanceName}`, 'DELETE');
             console.log(`Logout successful for ${instanceName}`);
-            
-            // Wait 1.5 seconds for Evolution to process the logout
             await new Promise(resolve => setTimeout(resolve, 1500));
-            
-            // Retry getting QR code
             result = await callEvolution(`/instance/connect/${instanceName}`, 'GET');
-            console.log(`Retry result for ${instanceName}:`, result.base64 ? 'QR available' : 'QR still not available');
+            qrcode = result.base64 || result.qrcode || null;
+            console.log(`Retry result for ${instanceName}:`, qrcode ? 'QR available' : 'QR still not available');
           } catch (logoutError) {
             console.error(`Logout error for ${instanceName}:`, logoutError);
-            // Continue with original result even if logout failed
           }
         }
         
         // Update QR code in database
-        if (result.base64) {
+        if (qrcode) {
           await supabaseClient
             .from('maturador_instances')
-            .update({ qrcode: result.base64 })
+            .update({ qrcode: qrcode })
             .eq('instance_name', instanceName)
             .eq('user_id', user.id);
         }
@@ -1184,7 +1310,20 @@ Regras:
           });
         }
 
-        result = await callEvolution(`/instance/logout/${instanceName}`, 'DELETE');
+        // Get instance config to call correct API
+        const { data: inst } = await supabaseClient
+          .from('maturador_instances')
+          .select('id, api_provider, uazapi_token')
+          .eq('instance_name', instanceName)
+          .eq('user_id', user.id)
+          .single();
+
+        if (inst?.api_provider === 'uazapi') {
+          const config = await getInstanceApiConfig(supabaseClient, inst.id);
+          result = await callWhatsAppApi(config, '/instance/logout', 'POST', undefined, false, inst.uazapi_token || undefined);
+        } else {
+          result = await callEvolution(`/instance/logout/${instanceName}`, 'DELETE');
+        }
 
         // Update status in database
         await supabaseClient
@@ -1205,12 +1344,26 @@ Regras:
           });
         }
 
-        // Try to delete from Evolution API, but don't fail if instance doesn't exist
+        // Get instance config
+        const { data: inst } = await supabaseClient
+          .from('maturador_instances')
+          .select('id, api_provider, uazapi_token')
+          .eq('instance_name', instanceName)
+          .eq('user_id', user.id)
+          .single();
+
+        // Try to delete from API, but don't fail if instance doesn't exist
         try {
-          result = await callEvolution(`/instance/delete/${instanceName}`, 'DELETE');
+          if (inst?.api_provider === 'uazapi') {
+            const config = await getInstanceApiConfig(supabaseClient, inst.id);
+            // UazAPI uses admin endpoint to delete
+            result = await callWhatsAppApi(config, '/admin/deleteInstance', 'DELETE', { instanceName }, true);
+          } else {
+            result = await callEvolution(`/instance/delete/${instanceName}`, 'DELETE');
+          }
         } catch (error) {
-          console.log(`Instance ${instanceName} not found in Evolution API, proceeding with local deletion`);
-          result = { deleted: true, note: 'Instance was not found in Evolution API' };
+          console.log(`Instance ${instanceName} not found in API, proceeding with local deletion`);
+          result = { deleted: true, note: 'Instance was not found in API' };
         }
 
         // Always delete from local database
@@ -1232,10 +1385,27 @@ Regras:
           });
         }
 
-        result = await callEvolution(`/message/sendText/${instanceName}`, 'POST', {
-          number,
-          text,
-        });
+        // Get instance config
+        const { data: inst } = await supabaseClient
+          .from('maturador_instances')
+          .select('id, api_provider, uazapi_token')
+          .eq('instance_name', instanceName)
+          .eq('user_id', user.id)
+          .single();
+
+        if (inst?.api_provider === 'uazapi') {
+          const config = await getInstanceApiConfig(supabaseClient, inst.id);
+          // UazAPI sendText endpoint format
+          result = await callWhatsAppApi(config, '/message/sendText', 'POST', {
+            phone: number,
+            message: text,
+          }, false, inst.uazapi_token || undefined);
+        } else {
+          result = await callEvolution(`/message/sendText/${instanceName}`, 'POST', {
+            number,
+            text,
+          });
+        }
 
         // Save message to database
         if (conversationId && fromInstanceId && toInstanceId) {
@@ -1264,14 +1434,32 @@ Regras:
           });
         }
 
-        // Try POST method instead of PUT for restart
+        // Get instance config
+        const { data: inst } = await supabaseClient
+          .from('maturador_instances')
+          .select('id, api_provider, uazapi_token')
+          .eq('instance_name', instanceName)
+          .eq('user_id', user.id)
+          .single();
+
         try {
-          result = await callEvolution(`/instance/restart/${instanceName}`, 'POST');
+          if (inst?.api_provider === 'uazapi') {
+            const config = await getInstanceApiConfig(supabaseClient, inst.id);
+            result = await callWhatsAppApi(config, '/instance/restart', 'POST', undefined, false, inst.uazapi_token || undefined);
+          } else {
+            result = await callEvolution(`/instance/restart/${instanceName}`, 'POST');
+          }
         } catch (e) {
-          // If POST fails, try DELETE + reconnect approach
-          console.log('Restart with POST failed, trying logout + connect');
-          await callEvolution(`/instance/logout/${instanceName}`, 'DELETE');
-          result = await callEvolution(`/instance/connect/${instanceName}`, 'GET');
+          // If restart fails, try logout + connect approach
+          console.log('Restart failed, trying logout + connect');
+          if (inst?.api_provider === 'uazapi') {
+            const config = await getInstanceApiConfig(supabaseClient, inst.id);
+            await callWhatsAppApi(config, '/instance/logout', 'POST', undefined, false, inst.uazapi_token || undefined);
+            result = await callWhatsAppApi(config, '/instance/qrcode', 'GET', undefined, false, inst.uazapi_token || undefined);
+          } else {
+            await callEvolution(`/instance/logout/${instanceName}`, 'DELETE');
+            result = await callEvolution(`/instance/connect/${instanceName}`, 'GET');
+          }
         }
         break;
       }
