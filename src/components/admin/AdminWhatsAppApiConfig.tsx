@@ -96,9 +96,10 @@ export const AdminWhatsAppApiConfig = () => {
       baseUrl = baseUrl.replace(/\/$/, '');
 
       // Test connection based on provider
+      // UazAPI uses /admin/listInstances with 'admintoken' header (lowercase)
       const endpoint = activeProvider === 'evolution' 
         ? `${baseUrl}/instance/fetchInstances`
-        : `${baseUrl}/listInstances`;
+        : `${baseUrl}/admin/listInstances`;
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -107,7 +108,7 @@ export const AdminWhatsAppApiConfig = () => {
       if (activeProvider === 'evolution') {
         headers['apikey'] = apiKey;
       } else {
-        headers['AdminToken'] = apiKey;
+        headers['admintoken'] = apiKey;
       }
 
       const response = await fetch(endpoint, {
