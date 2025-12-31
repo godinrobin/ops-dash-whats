@@ -651,13 +651,14 @@ Regras:
         let authHeader: Record<string, string> = {};
 
         if (apiProvider === 'uazapi') {
-          // UazAPI v2: POST /instance/init with admintoken header (per OpenAPI spec)
+          // UazAPI v2: POST /instance/init with admintoken header
+          // IMPORTANTE: UazAPI espera campo "Name" com N maiúsculo
           createEndpoint = `${createBaseUrl}/instance/init`;
           createBody = {
-            instanceName,
+            Name: instanceName,  // Campo "Name" com N maiúsculo - obrigatório pela API
           };
           authHeader = { 'admintoken': createApiKey };
-          console.log(`[CREATE-INSTANCE] UazAPI: POST /instance/init with admintoken header`);
+          console.log(`[CREATE-INSTANCE] UazAPI: POST /instance/init with payload:`, JSON.stringify(createBody));
         } else {
           // Evolution uses /instance/create with apikey header
           createEndpoint = `${createBaseUrl}/instance/create`;
