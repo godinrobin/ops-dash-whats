@@ -651,12 +651,13 @@ Regras:
         let authHeader: Record<string, string> = {};
 
         if (apiProvider === 'uazapi') {
-          // UazAPI uses /admin/createInstance with admintoken header
-          createEndpoint = `${createBaseUrl}/admin/createInstance`;
+          // UazAPI v2: POST /instance/init with admintoken header (per OpenAPI spec)
+          createEndpoint = `${createBaseUrl}/instance/init`;
           createBody = {
             instanceName,
           };
           authHeader = { 'admintoken': createApiKey };
+          console.log(`[CREATE-INSTANCE] UazAPI: POST /instance/init with admintoken header`);
         } else {
           // Evolution uses /instance/create with apikey header
           createEndpoint = `${createBaseUrl}/instance/create`;
@@ -748,13 +749,23 @@ Regras:
           let webhookConfigured = false;
           
           if (apiProvider === 'uazapi') {
-            // UazAPI webhook configuration - uses instance token
+            // UazAPI v2 webhook: POST /webhook/set with token header (per OpenAPI spec)
             try {
-              // Get the instance token from the response
-              const instanceToken = result.token || result.instanceToken || createApiKey;
+              // Get the instance token from the response (varies by UazAPI version)
+              const instanceToken = result.token || result.instanceToken || result.instance?.token || createApiKey;
+              
+              // Save the token to instance record for future use
+              if (instanceToken && instanceToken !== createApiKey) {
+                await supabaseClient
+                  .from('maturador_instances')
+                  .update({ uazapi_token: instanceToken })
+                  .eq('instance_name', instanceName)
+                  .eq('user_id', user.id);
+                console.log(`[CREATE-INSTANCE] Saved UazAPI instance token`);
+              }
               
               const uazapiWebhookPayload = {
-                webhookUrl: webhookUrl,
+                url: webhookUrl,
                 enabled: true,
                 events: ['messages', 'status', 'connection']
               };

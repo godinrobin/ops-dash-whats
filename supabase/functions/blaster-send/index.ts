@@ -83,7 +83,7 @@ serve(async (req) => {
 
     const { data: instances } = await supabaseClient
       .from('maturador_instances')
-      .select('*')
+      .select('*, api_provider, uazapi_token')
       .in('id', assignedInstanceIds)
       .in('status', ['connected', 'open']);
 
@@ -199,61 +199,71 @@ serve(async (req) => {
             ? messageVariations[Math.floor(Math.random() * messageVariations.length)]
             : '';
 
-          let evolutionUrl: string;
+          const apiProvider = instance.api_provider || 'evolution';
+          const baseUrl = config.evolution_base_url?.replace(/\/$/, '') || '';
+          let apiEndpoint: string;
           let body: any;
+          let authHeader: Record<string, string>;
 
-          // Determine the endpoint and body based on media type
-          switch (mediaType) {
-            case 'image':
-              evolutionUrl = `${config.evolution_base_url}/message/sendMedia/${instance.instance_name}`;
-              body = {
-                number: phone,
-                mediatype: 'image',
-                media: mediaUrl,
-                caption: message,
-              };
-              break;
-            case 'video':
-              evolutionUrl = `${config.evolution_base_url}/message/sendMedia/${instance.instance_name}`;
-              body = {
-                number: phone,
-                mediatype: 'video',
-                media: mediaUrl,
-                caption: message,
-              };
-              break;
-            case 'audio':
-              evolutionUrl = `${config.evolution_base_url}/message/sendWhatsAppAudio/${instance.instance_name}`;
-              body = {
-                number: phone,
-                audio: mediaUrl,
-              };
-              break;
-            case 'document':
-              evolutionUrl = `${config.evolution_base_url}/message/sendMedia/${instance.instance_name}`;
-              body = {
-                number: phone,
-                mediatype: 'document',
-                media: mediaUrl,
-                caption: message,
-                fileName: 'document',
-              };
-              break;
-            default: // text
-              evolutionUrl = `${config.evolution_base_url}/message/sendText/${instance.instance_name}`;
-              body = {
-                number: phone,
-                text: message,
-              };
+          if (apiProvider === 'uazapi') {
+            // UazAPI v2 endpoints (per OpenAPI spec) - use token header
+            authHeader = { 'token': instance.uazapi_token || config.evolution_api_key };
+            
+            switch (mediaType) {
+              case 'image':
+                apiEndpoint = `${baseUrl}/message/sendMedia`;
+                body = { number: phone, mediatype: 'image', media: mediaUrl, caption: message };
+                break;
+              case 'video':
+                apiEndpoint = `${baseUrl}/message/sendMedia`;
+                body = { number: phone, mediatype: 'video', media: mediaUrl, caption: message };
+                break;
+              case 'audio':
+                apiEndpoint = `${baseUrl}/message/sendAudio`;
+                body = { number: phone, audio: mediaUrl };
+                break;
+              case 'document':
+                apiEndpoint = `${baseUrl}/message/sendMedia`;
+                body = { number: phone, mediatype: 'document', media: mediaUrl, caption: message, fileName: 'document' };
+                break;
+              default: // text
+                apiEndpoint = `${baseUrl}/message/sendText`;
+                body = { number: phone, text: message };
+            }
+          } else {
+            // Evolution API endpoints - use apikey header
+            authHeader = { 'apikey': config.evolution_api_key };
+            
+            switch (mediaType) {
+              case 'image':
+                apiEndpoint = `${baseUrl}/message/sendMedia/${instance.instance_name}`;
+                body = { number: phone, mediatype: 'image', media: mediaUrl, caption: message };
+                break;
+              case 'video':
+                apiEndpoint = `${baseUrl}/message/sendMedia/${instance.instance_name}`;
+                body = { number: phone, mediatype: 'video', media: mediaUrl, caption: message };
+                break;
+              case 'audio':
+                apiEndpoint = `${baseUrl}/message/sendWhatsAppAudio/${instance.instance_name}`;
+                body = { number: phone, audio: mediaUrl };
+                break;
+              case 'document':
+                apiEndpoint = `${baseUrl}/message/sendMedia/${instance.instance_name}`;
+                body = { number: phone, mediatype: 'document', media: mediaUrl, caption: message, fileName: 'document' };
+                break;
+              default: // text
+                apiEndpoint = `${baseUrl}/message/sendText/${instance.instance_name}`;
+                body = { number: phone, text: message };
+            }
           }
           
-          console.log(`Sending ${mediaType} to ${phone} via ${instance.instance_name}`);
+          console.log(`[${apiProvider.toUpperCase()}] Sending ${mediaType} to ${phone} via ${instance.instance_name}`);
           
-          const response = await fetch(evolutionUrl, {
+          const response = await fetch(apiEndpoint, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'apikey': config.evolution_api_key,
+              ...authHeader,
             },
             body: JSON.stringify(body),
           });
@@ -431,7 +441,7 @@ async function executeFlowForContact(
       case 'text':
         const message = replaceVariables(currentNode.data.message as string || '', variables);
         if (message) {
-          await sendMessage(config, instance.instance_name, formattedPhone, message, 'text');
+          await sendMessage(config, instance.instance_name, formattedPhone, message, 'text', undefined, undefined, instance.api_provider || 'evolution', instance.uazapi_token);
         }
         
         const textEdge = edges.find(e => e.source === currentNodeId);
@@ -447,7 +457,7 @@ async function executeFlowForContact(
         const fileName = currentNode.data.fileName as string || '';
         
         if (mediaUrl) {
-          await sendMessage(config, instance.instance_name, formattedPhone, caption, currentNode.type, mediaUrl, fileName);
+          await sendMessage(config, instance.instance_name, formattedPhone, caption, currentNode.type, mediaUrl, fileName, instance.api_provider || 'evolution', instance.uazapi_token);
         }
         
         const mediaEdge = edges.find(e => e.source === currentNodeId);
@@ -458,7 +468,7 @@ async function executeFlowForContact(
       case 'audio':
         const audioUrl = currentNode.data.mediaUrl as string;
         if (audioUrl) {
-          await sendMessage(config, instance.instance_name, formattedPhone, '', 'audio', audioUrl);
+          await sendMessage(config, instance.instance_name, formattedPhone, '', 'audio', audioUrl, undefined, instance.api_provider || 'evolution', instance.uazapi_token);
         }
         
         const audioEdge = edges.find(e => e.source === currentNodeId);
@@ -583,49 +593,89 @@ async function sendMessage(
   content: string, 
   messageType: string, 
   mediaUrl?: string,
-  fileName?: string
+  fileName?: string,
+  apiProvider: string = 'evolution',
+  instanceToken?: string
 ) {
   let endpoint = '';
   let body: Record<string, unknown> = {};
+  let authHeader: Record<string, string> = {};
 
-  switch (messageType) {
-    case 'text':
-      endpoint = `/message/sendText/${instanceName}`;
-      body = { number: phone, text: content };
-      break;
-    case 'image':
-      endpoint = `/message/sendMedia/${instanceName}`;
-      body = { number: phone, mediatype: 'image', media: mediaUrl, caption: content };
-      break;
-    case 'audio':
-      endpoint = `/message/sendWhatsAppAudio/${instanceName}`;
-      body = { number: phone, audio: mediaUrl };
-      break;
-    case 'video':
-      endpoint = `/message/sendMedia/${instanceName}`;
-      body = { number: phone, mediatype: 'video', media: mediaUrl, caption: content };
-      break;
-    case 'document':
-      endpoint = `/message/sendMedia/${instanceName}`;
-      body = { 
-        number: phone, 
-        mediatype: 'document', 
-        media: mediaUrl, 
-        fileName: fileName || 'document',
-        caption: content 
-      };
-      break;
-    default:
-      endpoint = `/message/sendText/${instanceName}`;
-      body = { number: phone, text: content };
+  // Determine base URL based on provider
+  const baseUrl = config.evolution_base_url?.replace(/\/$/, '') || '';
+
+  if (apiProvider === 'uazapi') {
+    // UazAPI v2 endpoints (per OpenAPI spec) - use token header
+    authHeader = { 'token': instanceToken || config.evolution_api_key };
+    
+    switch (messageType) {
+      case 'text':
+        endpoint = '/message/sendText';
+        body = { number: phone, text: content };
+        break;
+      case 'image':
+        endpoint = '/message/sendMedia';
+        body = { number: phone, mediatype: 'image', media: mediaUrl, caption: content };
+        break;
+      case 'audio':
+        endpoint = '/message/sendAudio';
+        body = { number: phone, audio: mediaUrl };
+        break;
+      case 'video':
+        endpoint = '/message/sendMedia';
+        body = { number: phone, mediatype: 'video', media: mediaUrl, caption: content };
+        break;
+      case 'document':
+        endpoint = '/message/sendMedia';
+        body = { number: phone, mediatype: 'document', media: mediaUrl, fileName: fileName || 'document', caption: content };
+        break;
+      default:
+        endpoint = '/message/sendText';
+        body = { number: phone, text: content };
+    }
+  } else {
+    // Evolution API endpoints - use apikey header
+    authHeader = { 'apikey': config.evolution_api_key };
+    
+    switch (messageType) {
+      case 'text':
+        endpoint = `/message/sendText/${instanceName}`;
+        body = { number: phone, text: content };
+        break;
+      case 'image':
+        endpoint = `/message/sendMedia/${instanceName}`;
+        body = { number: phone, mediatype: 'image', media: mediaUrl, caption: content };
+        break;
+      case 'audio':
+        endpoint = `/message/sendWhatsAppAudio/${instanceName}`;
+        body = { number: phone, audio: mediaUrl };
+        break;
+      case 'video':
+        endpoint = `/message/sendMedia/${instanceName}`;
+        body = { number: phone, mediatype: 'video', media: mediaUrl, caption: content };
+        break;
+      case 'document':
+        endpoint = `/message/sendMedia/${instanceName}`;
+        body = { 
+          number: phone, 
+          mediatype: 'document', 
+          media: mediaUrl, 
+          fileName: fileName || 'document',
+          caption: content 
+        };
+        break;
+      default:
+        endpoint = `/message/sendText/${instanceName}`;
+        body = { number: phone, text: content };
+    }
   }
 
-  console.log(`Sending ${messageType} to ${phone} via ${endpoint}`);
+  console.log(`[${apiProvider.toUpperCase()}] Sending ${messageType} to ${phone} via ${endpoint}`);
 
-  const response = await fetch(`${config.evolution_base_url}${endpoint}`, {
+  const response = await fetch(`${baseUrl}${endpoint}`, {
     method: 'POST',
     headers: {
-      'apikey': config.evolution_api_key,
+      ...authHeader,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),

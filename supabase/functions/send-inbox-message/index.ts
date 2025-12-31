@@ -132,31 +132,33 @@ serve(async (req) => {
       });
     }
 
-    // Resolve instance id and get Evolution config for status updates
+    // Resolve instance id and get API config for status updates
     const { data: instanceRow } = await supabaseAdmin
       .from('maturador_instances')
-      .select('id, evolution_base_url, evolution_api_key')
+      .select('id, evolution_base_url, evolution_api_key, api_provider, uazapi_token')
       .eq('instance_name', instanceName)
       .eq('user_id', user.id)
       .maybeSingle();
 
     const instanceId = instanceRow?.id ?? null;
+    const apiProvider = instanceRow?.api_provider || 'evolution';
+    const instanceToken = instanceRow?.uazapi_token;
 
     // PRIORITY: 1) Instance config, 2) User config, 3) Admin config, 4) Global secrets
-    let EVOLUTION_BASE_URL = '';
-    let EVOLUTION_API_KEY = '';
+    let API_BASE_URL = '';
+    let API_KEY = '';
     let configSource = 'none';
 
     // 1) Try instance's own config (highest priority)
     if (instanceRow?.evolution_base_url && instanceRow?.evolution_api_key) {
-      EVOLUTION_BASE_URL = instanceRow.evolution_base_url.replace(/\/$/, '');
-      EVOLUTION_API_KEY = instanceRow.evolution_api_key;
+      API_BASE_URL = instanceRow.evolution_base_url.replace(/\/$/, '');
+      API_KEY = instanceRow.evolution_api_key;
       configSource = 'instance';
-      console.log(`[SEND-MESSAGE] Using instance config: ${EVOLUTION_BASE_URL}`);
+      console.log(`[SEND-MESSAGE] Using instance config: ${API_BASE_URL}`);
     }
     
     // 2) Try user's own config
-    if (!EVOLUTION_BASE_URL) {
+    if (!API_BASE_URL) {
       const { data: userConfig } = await supabaseAdmin
         .from('maturador_config')
         .select('evolution_base_url, evolution_api_key')
@@ -164,15 +166,15 @@ serve(async (req) => {
         .maybeSingle();
       
       if (userConfig?.evolution_base_url && userConfig?.evolution_api_key) {
-        EVOLUTION_BASE_URL = userConfig.evolution_base_url.replace(/\/$/, '');
-        EVOLUTION_API_KEY = userConfig.evolution_api_key;
+        API_BASE_URL = userConfig.evolution_base_url.replace(/\/$/, '');
+        API_KEY = userConfig.evolution_api_key;
         configSource = 'user';
-        console.log(`[SEND-MESSAGE] Using user config: ${EVOLUTION_BASE_URL}`);
+        console.log(`[SEND-MESSAGE] Using user config: ${API_BASE_URL}`);
       }
     }
 
     // 3) Try any admin config (first available)
-    if (!EVOLUTION_BASE_URL) {
+    if (!API_BASE_URL) {
       const { data: adminConfig } = await supabaseAdmin
         .from('maturador_config')
         .select('evolution_base_url, evolution_api_key')
@@ -180,33 +182,35 @@ serve(async (req) => {
         .maybeSingle();
       
       if (adminConfig?.evolution_base_url && adminConfig?.evolution_api_key) {
-        EVOLUTION_BASE_URL = adminConfig.evolution_base_url.replace(/\/$/, '');
-        EVOLUTION_API_KEY = adminConfig.evolution_api_key;
+        API_BASE_URL = adminConfig.evolution_base_url.replace(/\/$/, '');
+        API_KEY = adminConfig.evolution_api_key;
         configSource = 'admin';
-        console.log(`[SEND-MESSAGE] Using admin config: ${EVOLUTION_BASE_URL}`);
+        console.log(`[SEND-MESSAGE] Using admin config: ${API_BASE_URL}`);
       }
     }
 
     // 4) Try global secrets
-    if (!EVOLUTION_BASE_URL) {
+    if (!API_BASE_URL) {
       const globalBaseUrl = Deno.env.get('EVOLUTION_BASE_URL');
       const globalApiKey = Deno.env.get('EVOLUTION_API_KEY');
       
       if (globalBaseUrl && globalApiKey) {
-        EVOLUTION_BASE_URL = globalBaseUrl.replace(/\/$/, '');
-        EVOLUTION_API_KEY = globalApiKey;
+        API_BASE_URL = globalBaseUrl.replace(/\/$/, '');
+        API_KEY = globalApiKey;
         configSource = 'global';
-        console.log(`[SEND-MESSAGE] Using global config: ${EVOLUTION_BASE_URL}`);
+        console.log(`[SEND-MESSAGE] Using global config: ${API_BASE_URL}`);
       }
     }
 
-    if (!EVOLUTION_BASE_URL || !EVOLUTION_API_KEY) {
-      console.error('[SEND-MESSAGE] No Evolution API configuration available');
-      return new Response(JSON.stringify({ error: 'Evolution API not configured' }), {
+    if (!API_BASE_URL || !API_KEY) {
+      console.error('[SEND-MESSAGE] No API configuration available');
+      return new Response(JSON.stringify({ error: 'WhatsApp API not configured' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    console.log(`[SEND-MESSAGE] Provider: ${apiProvider}, Config source: ${configSource}`);
 
     // Determine how to send: via remoteJid (for @lid contacts) or formatted phone
     // Priority: remoteJid if it's @lid, otherwise use formatted phone
@@ -268,18 +272,16 @@ serve(async (req) => {
       }
     }
 
-    let evolutionEndpoint = '';
-    let evolutionBody: Record<string, unknown> = {};
 
     // For @lid contacts, skip the WhatsApp number check (we can't verify LID contacts)
-    // For regular phone contacts, verify if the number exists on WhatsApp
-    if (!isLidContact) {
+    // For regular phone contacts, verify if the number exists on WhatsApp (Evolution only)
+    if (!isLidContact && apiProvider === 'evolution') {
       console.log('Checking if number exists on WhatsApp...');
       try {
-        const checkResponse = await fetch(`${EVOLUTION_BASE_URL}/chat/whatsappNumbers/${instanceName}`, {
+        const checkResponse = await fetch(`${API_BASE_URL}/chat/whatsappNumbers/${instanceName}`, {
           method: 'POST',
           headers: {
-            'apikey': EVOLUTION_API_KEY,
+            'apikey': API_KEY,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ numbers: [sendDestination] }),
@@ -316,84 +318,93 @@ serve(async (req) => {
         // If the check fails, log and continue - the send might still work
         console.warn('WhatsApp number check failed, continuing with send:', checkErr);
       }
-    } else {
+    } else if (isLidContact) {
       console.log('[LID] Skipping WhatsApp number check for @lid contact');
     }
 
     // Use the persisted URL for sending
     const urlToSend = persistedMediaUrl || mediaUrl;
 
-    switch (messageType) {
-      case 'text':
-        evolutionEndpoint = `/message/sendText/${instanceName}`;
-        evolutionBody = {
-          number: sendDestination,
-          text: content,
-        };
-        break;
+    let apiEndpoint = '';
+    let apiBody: Record<string, unknown> = {};
+    let authHeader: Record<string, string> = {};
 
-      case 'image':
-        evolutionEndpoint = `/message/sendMedia/${instanceName}`;
-        evolutionBody = {
-          number: sendDestination,
-          mediatype: 'image',
-          media: urlToSend,
-          caption: content || '',
-        };
-        break;
-
-      case 'audio':
-        evolutionEndpoint = `/message/sendWhatsAppAudio/${instanceName}`;
-        evolutionBody = {
-          number: sendDestination,
-          audio: urlToSend,
-        };
-        break;
-
-      case 'video':
-        evolutionEndpoint = `/message/sendMedia/${instanceName}`;
-        evolutionBody = {
-          number: sendDestination,
-          mediatype: 'video',
-          media: urlToSend,
-          caption: content || '',
-        };
-        break;
-
-      case 'document':
-        evolutionEndpoint = `/message/sendMedia/${instanceName}`;
-        evolutionBody = {
-          number: sendDestination,
-          mediatype: 'document',
-          media: urlToSend,
-          fileName: content || 'document',
-        };
-        break;
-
-      default:
-        evolutionEndpoint = `/message/sendText/${instanceName}`;
-        evolutionBody = {
-          number: sendDestination,
-          text: content,
-        };
+    if (apiProvider === 'uazapi') {
+      // UazAPI v2 endpoints (per OpenAPI spec) - use token header
+      authHeader = { 'token': instanceToken || API_KEY };
+      
+      switch (messageType) {
+        case 'text':
+          apiEndpoint = `/message/sendText`;
+          apiBody = { number: sendDestination, text: content };
+          break;
+        case 'image':
+          apiEndpoint = `/message/sendMedia`;
+          apiBody = { number: sendDestination, mediatype: 'image', media: urlToSend, caption: content || '' };
+          break;
+        case 'audio':
+          apiEndpoint = `/message/sendAudio`;
+          apiBody = { number: sendDestination, audio: urlToSend };
+          break;
+        case 'video':
+          apiEndpoint = `/message/sendMedia`;
+          apiBody = { number: sendDestination, mediatype: 'video', media: urlToSend, caption: content || '' };
+          break;
+        case 'document':
+          apiEndpoint = `/message/sendMedia`;
+          apiBody = { number: sendDestination, mediatype: 'document', media: urlToSend, fileName: content || 'document' };
+          break;
+        default:
+          apiEndpoint = `/message/sendText`;
+          apiBody = { number: sendDestination, text: content };
+      }
+    } else {
+      // Evolution API endpoints - use apikey header  
+      authHeader = { 'apikey': API_KEY };
+      
+      switch (messageType) {
+        case 'text':
+          apiEndpoint = `/message/sendText/${instanceName}`;
+          apiBody = { number: sendDestination, text: content };
+          break;
+        case 'image':
+          apiEndpoint = `/message/sendMedia/${instanceName}`;
+          apiBody = { number: sendDestination, mediatype: 'image', media: urlToSend, caption: content || '' };
+          break;
+        case 'audio':
+          apiEndpoint = `/message/sendWhatsAppAudio/${instanceName}`;
+          apiBody = { number: sendDestination, audio: urlToSend };
+          break;
+        case 'video':
+          apiEndpoint = `/message/sendMedia/${instanceName}`;
+          apiBody = { number: sendDestination, mediatype: 'video', media: urlToSend, caption: content || '' };
+          break;
+        case 'document':
+          apiEndpoint = `/message/sendMedia/${instanceName}`;
+          apiBody = { number: sendDestination, mediatype: 'document', media: urlToSend, fileName: content || 'document' };
+          break;
+        default:
+          apiEndpoint = `/message/sendText/${instanceName}`;
+          apiBody = { number: sendDestination, text: content };
+      }
     }
 
-    console.log(`Calling Evolution API: POST ${EVOLUTION_BASE_URL}${evolutionEndpoint}`);
+    console.log(`[${apiProvider.toUpperCase()}] Calling API: POST ${API_BASE_URL}${apiEndpoint}`);
 
-    const evolutionResponse = await fetch(`${EVOLUTION_BASE_URL}${evolutionEndpoint}`, {
+    const apiResponse = await fetch(`${API_BASE_URL}${apiEndpoint}`, {
       method: 'POST',
       headers: {
-        'apikey': EVOLUTION_API_KEY,
+        ...authHeader,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(evolutionBody),
+      body: JSON.stringify(apiBody),
     });
 
-    const evolutionResult = await evolutionResponse.json();
-    console.log('Evolution API response:', JSON.stringify(evolutionResult, null, 2));
+    const apiResult = await apiResponse.json();
+    console.log('API response:', JSON.stringify(apiResult, null, 2));
 
-    if (!evolutionResponse.ok) {
-      console.error('Evolution API error:', evolutionResult);
+    if (!apiResponse.ok) {
+      console.error('API error:', apiResult);
       
       // Update message status to failed if we have messageId
       if (messageId) {
@@ -404,7 +415,7 @@ serve(async (req) => {
       }
       
       // Parse specific error messages for better user feedback
-      const errorMessage = evolutionResult?.message || evolutionResult?.response?.message;
+      const errorMessage = apiResult?.message || apiResult?.response?.message;
       const errorDetails = Array.isArray(errorMessage) ? errorMessage.join(', ') : errorMessage;
       
       let userFriendlyError = 'Falha ao enviar mensagem';
@@ -437,7 +448,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ 
         error: userFriendlyError,
         errorCode,
-        details: evolutionResult 
+        details: apiResult 
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -445,7 +456,7 @@ serve(async (req) => {
     }
 
     // Extract message ID from response
-    const remoteMessageId = evolutionResult.key?.id || evolutionResult.messageId || evolutionResult.id || null;
+    const remoteMessageId = apiResult.key?.id || apiResult.messageId || apiResult.id || null;
 
     // Mark instance connected AND clear last_error_at (best-effort)
     if (instanceId) {
@@ -482,7 +493,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({ 
       success: true, 
       messageId: remoteMessageId,
-      result: evolutionResult 
+      result: apiResult 
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
