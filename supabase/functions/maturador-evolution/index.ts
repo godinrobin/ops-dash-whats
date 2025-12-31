@@ -7,9 +7,149 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Evolution API credentials from environment
+// Evolution API credentials from environment (fallback)
 const EVOLUTION_BASE_URL = 'https://api.chatwp.xyz';
 const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || '';
+
+// Helper to get global WhatsApp API configuration
+async function getGlobalApiConfig(supabaseClient: any) {
+  try {
+    const { data, error } = await supabaseClient
+      .from('whatsapp_api_config')
+      .select('*')
+      .limit(1)
+      .single();
+
+    if (error || !data) {
+      console.log('[API-CONFIG] No global config found, using Evolution fallback');
+      return {
+        provider: 'evolution' as const,
+        baseUrl: EVOLUTION_BASE_URL,
+        apiKey: EVOLUTION_API_KEY,
+      };
+    }
+
+    console.log(`[API-CONFIG] Global config: provider=${data.active_provider}`);
+
+    if (data.active_provider === 'uazapi' && data.uazapi_base_url && data.uazapi_api_token) {
+      return {
+        provider: 'uazapi' as const,
+        baseUrl: data.uazapi_base_url.replace(/\/$/, ''),
+        apiKey: data.uazapi_api_token,
+      };
+    }
+
+    if (data.evolution_base_url && data.evolution_api_key) {
+      return {
+        provider: 'evolution' as const,
+        baseUrl: data.evolution_base_url.replace(/\/$/, ''),
+        apiKey: data.evolution_api_key,
+      };
+    }
+
+    return {
+      provider: 'evolution' as const,
+      baseUrl: EVOLUTION_BASE_URL,
+      apiKey: EVOLUTION_API_KEY,
+    };
+  } catch (err) {
+    console.error('[API-CONFIG] Error fetching config:', err);
+    return {
+      provider: 'evolution' as const,
+      baseUrl: EVOLUTION_BASE_URL,
+      apiKey: EVOLUTION_API_KEY,
+    };
+  }
+}
+
+// Helper to get API config for a specific instance
+async function getInstanceApiConfig(supabaseClient: any, instanceId: string) {
+  try {
+    const { data: instance, error } = await supabaseClient
+      .from('maturador_instances')
+      .select('api_provider, evolution_base_url, evolution_api_key, uazapi_token')
+      .eq('id', instanceId)
+      .single();
+
+    if (error || !instance) {
+      console.log(`[INSTANCE-CONFIG] No instance found for ${instanceId}, using global`);
+      return getGlobalApiConfig(supabaseClient);
+    }
+
+    // If instance has its own config, use it
+    if (instance.api_provider === 'uazapi' && instance.uazapi_token) {
+      // Get global uazapi base URL
+      const globalConfig = await getGlobalApiConfig(supabaseClient);
+      return {
+        provider: 'uazapi' as const,
+        baseUrl: globalConfig.provider === 'uazapi' ? globalConfig.baseUrl : 'https://zapdata.uazapi.com',
+        apiKey: instance.uazapi_token,
+      };
+    }
+
+    if (instance.evolution_base_url && instance.evolution_api_key) {
+      return {
+        provider: 'evolution' as const,
+        baseUrl: instance.evolution_base_url.replace(/\/$/, ''),
+        apiKey: instance.evolution_api_key,
+      };
+    }
+
+    // Fall back to global config
+    return getGlobalApiConfig(supabaseClient);
+  } catch (err) {
+    console.error('[INSTANCE-CONFIG] Error:', err);
+    return getGlobalApiConfig(supabaseClient);
+  }
+}
+
+// Helper to call API with provider abstraction
+async function callWhatsAppApi(
+  config: { provider: 'evolution' | 'uazapi'; baseUrl: string; apiKey: string },
+  endpoint: string,
+  method: string = 'GET',
+  body?: any
+) {
+  const url = `${config.baseUrl}${endpoint}`;
+  console.log(`[API-CALL] ${config.provider}: ${method} ${url}`);
+  if (body) console.log('[API-CALL] Body:', JSON.stringify(body));
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'apikey': config.apiKey,
+  };
+
+  const options: RequestInit = { method, headers };
+  if (body) {
+    options.body = JSON.stringify(body);
+  }
+
+  const response = await fetch(url, options);
+  const responseText = await response.text();
+
+  console.log(`[API-CALL] Response status: ${response.status}`);
+
+  let data: any;
+  try {
+    data = JSON.parse(responseText);
+  } catch {
+    data = { message: responseText };
+  }
+
+  if (!response.ok) {
+    console.error('[API-CALL] Error:', { status: response.status, endpoint, response: data });
+    const err = new Error(
+      (data?.message && Array.isArray(data.message) ? data.message.join(' | ') : data?.message) ||
+      data?.error ||
+      `API error: ${response.status}`
+    ) as Error & { status?: number; details?: any };
+    err.status = response.status;
+    err.details = data;
+    throw err;
+  }
+
+  return data;
+}
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -41,56 +181,14 @@ serve(async (req) => {
     const { action, ...params } = await req.json();
     console.log(`Maturador action: ${action}`, params);
 
-    // Helper function to call Evolution API
+    // Helper function to call Evolution API (backward compatibility wrapper)
     const callEvolution = async (endpoint: string, method: string = 'GET', body?: any) => {
-      const url = `${EVOLUTION_BASE_URL}${endpoint}`;
-      console.log(`Calling Evolution API: ${method} ${url}`);
-      if (body) console.log('Evolution API request body:', JSON.stringify(body));
-
-      const options: RequestInit = {
-        method,
-        headers: {
-          apikey: EVOLUTION_API_KEY,
-          'Content-Type': 'application/json',
-        },
+      const config = {
+        provider: 'evolution' as const,
+        baseUrl: EVOLUTION_BASE_URL,
+        apiKey: EVOLUTION_API_KEY,
       };
-
-      if (body) {
-        options.body = JSON.stringify(body);
-      }
-
-      const response = await fetch(url, options);
-      const responseText = await response.text();
-
-      console.log(`Evolution API response status: ${response.status}`);
-
-      let data: any;
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        data = { message: responseText };
-      }
-
-      if (!response.ok) {
-        console.error('Evolution API error:', {
-          status: response.status,
-          error: response.statusText,
-          endpoint,
-          response: data,
-        });
-
-        const err = new Error(
-          (data?.message && Array.isArray(data.message) ? data.message.join(' | ') : data?.message) ||
-            data?.error ||
-            `Evolution API error: ${response.status}`
-        ) as Error & { status?: number; details?: any; endpoint?: string };
-        err.status = response.status;
-        err.details = data;
-        err.endpoint = endpoint;
-        throw err;
-      }
-
-      return data;
+      return callWhatsAppApi(config, endpoint, method, body);
     };
 
     // Helper to extract phone number from Evolution instance data
@@ -371,75 +469,103 @@ Regras:
           });
         }
 
-        // Determine which Evolution API to use for creation
-        // Priority: evolutionConfig from request > user config > admin config > global
-        let createBaseUrl = EVOLUTION_BASE_URL;
-        let createApiKey = EVOLUTION_API_KEY;
+        // Get global API configuration
+        const globalConfig = await getGlobalApiConfig(supabaseClient);
+        console.log(`[CREATE-INSTANCE] Using ${globalConfig.provider} API from global config`);
+
+        // Determine which API to use for creation
+        // Priority: evolutionConfig from request > global config
+        let createBaseUrl = globalConfig.baseUrl;
+        let createApiKey = globalConfig.apiKey;
+        let apiProvider = globalConfig.provider;
         
         if (evolutionConfig?.baseUrl && evolutionConfig?.apiKey) {
-          console.log(`[CREATE-INSTANCE] Using custom Evolution config: ${evolutionConfig.baseUrl}`);
+          console.log(`[CREATE-INSTANCE] Overriding with custom config: ${evolutionConfig.baseUrl}`);
           createBaseUrl = evolutionConfig.baseUrl.replace(/\/$/, '');
           createApiKey = evolutionConfig.apiKey;
+          apiProvider = 'evolution'; // Custom config is always Evolution
         }
 
-        // Create instance in Evolution API using the appropriate config
-        const createResponse = await fetch(`${createBaseUrl}/instance/create`, {
-          method: 'POST',
-          headers: {
-            apikey: createApiKey,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
+        // Create instance using the chosen API
+        let createEndpoint: string;
+        let createBody: any;
+
+        if (apiProvider === 'uazapi') {
+          createEndpoint = `${createBaseUrl}/instance/create`;
+          createBody = {
+            instanceName,
+            qrcode: true,
+          };
+        } else {
+          createEndpoint = `${createBaseUrl}/instance/create`;
+          createBody = {
             instanceName,
             qrcode: true,
             integration: 'WHATSAPP-BAILEYS',
-          }),
+          };
+        }
+
+        console.log(`[CREATE-INSTANCE] Calling ${createEndpoint}`);
+        const createResponse = await fetch(createEndpoint, {
+          method: 'POST',
+          headers: {
+            'apikey': createApiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(createBody),
         });
 
         if (!createResponse.ok) {
           const errorText = await createResponse.text();
-          console.error('[CREATE-INSTANCE] Evolution API error:', errorText);
-          throw new Error(`Evolution API error: ${createResponse.status}`);
+          console.error('[CREATE-INSTANCE] API error:', errorText);
+          throw new Error(`API error: ${createResponse.status} - ${errorText}`);
         }
 
         result = await createResponse.json();
+        console.log('[CREATE-INSTANCE] Response:', JSON.stringify(result));
 
-        // Configure instance settings to ignore groups (messages from groups won't be sent to webhook)
-        try {
-          await fetch(`${createBaseUrl}/settings/set/${instanceName}`, {
-            method: 'POST',
-            headers: {
-              apikey: createApiKey,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              rejectCall: false,
-              groupsIgnore: true, // Ignore group messages at Evolution API level
-              alwaysOnline: false,
-              readMessages: false,
-              readStatus: false,
-              syncFullHistory: false,
-            }),
-          });
-          console.log(`[INSTANCE] Configured ignoreGroups=true for ${instanceName}`);
-        } catch (settingsError) {
-          console.error(`[INSTANCE] Failed to set ignoreGroups for ${instanceName}:`, settingsError);
-          // Continue even if settings fail - instance is still created
+        // Extract QR code from response (different formats)
+        let qrCodeBase64 = result.qrcode?.base64 || result.qrcode || result.base64 || null;
+
+        // Configure instance settings (Evolution only)
+        if (apiProvider === 'evolution') {
+          try {
+            await fetch(`${createBaseUrl}/settings/set/${instanceName}`, {
+              method: 'POST',
+              headers: {
+                'apikey': createApiKey,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                rejectCall: false,
+                groupsIgnore: true,
+                alwaysOnline: false,
+                readMessages: false,
+                readStatus: false,
+                syncFullHistory: false,
+              }),
+            });
+            console.log(`[INSTANCE] Configured ignoreGroups=true for ${instanceName}`);
+          } catch (settingsError) {
+            console.error(`[INSTANCE] Failed to set settings for ${instanceName}:`, settingsError);
+          }
         }
 
-        // Save instance to database WITH Evolution config if provided
+        // Save instance to database with API provider info
         const insertData: any = {
           user_id: user.id,
           instance_name: instanceName,
           status: 'disconnected',
-          qrcode: result.qrcode?.base64 || null,
+          qrcode: qrCodeBase64,
+          api_provider: apiProvider,
         };
         
-        // Save Evolution config per instance if custom config was provided
-        if (evolutionConfig?.baseUrl && evolutionConfig?.apiKey) {
+        // Save API config per instance
+        if (apiProvider === 'uazapi') {
+          insertData.uazapi_token = createApiKey;
+        } else if (evolutionConfig?.baseUrl && evolutionConfig?.apiKey) {
           insertData.evolution_base_url = evolutionConfig.baseUrl.replace(/\/$/, '');
           insertData.evolution_api_key = evolutionConfig.apiKey;
-          console.log(`[CREATE-INSTANCE] Saving custom Evolution config for ${instanceName}`);
         }
 
         const { error: insertError } = await supabaseClient
@@ -455,6 +581,7 @@ Regras:
           const webhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/webhook-inbox-messages`;
           console.log(`[CREATE-INSTANCE] Configuring webhook for ${instanceName} to ${webhookUrl}`);
           
+          // Different webhook payload formats for different API versions
           const webhookPayloads = [
             {
               url: webhookUrl,
@@ -473,15 +600,19 @@ Regras:
             }
           ];
 
+          const webhookEndpoint = apiProvider === 'uazapi' 
+            ? `${createBaseUrl}/webhook/set`
+            : `${createBaseUrl}/webhook/set/${instanceName}`;
+
           for (const payload of webhookPayloads) {
             try {
-              const webhookRes = await fetch(`${createBaseUrl}/webhook/set/${instanceName}`, {
+              const webhookRes = await fetch(webhookEndpoint, {
                 method: 'POST',
                 headers: {
-                  apikey: createApiKey,
+                  'apikey': createApiKey,
                   'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(payload),
+                body: JSON.stringify(apiProvider === 'uazapi' ? { ...payload, instanceName } : payload),
               });
               
               if (webhookRes.ok) {
@@ -489,12 +620,19 @@ Regras:
                 break;
               }
             } catch (webhookError) {
-              console.log(`[CREATE-INSTANCE] Webhook payload failed for ${instanceName}:`, webhookError);
+              console.log(`[CREATE-INSTANCE] Webhook payload failed:`, webhookError);
             }
           }
         } catch (webhookError) {
-          console.error(`[CREATE-INSTANCE] Failed to configure webhook for ${instanceName}:`, webhookError);
+          console.error(`[CREATE-INSTANCE] Failed to configure webhook:`, webhookError);
         }
+
+        // Return result with QR code
+        result = {
+          ...result,
+          qrcode: qrCodeBase64 ? { base64: qrCodeBase64 } : result.qrcode,
+          api_provider: apiProvider,
+        };
 
         break;
       }

@@ -15,7 +15,7 @@ import {
   Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X, Key, Loader2, 
   UserPlus, Activity, Megaphone, Eye, MousePointer, Trash2, Image, Clock, Settings, Users, 
   BarChart3, Phone, FileText, Wallet, History, Percent, Menu, ShoppingBag, Package, Globe, RefreshCw,
-  Smartphone, Shield, TrendingUp
+  Smartphone, Shield, TrendingUp, Wifi
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -24,6 +24,7 @@ import { MarketplaceProductModal } from "@/components/MarketplaceProductModal";
 import { AdminMFA } from "@/components/admin/AdminMFA";
 import { AdminAdsMetrics } from "@/components/admin/AdminAdsMetrics";
 import { AdminInstances } from "@/components/admin/AdminInstances";
+import { AdminWhatsAppApiConfig } from "@/components/admin/AdminWhatsAppApiConfig";
 
 // Product image imports for admin
 import bmVerificadaImg from "@/assets/bm-verificada.png";
@@ -93,6 +94,7 @@ const SIDEBAR_MENU = [
     icon: Smartphone,
     items: [
       { id: "instances", label: "Números WhatsApp", icon: Smartphone },
+      { id: "whatsapp-api", label: "Configurar API", icon: Wifi },
     ]
   },
   {
@@ -2428,6 +2430,9 @@ const AdminPanelNew = () => {
 
       case 'ads-metrics':
         return <AdminAdsMetrics />;
+
+      case 'whatsapp-api':
+        return <AdminWhatsAppApiConfig />;
 
       default:
         return null;
