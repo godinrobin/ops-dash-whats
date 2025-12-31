@@ -2523,6 +2523,7 @@ Regras IMPORTANTES:
       case 'enable-ignore-groups': {
         // Enable ignoreGroups setting on all existing instances in Evolution API
         // This prevents group messages from being sent to webhook
+        // NOTE: This is an Evolution-only feature - UazAPI handles this via excludeMessages in webhook config
         const { instanceNames } = params;
         
         if (!instanceNames || !Array.isArray(instanceNames) || instanceNames.length === 0) {
@@ -2532,9 +2533,28 @@ Regras IMPORTANTES:
           });
         }
 
-        const results: { instanceName: string; success: boolean; error?: string }[] = [];
+        const results: { instanceName: string; success: boolean; error?: string; skipped?: boolean }[] = [];
+
+        // Get api_provider for each instance to skip UazAPI ones
+        const { data: instancesData } = await supabaseClient
+          .from('maturador_instances')
+          .select('instance_name, api_provider')
+          .eq('user_id', user.id)
+          .in('instance_name', instanceNames);
+        
+        const instanceProviderMap = new Map<string, string>();
+        instancesData?.forEach(i => instanceProviderMap.set(i.instance_name, i.api_provider || 'evolution'));
 
         for (const instanceName of instanceNames) {
+          const provider = instanceProviderMap.get(instanceName) || 'evolution';
+          
+          // Skip UazAPI instances - they handle group filtering via webhook excludeMessages
+          if (provider === 'uazapi') {
+            console.log(`[IGNORE-GROUPS] Skipping ${instanceName} (UazAPI instance)`);
+            results.push({ instanceName, success: true, skipped: true });
+            continue;
+          }
+          
           try {
             await callEvolution(`/settings/set/${instanceName}`, 'POST', {
               rejectCall: false,
@@ -2558,8 +2578,9 @@ Regras IMPORTANTES:
 
         const successCount = results.filter(r => r.success).length;
         const failCount = results.filter(r => !r.success).length;
+        const skippedCount = results.filter(r => r.skipped).length;
         
-        console.log(`[IGNORE-GROUPS] Completed: ${successCount} success, ${failCount} failed`);
+        console.log(`[IGNORE-GROUPS] Completed: ${successCount} success, ${failCount} failed, ${skippedCount} skipped (UazAPI)`);
         
         result = { 
           success: true, 
@@ -2567,7 +2588,8 @@ Regras IMPORTANTES:
           summary: {
             total: instanceNames.length,
             success: successCount,
-            failed: failCount
+            failed: failCount,
+            skipped: skippedCount
           }
         };
         break;
