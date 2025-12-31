@@ -130,58 +130,102 @@ serve(async (req) => {
 
     // Handle UazAPI instances differently
     if (instance.api_provider === 'uazapi') {
-      // UazAPI: POST /instance/setWebhooks with token header
-      const UAZAPI_BASE_URL = Deno.env.get('EVOLUTION_BASE_URL') ?? '';
-      const instanceToken = instance.uazapi_token || Deno.env.get('EVOLUTION_API_KEY') || '';
-      
+      // UazAPI: /instance/setWebhooks with instance token header
+      if (!instance.uazapi_token) {
+        return new Response(JSON.stringify({ error: 'Instance token not found (uazapi_token)' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Fetch UazAPI base URL from backend config (fallback to default)
+      const { data: globalCfg } = await supabaseClient
+        .from('whatsapp_api_config')
+        .select('uazapi_base_url, uazapi_api_prefix')
+        .limit(1)
+        .maybeSingle();
+
+      const baseUrl = (globalCfg?.uazapi_base_url || 'https://zapdata.uazapi.com').replace(/\/$/, '');
+      const prefix = (globalCfg?.uazapi_api_prefix || '').toString();
+      const uazapiUrl = `${baseUrl}${prefix}`;
+
+      const instanceToken = instance.uazapi_token;
+
       const uazapiWebhookPayload = {
         url: webhookUrl,
         addUrlEvents: true,
         addUrlTypesMessages: true,
         events: 'messages',
-        excludeMessages: 'wasSentByApi,isGroupYes'
+        excludeMessages: 'wasSentByApi,isGroupYes',
       };
-      
+
       console.log('[CONFIGURE-WEBHOOK] UazAPI webhook payload:', JSON.stringify(uazapiWebhookPayload));
-      
-      const webhookRes = await fetch(`${UAZAPI_BASE_URL}/instance/setWebhooks`, {
+      console.log('[CONFIGURE-WEBHOOK] UazAPI base URL:', uazapiUrl);
+
+      // Try POST first, fallback to PUT if server returns 405
+      let webhookRes = await fetch(`${uazapiUrl}/instance/setWebhooks`, {
         method: 'POST',
         headers: {
-          'token': instanceToken,
+          token: instanceToken,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(uazapiWebhookPayload),
       });
-      
-      const responseText = await webhookRes.text();
-      console.log('[CONFIGURE-WEBHOOK] UazAPI response:', webhookRes.status, responseText);
-      
-      if (webhookRes.ok) {
-        let result;
-        try {
-          result = JSON.parse(responseText);
-        } catch {
-          result = { raw: responseText };
-        }
-        return new Response(JSON.stringify({ 
-          success: true, 
-          webhookUrl,
-          instanceName,
-          result,
-          format: 'uazapi'
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+
+      let responseText = await webhookRes.text();
+
+      if (!webhookRes.ok && webhookRes.status === 405) {
+        const allow = webhookRes.headers.get('allow') || webhookRes.headers.get('Allow');
+        console.log(`[CONFIGURE-WEBHOOK] POST returned 405. Allow=${allow ?? 'unknown'}. Retrying with PUT...`);
+
+        webhookRes = await fetch(`${uazapiUrl}/instance/setWebhooks`, {
+          method: 'PUT',
+          headers: {
+            token: instanceToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(uazapiWebhookPayload),
         });
-      } else {
-        return new Response(JSON.stringify({ 
+
+        responseText = await webhookRes.text();
+      }
+
+      console.log('[CONFIGURE-WEBHOOK] UazAPI response:', webhookRes.status, responseText);
+
+      if (webhookRes.ok) {
+        let parsed;
+        try {
+          parsed = JSON.parse(responseText);
+        } catch {
+          parsed = { raw: responseText };
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            webhookUrl,
+            instanceName,
+            result: parsed,
+            format: 'uazapi',
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
           error: 'Failed to configure UazAPI webhook',
           details: responseText,
-          webhookUrl
-        }), {
+          webhookUrl,
+          baseUrl: uazapiUrl,
+        }),
+        {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+        }
+      );
     }
 
     // Evolution API flow
