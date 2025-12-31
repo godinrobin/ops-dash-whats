@@ -124,114 +124,84 @@ serve(async (req) => {
     }
 
     // 2. Probe admin endpoints with various combinations
-    const prefixes = ["", "/api", "/v2", "/api/v2"];
+    const prefixes = ["", "/api", "/v2", "/api/v2", "/v1"];
     const paths = [
       "/admin/listInstances",
       "/admin/instances",
       "/admin/instance/list",
+      "/admin/instance",
       "/listInstances",
       "/instances",
+      "/instance/list",
+      "/instance/fetchInstances",
+      // UazAPI specific paths from docs
+      "/instance",
+      "/whatsapp/instance",
+      "/whatsapp/listInstances",
     ];
     const methods = ["GET", "POST"];
-    const headerKeys = ["admintoken", "AdminToken", "admin_token", "x-admin-token"];
+    const headerKeys = [
+      "admintoken", 
+      "AdminToken", 
+      "admin_token", 
+      "x-admin-token",
+      "Authorization",  // Bearer style
+      "apikey",
+      "api_key",
+      "token",
+    ];
 
     let found = false;
 
-    for (const prefix of prefixes) {
+    // First try the most common combinations
+    const priorityTests = [
+      { prefix: "", path: "/admin/listInstances", method: "GET", headerKey: "admintoken" },
+      { prefix: "", path: "/instance/fetchInstances", method: "GET", headerKey: "admintoken" },
+      { prefix: "", path: "/admin/instances", method: "GET", headerKey: "admintoken" },
+      { prefix: "/api", path: "/admin/listInstances", method: "GET", headerKey: "admintoken" },
+      { prefix: "", path: "/instance/list", method: "GET", headerKey: "admintoken" },
+    ];
+
+    console.log(`[uazapi-probe] Starting priority endpoint tests...`);
+
+    for (const test of priorityTests) {
       if (found) break;
-      for (const path of paths) {
+      const fullUrl = `${baseUrl}${test.prefix}${test.path}`;
+      
+      // Test with both regular header and Bearer token
+      for (const useBearer of [false, true]) {
         if (found) break;
-        for (const method of methods) {
-          if (found) break;
-          for (const headerKey of headerKeys) {
-            if (found) break;
-
-            const fullUrl = `${baseUrl}${prefix}${path}`;
-            const headers: Record<string, string> = {
-              "Content-Type": "application/json",
-              [headerKey]: adminToken,
-            };
-
-            console.log(`[uazapi-probe] Trying ${method} ${fullUrl} with header ${headerKey}`);
-
-            try {
-              const resp = await fetch(fullUrl, {
-                method,
-                headers,
-                body: method === "POST" ? JSON.stringify({}) : undefined,
-              });
-
-              const result: ProbeResult = {
-                path: `${prefix}${path}`,
-                method,
-                status: resp.status,
-                statusText: resp.statusText,
-                isSuccess: resp.ok,
-              };
-
-              // Only add interesting results (not 404)
-              if (resp.status !== 404 && resp.status !== 405) {
-                try {
-                  const bodyText = await resp.text();
-                  result.bodyPreview = bodyText.substring(0, 200);
-                } catch {}
-                response.probeResults.push(result);
-              }
-
-              if (resp.ok) {
-                found = true;
-                response.adminEndpointFound = true;
-                response.detectedConfig = {
-                  prefix,
-                  listInstancesPath: path,
-                  listInstancesMethod: method,
-                  headerKey,
-                };
-                console.log(`[uazapi-probe] SUCCESS: ${method} ${prefix}${path} with ${headerKey}`);
-              }
-            } catch (e) {
-              console.error(`[uazapi-probe] Error probing ${fullUrl}:`, e);
-            }
-          }
+        
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        
+        if (useBearer) {
+          headers["Authorization"] = `Bearer ${adminToken}`;
+        } else {
+          headers[test.headerKey] = adminToken;
         }
-      }
-    }
 
-    // Also try specific UazAPI v2 endpoints from docs
-    if (!found) {
-      const docEndpoints = [
-        { path: "/instance/list", method: "GET", headerKey: "admintoken" },
-        { path: "/instance", method: "GET", headerKey: "admintoken" },
-        { path: "/admin/instance", method: "GET", headerKey: "admintoken" },
-      ];
-
-      for (const ep of docEndpoints) {
-        const fullUrl = `${baseUrl}${ep.path}`;
-        const headers: Record<string, string> = {
-          "Content-Type": "application/json",
-          [ep.headerKey]: adminToken,
-        };
-
-        console.log(`[uazapi-probe] Trying doc endpoint: ${ep.method} ${fullUrl}`);
+        console.log(`[uazapi-probe] Priority: ${test.method} ${fullUrl} (${useBearer ? 'Bearer' : test.headerKey})`);
 
         try {
           const resp = await fetch(fullUrl, {
-            method: ep.method,
+            method: test.method,
             headers,
+            body: test.method === "POST" ? JSON.stringify({}) : undefined,
           });
 
           const result: ProbeResult = {
-            path: ep.path,
-            method: ep.method,
+            path: `${test.prefix}${test.path}`,
+            method: test.method,
             status: resp.status,
             statusText: resp.statusText,
             isSuccess: resp.ok,
           };
 
+          // Capture body for any non-404 response
           if (resp.status !== 404 && resp.status !== 405) {
             try {
               const bodyText = await resp.text();
-              result.bodyPreview = bodyText.substring(0, 200);
+              result.bodyPreview = bodyText.substring(0, 300);
             } catch {}
             response.probeResults.push(result);
           }
@@ -240,16 +210,82 @@ serve(async (req) => {
             found = true;
             response.adminEndpointFound = true;
             response.detectedConfig = {
-              prefix: "",
-              listInstancesPath: ep.path,
-              listInstancesMethod: ep.method,
-              headerKey: ep.headerKey,
+              prefix: test.prefix,
+              listInstancesPath: test.path,
+              listInstancesMethod: test.method,
+              headerKey: useBearer ? "Authorization" : test.headerKey,
             };
-            console.log(`[uazapi-probe] SUCCESS: ${ep.method} ${ep.path}`);
-            break;
+            console.log(`[uazapi-probe] SUCCESS: ${test.method} ${test.prefix}${test.path} with ${useBearer ? 'Bearer' : test.headerKey}`);
           }
         } catch (e) {
-          console.error(`[uazapi-probe] Error:`, e);
+          console.error(`[uazapi-probe] Error probing ${fullUrl}:`, e);
+        }
+      }
+    }
+
+    // Full matrix scan if priority tests failed
+    if (!found) {
+      console.log(`[uazapi-probe] Priority tests failed, running full matrix scan...`);
+      
+      for (const prefix of prefixes) {
+        if (found) break;
+        for (const path of paths) {
+          if (found) break;
+          for (const method of methods) {
+            if (found) break;
+            for (const headerKey of headerKeys) {
+              if (found) break;
+
+              const fullUrl = `${baseUrl}${prefix}${path}`;
+              const headers: Record<string, string> = { "Content-Type": "application/json" };
+              
+              // Special handling for Authorization header (use Bearer)
+              if (headerKey === "Authorization") {
+                headers["Authorization"] = `Bearer ${adminToken}`;
+              } else {
+                headers[headerKey] = adminToken;
+              }
+
+              try {
+                const resp = await fetch(fullUrl, {
+                  method,
+                  headers,
+                  body: method === "POST" ? JSON.stringify({}) : undefined,
+                });
+
+                const result: ProbeResult = {
+                  path: `${prefix}${path}`,
+                  method,
+                  status: resp.status,
+                  statusText: resp.statusText,
+                  isSuccess: resp.ok,
+                };
+
+                // Capture ALL interesting responses (401, 403, 500 - not just 2xx)
+                if (resp.status !== 404 && resp.status !== 405) {
+                  try {
+                    const bodyText = await resp.text();
+                    result.bodyPreview = bodyText.substring(0, 300);
+                  } catch {}
+                  response.probeResults.push(result);
+                }
+
+                if (resp.ok) {
+                  found = true;
+                  response.adminEndpointFound = true;
+                  response.detectedConfig = {
+                    prefix,
+                    listInstancesPath: path,
+                    listInstancesMethod: method,
+                    headerKey,
+                  };
+                  console.log(`[uazapi-probe] SUCCESS: ${method} ${prefix}${path} with ${headerKey}`);
+                }
+              } catch (e) {
+                // Silent - too many errors to log
+              }
+            }
+          }
         }
       }
     }
