@@ -2917,8 +2917,12 @@ export type Database = {
           evolution_api_key: string | null
           evolution_base_url: string | null
           id: string
+          uazapi_admin_header: string | null
+          uazapi_api_prefix: string | null
           uazapi_api_token: string | null
           uazapi_base_url: string | null
+          uazapi_list_instances_method: string | null
+          uazapi_list_instances_path: string | null
           updated_at: string | null
           updated_by: string | null
         }
@@ -2927,8 +2931,12 @@ export type Database = {
           evolution_api_key?: string | null
           evolution_base_url?: string | null
           id?: string
+          uazapi_admin_header?: string | null
+          uazapi_api_prefix?: string | null
           uazapi_api_token?: string | null
           uazapi_base_url?: string | null
+          uazapi_list_instances_method?: string | null
+          uazapi_list_instances_path?: string | null
           updated_at?: string | null
           updated_by?: string | null
         }
@@ -2937,8 +2945,12 @@ export type Database = {
           evolution_api_key?: string | null
           evolution_base_url?: string | null
           id?: string
+          uazapi_admin_header?: string | null
+          uazapi_api_prefix?: string | null
           uazapi_api_token?: string | null
           uazapi_base_url?: string | null
+          uazapi_list_instances_method?: string | null
+          uazapi_list_instances_path?: string | null
           updated_at?: string | null
           updated_by?: string | null
         }

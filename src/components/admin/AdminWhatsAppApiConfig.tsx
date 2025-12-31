@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, CheckCircle, XCircle, Eye, EyeOff, Copy, Wifi } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, Eye, EyeOff, Copy, Wifi, Search, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -17,13 +17,41 @@ interface WhatsAppApiConfig {
   uazapi_base_url: string | null;
   uazapi_api_token: string | null;
   updated_at: string;
+  uazapi_api_prefix?: string | null;
+  uazapi_admin_header?: string | null;
+  uazapi_list_instances_path?: string | null;
+  uazapi_list_instances_method?: string | null;
+}
+
+interface ProbeResult {
+  path: string;
+  method: string;
+  status: number;
+  statusText: string;
+  isSuccess: boolean;
+  bodyPreview?: string;
+}
+
+interface ProbeResponse {
+  serverOnline: boolean;
+  statusEndpoint?: { status: number; body?: any };
+  adminEndpointFound: boolean;
+  detectedConfig?: {
+    prefix: string;
+    listInstancesPath: string;
+    listInstancesMethod: string;
+    headerKey: string;
+  };
+  probeResults: ProbeResult[];
+  recommendation?: string;
+  error?: string;
 }
 
 export const AdminWhatsAppApiConfig = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string; details?: ProbeResponse } | null>(null);
   
   const [config, setConfig] = useState<WhatsAppApiConfig | null>(null);
   const [activeProvider, setActiveProvider] = useState<'evolution' | 'uazapi'>('uazapi');
@@ -95,16 +123,12 @@ export const AdminWhatsAppApiConfig = () => {
       // Clean URL
       baseUrl = baseUrl.replace(/\/$/, '');
 
-      // Test connection based on provider
-      // UazAPI docs: admin endpoints use header `admintoken`
-      // Some servers expose the admin routes under different prefixes, so we probe a small set.
-
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-
+      // Evolution: test directly
       if (activeProvider === 'evolution') {
-        headers['apikey'] = apiKey;
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'apikey': apiKey,
+        };
 
         const endpoint = `${baseUrl}/instance/fetchInstances`;
         const response = await fetch(endpoint, { method: 'GET', headers });
@@ -122,51 +146,60 @@ export const AdminWhatsAppApiConfig = () => {
         return;
       }
 
-      // UazAPI
-      headers['admintoken'] = apiKey;
+      // UazAPI: use the probe function for comprehensive testing
+      setTestResult({ success: false, message: 'Detectando endpoints UazAPI...' });
 
-      const candidates = [
-        `${baseUrl}/admin/listInstances`,
-        `${baseUrl}/api/admin/listInstances`,
-        `${baseUrl}/v2/admin/listInstances`,
-        `${baseUrl}/admin/instances`,
-        `${baseUrl}/api/admin/instances`,
-      ];
+      const { data: probeData, error: probeError } = await supabase.functions.invoke('uazapi-probe', {
+        body: { baseUrl, adminToken: apiKey },
+      });
 
-      let lastError: { status: number; statusText: string; body?: string } | null = null;
-
-      for (const endpoint of candidates) {
-        try {
-          const response = await fetch(endpoint, { method: 'GET', headers });
-          if (!response.ok) {
-            lastError = { status: response.status, statusText: response.statusText, body: await response.text() };
-            continue;
-          }
-
-          const data = await response.json();
-          const count =
-            (Array.isArray(data) ? data.length : 0) ||
-            data?.instances?.length ||
-            data?.data?.instances?.length ||
-            data?.data?.length ||
-            0;
-
-          setTestResult({
-            success: true,
-            message: `Conexão bem-sucedida! ${count} instância(s) encontrada(s).`,
-          });
-          return;
-        } catch (e) {
-          // try next
-        }
+      if (probeError) {
+        console.error('Probe error:', probeError);
+        setTestResult({ 
+          success: false, 
+          message: `Erro ao executar diagnóstico: ${probeError.message}` 
+        });
+        return;
       }
 
-      console.error('UazAPI test error:', lastError);
-      setTestResult({
-        success: false,
-        message: `Erro: endpoint admin não encontrado. Confirme o Server URL (deve ser https://{seu-subdominio}.uazapi.com).`,
-      });
-      return;
+      const probe = probeData as ProbeResponse;
+
+      if (probe.error) {
+        setTestResult({ success: false, message: probe.error, details: probe });
+        return;
+      }
+
+      if (!probe.serverOnline) {
+        setTestResult({ 
+          success: false, 
+          message: 'Servidor não está respondendo. Verifique a URL base.',
+          details: probe 
+        });
+        return;
+      }
+
+      if (probe.adminEndpointFound && probe.detectedConfig) {
+        const config = probe.detectedConfig;
+        setTestResult({ 
+          success: true, 
+          message: `Conexão bem-sucedida! Endpoint detectado: ${config.listInstancesMethod} ${config.prefix}${config.listInstancesPath}`,
+          details: probe
+        });
+        // Reload config to show saved values
+        await loadConfig();
+        return;
+      }
+
+      // Not found
+      let message = 'Servidor online, mas endpoint admin não encontrado.';
+      if (probe.recommendation) {
+        message = probe.recommendation;
+      }
+      if (probe.probeResults.length > 0) {
+        const attempts = probe.probeResults.slice(0, 3).map(r => `${r.method} ${r.path} (${r.status})`).join(', ');
+        message += ` Tentativas: ${attempts}`;
+      }
+      setTestResult({ success: false, message, details: probe });
     } catch (err: any) {
       console.error('Connection test error:', err);
       setTestResult({ 
@@ -404,17 +437,69 @@ export const AdminWhatsAppApiConfig = () => {
 
         {/* Test Result */}
         {testResult && (
-          <div className={`flex items-center gap-2 p-3 rounded-lg ${
-            testResult.success 
-              ? 'bg-green-500/10 text-green-500 border border-green-500/20' 
-              : 'bg-red-500/10 text-red-500 border border-red-500/20'
-          }`}>
-            {testResult.success ? (
-              <CheckCircle className="h-5 w-5" />
-            ) : (
-              <XCircle className="h-5 w-5" />
+          <div className="space-y-3">
+            <div className={`flex items-start gap-2 p-3 rounded-lg ${
+              testResult.success 
+                ? 'bg-green-500/10 text-green-500 border border-green-500/20' 
+                : 'bg-red-500/10 text-red-500 border border-red-500/20'
+            }`}>
+              {testResult.success ? (
+                <CheckCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
+              ) : (
+                <XCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
+              )}
+              <span className="text-sm">{testResult.message}</span>
+            </div>
+
+            {/* Detailed probe results for UazAPI */}
+            {testResult.details && activeProvider === 'uazapi' && (
+              <div className="text-xs space-y-2 p-3 rounded-lg bg-muted/50 border border-border">
+                <div className="flex items-center gap-2">
+                  <Search className="h-4 w-4" />
+                  <span className="font-medium">Diagnóstico UazAPI</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-muted-foreground">
+                  <div>Servidor Online:</div>
+                  <div>{testResult.details.serverOnline ? '✅ Sim' : '❌ Não'}</div>
+                  
+                  <div>Status Endpoint:</div>
+                  <div>{testResult.details.statusEndpoint?.status || 'N/A'}</div>
+                  
+                  <div>Endpoint Admin:</div>
+                  <div>{testResult.details.adminEndpointFound ? '✅ Encontrado' : '❌ Não encontrado'}</div>
+                </div>
+
+                {testResult.details.detectedConfig && (
+                  <div className="pt-2 border-t border-border/50 space-y-1">
+                    <div className="font-medium text-foreground">Configuração Detectada:</div>
+                    <div className="font-mono text-muted-foreground">
+                      {testResult.details.detectedConfig.listInstancesMethod}{' '}
+                      {testResult.details.detectedConfig.prefix}
+                      {testResult.details.detectedConfig.listInstancesPath}
+                    </div>
+                    <div className="text-muted-foreground">
+                      Header: <code className="bg-muted px-1 rounded">{testResult.details.detectedConfig.headerKey}</code>
+                    </div>
+                  </div>
+                )}
+
+                {testResult.details.probeResults && testResult.details.probeResults.length > 0 && !testResult.details.adminEndpointFound && (
+                  <div className="pt-2 border-t border-border/50">
+                    <div className="flex items-center gap-1 font-medium text-foreground mb-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      Endpoints testados:
+                    </div>
+                    <div className="space-y-1">
+                      {testResult.details.probeResults.slice(0, 5).map((r, i) => (
+                        <div key={i} className="font-mono text-muted-foreground">
+                          {r.method} {r.path} → {r.status} {r.statusText}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
-            <span className="text-sm">{testResult.message}</span>
           </div>
         )}
 
