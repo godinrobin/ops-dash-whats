@@ -200,14 +200,15 @@ async function callWhatsAppApi(
 
 // UazAPI endpoint mapping - translates Evolution endpoints to UazAPI equivalents
 // Based on UazAPI v2 OpenAPI documentation:
-// - Admin endpoints require header "admintoken": POST /instance/init, GET /instance/all
+// - Admin endpoints require header "admintoken": POST /instance/init, GET /instance/all, DELETE /instance/delete
 // - Instance endpoints require header "token": GET /instance/status, POST /instance/connect, etc.
-function getUazApiEndpoint(evolutionEndpoint: string, instanceName?: string): { endpoint: string; isAdmin: boolean } {
+// IMPORTANT: UazAPI uses different endpoints and methods than Evolution API
+function getUazApiEndpoint(evolutionEndpoint: string, instanceName?: string): { endpoint: string; isAdmin: boolean; method?: string } {
   // Remove instance name from Evolution-style endpoints
   const cleanEndpoint = evolutionEndpoint.replace(`/${instanceName}`, '');
   
   // Map common Evolution endpoints to UazAPI (per OpenAPI spec)
-  const mappings: Record<string, { endpoint: string; isAdmin: boolean }> = {
+  const mappings: Record<string, { endpoint: string; isAdmin: boolean; method?: string }> = {
     // Admin endpoints (require admintoken header)
     '/instance/fetchInstances': { endpoint: '/instance/all', isAdmin: true },
     '/instance/create': { endpoint: '/instance/init', isAdmin: true },
@@ -216,8 +217,10 @@ function getUazApiEndpoint(evolutionEndpoint: string, instanceName?: string): { 
     // Instance endpoints (require token header)
     '/instance/connect': { endpoint: '/instance/connect', isAdmin: false },
     '/instance/connectionState': { endpoint: '/instance/status', isAdmin: false },
-    '/instance/logout': { endpoint: '/instance/disconnect', isAdmin: false },
-    '/instance/restart': { endpoint: '/instance/restart', isAdmin: false },
+    // UazAPI uses /instance/disconnect with DELETE method for logout
+    '/instance/logout': { endpoint: '/instance/disconnect', isAdmin: false, method: 'DELETE' },
+    // UazAPI may not have restart - use disconnect + connect instead
+    '/instance/restart': { endpoint: '/instance/disconnect', isAdmin: false, method: 'DELETE' },
     
     // Message endpoints (require token header)
     '/message/sendText': { endpoint: '/message/sendText', isAdmin: false },
@@ -225,8 +228,8 @@ function getUazApiEndpoint(evolutionEndpoint: string, instanceName?: string): { 
     '/message/sendWhatsAppAudio': { endpoint: '/message/sendAudio', isAdmin: false },
     
     // Webhook endpoints (require token header)
-    '/webhook/set': { endpoint: '/webhook/set', isAdmin: false },
-    '/webhook/find': { endpoint: '/webhook/get', isAdmin: false },
+    '/webhook/set': { endpoint: '/instance/setWebhooks', isAdmin: false },
+    '/webhook/find': { endpoint: '/instance/getWebhooks', isAdmin: false },
     
     // Contact endpoints (require token header)
     '/chat/fetchProfilePictureUrl': { endpoint: '/chat/getProfilePicture', isAdmin: false },
@@ -1172,21 +1175,60 @@ Regras:
 
         if (inst?.api_provider === 'uazapi') {
           const config = await getInstanceApiConfig(supabaseClient, inst.id);
-          result = await callWhatsAppApi(config, '/instance/status', 'GET', undefined, false, inst.uazapi_token || undefined);
-          console.log('UazAPI status result:', JSON.stringify(result, null, 2));
+          
+          try {
+            result = await callWhatsAppApi(config, '/instance/status', 'GET', undefined, false, inst.uazapi_token || undefined);
+            console.log('UazAPI status result:', JSON.stringify(result, null, 2));
+          } catch (statusError: any) {
+            console.error('UazAPI status error:', statusError);
+            // If status call fails, instance is disconnected
+            await supabaseClient
+              .from('maturador_instances')
+              .update({ status: 'disconnected' })
+              .eq('instance_name', instanceName)
+              .eq('user_id', user.id);
+            break;
+          }
 
+          // UazAPI returns different formats for connection status
+          // Check multiple possible response shapes
           const isConnected = Boolean(
-            result?.connected ??
-            result?.status?.connected ??
-            result?.instance?.connected ??
-            result?.data?.connected ??
-            false
+            // Direct connected field
+            result?.connected === true ||
+            // Nested in status object
+            result?.status?.connected === true ||
+            // Nested in instance object
+            result?.instance?.connected === true ||
+            // Nested in data object
+            result?.data?.connected === true ||
+            // Check state field (some UazAPI versions use this)
+            result?.state === 'open' ||
+            result?.status?.state === 'open' ||
+            result?.instance?.state === 'open' ||
+            // Check connection field
+            result?.connection === 'open' ||
+            result?.status?.connection === 'open'
+          );
+          
+          // Also check for explicit disconnected states
+          const isDisconnected = Boolean(
+            result?.connected === false ||
+            result?.status?.connected === false ||
+            result?.state === 'close' ||
+            result?.state === 'disconnected' ||
+            result?.connection === 'close' ||
+            result?.status?.state === 'close'
           );
 
-          const newStatus = isConnected ? 'connected' : 'disconnected';
+          console.log(`[UAZAPI-STATUS] Instance ${instanceName}: connected=${isConnected}, disconnected=${isDisconnected}`);
+
+          const newStatus = isConnected && !isDisconnected ? 'connected' : 'disconnected';
           await supabaseClient
             .from('maturador_instances')
-            .update({ status: newStatus })
+            .update({ 
+              status: newStatus,
+              last_seen: newStatus === 'connected' ? new Date().toISOString() : null,
+            })
             .eq('instance_name', instanceName)
             .eq('user_id', user.id);
 
@@ -1616,7 +1658,18 @@ Regras:
 
         if (inst?.api_provider === 'uazapi') {
           const config = await getInstanceApiConfig(supabaseClient, inst.id);
-          result = await callWhatsAppApi(config, '/instance/logout', 'POST', undefined, false, inst.uazapi_token || undefined);
+          // UazAPI uses /instance/disconnect with DELETE method
+          try {
+            result = await callWhatsAppApi(config, '/instance/disconnect', 'DELETE', undefined, false, inst.uazapi_token || undefined);
+          } catch (e: any) {
+            // Try POST if DELETE fails (some UazAPI versions)
+            if (e?.status === 405) {
+              console.log('[LOGOUT] DELETE failed with 405, trying POST...');
+              result = await callWhatsAppApi(config, '/instance/disconnect', 'POST', undefined, false, inst.uazapi_token || undefined);
+            } else {
+              throw e;
+            }
+          }
         } else {
           result = await callEvolution(`/instance/logout/${instanceName}`, 'DELETE');
         }
@@ -1738,21 +1791,59 @@ Regras:
           .eq('user_id', user.id)
           .single();
 
-        try {
-          if (inst?.api_provider === 'uazapi') {
-            const config = await getInstanceApiConfig(supabaseClient, inst.id);
-            result = await callWhatsAppApi(config, '/instance/restart', 'POST', undefined, false, inst.uazapi_token || undefined);
-          } else {
-            result = await callEvolution(`/instance/restart/${instanceName}`, 'POST');
+        if (inst?.api_provider === 'uazapi') {
+          // UazAPI doesn't have a restart endpoint - use disconnect + connect
+          const config = await getInstanceApiConfig(supabaseClient, inst.id);
+          
+          try {
+            // First disconnect
+            await callWhatsAppApi(config, '/instance/disconnect', 'DELETE', undefined, false, inst.uazapi_token || undefined);
+          } catch (disconnectError: any) {
+            // Try POST if DELETE fails
+            if (disconnectError?.status === 405) {
+              try {
+                await callWhatsAppApi(config, '/instance/disconnect', 'POST', undefined, false, inst.uazapi_token || undefined);
+              } catch (e) {
+                console.log('[RESTART] Disconnect failed, continuing with connect...');
+              }
+            } else {
+              console.log('[RESTART] Disconnect error (continuing anyway):', disconnectError.message);
+            }
           }
-        } catch (e) {
-          // If restart fails, try logout + connect approach
-          console.log('Restart failed, trying logout + connect');
-          if (inst?.api_provider === 'uazapi') {
-            const config = await getInstanceApiConfig(supabaseClient, inst.id);
-            await callWhatsAppApi(config, '/instance/logout', 'POST', undefined, false, inst.uazapi_token || undefined);
-            result = await callWhatsAppApi(config, '/instance/qrcode', 'GET', undefined, false, inst.uazapi_token || undefined);
-          } else {
+          
+          // Wait a bit
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Then connect to get new QR code
+          try {
+            result = await callWhatsAppApi(config, '/instance/connect', 'POST', undefined, false, inst.uazapi_token || undefined);
+            
+            // Extract QR code if available
+            const qrcode = result?.qrcode || result?.base64 || result?.instance?.qrcode || null;
+            if (qrcode) {
+              await supabaseClient
+                .from('maturador_instances')
+                .update({ qrcode, status: 'connecting' })
+                .eq('instance_name', instanceName)
+                .eq('user_id', user.id);
+            }
+          } catch (connectError) {
+            console.error('[RESTART] Connect error:', connectError);
+          }
+          
+          // Update status
+          await supabaseClient
+            .from('maturador_instances')
+            .update({ status: 'disconnected' })
+            .eq('instance_name', instanceName)
+            .eq('user_id', user.id);
+        } else {
+          // Evolution API
+          try {
+            result = await callEvolution(`/instance/restart/${instanceName}`, 'POST');
+          } catch (e) {
+            // If restart fails, try logout + connect approach
+            console.log('Restart failed, trying logout + connect');
             await callEvolution(`/instance/logout/${instanceName}`, 'DELETE');
             result = await callEvolution(`/instance/connect/${instanceName}`, 'GET');
           }

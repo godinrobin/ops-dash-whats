@@ -144,13 +144,30 @@ serve(async (req) => {
     const apiProvider = instanceRow?.api_provider || 'evolution';
     const instanceToken = instanceRow?.uazapi_token;
 
-    // PRIORITY: 1) Instance config, 2) User config, 3) Admin config, 4) Global secrets
+    // PRIORITY: 1) Instance config, 2) User config, 3) Admin config, 4) Global whatsapp_api_config, 5) Global secrets
     let API_BASE_URL = '';
     let API_KEY = '';
     let configSource = 'none';
 
-    // 1) Try instance's own config (highest priority)
-    if (instanceRow?.evolution_base_url && instanceRow?.evolution_api_key) {
+    // For UazAPI, we need to get the base URL from whatsapp_api_config
+    if (apiProvider === 'uazapi') {
+      // Get UazAPI base URL from whatsapp_api_config table
+      const { data: apiConfig } = await supabaseAdmin
+        .from('whatsapp_api_config')
+        .select('uazapi_base_url, uazapi_api_token')
+        .limit(1)
+        .single();
+      
+      if (apiConfig?.uazapi_base_url) {
+        API_BASE_URL = apiConfig.uazapi_base_url.replace(/\/$/, '');
+        API_KEY = instanceToken || apiConfig.uazapi_api_token || '';
+        configSource = 'whatsapp_api_config';
+        console.log(`[SEND-MESSAGE] UazAPI using whatsapp_api_config: ${API_BASE_URL}`);
+      }
+    }
+
+    // 1) Try instance's own config (highest priority) - for Evolution
+    if (!API_BASE_URL && instanceRow?.evolution_base_url && instanceRow?.evolution_api_key) {
       API_BASE_URL = instanceRow.evolution_base_url.replace(/\/$/, '');
       API_KEY = instanceRow.evolution_api_key;
       configSource = 'instance';
@@ -210,7 +227,7 @@ serve(async (req) => {
       });
     }
 
-    console.log(`[SEND-MESSAGE] Provider: ${apiProvider}, Config source: ${configSource}`);
+    console.log(`[SEND-MESSAGE] Provider: ${apiProvider}, Config source: ${configSource}, URL: ${API_BASE_URL}`);
 
     // Determine how to send: via remoteJid (for @lid contacts) or formatted phone
     // Priority: remoteJid if it's @lid, otherwise use formatted phone
