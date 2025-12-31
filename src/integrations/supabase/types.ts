@@ -1698,6 +1698,7 @@ export type Database = {
       }
       maturador_instances: {
         Row: {
+          api_provider: string | null
           conversation_count: number | null
           created_at: string
           evolution_api_key: string | null
@@ -1712,10 +1713,12 @@ export type Database = {
           phone_number: string | null
           qrcode: string | null
           status: string
+          uazapi_token: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          api_provider?: string | null
           conversation_count?: number | null
           created_at?: string
           evolution_api_key?: string | null
@@ -1730,10 +1733,12 @@ export type Database = {
           phone_number?: string | null
           qrcode?: string | null
           status?: string
+          uazapi_token?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          api_provider?: string | null
           conversation_count?: number | null
           created_at?: string
           evolution_api_key?: string | null
@@ -1748,6 +1753,7 @@ export type Database = {
           phone_number?: string | null
           qrcode?: string | null
           status?: string
+          uazapi_token?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -2902,6 +2908,39 @@ export type Database = {
           status?: string
           transaction_id?: string | null
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      whatsapp_api_config: {
+        Row: {
+          active_provider: string
+          evolution_api_key: string | null
+          evolution_base_url: string | null
+          id: string
+          uazapi_api_token: string | null
+          uazapi_base_url: string | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          active_provider?: string
+          evolution_api_key?: string | null
+          evolution_base_url?: string | null
+          id?: string
+          uazapi_api_token?: string | null
+          uazapi_base_url?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          active_provider?: string
+          evolution_api_key?: string | null
+          evolution_base_url?: string | null
+          id?: string
+          uazapi_api_token?: string | null
+          uazapi_base_url?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
         }
         Relationships: []
       }
