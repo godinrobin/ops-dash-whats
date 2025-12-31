@@ -96,10 +96,8 @@ export const AdminWhatsAppApiConfig = () => {
       baseUrl = baseUrl.replace(/\/$/, '');
 
       // Test connection based on provider
-      // UazAPI uses /admin/listInstances with 'admintoken' header (lowercase)
-      const endpoint = activeProvider === 'evolution' 
-        ? `${baseUrl}/instance/fetchInstances`
-        : `${baseUrl}/admin/listInstances`;
+      // UazAPI docs: admin endpoints use header `admintoken`
+      // Some servers expose the admin routes under different prefixes, so we probe a small set.
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -107,30 +105,68 @@ export const AdminWhatsAppApiConfig = () => {
 
       if (activeProvider === 'evolution') {
         headers['apikey'] = apiKey;
-      } else {
-        headers['admintoken'] = apiKey;
-      }
 
-      const response = await fetch(endpoint, {
-        method: 'GET',
-        headers,
-      });
+        const endpoint = `${baseUrl}/instance/fetchInstances`;
+        const response = await fetch(endpoint, { method: 'GET', headers });
 
-      if (response.ok) {
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('API test error:', errorText);
+          setTestResult({ success: false, message: `Erro ${response.status}: ${response.statusText}` });
+          return;
+        }
+
         const data = await response.json();
         const count = Array.isArray(data) ? data.length : (data?.instances?.length || 0);
-        setTestResult({ 
-          success: true, 
-          message: `Conexão bem-sucedida! ${count} instância(s) encontrada(s).` 
-        });
-      } else {
-        const errorText = await response.text();
-        console.error('API test error:', errorText);
-        setTestResult({ 
-          success: false, 
-          message: `Erro ${response.status}: ${response.statusText}` 
-        });
+        setTestResult({ success: true, message: `Conexão bem-sucedida! ${count} instância(s) encontrada(s).` });
+        return;
       }
+
+      // UazAPI
+      headers['admintoken'] = apiKey;
+
+      const candidates = [
+        `${baseUrl}/admin/listInstances`,
+        `${baseUrl}/api/admin/listInstances`,
+        `${baseUrl}/v2/admin/listInstances`,
+        `${baseUrl}/admin/instances`,
+        `${baseUrl}/api/admin/instances`,
+      ];
+
+      let lastError: { status: number; statusText: string; body?: string } | null = null;
+
+      for (const endpoint of candidates) {
+        try {
+          const response = await fetch(endpoint, { method: 'GET', headers });
+          if (!response.ok) {
+            lastError = { status: response.status, statusText: response.statusText, body: await response.text() };
+            continue;
+          }
+
+          const data = await response.json();
+          const count =
+            (Array.isArray(data) ? data.length : 0) ||
+            data?.instances?.length ||
+            data?.data?.instances?.length ||
+            data?.data?.length ||
+            0;
+
+          setTestResult({
+            success: true,
+            message: `Conexão bem-sucedida! ${count} instância(s) encontrada(s).`,
+          });
+          return;
+        } catch (e) {
+          // try next
+        }
+      }
+
+      console.error('UazAPI test error:', lastError);
+      setTestResult({
+        success: false,
+        message: `Erro: endpoint admin não encontrado. Confirme o Server URL (deve ser https://{seu-subdominio}.uazapi.com).`,
+      });
+      return;
     } catch (err: any) {
       console.error('Connection test error:', err);
       setTestResult({ 
