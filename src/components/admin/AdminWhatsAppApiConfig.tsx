@@ -5,7 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, CheckCircle, XCircle, Eye, EyeOff, Copy, Wifi, Search, AlertTriangle } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, CheckCircle, XCircle, Eye, EyeOff, Copy, Wifi, Search, AlertTriangle, Settings, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -46,6 +48,229 @@ interface ProbeResponse {
   recommendation?: string;
   error?: string;
 }
+
+// UazAPI Config Component with Manual Mode
+const UazAPIConfig = ({
+  baseUrl,
+  setBaseUrl,
+  token,
+  setToken,
+  showToken,
+  setShowToken,
+  copyToClipboard,
+  config,
+}: {
+  baseUrl: string;
+  setBaseUrl: (v: string) => void;
+  token: string;
+  setToken: (v: string) => void;
+  showToken: boolean;
+  setShowToken: (v: boolean) => void;
+  copyToClipboard: (v: string) => void;
+  config: WhatsAppApiConfig | null;
+}) => {
+  const [manualMode, setManualMode] = useState(false);
+  const [manualPrefix, setManualPrefix] = useState(config?.uazapi_api_prefix || '');
+  const [manualPath, setManualPath] = useState(config?.uazapi_list_instances_path || '/admin/listInstances');
+  const [manualMethod, setManualMethod] = useState(config?.uazapi_list_instances_method || 'GET');
+  const [manualHeader, setManualHeader] = useState(config?.uazapi_admin_header || 'admintoken');
+  const [savingManual, setSavingManual] = useState(false);
+
+  useEffect(() => {
+    if (config) {
+      setManualPrefix(config.uazapi_api_prefix || '');
+      setManualPath(config.uazapi_list_instances_path || '/admin/listInstances');
+      setManualMethod(config.uazapi_list_instances_method || 'GET');
+      setManualHeader(config.uazapi_admin_header || 'admintoken');
+    }
+  }, [config]);
+
+  const saveManualConfig = async () => {
+    if (!config?.id) {
+      toast.error('Salve a configuração principal primeiro');
+      return;
+    }
+
+    setSavingManual(true);
+    try {
+      const { error } = await supabase
+        .from('whatsapp_api_config')
+        .update({
+          uazapi_api_prefix: manualPrefix || null,
+          uazapi_list_instances_path: manualPath || null,
+          uazapi_list_instances_method: manualMethod || null,
+          uazapi_admin_header: manualHeader || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', config.id);
+
+      if (error) throw error;
+      toast.success('Configuração manual salva!');
+    } catch (err) {
+      console.error('Error saving manual config:', err);
+      toast.error('Erro ao salvar configuração manual');
+    } finally {
+      setSavingManual(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4 p-4 rounded-lg border border-border bg-muted/30">
+      <h3 className="font-medium">Configuração UazAPI</h3>
+      
+      <div className="space-y-2">
+        <Label htmlFor="uazapi-url">Server URL</Label>
+        <div className="flex gap-2">
+          <Input
+            id="uazapi-url"
+            placeholder="https://zapdata.uazapi.com"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+          />
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => copyToClipboard(baseUrl)}
+            disabled={!baseUrl}
+          >
+            <Copy className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="uazapi-token">Admin Token</Label>
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Input
+              id="uazapi-token"
+              type={showToken ? 'text' : 'password'}
+              placeholder="Seu Admin Token"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute right-0 top-0 h-full"
+              onClick={() => setShowToken(!showToken)}
+            >
+              {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </Button>
+          </div>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => copyToClipboard(token)}
+            disabled={!token}
+          >
+            <Copy className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Manual Configuration Section */}
+      <Collapsible open={manualMode} onOpenChange={setManualMode}>
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" className="w-full justify-between text-muted-foreground hover:text-foreground">
+            <div className="flex items-center gap-2">
+              <Settings className="h-4 w-4" />
+              <span className="text-sm">Configuração Manual de Endpoints</span>
+            </div>
+            <ChevronDown className={`h-4 w-4 transition-transform ${manualMode ? 'rotate-180' : ''}`} />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-4 pt-4 border-t border-border/50 mt-2">
+          <p className="text-xs text-muted-foreground">
+            Use esta seção se a detecção automática falhar. Configure manualmente os endpoints da sua API UazAPI.
+          </p>
+          
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Prefixo da API</Label>
+              <Select value={manualPrefix} onValueChange={setManualPrefix}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">(nenhum)</SelectItem>
+                  <SelectItem value="/api">/api</SelectItem>
+                  <SelectItem value="/v1">/v1</SelectItem>
+                  <SelectItem value="/v2">/v2</SelectItem>
+                  <SelectItem value="/api/v2">/api/v2</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Método HTTP</Label>
+              <Select value={manualMethod} onValueChange={setManualMethod}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="GET">GET</SelectItem>
+                  <SelectItem value="POST">POST</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-xs">Path para Listar Instâncias</Label>
+            <Input
+              placeholder="/admin/listInstances"
+              value={manualPath}
+              onChange={(e) => setManualPath(e.target.value)}
+              className="font-mono text-sm"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-xs">Header de Autenticação</Label>
+            <Select value={manualHeader} onValueChange={setManualHeader}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="admintoken">admintoken</SelectItem>
+                <SelectItem value="AdminToken">AdminToken</SelectItem>
+                <SelectItem value="Authorization">Authorization (Bearer)</SelectItem>
+                <SelectItem value="apikey">apikey</SelectItem>
+                <SelectItem value="x-admin-token">x-admin-token</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Button 
+            onClick={saveManualConfig} 
+            disabled={savingManual}
+            size="sm"
+            className="w-full"
+          >
+            {savingManual ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Salvando...
+              </>
+            ) : (
+              'Salvar Configuração Manual'
+            )}
+          </Button>
+
+          {(config?.uazapi_api_prefix || config?.uazapi_list_instances_path) && (
+            <div className="text-xs text-muted-foreground bg-muted p-2 rounded">
+              <strong>Configuração atual:</strong><br />
+              {config.uazapi_list_instances_method || 'GET'}{' '}
+              {config.uazapi_api_prefix || ''}{config.uazapi_list_instances_path || '/admin/listInstances'}<br />
+              Header: {config.uazapi_admin_header || 'admintoken'}
+            </div>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+};
 
 export const AdminWhatsAppApiConfig = () => {
   const [loading, setLoading] = useState(true);
@@ -379,60 +604,16 @@ export const AdminWhatsAppApiConfig = () => {
             </div>
           </div>
         ) : (
-          <div className="space-y-4 p-4 rounded-lg border border-border bg-muted/30">
-            <h3 className="font-medium">Configuração UazAPI</h3>
-            
-            <div className="space-y-2">
-              <Label htmlFor="uazapi-url">Server URL</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="uazapi-url"
-                  placeholder="https://zapdata.uazapi.com"
-                  value={uazapiBaseUrl}
-                  onChange={(e) => setUazapiBaseUrl(e.target.value)}
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => copyToClipboard(uazapiBaseUrl)}
-                  disabled={!uazapiBaseUrl}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="uazapi-token">Admin Token</Label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Input
-                    id="uazapi-token"
-                    type={showUazapiToken ? 'text' : 'password'}
-                    placeholder="Seu Admin Token"
-                    value={uazapiToken}
-                    onChange={(e) => setUazapiToken(e.target.value)}
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full"
-                    onClick={() => setShowUazapiToken(!showUazapiToken)}
-                  >
-                    {showUazapiToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => copyToClipboard(uazapiToken)}
-                  disabled={!uazapiToken}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          </div>
+          <UazAPIConfig
+            baseUrl={uazapiBaseUrl}
+            setBaseUrl={setUazapiBaseUrl}
+            token={uazapiToken}
+            setToken={setUazapiToken}
+            showToken={showUazapiToken}
+            setShowToken={setShowUazapiToken}
+            copyToClipboard={copyToClipboard}
+            config={config}
+          />
         )}
 
         {/* Test Result */}
