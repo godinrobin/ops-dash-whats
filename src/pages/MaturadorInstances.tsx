@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { splashedToast as toast } from "@/hooks/useSplashedToast";
+import { QRCodeModal, getQrCodeFromCache, setQrCodeCache } from "@/components/QRCodeModal";
 
 interface Instance {
   id: string;
@@ -213,9 +214,18 @@ export default function MaturadorInstances() {
     }
   };
 
-  const handleGetQrCode = async (instance: Instance) => {
+  const handleGetQrCode = useCallback(async (instance: Instance) => {
     setCurrentQrInstance(instance);
     setQrModalOpen(true);
+    
+    // Verifica cache primeiro
+    const cachedQr = getQrCodeFromCache(instance.instance_name);
+    if (cachedQr) {
+      setQrCode(cachedQr);
+      setLoadingQr(false);
+      return;
+    }
+    
     setLoadingQr(true);
     setQrCode(null);
 
@@ -227,8 +237,11 @@ export default function MaturadorInstances() {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
-      setQrCode(data.base64 || data.qrcode?.base64);
-      
+      const qr = data.base64 || data.qrcode?.base64;
+      if (qr) {
+        setQrCodeCache(instance.instance_name, qr);
+        setQrCode(qr);
+      }
     } catch (error: any) {
       console.error('Error getting QR code:', error);
       toast.error(error.message || 'Erro ao obter QR Code');
@@ -236,7 +249,33 @@ export default function MaturadorInstances() {
     } finally {
       setLoadingQr(false);
     }
-  };
+  }, []);
+
+  const handleRefreshQrCode = useCallback(async () => {
+    if (!currentQrInstance) return;
+    setLoadingQr(true);
+    setQrCode(null);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('maturador-evolution', {
+        body: { action: 'get-qrcode', instanceName: currentQrInstance.instance_name },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      const qr = data.base64 || data.qrcode?.base64;
+      if (qr) {
+        setQrCodeCache(currentQrInstance.instance_name, qr);
+        setQrCode(qr);
+      }
+    } catch (error: any) {
+      console.error('Error refreshing QR code:', error);
+      toast.error(error.message || 'Erro ao atualizar QR Code');
+    } finally {
+      setLoadingQr(false);
+    }
+  }, [currentQrInstance]);
 
   const handleCheckQrStatus = async () => {
     if (!currentQrInstance) return;
@@ -561,50 +600,16 @@ export default function MaturadorInstances() {
         </Dialog>
 
         {/* QR Code Modal */}
-        <Dialog open={qrModalOpen} onOpenChange={setQrModalOpen}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Conectar WhatsApp</DialogTitle>
-              <DialogDescription>
-                Escaneie o QR Code com seu WhatsApp para conectar o número
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex flex-col items-center justify-center py-4">
-              {loadingQr ? (
-                <div className="flex flex-col items-center gap-4">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  <p className="text-sm text-muted-foreground">Gerando QR Code...</p>
-                </div>
-              ) : qrCode ? (
-                <div className="space-y-4">
-                  <div className="border rounded-lg p-4 bg-white">
-                    <img 
-                      src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`} 
-                      alt="QR Code" 
-                      className="w-64 h-64" 
-                    />
-                  </div>
-                  <p className="text-sm text-center text-muted-foreground">
-                    Abra o WhatsApp &gt; Menu &gt; Dispositivos conectados &gt; Conectar dispositivo
-                  </p>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Erro ao carregar QR Code</p>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setQrModalOpen(false)}>
-                Fechar
-              </Button>
-              <Button onClick={handleCheckQrStatus} disabled={checkingStatus || loadingQr}>
-                {checkingStatus ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : null}
-                Verificar Conexão
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <QRCodeModal
+          open={qrModalOpen}
+          onOpenChange={setQrModalOpen}
+          instanceName={currentQrInstance?.instance_name || ''}
+          qrCode={qrCode}
+          loading={loadingQr}
+          onCheckStatus={handleCheckQrStatus}
+          onRefreshQr={handleRefreshQrCode}
+          checkingStatus={checkingStatus}
+        />
 
         {/* Delete Confirmation Dialog */}
         <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

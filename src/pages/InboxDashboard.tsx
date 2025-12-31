@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +18,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { InboxMenu } from '@/components/inbox/InboxMenu';
 import { cn } from '@/lib/utils';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
+import { QRCodeModal, getQrCodeFromCache, setQrCodeCache } from "@/components/QRCodeModal";
 
 interface Instance {
   id: string;
@@ -312,9 +313,18 @@ export default function InboxDashboard() {
     setProxyPassword("");
   };
 
-  const handleGetQrCode = async (instance: Instance) => {
+  const handleGetQrCode = useCallback(async (instance: Instance) => {
     setCurrentQrInstance(instance);
     setQrModalOpen(true);
+    
+    // Verifica cache primeiro
+    const cachedQr = getQrCodeFromCache(instance.instance_name);
+    if (cachedQr) {
+      setQrCode(cachedQr);
+      setLoadingQr(false);
+      return;
+    }
+    
     setLoadingQr(true);
     setQrCode(null);
 
@@ -324,7 +334,12 @@ export default function InboxDashboard() {
       });
       if (error) throw error;
       if (data.error) throw new Error(data.error);
-      setQrCode(data.base64 || data.qrcode?.base64);
+      
+      const qr = data.base64 || data.qrcode?.base64;
+      if (qr) {
+        setQrCodeCache(instance.instance_name, qr);
+        setQrCode(qr);
+      }
     } catch (error: any) {
       console.error('Error getting QR code:', error);
       toast.error(error.message || 'Erro ao obter QR Code');
@@ -332,7 +347,32 @@ export default function InboxDashboard() {
     } finally {
       setLoadingQr(false);
     }
-  };
+  }, []);
+
+  const handleRefreshQrCode = useCallback(async () => {
+    if (!currentQrInstance) return;
+    setLoadingQr(true);
+    setQrCode(null);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('maturador-evolution', {
+        body: { action: 'get-qrcode', instanceName: currentQrInstance.instance_name },
+      });
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+      
+      const qr = data.base64 || data.qrcode?.base64;
+      if (qr) {
+        setQrCodeCache(currentQrInstance.instance_name, qr);
+        setQrCode(qr);
+      }
+    } catch (error: any) {
+      console.error('Error refreshing QR code:', error);
+      toast.error(error.message || 'Erro ao atualizar QR Code');
+    } finally {
+      setLoadingQr(false);
+    }
+  }, [currentQrInstance]);
 
   const handleCheckQrStatus = async () => {
     if (!currentQrInstance) return;
@@ -970,41 +1010,16 @@ export default function InboxDashboard() {
       </Dialog>
 
       {/* QR Code Modal */}
-      <Dialog open={qrModalOpen} onOpenChange={setQrModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Conectar WhatsApp</DialogTitle>
-            <DialogDescription>Escaneie o QR Code com seu WhatsApp para conectar o número</DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col items-center justify-center py-4">
-            {loadingQr ? (
-              <div className="w-64 h-64 flex items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
-            ) : qrCode ? (
-              <img 
-                src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`} 
-                alt="QR Code" 
-                className="w-64 h-64" 
-              />
-            ) : (
-              <div className="w-64 h-64 flex items-center justify-center text-muted-foreground">
-                QR Code não disponível
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => currentQrInstance && handleGetQrCode(currentQrInstance)} disabled={loadingQr}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${loadingQr ? 'animate-spin' : ''}`} />
-              Atualizar QR
-            </Button>
-            <Button onClick={handleCheckQrStatus} disabled={checkingStatus}>
-              {checkingStatus ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-              Verificar Conexão
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <QRCodeModal
+        open={qrModalOpen}
+        onOpenChange={setQrModalOpen}
+        instanceName={currentQrInstance?.instance_name || ''}
+        qrCode={qrCode}
+        loading={loadingQr}
+        onCheckStatus={handleCheckQrStatus}
+        onRefreshQr={handleRefreshQrCode}
+        checkingStatus={checkingStatus}
+      />
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
