@@ -98,7 +98,7 @@ export const AdminWhatsAppApiConfig = () => {
       // Test connection based on provider
       const endpoint = activeProvider === 'evolution' 
         ? `${baseUrl}/instance/fetchInstances`
-        : `${baseUrl}/instance/list`;
+        : `${baseUrl}/listInstances`;
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -107,7 +107,7 @@ export const AdminWhatsAppApiConfig = () => {
       if (activeProvider === 'evolution') {
         headers['apikey'] = apiKey;
       } else {
-        headers['apikey'] = apiKey;
+        headers['AdminToken'] = apiKey;
       }
 
       const response = await fetch(endpoint, {
