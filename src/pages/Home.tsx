@@ -8,6 +8,7 @@ import Marketplace from "./Marketplace";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAccessLevel } from "@/hooks/useAccessLevel";
+import { useAdminStatus } from "@/hooks/useAdminStatus";
 import { RestrictedFeatureModal } from "@/components/RestrictedFeatureModal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -99,6 +100,7 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isFullMember, loading: accessLoading } = useAccessLevel();
+  const { isAdmin } = useAdminStatus();
   const [restrictedModalOpen, setRestrictedModalOpen] = useState(false);
   const [selectedFeatureName, setSelectedFeatureName] = useState<string>("");
   const [comingSoonModalOpen, setComingSoonModalOpen] = useState(false);
@@ -319,13 +321,13 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
   ];
 
   const handleSystemClick = (system: typeof systems[0]) => {
-    // Check if system is coming soon
-    if (system.comingSoon) {
+    // Check if system is coming soon - admins can bypass this
+    if (system.comingSoon && !isAdmin) {
       setComingSoonModalOpen(true);
       return;
     }
     
-    if (isFullMember || !system.restricted) {
+    if (isFullMember || !system.restricted || isAdmin) {
       navigate(system.path);
       return;
     }
@@ -390,7 +392,9 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
             }}
           >
             {systems.map((system, index) => {
-              const isLocked = !accessLoading && isFullMember === false && system.restricted;
+              const isLocked = !accessLoading && isFullMember === false && system.restricted && !isAdmin;
+              // Hide coming soon badge for admins
+              const showComingSoon = system.comingSoon && !isAdmin;
               
               return (
                 <motion.div 
@@ -422,7 +426,7 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
                     onClick={() => handleSystemClick(system)}
                     isLocked={isLocked}
                     isBeta={system.isBeta}
-                    isComingSoon={system.comingSoon}
+                    isComingSoon={showComingSoon}
                     gradient={system.gradient}
                     glowColor={system.glowColor}
                   />
