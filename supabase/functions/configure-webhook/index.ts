@@ -105,10 +105,10 @@ serve(async (req) => {
     const { instanceId } = await req.json();
     console.log(`[CONFIGURE-WEBHOOK] Configuring webhook for instance: ${instanceId}, user: ${user.id}`);
 
-    // Get instance info INCLUDING evolution config columns
+    // Get instance info INCLUDING evolution config columns and UazAPI token
     const { data: instance, error: instanceError } = await supabaseClient
       .from('maturador_instances')
-      .select('*, evolution_base_url, evolution_api_key')
+      .select('*, evolution_base_url, evolution_api_key, api_provider, uazapi_token')
       .eq('id', instanceId)
       .eq('user_id', user.id)
       .single();
@@ -121,7 +121,70 @@ serve(async (req) => {
       });
     }
 
-    // Get Evolution API config with fallback strategy (instance config has priority)
+    const instanceName = instance.instance_name;
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
+    const webhookUrl = `${SUPABASE_URL}/functions/v1/webhook-inbox-messages`;
+    
+    console.log(`[CONFIGURE-WEBHOOK] Configuring webhook for ${instanceName} to ${webhookUrl}`);
+    console.log(`[CONFIGURE-WEBHOOK] API Provider: ${instance.api_provider || 'evolution'}`);
+
+    // Handle UazAPI instances differently
+    if (instance.api_provider === 'uazapi') {
+      // UazAPI: POST /instance/setWebhooks with token header
+      const UAZAPI_BASE_URL = Deno.env.get('EVOLUTION_BASE_URL') ?? '';
+      const instanceToken = instance.uazapi_token || Deno.env.get('EVOLUTION_API_KEY') || '';
+      
+      const uazapiWebhookPayload = {
+        url: webhookUrl,
+        addUrlEvents: true,
+        addUrlTypesMessages: true,
+        events: 'messages',
+        excludeMessages: 'wasSentByApi,isGroupYes'
+      };
+      
+      console.log('[CONFIGURE-WEBHOOK] UazAPI webhook payload:', JSON.stringify(uazapiWebhookPayload));
+      
+      const webhookRes = await fetch(`${UAZAPI_BASE_URL}/instance/setWebhooks`, {
+        method: 'POST',
+        headers: {
+          'token': instanceToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(uazapiWebhookPayload),
+      });
+      
+      const responseText = await webhookRes.text();
+      console.log('[CONFIGURE-WEBHOOK] UazAPI response:', webhookRes.status, responseText);
+      
+      if (webhookRes.ok) {
+        let result;
+        try {
+          result = JSON.parse(responseText);
+        } catch {
+          result = { raw: responseText };
+        }
+        return new Response(JSON.stringify({ 
+          success: true, 
+          webhookUrl,
+          instanceName,
+          result,
+          format: 'uazapi'
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } else {
+        return new Response(JSON.stringify({ 
+          error: 'Failed to configure UazAPI webhook',
+          details: responseText,
+          webhookUrl
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    // Evolution API flow
     const evolutionConfig = await getEvolutionConfig(supabaseClient, user.id, {
       evolution_base_url: instance.evolution_base_url,
       evolution_api_key: instance.evolution_api_key,
@@ -139,13 +202,6 @@ serve(async (req) => {
 
     const EVOLUTION_BASE_URL = evolutionConfig.baseUrl;
     const EVOLUTION_API_KEY = evolutionConfig.apiKey;
-    const instanceName = instance.instance_name;
-    const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
-    
-    // Webhook URL for receiving messages
-    const webhookUrl = `${SUPABASE_URL}/functions/v1/webhook-inbox-messages`;
-    
-    console.log(`[CONFIGURE-WEBHOOK] Configuring webhook for ${instanceName} to ${webhookUrl}`);
 
     // Evolution API v2 format - POST /webhook/set/{instanceName}
     // The body needs the 'webhook' property with the configuration
