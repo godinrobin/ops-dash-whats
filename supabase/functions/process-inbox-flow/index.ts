@@ -1374,45 +1374,77 @@ async function sendMessage(
   content: string, 
   messageType: string, 
   mediaUrl?: string,
-  fileName?: string
+  fileName?: string,
+  apiProvider: string = 'evolution',
+  instanceToken?: string
 ): Promise<SendMessageResult> {
   const formattedPhone = phone.replace(/\D/g, '');
   
   let endpoint = '';
   let body: Record<string, unknown> = {};
+  let authHeader: Record<string, string> = {};
 
-  switch (messageType) {
-    case 'text':
-      endpoint = `/message/sendText/${instanceName}`;
-      body = { number: formattedPhone, text: content };
-      break;
-    case 'image':
-      endpoint = `/message/sendMedia/${instanceName}`;
-      body = { number: formattedPhone, mediatype: 'image', media: mediaUrl, caption: content };
-      break;
-    case 'audio':
-      endpoint = `/message/sendWhatsAppAudio/${instanceName}`;
-      body = { number: formattedPhone, audio: mediaUrl };
-      break;
-    case 'video':
-      endpoint = `/message/sendMedia/${instanceName}`;
-      body = { number: formattedPhone, mediatype: 'video', media: mediaUrl, caption: content };
-      break;
-    case 'document':
-      endpoint = `/message/sendMedia/${instanceName}`;
-      body = { 
-        number: formattedPhone, 
-        mediatype: 'document', 
-        media: mediaUrl, 
-        fileName: fileName || 'document'
-      };
-      break;
-    default:
-      console.log(`Unknown message type: ${messageType}`);
-      return { ok: false, remoteMessageId: null, errorDetails: `Unknown message type: ${messageType}` };
+  if (apiProvider === 'uazapi') {
+    // UazAPI v2 endpoints (per OpenAPI spec) - use token header
+    authHeader = { 'token': instanceToken || apiKey };
+    
+    switch (messageType) {
+      case 'text':
+        endpoint = `/message/sendText`;
+        body = { number: formattedPhone, text: content };
+        break;
+      case 'image':
+        endpoint = `/message/sendMedia`;
+        body = { number: formattedPhone, mediatype: 'image', media: mediaUrl, caption: content };
+        break;
+      case 'audio':
+        endpoint = `/message/sendAudio`;
+        body = { number: formattedPhone, audio: mediaUrl };
+        break;
+      case 'video':
+        endpoint = `/message/sendMedia`;
+        body = { number: formattedPhone, mediatype: 'video', media: mediaUrl, caption: content };
+        break;
+      case 'document':
+        endpoint = `/message/sendMedia`;
+        body = { number: formattedPhone, mediatype: 'document', media: mediaUrl, fileName: fileName || 'document' };
+        break;
+      default:
+        console.log(`Unknown message type: ${messageType}`);
+        return { ok: false, remoteMessageId: null, errorDetails: `Unknown message type: ${messageType}` };
+    }
+  } else {
+    // Evolution API endpoints - use apikey header
+    authHeader = { 'apikey': apiKey, 'Authorization': `Bearer ${apiKey}` };
+    
+    switch (messageType) {
+      case 'text':
+        endpoint = `/message/sendText/${instanceName}`;
+        body = { number: formattedPhone, text: content };
+        break;
+      case 'image':
+        endpoint = `/message/sendMedia/${instanceName}`;
+        body = { number: formattedPhone, mediatype: 'image', media: mediaUrl, caption: content };
+        break;
+      case 'audio':
+        endpoint = `/message/sendWhatsAppAudio/${instanceName}`;
+        body = { number: formattedPhone, audio: mediaUrl };
+        break;
+      case 'video':
+        endpoint = `/message/sendMedia/${instanceName}`;
+        body = { number: formattedPhone, mediatype: 'video', media: mediaUrl, caption: content };
+        break;
+      case 'document':
+        endpoint = `/message/sendMedia/${instanceName}`;
+        body = { number: formattedPhone, mediatype: 'document', media: mediaUrl, fileName: fileName || 'document' };
+        break;
+      default:
+        console.log(`Unknown message type: ${messageType}`);
+        return { ok: false, remoteMessageId: null, errorDetails: `Unknown message type: ${messageType}` };
+    }
   }
 
-  console.log(`Sending ${messageType} to ${formattedPhone} via ${endpoint}`);
+  console.log(`[${apiProvider.toUpperCase()}] Sending ${messageType} to ${formattedPhone} via ${endpoint}`);
   console.log('Request body:', JSON.stringify(body, null, 2));
 
   try {
@@ -1420,14 +1452,13 @@ async function sendMessage(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        apikey: apiKey,
-        Authorization: `Bearer ${apiKey}`,
+        ...authHeader,
       },
       body: JSON.stringify(body),
     });
 
     const responseText = await response.text();
-    console.log(`Evolution API response (${response.status}):`, responseText);
+    console.log(`API response (${response.status}):`, responseText);
     
     if (!response.ok) {
       console.error(`Failed to send ${messageType}:`, responseText);
@@ -1438,11 +1469,10 @@ async function sendMessage(
     let remoteMessageId: string | null = null;
     try {
       const responseData = JSON.parse(responseText);
-      // Evolution API returns the message ID in different formats
       remoteMessageId = responseData?.key?.id || responseData?.id || responseData?.messageId || null;
       console.log(`Extracted remoteMessageId: ${remoteMessageId}`);
     } catch (parseErr) {
-      console.log('Could not parse Evolution response for message ID:', parseErr);
+      console.log('Could not parse API response for message ID:', parseErr);
     }
     
     return { ok: true, remoteMessageId, errorDetails: null };
