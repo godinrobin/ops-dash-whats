@@ -164,18 +164,32 @@ serve(async (req) => {
     const uazapiBaseUrl = globalConfig?.uazapi_base_url || "https://zapdata.uazapi.com";
     const messageId = data.key.id || "";
 
-    // Download media
-    const mediaResponse = await fetch(`${uazapiBaseUrl}/media/download`, {
+    // Download media using correct UAZAPI endpoint: POST /message/download
+    console.log("[TAG-WHATS] Downloading media from UAZAPI...");
+    console.log("[TAG-WHATS] Download request:", { 
+      url: `${uazapiBaseUrl}/message/download`,
+      messageId: messageId 
+    });
+    
+    const mediaResponse = await fetch(`${uazapiBaseUrl}/message/download`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "token": uazapiToken,
       },
-      body: JSON.stringify({ messageid: messageId }),
+      body: JSON.stringify({ 
+        id: messageId,
+        return_base64: true,
+        return_link: false
+      }),
     });
 
+    const mediaResponseText = await mediaResponse.text();
+    console.log("[TAG-WHATS] Media download response status:", mediaResponse.status);
+    console.log("[TAG-WHATS] Media download response preview:", mediaResponseText.substring(0, 500));
+
     if (!mediaResponse.ok) {
-      console.error("[TAG-WHATS] Failed to download media:", await mediaResponse.text());
+      console.error("[TAG-WHATS] Failed to download media:", mediaResponseText);
       
       // Log the failure
       await supabase.from("tag_whats_logs").insert({
@@ -186,7 +200,7 @@ serve(async (req) => {
         message_type: messageType,
         is_pix_payment: false,
         label_applied: false,
-        error_message: "Failed to download media",
+        error_message: `Failed to download media: ${mediaResponseText.substring(0, 200)}`,
       });
       
       return new Response(JSON.stringify({ success: false, error: "Failed to download media" }), {
@@ -195,11 +209,41 @@ serve(async (req) => {
       });
     }
 
-    const mediaData = await mediaResponse.json();
-    let mediaBase64 = mediaData.base64 || mediaData.data;
+    let mediaData;
+    try {
+      mediaData = JSON.parse(mediaResponseText);
+    } catch (e) {
+      console.error("[TAG-WHATS] Failed to parse media response as JSON");
+      return new Response(JSON.stringify({ success: false, error: "Invalid media response" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
+    // UAZAPI returns base64Data and mimetype in the response
+    const mediaBase64 = mediaData.base64Data || mediaData.base64 || mediaData.data;
+    const mediaMimetype = mediaData.mimetype || (isImage ? "image/jpeg" : "application/pdf");
+    
+    console.log("[TAG-WHATS] Media extracted:", { 
+      hasBase64: !!mediaBase64, 
+      base64Length: mediaBase64?.length || 0,
+      mimetype: mediaMimetype 
+    });
     
     if (!mediaBase64) {
-      console.error("[TAG-WHATS] No base64 in media response");
+      console.error("[TAG-WHATS] No base64 in media response. Keys available:", Object.keys(mediaData));
+      
+      await supabase.from("tag_whats_logs").insert({
+        user_id: instance.user_id,
+        config_id: config.id,
+        instance_id: instance.id,
+        contact_phone: phone,
+        message_type: messageType,
+        is_pix_payment: false,
+        label_applied: false,
+        error_message: `No base64 data. Response keys: ${Object.keys(mediaData).join(', ')}`,
+      });
+      
       return new Response(JSON.stringify({ success: false, error: "No media data" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -242,6 +286,10 @@ Critérios para identificar um comprovante PIX:
 
 Se não for possível determinar ou a imagem não for clara, retorne is_pix_payment: false.`;
 
+    // Construct proper data URL with correct mimetype
+    const imageDataUrl = `data:${mediaMimetype};base64,${mediaBase64}`;
+    console.log("[TAG-WHATS] Sending to OpenAI for analysis. Data URL length:", imageDataUrl.length);
+
     const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -258,7 +306,7 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
               {
                 type: "image_url",
                 image_url: {
-                  url: `data:${isImage ? "image/jpeg" : "application/pdf"};base64,${mediaBase64}`,
+                  url: imageDataUrl,
                   detail: "low",
                 },
               },
