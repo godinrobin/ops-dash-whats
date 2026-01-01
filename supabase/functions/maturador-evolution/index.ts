@@ -1207,7 +1207,20 @@ Regras:
             result?.instance?.state === 'open' ||
             // Check connection field
             result?.connection === 'open' ||
-            result?.status?.connection === 'open'
+            result?.status?.connection === 'open' ||
+            // Check explicit status string
+            result?.status === 'connected' ||
+            result?.instance?.status === 'connected'
+          );
+          
+          // Check for connecting state (important: must distinguish from connected)
+          const isConnecting = Boolean(
+            result?.status === 'connecting' ||
+            result?.instance?.status === 'connecting' ||
+            result?.state === 'connecting' ||
+            result?.instance?.state === 'connecting' ||
+            result?.connection === 'connecting' ||
+            result?.status?.state === 'connecting'
           );
           
           // Also check for explicit disconnected states
@@ -1216,13 +1229,23 @@ Regras:
             result?.status?.connected === false ||
             result?.state === 'close' ||
             result?.state === 'disconnected' ||
+            result?.status === 'disconnected' ||
+            result?.instance?.status === 'disconnected' ||
             result?.connection === 'close' ||
             result?.status?.state === 'close'
           );
 
-          console.log(`[UAZAPI-STATUS] Instance ${instanceName}: connected=${isConnected}, disconnected=${isDisconnected}`);
+          console.log(`[UAZAPI-STATUS] Instance ${instanceName}: connected=${isConnected}, connecting=${isConnecting}, disconnected=${isDisconnected}`);
+          console.log(`[UAZAPI-STATUS] Raw result.status: ${result?.status}, result.instance?.status: ${result?.instance?.status}`);
 
-          const newStatus = isConnected && !isDisconnected ? 'connected' : 'disconnected';
+          // Determine the new status: connected > connecting > disconnected
+          let newStatus = 'disconnected';
+          if (isConnected && !isConnecting) {
+            newStatus = 'connected';
+          } else if (isConnecting) {
+            newStatus = 'connecting';
+          }
+          
           await supabaseClient
             .from('maturador_instances')
             .update({ 
@@ -1710,45 +1733,45 @@ Regras:
             // Try multiple endpoints for UazAPI deletion
             let deleted = false;
             
-            // Method 1: Try /instance/delete with instance token
+            // Method 1: CORRECT endpoint per UazAPI docs: DELETE /instance with token header
             try {
-              result = await callWhatsAppApi(config, '/instance/delete', 'DELETE', undefined, false, inst.uazapi_token || undefined);
+              result = await callWhatsAppApi(config, '/instance', 'DELETE', undefined, false, inst.uazapi_token || undefined);
               deleted = true;
-              console.log('[DELETE-INSTANCE] Deleted via /instance/delete');
+              console.log('[DELETE-INSTANCE] Deleted via DELETE /instance (correct endpoint)');
             } catch (e1: any) {
-              console.log('[DELETE-INSTANCE] /instance/delete failed:', e1.message);
+              console.log('[DELETE-INSTANCE] DELETE /instance failed:', e1.message);
             }
             
-            // Method 2: Try POST to /instance/delete
+            // Method 2: Try /instance/delete with instance token (legacy fallback)
+            if (!deleted) {
+              try {
+                result = await callWhatsAppApi(config, '/instance/delete', 'DELETE', undefined, false, inst.uazapi_token || undefined);
+                deleted = true;
+                console.log('[DELETE-INSTANCE] Deleted via /instance/delete');
+              } catch (e2: any) {
+                console.log('[DELETE-INSTANCE] /instance/delete failed:', e2.message);
+              }
+            }
+            
+            // Method 3: Try POST to /instance/delete
             if (!deleted) {
               try {
                 result = await callWhatsAppApi(config, '/instance/delete', 'POST', undefined, false, inst.uazapi_token || undefined);
                 deleted = true;
                 console.log('[DELETE-INSTANCE] Deleted via POST /instance/delete');
-              } catch (e2: any) {
-                console.log('[DELETE-INSTANCE] POST /instance/delete failed:', e2.message);
+              } catch (e3: any) {
+                console.log('[DELETE-INSTANCE] POST /instance/delete failed:', e3.message);
               }
             }
             
-            // Method 3: Try admin endpoint with instanceName in body
+            // Method 4: Try admin endpoint with instanceName in body
             if (!deleted) {
               try {
                 result = await callWhatsAppApi(config, '/admin/deleteInstance', 'POST', { instanceName }, true);
                 deleted = true;
                 console.log('[DELETE-INSTANCE] Deleted via /admin/deleteInstance POST');
-              } catch (e3: any) {
-                console.log('[DELETE-INSTANCE] /admin/deleteInstance POST failed:', e3.message);
-              }
-            }
-            
-            // Method 4: Try admin endpoint with DELETE
-            if (!deleted) {
-              try {
-                result = await callWhatsAppApi(config, '/admin/deleteInstance', 'DELETE', { instanceName }, true);
-                deleted = true;
-                console.log('[DELETE-INSTANCE] Deleted via /admin/deleteInstance DELETE');
               } catch (e4: any) {
-                console.log('[DELETE-INSTANCE] /admin/deleteInstance DELETE failed:', e4.message);
+                console.log('[DELETE-INSTANCE] /admin/deleteInstance POST failed:', e4.message);
               }
             }
             
