@@ -2404,7 +2404,7 @@ Regras IMPORTANTES:
           // Check if we should make a call (only if calls_enabled is true)
           const callsEnabled = conversation.enable_calls === true;
           if (callsEnabled) {
-            // Get message count for this specific instance
+            // Get message count for this specific instance (count AFTER insert, so -1 for "before this message")
             const { count: instanceMsgCount } = await supabaseClient
               .from('maturador_messages')
               .select('*', { count: 'exact', head: true })
@@ -2421,27 +2421,39 @@ Regras IMPORTANTES:
               
             const totalMessages = totalMsgCount || 0;
             
-            console.log(`[CALL-CHECK] Instance ${fromInstance.instance_name}: myMsgCount=${myMsgCount}, totalMessages=${totalMessages}`);
+            console.log(`[CALL-CHECK] Instance ${fromInstance.instance_name}: myMsgCount=${myMsgCount}, totalMessages=${totalMessages}, callsEnabled=${callsEnabled}`);
             
-            // Call on 4th message from this instance
+            // Call on 4th message from this instance (myMsgCount is AFTER insert, so check for 4)
             if (myMsgCount === 4) {
-              console.log(`[CALL-CHECK] Making call on 4th message from ${fromInstance.instance_name}`);
-              await makeVoiceCall(fromInstance, toPhone);
+              console.log(`[CALL-CHECK] 🔔 Making call on 4th message from ${fromInstance.instance_name} to ${toPhone}`);
+              try {
+                const callResult = await makeVoiceCall(fromInstance, toPhone);
+                console.log(`[CALL-CHECK] Call result: ${callResult}`);
+              } catch (callError) {
+                console.error(`[CALL-CHECK] Call error:`, callError);
+              }
             }
             
-            // Call between 40-60 total messages (random within range)
-            // We check modulo to call periodically
-            if (totalMessages >= 40 && totalMessages <= 60) {
-              // Only call once in this range - check if already called
-              const callThreshold = 40 + Math.floor(Math.random() * 21); // Random 40-60
-              if (totalMessages === callThreshold) {
-                console.log(`[CALL-CHECK] Making periodic call at ${totalMessages} total messages`);
-                await makeVoiceCall(fromInstance, toPhone);
+            // Call between 40-60 total messages (call once at message 50)
+            if (totalMessages === 50) {
+              console.log(`[CALL-CHECK] 🔔 Making periodic call at 50 total messages from ${fromInstance.instance_name} to ${toPhone}`);
+              try {
+                const callResult = await makeVoiceCall(fromInstance, toPhone);
+                console.log(`[CALL-CHECK] Periodic call result: ${callResult}`);
+              } catch (callError) {
+                console.error(`[CALL-CHECK] Periodic call error:`, callError);
               }
-            } else if (totalMessages > 60 && (totalMessages - 60) % 50 === 0) {
-              // After 60, call every 50 messages
-              console.log(`[CALL-CHECK] Making periodic call at ${totalMessages} total messages (every 50 after 60)`);
-              await makeVoiceCall(fromInstance, toPhone);
+            }
+            
+            // After 100, call every 50 messages
+            if (totalMessages >= 100 && totalMessages % 50 === 0) {
+              console.log(`[CALL-CHECK] 🔔 Making periodic call at ${totalMessages} total messages (every 50)`);
+              try {
+                const callResult = await makeVoiceCall(fromInstance, toPhone);
+                console.log(`[CALL-CHECK] Periodic call result: ${callResult}`);
+              } catch (callError) {
+                console.error(`[CALL-CHECK] Periodic call error:`, callError);
+              }
             }
           }
 

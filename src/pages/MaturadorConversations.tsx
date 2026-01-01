@@ -565,14 +565,9 @@ export default function MaturadorConversations() {
                   onChange={(e) => setEnableCalls(e.target.checked)}
                   className="h-5 w-5 rounded border-orange-500 text-orange-500 focus:ring-orange-500 accent-orange-500"
                 />
-                <div className="flex-1">
-                  <Label htmlFor="enableCalls" className="text-orange-400 font-medium cursor-pointer">
-                    Habilitar Chamadas de Voz
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    Faz uma ligação na 4ª mensagem de cada número e periodicamente entre 40-60 mensagens
-                  </p>
-                </div>
+                <Label htmlFor="enableCalls" className="text-orange-400 font-medium cursor-pointer">
+                  Habilitar Chamadas de Voz
+                </Label>
               </div>
 
               <div className="space-y-2">
