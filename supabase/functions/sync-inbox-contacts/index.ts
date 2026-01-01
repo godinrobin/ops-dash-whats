@@ -201,6 +201,9 @@ serve(async (req) => {
     }
 
     // Get Evolution API config with multiple fallback strategies
+    let evolutionBaseUrl = '';
+    let evolutionApiKey = '';
+    let configSource = '';
 
     // Strategy 1: User's own maturador_config
     const { data: userConfig } = await supabaseClient
