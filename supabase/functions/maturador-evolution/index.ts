@@ -2179,7 +2179,7 @@ Regras:
         // Helper to send message via correct API provider
         const sendMessageViaApi = async (
           inst: any,
-          type: 'text' | 'audio' | 'image',
+          type: 'text' | 'audio' | 'image' | 'call',
           toPhone: string,
           payload: any
         ) => {
@@ -2187,7 +2187,7 @@ Regras:
           console.log(`[sendMessageViaApi] Provider: ${config.provider}, Type: ${type}, To: ${toPhone}`);
           
           if (config.provider === 'uazapi') {
-            // UazAPI endpoints
+            // UazAPI endpoints per documentation
             let endpoint: string;
             let body: any;
             
@@ -2196,22 +2196,31 @@ Regras:
               endpoint = '/send/text';
               body = { number: toPhone, text: payload.text };
             } else if (type === 'audio') {
-              // UazAPI: POST /send/media with type=ptt or audio
+              // UazAPI: POST /send/media with type=ptt for voice message
+              // Documentation: type can be "ptt" (Push-to-Talk) for voice messages
               endpoint = '/send/media';
               body = { 
                 number: toPhone, 
                 type: 'ptt',
-                media: payload.audio.startsWith('data:') ? payload.audio : `data:audio/ogg;base64,${payload.audio}`
+                file: payload.audio.startsWith('data:') ? payload.audio : `data:audio/mp3;base64,${payload.audio}`
               };
+              console.log(`[sendMessageViaApi] UazAPI audio payload: number=${toPhone}, type=ptt, file.length=${body.file.length}`);
             } else if (type === 'image') {
               // UazAPI: POST /send/media with type=image
+              // Documentation: file can be URL or base64
               endpoint = '/send/media';
               body = { 
                 number: toPhone, 
                 type: 'image',
-                media: payload.media,
-                caption: payload.caption || ''
+                file: payload.media,
+                text: payload.caption || ''
               };
+              console.log(`[sendMessageViaApi] UazAPI image payload: number=${toPhone}, type=image`);
+            } else if (type === 'call') {
+              // UazAPI: POST /call/make with { number }
+              endpoint = '/call/make';
+              body = { number: toPhone };
+              console.log(`[sendMessageViaApi] UazAPI call payload: number=${toPhone}`);
             } else {
               throw new Error(`Unknown message type: ${type}`);
             }
@@ -2239,7 +2248,24 @@ Regras:
                 media: payload.media,
                 fileName: 'image.png',
               }, false);
+            } else if (type === 'call') {
+              // Evolution doesn't have a call endpoint, skip
+              console.log(`[sendMessageViaApi] Evolution API doesn't support calls, skipping`);
+              return { skipped: true };
             }
+          }
+        };
+        
+        // Helper to make a voice call
+        const makeVoiceCall = async (inst: any, toPhone: string): Promise<boolean> => {
+          try {
+            console.log(`[makeVoiceCall] Making call from ${inst.instance_name} to ${toPhone}`);
+            const result = await sendMessageViaApi(inst, 'call', toPhone, {});
+            console.log(`[makeVoiceCall] Result:`, JSON.stringify(result, null, 2));
+            return !result?.skipped;
+          } catch (error) {
+            console.error(`[makeVoiceCall] Error:`, error);
+            return false;
           }
         };
 
@@ -2374,6 +2400,50 @@ Regras IMPORTANTES:
               status: 'sent',
               message_type: messageType,
             });
+            
+          // Check if we should make a call (only if calls_enabled is true)
+          const callsEnabled = conversation.enable_calls === true;
+          if (callsEnabled) {
+            // Get message count for this specific instance
+            const { count: instanceMsgCount } = await supabaseClient
+              .from('maturador_messages')
+              .select('*', { count: 'exact', head: true })
+              .eq('conversation_id', conversationId)
+              .eq('from_instance_id', fromInstance.id);
+              
+            const myMsgCount = instanceMsgCount || 0;
+            
+            // Total messages in conversation
+            const { count: totalMsgCount } = await supabaseClient
+              .from('maturador_messages')
+              .select('*', { count: 'exact', head: true })
+              .eq('conversation_id', conversationId);
+              
+            const totalMessages = totalMsgCount || 0;
+            
+            console.log(`[CALL-CHECK] Instance ${fromInstance.instance_name}: myMsgCount=${myMsgCount}, totalMessages=${totalMessages}`);
+            
+            // Call on 4th message from this instance
+            if (myMsgCount === 4) {
+              console.log(`[CALL-CHECK] Making call on 4th message from ${fromInstance.instance_name}`);
+              await makeVoiceCall(fromInstance, toPhone);
+            }
+            
+            // Call between 40-60 total messages (random within range)
+            // We check modulo to call periodically
+            if (totalMessages >= 40 && totalMessages <= 60) {
+              // Only call once in this range - check if already called
+              const callThreshold = 40 + Math.floor(Math.random() * 21); // Random 40-60
+              if (totalMessages === callThreshold) {
+                console.log(`[CALL-CHECK] Making periodic call at ${totalMessages} total messages`);
+                await makeVoiceCall(fromInstance, toPhone);
+              }
+            } else if (totalMessages > 60 && (totalMessages - 60) % 50 === 0) {
+              // After 60, call every 50 messages
+              console.log(`[CALL-CHECK] Making periodic call at ${totalMessages} total messages (every 50 after 60)`);
+              await makeVoiceCall(fromInstance, toPhone);
+            }
+          }
 
         } catch (error) {
           console.error(`Error sending ${messageType} message:`, error);
