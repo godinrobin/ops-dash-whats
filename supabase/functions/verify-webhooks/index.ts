@@ -4,6 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
 };
 
 // Helper to get Evolution API config with fallback strategy
@@ -130,12 +131,47 @@ serve(async (req) => {
     console.log(`[VERIFY-WEBHOOKS] Found ${instances.length} connected/open instances`);
 
     const expectedWebhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/webhook-inbox-messages`;
-    const results: Array<{instance: string, status: string, configured: boolean, configSource?: string, evolutionUrl?: string}> = [];
+
+    // UazAPI base URL from backend config (fallback to default)
+    const { data: uazapiCfg } = await supabaseClient
+      .from('whatsapp_api_config')
+      .select('uazapi_base_url, uazapi_api_prefix')
+      .limit(1)
+      .maybeSingle();
+
+    const uazapiBaseUrl = (uazapiCfg?.uazapi_base_url || 'https://zapdata.uazapi.com').replace(/\/$/, '');
+    const uazapiPrefix = (uazapiCfg?.uazapi_api_prefix || '').toString();
+    const uazapiUrl = `${uazapiBaseUrl}${uazapiPrefix}`;
+
+    const results: Array<{
+      instance: string;
+      status: string;
+      configured: boolean;
+      provider: 'uazapi' | 'evolution';
+      configSource?: string;
+      providerUrl?: string;
+      details?: string;
+    }> = [];
 
     for (const instance of instances) {
       const instanceName = instance.instance_name;
-      
-      // Get config for THIS specific instance (may have its own Evolution server)
+      const provider: 'uazapi' | 'evolution' = instance.api_provider === 'uazapi' ? 'uazapi' : 'evolution';
+
+      // UazAPI instances are handled by configure-webhook (setWebhooks). Here we just report.
+      if (provider === 'uazapi') {
+        results.push({
+          instance: instanceName,
+          status: 'uazapi_instance',
+          configured: true,
+          provider: 'uazapi',
+          configSource: 'instance',
+          providerUrl: uazapiUrl,
+          details: 'UazAPI webhooks are configured via /instance/setWebhooks (use configure-webhook/auto-heal).',
+        });
+        continue;
+      }
+
+      // Evolution config for THIS specific instance (may have its own server)
       const evolutionConfig = await getEvolutionConfigForInstance(supabaseClient, user.id, {
         evolution_base_url: instance.evolution_base_url,
         evolution_api_key: instance.evolution_api_key,
@@ -143,11 +179,12 @@ serve(async (req) => {
 
       if (!evolutionConfig) {
         console.log(`[VERIFY-WEBHOOKS] No Evolution config available for ${instanceName}`);
-        results.push({ 
-          instance: instanceName, 
-          status: 'no_config', 
+        results.push({
+          instance: instanceName,
+          status: 'no_config',
           configured: false,
-          configSource: 'none'
+          provider: 'evolution',
+          configSource: 'none',
         });
         continue;
       }
@@ -165,23 +202,24 @@ serve(async (req) => {
         });
 
         let needsConfiguration = true;
-        
+
         if (findRes.ok) {
           const webhookData = await findRes.json();
           console.log(`[VERIFY-WEBHOOKS] Current webhook for ${instanceName}:`, JSON.stringify(webhookData));
-          
+
           // Check if webhook is properly configured
           const currentUrl = webhookData?.url || webhookData?.webhook?.url || '';
           const isEnabled = webhookData?.enabled ?? webhookData?.webhook?.enabled ?? false;
-          
+
           if (currentUrl === expectedWebhookUrl && isEnabled) {
             console.log(`[VERIFY-WEBHOOKS] Webhook already configured correctly for ${instanceName}`);
-            results.push({ 
-              instance: instanceName, 
-              status: 'already_configured', 
+            results.push({
+              instance: instanceName,
+              status: 'already_configured',
               configured: true,
+              provider: 'evolution',
               configSource: evolutionConfig.source,
-              evolutionUrl: evolutionConfig.baseUrl
+              providerUrl: evolutionConfig.baseUrl,
             });
             needsConfiguration = false;
           }
@@ -189,7 +227,7 @@ serve(async (req) => {
 
         if (needsConfiguration) {
           console.log(`[VERIFY-WEBHOOKS] Configuring webhook for ${instanceName}`);
-          
+
           // Try different payload formats for different Evolution API versions
           const payloads = [
             // Evolution API v2 format
@@ -199,12 +237,12 @@ serve(async (req) => {
               webhookByEvents: false,
               webhookBase64: false,
               events: [
-                "MESSAGES_UPSERT",
-                "MESSAGES_UPDATE",
-                "MESSAGES_DELETE",
-                "CONNECTION_UPDATE",
-                "SEND_MESSAGE"
-              ]
+                'MESSAGES_UPSERT',
+                'MESSAGES_UPDATE',
+                'MESSAGES_DELETE',
+                'CONNECTION_UPDATE',
+                'SEND_MESSAGE',
+              ],
             },
             // Alternative format
             {
@@ -212,15 +250,15 @@ serve(async (req) => {
                 url: expectedWebhookUrl,
                 enabled: true,
                 webhookByEvents: false,
-                events: ["messages.upsert", "messages.update", "connection.update", "send.message"]
-              }
+                events: ['messages.upsert', 'messages.update', 'connection.update', 'send.message'],
+              },
             },
             // Simple format
             {
               url: expectedWebhookUrl,
               enabled: true,
-              events: ["MESSAGES_UPSERT", "MESSAGES_UPDATE", "CONNECTION_UPDATE", "SEND_MESSAGE"]
-            }
+              events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE', 'SEND_MESSAGE'],
+            },
           ];
 
           let configured = false;
@@ -238,12 +276,13 @@ serve(async (req) => {
               if (setRes.ok) {
                 const result = await setRes.json();
                 console.log(`[VERIFY-WEBHOOKS] Webhook configured successfully for ${instanceName}:`, JSON.stringify(result));
-                results.push({ 
-                  instance: instanceName, 
-                  status: 'configured', 
+                results.push({
+                  instance: instanceName,
+                  status: 'configured',
                   configured: true,
+                  provider: 'evolution',
                   configSource: evolutionConfig.source,
-                  evolutionUrl: evolutionConfig.baseUrl
+                  providerUrl: evolutionConfig.baseUrl,
                 });
                 configured = true;
                 break;
@@ -258,23 +297,25 @@ serve(async (req) => {
 
           if (!configured) {
             console.error(`[VERIFY-WEBHOOKS] Failed to configure webhook for ${instanceName}`);
-            results.push({ 
-              instance: instanceName, 
-              status: 'failed', 
+            results.push({
+              instance: instanceName,
+              status: 'failed',
               configured: false,
+              provider: 'evolution',
               configSource: evolutionConfig.source,
-              evolutionUrl: evolutionConfig.baseUrl
+              providerUrl: evolutionConfig.baseUrl,
             });
           }
         }
       } catch (instanceError) {
         console.error(`[VERIFY-WEBHOOKS] Error processing ${instanceName}:`, instanceError);
-        results.push({ 
-          instance: instanceName, 
-          status: 'error', 
+        results.push({
+          instance: instanceName,
+          status: 'error',
           configured: false,
+          provider: 'evolution',
           configSource: evolutionConfig.source,
-          evolutionUrl: evolutionConfig.baseUrl
+          providerUrl: evolutionConfig.baseUrl,
         });
       }
     }
