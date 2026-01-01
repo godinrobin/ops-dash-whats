@@ -418,6 +418,9 @@ export default function MaturadorInstances() {
     if (!instanceToDelete) return;
 
     setDeleting(true);
+    setDeleteDialogOpen(false);
+    toast.info('Excluindo instância...');
+    
     try {
       const { data, error } = await supabase.functions.invoke('maturador-evolution', {
         body: { action: 'delete-instance', instanceName: instanceToDelete.instance_name },
@@ -427,7 +430,6 @@ export default function MaturadorInstances() {
       if (data.error) throw new Error(data.error);
 
       toast.success('Número removido');
-      setDeleteDialogOpen(false);
       setInstanceToDelete(null);
       await fetchInstances();
     } catch (error: any) {

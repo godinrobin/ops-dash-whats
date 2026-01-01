@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ArrowLeft, Loader2, Send, ShieldCheck, User, AlertCircle, Plus, Pencil, Trash2 } from "lucide-react";
@@ -45,7 +45,7 @@ export default function MaturadorVerifiedContacts() {
   // Send message modal
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [selectedContact, setSelectedContact] = useState<VerifiedContact | null>(null);
-  const [selectedInstanceId, setSelectedInstanceId] = useState("");
+  const [selectedInstanceIds, setSelectedInstanceIds] = useState<string[]>([]);
   const [messageText, setMessageText] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -148,37 +148,55 @@ export default function MaturadorVerifiedContacts() {
 
   const openSendModal = (contact: VerifiedContact) => {
     setSelectedContact(contact);
-    setSelectedInstanceId("");
+    setSelectedInstanceIds([]);
     setMessageText("");
     setSendModalOpen(true);
   };
 
   const handleSendMessage = async () => {
-    if (!selectedInstanceId || !messageText.trim() || !selectedContact) {
-      toast.error('Selecione um número e digite uma mensagem');
+    if (selectedInstanceIds.length === 0 || !messageText.trim() || !selectedContact) {
+      toast.error('Selecione pelo menos um número e digite uma mensagem');
       return;
     }
 
     setSending(true);
     try {
-      const instance = instances.find(i => i.id === selectedInstanceId);
-      if (!instance) throw new Error('Instância não encontrada');
+      const selectedInstances = instances.filter(i => selectedInstanceIds.includes(i.id));
+      if (selectedInstances.length === 0) throw new Error('Nenhuma instância encontrada');
 
-      const { data, error } = await supabase.functions.invoke('maturador-evolution', {
-        body: {
-          action: 'send-verified-message',
-          instanceName: instance.instance_name,
-          phone: selectedContact.phone,
-          message: messageText.trim(),
-        },
-      });
+      let successCount = 0;
+      let errorCount = 0;
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      for (const instance of selectedInstances) {
+        try {
+          const { data, error } = await supabase.functions.invoke('maturador-evolution', {
+            body: {
+              action: 'send-verified-message',
+              instanceName: instance.instance_name,
+              phone: selectedContact.phone,
+              message: messageText.trim(),
+            },
+          });
 
-      toast.success('Mensagem enviada com sucesso!');
+          if (error) throw error;
+          if (data?.error) throw new Error(data.error);
+          successCount++;
+        } catch (err) {
+          console.error(`Error sending from ${instance.instance_name}:`, err);
+          errorCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`Mensagem enviada de ${successCount} número(s)!`);
+      }
+      if (errorCount > 0) {
+        toast.error(`Falha ao enviar de ${errorCount} número(s)`);
+      }
+      
       setSendModalOpen(false);
       setMessageText("");
+      setSelectedInstanceIds([]);
     } catch (error: any) {
       console.error('Error sending message:', error);
       toast.error(error.message || 'Erro ao enviar mensagem');
@@ -460,19 +478,41 @@ export default function MaturadorVerifiedContacts() {
 
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label>Selecione o número para enviar</Label>
-                <Select value={selectedInstanceId} onValueChange={setSelectedInstanceId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um número" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {instances.map((instance) => (
-                      <SelectItem key={instance.id} value={instance.id}>
-                        {instance.label || instance.phone_number || instance.instance_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Selecione os números para enviar</Label>
+                <div className="grid gap-2 max-h-40 overflow-y-auto border rounded-md p-2">
+                  {instances.map((instance) => {
+                    const isSelected = selectedInstanceIds.includes(instance.id);
+                    return (
+                      <label 
+                        key={instance.id} 
+                        className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${
+                          isSelected ? 'bg-primary/10 border border-primary/30' : 'hover:bg-muted'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedInstanceIds([...selectedInstanceIds, instance.id]);
+                            } else {
+                              setSelectedInstanceIds(selectedInstanceIds.filter(id => id !== instance.id));
+                            }
+                          }}
+                          className="h-4 w-4 accent-primary"
+                        />
+                        <span className="text-sm">
+                          {instance.label || instance.phone_number || instance.instance_name}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {selectedInstanceIds.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedInstanceIds.length} número(s) selecionado(s)
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -493,7 +533,7 @@ export default function MaturadorVerifiedContacts() {
               <Button variant="outline" onClick={() => setSendModalOpen(false)}>
                 Cancelar
               </Button>
-              <Button onClick={handleSendMessage} disabled={sending || !selectedInstanceId || !messageText.trim()}>
+              <Button onClick={handleSendMessage} disabled={sending || selectedInstanceIds.length === 0 || !messageText.trim()}>
                 {sending ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
