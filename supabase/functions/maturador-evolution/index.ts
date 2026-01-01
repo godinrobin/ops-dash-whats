@@ -1943,6 +1943,81 @@ Regras:
         break;
       }
 
+      // Test call action - for debugging calls
+      case 'test-call': {
+        const { instanceId, targetPhone } = params;
+        
+        if (!instanceId || !targetPhone) {
+          return new Response(JSON.stringify({ error: 'instanceId and targetPhone are required' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Get instance
+        const { data: instance } = await supabaseClient
+          .from('maturador_instances')
+          .select('*')
+          .eq('id', instanceId)
+          .eq('user_id', user.id)
+          .single();
+
+        if (!instance) {
+          return new Response(JSON.stringify({ error: 'Instance not found' }), {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        console.log(`[TEST-CALL] Testing call from instance ${instance.instance_name} to ${targetPhone}`);
+
+        // Get instance API config
+        const config = await getInstanceApiConfig(supabaseClient, instance.id);
+        console.log(`[TEST-CALL] Provider: ${config.provider}`);
+
+        if (config.provider !== 'uazapi') {
+          return new Response(JSON.stringify({ error: 'Call feature only available for UazAPI instances' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        try {
+          // Clean phone number - remove any non-numeric characters
+          const cleanPhone = targetPhone.replace(/\D/g, '');
+          console.log(`[TEST-CALL] Making call to: ${cleanPhone}`);
+
+          // Call UazAPI /call/make endpoint
+          const callResult = await callWhatsAppApi(
+            config,
+            '/call/make',
+            'POST',
+            { number: cleanPhone },
+            false,
+            instance.uazapi_token || undefined
+          );
+
+          console.log(`[TEST-CALL] Call result:`, JSON.stringify(callResult, null, 2));
+
+          result = { 
+            success: true, 
+            message: 'Call initiated successfully',
+            callResult 
+          };
+        } catch (callError: any) {
+          console.error(`[TEST-CALL] Call error:`, callError);
+          return new Response(JSON.stringify({ 
+            error: 'Call failed', 
+            details: callError.message || String(callError) 
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        break;
+      }
+
       case 'run-conversation': {
         const { conversationId } = params;
         if (!conversationId) {
