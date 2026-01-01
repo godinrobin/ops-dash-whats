@@ -139,16 +139,148 @@ serve(async (req) => {
 
     const { data: instance } = await supabaseClient
       .from("maturador_instances")
-      .select("instance_name, api_provider")
+      .select("instance_name, api_provider, uazapi_token")
       .eq("id", contact.instance_id)
       .eq("user_id", user.id)
       .single();
 
     const instanceName = instance?.instance_name;
 
-    // UazAPI: message sync is handled via webhooks; Evolution polling endpoints won't work.
+    // UazAPI: use /message/find (OpenAPI) to fetch latest messages
     if (instance?.api_provider === 'uazapi') {
-      return new Response(JSON.stringify({ inserted: 0, reason: 'UazAPI uses webhook-based sync' }), {
+      const { data: apiConfig } = await supabaseAdmin
+        .from('whatsapp_api_config')
+        .select('uazapi_base_url')
+        .limit(1)
+        .single();
+
+      const baseUrl = (apiConfig?.uazapi_base_url || '').replace(/\/$/, '');
+      const token = (instance as any).uazapi_token as string | undefined;
+
+      if (!baseUrl || !token) {
+        return new Response(JSON.stringify({ inserted: 0, reason: 'UazAPI não configurado (baseUrl/token)' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const cleanPhone = String(contact.phone || '').replace(/\D/g, '');
+      const chatid = (contact as any).remote_jid || (cleanPhone ? `${cleanPhone}@s.whatsapp.net` : null);
+
+      if (!chatid) {
+        return new Response(JSON.stringify({ inserted: 0, reason: 'Sem chatid para sincronizar' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      console.log(`[UAZAPI-SYNC] Fetching messages for chatid=${chatid}`);
+
+      const resp = await fetch(`${baseUrl}/message/find`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          token,
+        },
+        body: JSON.stringify({ chatid, limit, offset: 0 }),
+      });
+
+      const txt = await resp.text();
+      let payload: any = null;
+      try {
+        payload = JSON.parse(txt);
+      } catch {
+        payload = { raw: txt };
+      }
+
+      if (!resp.ok) {
+        console.error('[UAZAPI-SYNC] Error:', resp.status, payload);
+        return new Response(JSON.stringify({ inserted: 0, error: 'Falha ao sincronizar mensagens', details: payload }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const messages: any[] = Array.isArray(payload?.messages) ? payload.messages : [];
+      console.log(`[UAZAPI-SYNC] Received messages: ${messages.length}`);
+
+      const toIsoFromAnyTs = (v: any): string => {
+        const n = typeof v === 'string' ? Number(v) : typeof v === 'number' ? v : NaN;
+        if (!Number.isFinite(n)) return new Date().toISOString();
+        const ms = n > 1e12 ? n : n * 1000;
+        return new Date(ms).toISOString();
+      };
+
+      const normalizeMsg = (m: any) => {
+        const remoteId = String(m?.id || m?.key?.id || m?.messageId || m?.msgid || '');
+        const fromMe = Boolean(m?.fromMe ?? m?.key?.fromMe ?? false);
+        const createdAt = toIsoFromAnyTs(m?.timestamp ?? m?.messageTimestamp ?? m?.t ?? m?.time ?? m?.date ?? Date.now());
+        const messageType = String(
+          m?.type || m?.messageType ||
+          (m?.message?.imageMessage ? 'image' :
+           m?.message?.videoMessage ? 'video' :
+           m?.message?.audioMessage ? 'audio' :
+           m?.message?.documentMessage ? 'document' : 'text')
+        );
+        const content =
+          (typeof m?.text === 'string' ? m.text : null) ||
+          (typeof m?.body === 'string' ? m.body : null) ||
+          (typeof m?.message?.conversation === 'string' ? m.message.conversation : null) ||
+          (typeof m?.message?.extendedTextMessage?.text === 'string' ? m.message.extendedTextMessage.text : null) ||
+          '';
+        const mediaUrl =
+          (typeof m?.url === 'string' ? m.url : null) ||
+          (typeof m?.file === 'string' ? m.file : null) ||
+          (typeof m?.mediaUrl === 'string' ? m.mediaUrl : null) ||
+          null;
+
+        return { remoteId, fromMe, createdAt, messageType, content, mediaUrl };
+      };
+
+      const normalized = messages.map(normalizeMsg).filter((m) => m.remoteId);
+      const remoteIds = normalized.map((m) => m.remoteId);
+
+      const { data: existing } = await supabaseAdmin
+        .from('inbox_messages')
+        .select('remote_message_id')
+        .eq('contact_id', contactId)
+        .in('remote_message_id', remoteIds);
+
+      const existingSet = new Set((existing || []).map((r: any) => r.remote_message_id));
+      const newOnes = normalized.filter((m) => !existingSet.has(m.remoteId));
+
+      if (newOnes.length === 0) {
+        return new Response(JSON.stringify({ inserted: 0, reason: 'No new messages' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const inserts = newOnes.map((m) => ({
+        contact_id: contactId,
+        instance_id: contact.instance_id,
+        user_id: user.id,
+        direction: m.fromMe ? 'outbound' : 'inbound',
+        message_type: m.messageType,
+        content: m.content,
+        media_url: m.mediaUrl,
+        remote_message_id: m.remoteId,
+        status: 'sent',
+        is_from_flow: false,
+        flow_id: null,
+        created_at: m.createdAt,
+      }));
+
+      const { error: insertErr } = await supabaseAdmin
+        .from('inbox_messages')
+        .insert(inserts);
+
+      if (insertErr) {
+        console.error('[UAZAPI-SYNC] Insert error:', insertErr);
+        return new Response(JSON.stringify({ inserted: 0, error: 'Falha ao salvar mensagens', details: insertErr }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(JSON.stringify({ inserted: inserts.length }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
