@@ -2850,7 +2850,7 @@ Regras IMPORTANTES:
       // Send message to verified contact
       case 'send-verified-message': {
         const { instanceName, phone, message } = params;
-        
+
         if (!instanceName || !phone || !message) {
           return new Response(JSON.stringify({ error: 'instanceName, phone and message are required' }), {
             status: 400,
@@ -2859,23 +2859,56 @@ Regras IMPORTANTES:
         }
 
         try {
-          // Clean phone number
-          const cleanPhone = phone.replace(/\D/g, '');
-          
-          // Send text message
-          const sendResult = await callEvolution(`/message/sendText/${instanceName}`, 'POST', {
-            number: cleanPhone,
-            text: message,
-          });
+          const cleanPhone = String(phone).replace(/\D/g, '');
+
+          // Detect instance provider/config (UazAPI vs Evolution)
+          const { data: instanceRow, error: instanceErr } = await supabaseClient
+            .from('maturador_instances')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('instance_name', instanceName)
+            .maybeSingle();
+
+          if (instanceErr) {
+            console.error('[send-verified-message] Error fetching instance:', instanceErr);
+          }
+
+          const apiConfig = instanceRow?.id
+            ? await getInstanceApiConfig(supabaseClient, instanceRow.id)
+            : await getGlobalApiConfig(supabaseClient);
+
+          console.log(`[send-verified-message] provider=${apiConfig.provider} instanceName=${instanceName}`);
+
+          // Per UazAPI docs: POST /send/text with header 'token'
+          const sendResult = apiConfig.provider === 'uazapi'
+            ? await callWhatsAppApi(apiConfig, '/send/text', 'POST', {
+                number: cleanPhone,
+                text: String(message),
+              })
+            : await callEvolution(`/message/sendText/${instanceName}`, 'POST', {
+                number: cleanPhone,
+                text: String(message),
+              });
 
           console.log('Verified message send result:', JSON.stringify(sendResult, null, 2));
-          result = { success: true, sendResult };
+          result = { success: true, provider: apiConfig.provider, sendResult };
         } catch (error) {
           console.error('Error sending verified message:', error);
-          return new Response(JSON.stringify({ error: 'Erro ao enviar mensagem' }), {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
+          const err = error as any;
+
+          // Return 200 so the client can read the payload (supabase-js discards body on non-2xx)
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: String(err?.message || 'Erro ao enviar mensagem'),
+              status: err?.status,
+              details: err?.details,
+            }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
         }
         break;
       }

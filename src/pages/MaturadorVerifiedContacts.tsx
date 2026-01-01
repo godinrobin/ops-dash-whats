@@ -8,8 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Loader2, Send, ShieldCheck, User, AlertCircle, Plus, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Loader2, Send, ShieldCheck, User, AlertCircle, Plus, Pencil, Trash2, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
@@ -479,40 +480,50 @@ export default function MaturadorVerifiedContacts() {
             <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label>Selecione os números para enviar</Label>
-                <div className="grid gap-2 max-h-40 overflow-y-auto border rounded-md p-2">
-                  {instances.map((instance) => {
-                    const isSelected = selectedInstanceIds.includes(instance.id);
-                    return (
-                      <label 
-                        key={instance.id} 
-                        className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${
-                          isSelected ? 'bg-primary/10 border border-primary/30' : 'hover:bg-muted'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={(e) => {
-                            const checked = e.target.checked;
-                            setSelectedInstanceIds((prev) => {
-                              if (checked) return prev.includes(instance.id) ? prev : [...prev, instance.id];
-                              return prev.filter((id) => id !== instance.id);
-                            });
-                          }}
-                          className="h-4 w-4 accent-primary"
-                        />
-                        <span className="text-sm">
-                          {instance.label || instance.phone_number || instance.instance_name}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-                {selectedInstanceIds.length > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {selectedInstanceIds.length} número(s) selecionado(s)
-                  </p>
-                )}
+
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between">
+                      <span className="truncate">
+                        {selectedInstanceIds.length > 0
+                          ? `${selectedInstanceIds.length} número(s) selecionado(s)`
+                          : "Selecione os números"}
+                      </span>
+                      <ChevronDown className="h-4 w-4 opacity-70" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-2">
+                    <div className="grid gap-1 max-h-56 overflow-y-auto">
+                      {instances.map((instance) => {
+                        const isSelected = selectedInstanceIds.includes(instance.id);
+                        return (
+                          <label
+                            key={instance.id}
+                            className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${
+                              isSelected ? 'bg-primary/10 border border-primary/30' : 'hover:bg-muted'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setSelectedInstanceIds((prev) => {
+                                  if (checked) return prev.includes(instance.id) ? prev : [...prev, instance.id];
+                                  return prev.filter((id) => id !== instance.id);
+                                });
+                              }}
+                              className="h-4 w-4 accent-accent"
+                            />
+                            <span className="text-sm truncate">
+                              {instance.label || instance.phone_number || instance.instance_name}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
 
               <div className="space-y-2">
