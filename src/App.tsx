@@ -24,7 +24,9 @@ import AudioGenerator from "./pages/AudioGenerator";
 import AudioTranscriber from "./pages/AudioTranscriber";
 import CreativeAnalyzer from "./pages/CreativeAnalyzer";
 import ZapSpy from "./pages/ZapSpy";
-import TagWhats from "./pages/TagWhats";
+import TagWhatsSelect from "./pages/TagWhatsSelect";
+import TagWhatsLocal from "./pages/TagWhatsLocal";
+import TagWhatsCloud from "./pages/TagWhatsCloud";
 import ExtensaoAdsWhatsApp from "./pages/ExtensaoAdsWhatsApp";
 import VideoDownloader from "./pages/VideoDownloader";
 import SMSBot from "./pages/SMSBot";
@@ -90,7 +92,9 @@ const App = () => {
               <Route path="/gerador-audio" element={<MemberRoute featureName="Gerador de Áudio"><AudioGenerator /></MemberRoute>} />
               <Route path="/transcricao-audio" element={<MemberRoute featureName="Transcrição de Áudio"><AudioTranscriber /></MemberRoute>} />
               <Route path="/analisador-criativos" element={<MemberRoute featureName="Analisador de Criativos"><CreativeAnalyzer /></MemberRoute>} />
-              <Route path="/tag-whats" element={<MemberRoute featureName="Tag Whats"><TagWhats /></MemberRoute>} />
+              <Route path="/tag-whats" element={<MemberRoute featureName="Tag Whats"><TagWhatsSelect /></MemberRoute>} />
+              <Route path="/tag-whats/local" element={<MemberRoute featureName="Tag Whats"><TagWhatsLocal /></MemberRoute>} />
+              <Route path="/tag-whats/cloud" element={<MemberRoute featureName="Tag Whats"><TagWhatsCloud /></MemberRoute>} />
               <Route path="/extensao-ads" element={<ProtectedRoute><ExtensaoAdsWhatsApp /></ProtectedRoute>} />
               <Route path="/video-downloader" element={<ProtectedRoute><VideoDownloader /></ProtectedRoute>} />
               <Route path="/maturador" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorDashboard /></MemberRoute>} />

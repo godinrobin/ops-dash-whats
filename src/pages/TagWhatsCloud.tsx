@@ -58,16 +58,16 @@ const TagWhatsCloud = () => {
         .from('maturador_instances')
         .select('id, instance_name, phone_number, status, uazapi_token, label')
         .eq('user_id', user.id)
-        .not('uazapi_token', 'is', null);
+        .not('uazapi_token', 'is', null) as any;
 
       if (instancesError) throw instancesError;
       setInstances(instancesData || []);
 
       // Fetch Tag Whats configs
-      const { data: configsData, error: configsError } = await supabase
-        .from('tag_whats_configs')
+      const { data: configsData, error: configsError } = await (supabase
+        .from('tag_whats_configs' as any)
         .select('*')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id) as any);
 
       if (configsError) throw configsError;
       setConfigs(configsData || []);
@@ -104,29 +104,29 @@ const TagWhatsCloud = () => {
 
       if (existingConfig) {
         // Update existing config
-        const { error } = await supabase
-          .from('tag_whats_configs')
+        const { error } = await (supabase
+          .from('tag_whats_configs' as any)
           .update({
             filter_images: filterImages,
             filter_pdfs: filterPdfs,
             is_active: true,
             updated_at: new Date().toISOString()
           })
-          .eq('id', existingConfig.id);
+          .eq('id', existingConfig.id) as any);
 
         if (error) throw error;
         toast.success('Configuração atualizada!');
       } else {
         // Create new config
-        const { error } = await supabase
-          .from('tag_whats_configs')
+        const { error } = await (supabase
+          .from('tag_whats_configs' as any)
           .insert({
             user_id: user.id,
             instance_id: selectedInstance.id,
             filter_images: filterImages,
             filter_pdfs: filterPdfs,
             is_active: true
-          });
+          }) as any);
 
         if (error) throw error;
         toast.success('Tag Whats ativado para este número!');
@@ -144,10 +144,10 @@ const TagWhatsCloud = () => {
 
   const handleToggleActive = async (configId: string, isActive: boolean) => {
     try {
-      const { error } = await supabase
-        .from('tag_whats_configs')
+      const { error } = await (supabase
+        .from('tag_whats_configs' as any)
         .update({ is_active: isActive, updated_at: new Date().toISOString() })
-        .eq('id', configId);
+        .eq('id', configId) as any);
 
       if (error) throw error;
       toast.success(isActive ? 'Tag Whats ativado!' : 'Tag Whats desativado!');
@@ -161,10 +161,10 @@ const TagWhatsCloud = () => {
   const handleDeleteConfig = async () => {
     if (!configToDelete) return;
     try {
-      const { error } = await supabase
-        .from('tag_whats_configs')
+      const { error } = await (supabase
+        .from('tag_whats_configs' as any)
         .delete()
-        .eq('id', configToDelete);
+        .eq('id', configToDelete) as any);
 
       if (error) throw error;
       toast.success('Configuração removida');
@@ -227,6 +227,24 @@ const TagWhatsCloud = () => {
               </CardContent>
             </Card>
           </div>
+
+          {/* Important Note */}
+          <Card className="mb-6 border-amber-500/30 bg-amber-500/5">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-amber-500/20 rounded-full">
+                  <FileText className="h-4 w-4 text-amber-500" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-amber-400">Importante</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Certifique-se de ter a etiqueta <strong>"Pago"</strong> criada no seu WhatsApp Business. 
+                    O sistema irá automaticamente detectar comprovantes PIX e aplicar essa etiqueta.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Add Number */}
           {availableInstances.length > 0 && (

@@ -6,8 +6,8 @@ import { useNavigate } from "react-router-dom";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useEffect } from "react";
 
-const TagWhats = () => {
-  useActivityTracker("page_visit", "Tag Whats");
+const TagWhatsLocal = () => {
+  useActivityTracker("page_visit", "Tag Whats - Local");
   const navigate = useNavigate();
 
   // Load VTURB optimization script
@@ -93,7 +93,7 @@ const TagWhats = () => {
         <div className="container mx-auto max-w-4xl">
           <Button
             variant="ghost"
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/tag-whats")}
             className="mb-6"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
@@ -175,4 +175,4 @@ const TagWhats = () => {
   );
 };
 
-export default TagWhats;
+export default TagWhatsLocal;
