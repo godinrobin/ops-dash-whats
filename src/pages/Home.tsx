@@ -103,7 +103,6 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
   const { isAdmin } = useAdminStatus();
   const [restrictedModalOpen, setRestrictedModalOpen] = useState(false);
   const [selectedFeatureName, setSelectedFeatureName] = useState<string>("");
-  const [comingSoonModalOpen, setComingSoonModalOpen] = useState(false);
   
   const autoplayPlugin = useRef(
     Autoplay({ delay: 3000, stopOnInteraction: true })
@@ -285,8 +284,7 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
       description: "Aqueça seus chips com conversas naturais entre instâncias",
       gradient: "from-green-400 to-emerald-500",
       restricted: true,
-      glowColor: 'green',
-      comingSoon: true
+      glowColor: 'green'
     },
     { 
       path: "/save-whatsapp", 
@@ -321,9 +319,8 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
   ];
 
   const handleSystemClick = (system: typeof systems[0]) => {
-    // Check if system is coming soon - admins can bypass this
+    // Check if system is coming soon - admins can bypass, others do nothing
     if (system.comingSoon && !isAdmin) {
-      setComingSoonModalOpen(true);
       return;
     }
     
@@ -488,38 +485,6 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
         featureName={selectedFeatureName}
       />
 
-      {/* Coming Soon Modal */}
-      <Dialog open={comingSoonModalOpen} onOpenChange={setComingSoonModalOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-12 h-12 rounded-full bg-accent/20 flex items-center justify-center">
-                <Clock className="w-6 h-6 text-accent" />
-              </div>
-              <DialogTitle className="text-xl">Em breve!</DialogTitle>
-            </div>
-            <DialogDescription asChild>
-              <div className="text-left space-y-4 pt-2">
-                <p className="font-semibold text-foreground">Recado pessoal do João!</p>
-                <p className="text-muted-foreground">
-                  Prezando pela sua experiência, este sistema está em atualização para um servidor mais potente. Não estava esperando tantos números conectados em tão pouco tempo de atividade.
-                </p>
-                <p className="text-muted-foreground">
-                  Eu João Lucas, peço desculpa pelo inconveniente, e prometo ativar este sistema o mais rápido possível com a melhor experiência que possa trazer para você!
-                </p>
-                <p className="text-muted-foreground">
-                  Desfrute dos outros sistemas disponíveis para sua operação enquanto está sendo feita a atualização deste sistema!
-                </p>
-              </div>
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button onClick={() => setComingSoonModalOpen(false)}>
-              Entendi
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 };
