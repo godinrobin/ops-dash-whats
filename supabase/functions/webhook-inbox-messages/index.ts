@@ -646,6 +646,27 @@ serve(async (req) => {
     console.log(`IP: ${forwardedFor}`);
     console.log(`User-Agent: ${userAgent}`);
     
+    // Extract event type from URL path when UazAPI uses addUrlEvents=true
+    // URL format: /webhook-inbox-messages/{evento}/{tipodemensagem}
+    // e.g., /webhook-inbox-messages/messages/text or /webhook-inbox-messages/connection
+    const url = new URL(requestUrl);
+    const pathParts = url.pathname.split('/').filter(Boolean);
+    
+    // Path structure: [functions, v1, webhook-inbox-messages, evento?, tipodemensagem?]
+    let urlEventType: string | null = null;
+    let urlMessageType: string | null = null;
+    
+    // Find index of webhook-inbox-messages in path
+    const webhookIndex = pathParts.findIndex(p => p === 'webhook-inbox-messages');
+    if (webhookIndex !== -1 && pathParts.length > webhookIndex + 1) {
+      urlEventType = pathParts[webhookIndex + 1] || null;
+      if (pathParts.length > webhookIndex + 2) {
+        urlMessageType = pathParts[webhookIndex + 2] || null;
+      }
+    }
+    
+    console.log(`[URL-PARSER] URL event type: ${urlEventType}, message type: ${urlMessageType}`);
+    
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -667,10 +688,17 @@ serve(async (req) => {
     
     console.log('Webhook payload parsed:', JSON.stringify(payload, null, 2));
 
-    // Evolution API sends different event types
-    const event = payload.event || payload.type;
+    // Determine event type - prioritize URL path (UazAPI addUrlEvents), then payload
+    // UazAPI can send event in URL path when addUrlEvents=true
+    // Evolution API sends event in payload
+    let event = urlEventType || payload.event || payload.type;
     const instance = payload.instance || payload.instanceName;
     const data = payload.data || payload;
+    
+    // If event came from URL, normalize it to match our expected formats
+    if (urlEventType) {
+      console.log(`[UAZAPI-URL] Event from URL path: ${urlEventType}, message type: ${urlMessageType}`);
+    }
 
     // Log webhook diagnostic for every event received
     const instanceName = typeof instance === 'string' ? instance : instance?.instanceName || 'unknown';
