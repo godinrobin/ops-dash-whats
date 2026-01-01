@@ -1385,29 +1385,32 @@ async function sendMessage(
   let authHeader: Record<string, string> = {};
 
   if (apiProvider === 'uazapi') {
-    // UazAPI v2 endpoints (per OpenAPI spec) - use token header
+    // UazAPI v2 (OpenAPI):
+    // - Auth header: token (instance token)
+    // - Send text: POST /send/text with { number, text }
+    // - Send media: POST /send/media with { number, type, file, text?, docName? }
     authHeader = { 'token': instanceToken || apiKey };
-    
+
     switch (messageType) {
       case 'text':
-        endpoint = `/message/sendText`;
+        endpoint = `/send/text`;
         body = { number: formattedPhone, text: content };
         break;
       case 'image':
-        endpoint = `/message/sendMedia`;
-        body = { number: formattedPhone, mediatype: 'image', media: mediaUrl, caption: content };
+        endpoint = `/send/media`;
+        body = { number: formattedPhone, type: 'image', file: mediaUrl, ...(content ? { text: content } : {}) };
         break;
       case 'audio':
-        endpoint = `/message/sendAudio`;
-        body = { number: formattedPhone, audio: mediaUrl };
+        endpoint = `/send/media`;
+        body = { number: formattedPhone, type: 'audio', file: mediaUrl, ...(content ? { text: content } : {}) };
         break;
       case 'video':
-        endpoint = `/message/sendMedia`;
-        body = { number: formattedPhone, mediatype: 'video', media: mediaUrl, caption: content };
+        endpoint = `/send/media`;
+        body = { number: formattedPhone, type: 'video', file: mediaUrl, ...(content ? { text: content } : {}) };
         break;
       case 'document':
-        endpoint = `/message/sendMedia`;
-        body = { number: formattedPhone, mediatype: 'document', media: mediaUrl, fileName: fileName || 'document' };
+        endpoint = `/send/media`;
+        body = { number: formattedPhone, type: 'document', file: mediaUrl, docName: fileName || 'document', ...(content ? { text: content } : {}) };
         break;
       default:
         console.log(`Unknown message type: ${messageType}`);
