@@ -52,7 +52,7 @@ const CHART_COLORS = [
 ];
 
 const TagWhatsCloud = () => {
-  useActivityTracker("page_visit", "Tag Whats - Cloud");
+  useActivityTracker("page_visit", "Tag Whats Cloud");
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -278,7 +278,7 @@ const TagWhatsCloud = () => {
           <header className="text-center mb-8">
             <div className="flex items-center justify-center gap-3 mb-2">
               <Cloud className="h-8 w-8 text-emerald-500" />
-              <h1 className="text-3xl md:text-4xl font-bold">Tag Whats em Nuvem</h1>
+              <h1 className="text-3xl md:text-4xl font-bold">Tag Whats Cloud</h1>
             </div>
             <p className="text-muted-foreground max-w-2xl mx-auto">
               Detecta automaticamente comprovantes PIX em imagens e PDFs e marca a etiqueta "Pago" no WhatsApp Business
@@ -389,34 +389,42 @@ const TagWhatsCloud = () => {
           </Card>
 
           {/* Add Number */}
-          {availableInstances.length > 0 && (
-            <Card className="mb-6 border-dashed border-2 border-emerald-500/30 bg-emerald-500/5">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-semibold">Adicionar Número</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {availableInstances.length} número(s) disponível(is) para configurar
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    {availableInstances.map(instance => (
-                      <Button
-                        key={instance.id}
-                        variant="outline"
-                        size="sm"
-                        className="border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/10"
-                        onClick={() => handleOpenConfig(instance)}
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        {instance.phone_number || instance.instance_name}
-                      </Button>
-                    ))}
-                  </div>
+          <Card className="mb-6 border-dashed border-2 border-emerald-500/30 bg-emerald-500/5">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold">Adicionar Número</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {availableInstances.length > 0 
+                      ? `${availableInstances.length} número(s) disponível(is) para configurar`
+                      : 'Adicione um novo número de WhatsApp'
+                    }
+                  </p>
                 </div>
-              </CardContent>
-            </Card>
-          )}
+                <div className="flex gap-2 items-center">
+                  {availableInstances.map(instance => (
+                    <Button
+                      key={instance.id}
+                      variant="outline"
+                      size="sm"
+                      className="border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/10"
+                      onClick={() => handleOpenConfig(instance)}
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      {instance.phone_number || instance.instance_name}
+                    </Button>
+                  ))}
+                  <Button
+                    size="sm"
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                    onClick={() => navigate('/tag-whats/cloud/add-number')}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* No instances warning */}
           {instances.length === 0 && !loading && (
