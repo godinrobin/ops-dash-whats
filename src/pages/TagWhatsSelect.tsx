@@ -59,11 +59,7 @@ const TagWhatsSelect = () => {
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-blue-500 mt-1">•</span>
-                      Funciona apenas localmente no seu computador
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-blue-500 mt-1">•</span>
-                      Total privacidade dos seus dados
+                      Funciona localmente direto no seu computador
                     </li>
                   </ul>
                 </div>
@@ -97,15 +93,11 @@ const TagWhatsSelect = () => {
                   <ul className="text-sm text-muted-foreground space-y-2">
                     <li className="flex items-start gap-2">
                       <span className="text-emerald-500 mt-1">•</span>
-                      Roda 24 horas por dia com o PC desligado
+                      Roda 24 horas por dia
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-emerald-500 mt-1">•</span>
-                      Processa imagens e PDFs automaticamente
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-emerald-500 mt-1">•</span>
-                      IA identifica comprovantes PIX instantaneamente
+                      Não precisa do PC ligado
                     </li>
                   </ul>
                 </div>

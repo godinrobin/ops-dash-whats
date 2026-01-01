@@ -25,6 +25,7 @@ import { AdminMFA } from "@/components/admin/AdminMFA";
 import { AdminAdsMetrics } from "@/components/admin/AdminAdsMetrics";
 import { AdminInstances } from "@/components/admin/AdminInstances";
 import { AdminWhatsAppApiConfig } from "@/components/admin/AdminWhatsAppApiConfig";
+import { AdminTagWhatsLabels } from "@/components/admin/AdminTagWhatsLabels";
 
 // Product image imports for admin
 import bmVerificadaImg from "@/assets/bm-verificada.png";
@@ -95,6 +96,7 @@ const SIDEBAR_MENU = [
     items: [
       { id: "instances", label: "Números WhatsApp", icon: Smartphone },
       { id: "whatsapp-api", label: "Configurar API", icon: Wifi },
+      { id: "tag-whats-labels", label: "Etiquetas Tag Whats", icon: Shield },
     ]
   },
   {
@@ -2433,6 +2435,9 @@ const AdminPanelNew = () => {
 
       case 'whatsapp-api':
         return <AdminWhatsAppApiConfig />;
+
+      case 'tag-whats-labels':
+        return <AdminTagWhatsLabels />;
 
       default:
         return null;
