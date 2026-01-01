@@ -950,7 +950,7 @@ serve(async (req) => {
             const fullMenuMessage = `${menuMessage}\n\n${options}`;
             
             if (instanceName && phone && fullMenuMessage) {
-              const menuSendResult = await sendMessage(evolutionBaseUrl, evolutionApiKey, instanceName, phone, fullMenuMessage, 'text');
+              const menuSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, fullMenuMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken);
               
               const menuStatus = menuSendResult.ok ? 'sent' : 'failed';
               await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, fullMenuMessage, 'text', flow.id, undefined, menuSendResult.remoteMessageId, menuStatus);
@@ -1053,7 +1053,7 @@ serve(async (req) => {
             if (!sentNodeIds.includes(currentNodeId)) {
               const transferMessage = replaceVariables(currentNode.data.message as string || 'Transferindo para atendimento humano...', variables);
               if (instanceName && phone && transferMessage) {
-                const transferSendResult = await sendMessage(evolutionBaseUrl, evolutionApiKey, instanceName, phone, transferMessage, 'text');
+                const transferSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, transferMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken);
                 
                 const transferStatus = transferSendResult.ok ? 'sent' : 'failed';
                 await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, transferMessage, 'text', flow.id, undefined, transferSendResult.remoteMessageId, transferStatus);
@@ -1436,8 +1436,9 @@ async function sendMessage(
         body = { number: formattedPhone, type: 'image', file: mediaUrl, ...(content ? { text: content } : {}) };
         break;
       case 'audio':
+        // UazAPI uses 'ptt' (push-to-talk) for voice messages
         endpoint = `/send/media`;
-        body = { number: formattedPhone, type: 'audio', file: mediaUrl, ...(content ? { text: content } : {}) };
+        body = { number: formattedPhone, type: 'ptt', file: mediaUrl };
         break;
       case 'video':
         endpoint = `/send/media`;
