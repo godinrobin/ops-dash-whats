@@ -38,6 +38,7 @@ interface Conversation {
   topics: string[];
   created_at: string;
   messageCount?: number;
+  enable_calls?: boolean;
 }
 
 export default function MaturadorConversations() {
@@ -61,11 +62,9 @@ export default function MaturadorConversations() {
   const [chipBId, setChipBId] = useState("");
   const [minDelay, setMinDelay] = useState(30);
   const [maxDelay, setMaxDelay] = useState(120);
-  const [messagesPerRound, setMessagesPerRound] = useState(5);
   const [dailyLimit, setDailyLimit] = useState(50);
-  const [quietStart, setQuietStart] = useState("22:00");
-  const [quietEnd, setQuietEnd] = useState("07:00");
   const [topics, setTopics] = useState("");
+  const [enableCalls, setEnableCalls] = useState(false);
 
   // Delete dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -129,11 +128,9 @@ export default function MaturadorConversations() {
     setChipBId("");
     setMinDelay(30);
     setMaxDelay(120);
-    setMessagesPerRound(5);
     setDailyLimit(50);
-    setQuietStart("22:00");
-    setQuietEnd("07:00");
     setTopics("");
+    setEnableCalls(false);
     setEditingConversation(null);
   };
 
@@ -149,11 +146,9 @@ export default function MaturadorConversations() {
     setChipBId(conversation.chip_b_id || "");
     setMinDelay(conversation.min_delay_seconds);
     setMaxDelay(conversation.max_delay_seconds);
-    setMessagesPerRound(conversation.messages_per_round);
     setDailyLimit(conversation.daily_limit);
-    setQuietStart(conversation.quiet_hours_start || "22:00");
-    setQuietEnd(conversation.quiet_hours_end || "07:00");
     setTopics(conversation.topics.join("\n"));
+    setEnableCalls(conversation.enable_calls || false);
     setModalOpen(true);
   };
 
@@ -197,11 +192,9 @@ export default function MaturadorConversations() {
         chip_b_id: chipBId,
         min_delay_seconds: minDelay,
         max_delay_seconds: maxDelay,
-        messages_per_round: messagesPerRound,
         daily_limit: dailyLimit,
-        quiet_hours_start: quietStart,
-        quiet_hours_end: quietEnd,
         topics: topicsArray,
+        enable_calls: enableCalls,
       };
 
       if (editingConversation) {
@@ -400,7 +393,9 @@ export default function MaturadorConversations() {
                   <div className="text-xs text-muted-foreground space-y-1">
                     <p>Delay: {conversation.min_delay_seconds}s - {conversation.max_delay_seconds}s</p>
                     <p>Limite diário: {conversation.daily_limit}</p>
-                    <p>Silêncio: {conversation.quiet_hours_start} - {conversation.quiet_hours_end}</p>
+                    {conversation.enable_calls && (
+                      <p className="text-orange-400">Chamadas habilitadas</p>
+                    )}
                     {conversation.topics.length > 0 && (
                       <p>Tópicos: {conversation.topics.length}</p>
                     )}
@@ -550,49 +545,33 @@ export default function MaturadorConversations() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="messagesPerRound">Mensagens por Round</Label>
-                  <Input
-                    id="messagesPerRound"
-                    type="number"
-                    min={1}
-                    max={20}
-                    value={messagesPerRound}
-                    onChange={(e) => setMessagesPerRound(Number(e.target.value))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="dailyLimit">Limite Diário</Label>
-                  <Input
-                    id="dailyLimit"
-                    type="number"
-                    min={1}
-                    max={500}
-                    value={dailyLimit}
-                    onChange={(e) => setDailyLimit(Number(e.target.value))}
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="dailyLimit">Limite Diário</Label>
+                <Input
+                  id="dailyLimit"
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={dailyLimit}
+                  onChange={(e) => setDailyLimit(Number(e.target.value))}
+                />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="quietStart">Início Silêncio</Label>
-                  <Input
-                    id="quietStart"
-                    type="time"
-                    value={quietStart}
-                    onChange={(e) => setQuietStart(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="quietEnd">Fim Silêncio</Label>
-                  <Input
-                    id="quietEnd"
-                    type="time"
-                    value={quietEnd}
-                    onChange={(e) => setQuietEnd(e.target.value)}
-                  />
+              <div className="flex items-center space-x-3 p-3 rounded-lg border border-orange-500/30 bg-orange-500/10">
+                <input
+                  type="checkbox"
+                  id="enableCalls"
+                  checked={enableCalls}
+                  onChange={(e) => setEnableCalls(e.target.checked)}
+                  className="h-5 w-5 rounded border-orange-500 text-orange-500 focus:ring-orange-500 accent-orange-500"
+                />
+                <div className="flex-1">
+                  <Label htmlFor="enableCalls" className="text-orange-400 font-medium cursor-pointer">
+                    Habilitar Chamadas de Voz
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Faz uma ligação na 4ª mensagem de cada número e periodicamente entre 40-60 mensagens
+                  </p>
                 </div>
               </div>
 

@@ -1630,6 +1630,7 @@ export type Database = {
           chip_b_id: string | null
           created_at: string
           daily_limit: number
+          enable_calls: boolean | null
           id: string
           is_active: boolean
           max_delay_seconds: number
@@ -1648,6 +1649,7 @@ export type Database = {
           chip_b_id?: string | null
           created_at?: string
           daily_limit?: number
+          enable_calls?: boolean | null
           id?: string
           is_active?: boolean
           max_delay_seconds?: number
@@ -1666,6 +1668,7 @@ export type Database = {
           chip_b_id?: string | null
           created_at?: string
           daily_limit?: number
+          enable_calls?: boolean | null
           id?: string
           is_active?: boolean
           max_delay_seconds?: number
