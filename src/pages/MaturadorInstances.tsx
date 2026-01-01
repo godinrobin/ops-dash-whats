@@ -12,7 +12,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { splashedToast as toast } from "@/hooks/useSplashedToast";
-import { QRCodeModal, getQrCodeFromCache, setQrCodeCache, clearQrCodeCache } from "@/components/QRCodeModal";
+import { QRCodeModal, setQrCodeCache, clearQrCodeCache } from "@/components/QRCodeModal";
 
 interface Instance {
   id: string;
@@ -217,17 +217,11 @@ export default function MaturadorInstances() {
   const handleGetQrCode = useCallback(async (instance: Instance) => {
     setCurrentQrInstance(instance);
     setQrModalOpen(true);
-    
-    // Check cache first
-    const cachedQr = getQrCodeFromCache(instance.instance_name);
-    if (cachedQr) {
-      setQrCode(cachedQr);
-      setLoadingQr(false);
-      return;
-    }
-    
     setLoadingQr(true);
     setQrCode(null);
+    
+    // Clear old cache to ensure fresh QR
+    clearQrCodeCache(instance.instance_name);
 
     try {
       const { data, error } = await supabase.functions.invoke('maturador-evolution', {
@@ -252,6 +246,7 @@ export default function MaturadorInstances() {
         setQrCode(qr);
       } else {
         console.log('[GET-QR] No QR in response:', JSON.stringify(data).substring(0, 200));
+        toast.error('QR Code não disponível. Tente novamente.');
       }
     } catch (error: any) {
       console.error('Error getting QR code:', error);
@@ -259,6 +254,8 @@ export default function MaturadorInstances() {
       setQrModalOpen(false);
     } finally {
       setLoadingQr(false);
+      // Refresh instances to update status from backend
+      await fetchInstances();
     }
   }, []);
 
@@ -536,7 +533,8 @@ export default function MaturadorInstances() {
                   </p>
                   
                   <div className="flex gap-2 flex-wrap">
-                    {instance.status !== 'connected' && (
+                    {/* Show QR Code button for disconnected OR connecting instances */}
+                    {(instance.status === 'disconnected' || instance.status === 'connecting') && (
                       <Button 
                         size="sm" 
                         variant="outline" 
@@ -544,7 +542,7 @@ export default function MaturadorInstances() {
                         disabled={actionLoading === instance.id}
                       >
                         <QrCode className="h-3 w-3 mr-1" />
-                        QR Code
+                        {instance.status === 'connecting' ? 'Ver QR Code' : 'Gerar QR Code'}
                       </Button>
                     )}
                     
