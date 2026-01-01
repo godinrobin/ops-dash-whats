@@ -620,33 +620,6 @@ export default function MaturadorConversations() {
                   Os tópicos serão usados para gerar mensagens mais naturais
                 </p>
               </div>
-
-              <div className="flex items-center justify-between rounded-lg border p-3">
-                <div>
-                  <p className="text-sm font-medium">Status</p>
-                  <p className="text-xs text-muted-foreground">
-                    Ative para permitir que o aquecimento execute automaticamente
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant={editingConversation?.is_active ? "default" : "outline"}
-                  onClick={() => editingConversation && handleToggleActive(editingConversation)}
-                  disabled={!editingConversation}
-                >
-                  {editingConversation?.is_active ? (
-                    <>
-                      <Pause className="h-4 w-4 mr-2" />
-                      Pausar
-                    </>
-                  ) : (
-                    <>
-                      <Play className="h-4 w-4 mr-2" />
-                      Ativar
-                    </>
-                  )}
-                </Button>
-              </div>
             </div>
 
             <DialogFooter>

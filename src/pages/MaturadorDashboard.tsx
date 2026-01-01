@@ -479,7 +479,7 @@ export default function MaturadorDashboard() {
 
           <AnimatedTabsContent value="instances" className="space-y-4">
             <div className="flex justify-between items-center">
-              <h2 className="text-xl font-semibold">Seus Números</h2>
+              <h2 className="text-xl font-semibold">Números de WhatsApp</h2>
               <Button onClick={() => navigate('/maturador/instances')}>
                 <Plus className="h-4 w-4 mr-2" />
                 Novo Número
@@ -500,8 +500,8 @@ export default function MaturadorDashboard() {
               </Card>
             ) : (
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {instances.slice(0, 6).map((instance) => (
-                  <Card key={instance.id} className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => navigate('/maturador/instances')}>
+                {instances.map((instance) => (
+                  <Card key={instance.id}>
                     <CardHeader className="pb-2">
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-base">{instance.label || instance.phone_number || instance.instance_name}</CardTitle>
@@ -510,36 +510,34 @@ export default function MaturadorDashboard() {
                           {getStatusText(instance.status)}
                         </Badge>
                       </div>
-                      <CardDescription>{instance.phone_number || 'Número não conectado'}</CardDescription>
+                      <CardDescription>{instance.phone_number || instance.instance_name}</CardDescription>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="space-y-3">
                       <p className="text-xs text-muted-foreground">
                         {instance.last_seen 
                           ? `Último acesso: ${new Date(instance.last_seen).toLocaleString('pt-BR')}`
                           : 'Nunca conectado'
                         }
                       </p>
+                      <div className="flex gap-2 pt-2">
+                        <Button size="sm" variant="outline" onClick={() => navigate('/maturador/instances')}>
+                          <Pencil className="h-3 w-3 mr-1" />
+                          Gerenciar
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
-              </div>
-            )}
-
-            {instances.length > 6 && (
-              <div className="text-center">
-                <Button variant="outline" onClick={() => navigate('/maturador/instances')}>
-                  Ver todos os {instances.length} números
-                </Button>
               </div>
             )}
           </AnimatedTabsContent>
 
           <AnimatedTabsContent value="conversations" className="space-y-4">
             <div className="flex justify-between items-center">
-              <h2 className="text-xl font-semibold">Conversas Configuradas</h2>
+              <h2 className="text-xl font-semibold">Aquecedor</h2>
               <Button onClick={() => navigate('/maturador/conversations')} disabled={instances.length < 2}>
                 <Plus className="h-4 w-4 mr-2" />
-                Nova Conversa
+                Novo Aquecimento
               </Button>
             </div>
 
@@ -547,23 +545,23 @@ export default function MaturadorDashboard() {
               <Card>
                 <CardContent className="p-8 text-center">
                   <MessageSquare className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="text-lg font-medium mb-2">Nenhuma conversa configurada</h3>
+                  <h3 className="text-lg font-medium mb-2">Nenhum aquecimento configurado</h3>
                   <p className="text-muted-foreground mb-4">
                     {instances.length < 2 
-                      ? 'Você precisa de pelo menos 2 números para criar uma conversa'
-                      : 'Configure conversas entre seus chips para aquecê-los'
+                      ? 'Você precisa de pelo menos 2 números para criar um aquecimento'
+                      : 'Configure pareamentos entre seus chips para aquecê-los'
                     }
                   </p>
                   <Button onClick={() => navigate('/maturador/conversations')} disabled={instances.length < 2}>
                     <Plus className="h-4 w-4 mr-2" />
-                    Criar Conversa
+                    Criar Aquecimento
                   </Button>
                 </CardContent>
               </Card>
             ) : (
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {conversations.map((conv) => (
-                  <Card key={conv.id} className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => navigate('/maturador/conversations')}>
+                  <Card key={conv.id}>
                     <CardHeader className="pb-2">
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-base">{conv.name}</CardTitle>
@@ -572,10 +570,18 @@ export default function MaturadorDashboard() {
                         </Badge>
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-1">
-                      <p className="text-sm font-medium">{instances.find(i => i.id === conv.chip_a_id)?.phone_number || instances.find(i => i.id === conv.chip_a_id)?.label || 'N/A'}</p>
-                      <p className="text-xs text-muted-foreground">↕</p>
-                      <p className="text-sm font-medium">{instances.find(i => i.id === conv.chip_b_id)?.phone_number || instances.find(i => i.id === conv.chip_b_id)?.label || 'N/A'}</p>
+                    <CardContent className="space-y-3">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">{instances.find(i => i.id === conv.chip_a_id)?.phone_number || instances.find(i => i.id === conv.chip_a_id)?.label || 'N/A'}</p>
+                        <p className="text-xs text-muted-foreground">↕</p>
+                        <p className="text-sm font-medium">{instances.find(i => i.id === conv.chip_b_id)?.phone_number || instances.find(i => i.id === conv.chip_b_id)?.label || 'N/A'}</p>
+                      </div>
+                      <div className="flex gap-2 pt-2">
+                        <Button size="sm" variant="outline" onClick={() => navigate('/maturador/conversations')}>
+                          <Pencil className="h-3 w-3 mr-1" />
+                          Gerenciar
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
