@@ -31,6 +31,66 @@ const RETRY_DELAYS = [1000, 2000, 4000]; // exponential backoff in ms
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Download media via UazAPI /message/download endpoint with retry
+const downloadMediaViaUazAPI = async (
+  uazapiToken: string,
+  remoteMessageId: string
+): Promise<{ base64: string; mimetype: string } | null> => {
+  const baseUrl = 'https://api.uazapi.com';
+  
+  console.log(`[MEDIA-FALLBACK] Using UazAPI: ${baseUrl}`);
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      console.log(`[MEDIA-FALLBACK] UazAPI Attempt ${attempt + 1}/${MAX_RETRIES}: messageId=${remoteMessageId}`);
+      
+      const response = await fetch(`${baseUrl}/message/download`, {
+        method: 'POST',
+        headers: {
+          'token': uazapiToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: remoteMessageId,
+          return_base64: true,
+          return_link: false,
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.log(`[MEDIA-FALLBACK] UazAPI error: status=${response.status}, body=${errorText.substring(0, 200)}`);
+        
+        // Retry on server errors (5xx) or rate limits (429)
+        if ((response.status >= 500 || response.status === 429) && attempt < MAX_RETRIES - 1) {
+          console.log(`[MEDIA-FALLBACK] Retrying in ${RETRY_DELAYS[attempt]}ms...`);
+          await sleep(RETRY_DELAYS[attempt]);
+          continue;
+        }
+        return null;
+      }
+      
+      const result = await response.json();
+      
+      if (result.base64Data && result.mimetype) {
+        console.log(`[MEDIA-FALLBACK] UazAPI Success! mimetype=${result.mimetype}, size=${result.base64Data.length} chars`);
+        return { base64: result.base64Data, mimetype: result.mimetype };
+      }
+      
+      console.log(`[MEDIA-FALLBACK] No base64Data in response:`, JSON.stringify(result).substring(0, 200));
+      return null;
+    } catch (err) {
+      console.error(`[MEDIA-FALLBACK] UazAPI Attempt ${attempt + 1} error:`, err);
+      if (attempt < MAX_RETRIES - 1) {
+        console.log(`[MEDIA-FALLBACK] Retrying in ${RETRY_DELAYS[attempt]}ms...`);
+        await sleep(RETRY_DELAYS[attempt]);
+      }
+    }
+  }
+  
+  return null;
+};
+
 // Download media via Evolution API getBase64FromMediaMessage endpoint with retry
 const downloadMediaViaEvolutionAPI = async (
   instanceName: string,
@@ -195,10 +255,10 @@ serve(async (req) => {
       });
     }
 
-    // Get instance info for Evolution API
+    // Get instance info
     const { data: instance, error: instanceError } = await supabaseClient
       .from('maturador_instances')
-      .select('instance_name, evolution_base_url, evolution_api_key')
+      .select('instance_name, api_provider, uazapi_token, evolution_base_url, evolution_api_key')
       .eq('id', contact.instance_id)
       .single();
 
@@ -210,7 +270,7 @@ serve(async (req) => {
       });
     }
 
-    // Need remote_jid and remote_message_id to fetch from Evolution API
+    // Need remote_jid and remote_message_id to fetch from API
     const remoteJid = contact.remote_jid || `${contact.phone}@s.whatsapp.net`;
     const remoteMessageId = message.remote_message_id;
 
@@ -222,22 +282,29 @@ serve(async (req) => {
       });
     }
 
-    console.log(`[MEDIA-FALLBACK] Attempting to fetch media from Evolution API`);
+    const isUazAPI = instance.api_provider === 'uazapi';
+    console.log(`[MEDIA-FALLBACK] Attempting to fetch media from ${isUazAPI ? 'UazAPI' : 'Evolution API'}`);
     console.log(`  instance: ${instance.instance_name}`);
     console.log(`  remoteJid: ${remoteJid}`);
     console.log(`  remoteMessageId: ${remoteMessageId}`);
 
-    // Try to download via Evolution API
-    const evolutionResult = await downloadMediaViaEvolutionAPI(
-      instance.instance_name,
-      remoteJid,
-      remoteMessageId,
-      instance.evolution_base_url || undefined,
-      instance.evolution_api_key || undefined
-    );
+    // Try to download via appropriate API
+    let mediaResult: { base64: string; mimetype: string } | null = null;
 
-    if (!evolutionResult) {
-      console.log(`[MEDIA-FALLBACK] Failed to download media from Evolution API`);
+    if (isUazAPI && instance.uazapi_token) {
+      mediaResult = await downloadMediaViaUazAPI(instance.uazapi_token, remoteMessageId);
+    } else {
+      mediaResult = await downloadMediaViaEvolutionAPI(
+        instance.instance_name,
+        remoteJid,
+        remoteMessageId,
+        instance.evolution_base_url || undefined,
+        instance.evolution_api_key || undefined
+      );
+    }
+
+    if (!mediaResult) {
+      console.log(`[MEDIA-FALLBACK] Failed to download media from ${isUazAPI ? 'UazAPI' : 'Evolution API'}`);
       return new Response(JSON.stringify({ success: false, error: 'Failed to download media' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -245,13 +312,13 @@ serve(async (req) => {
     }
 
     // Decode base64 to ArrayBuffer
-    const binaryString = atob(evolutionResult.base64);
+    const binaryString = atob(mediaResult.base64);
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
       bytes[i] = binaryString.charCodeAt(i);
     }
     const arrayBuffer = bytes.buffer;
-    const contentType = evolutionResult.mimetype;
+    const contentType = mediaResult.mimetype;
 
     console.log(`[MEDIA-FALLBACK] Downloaded: size=${arrayBuffer.byteLength}, mimetype=${contentType}`);
 
