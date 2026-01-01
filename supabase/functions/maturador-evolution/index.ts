@@ -1059,6 +1059,18 @@ Regras:
             
             if (isConnected) {
               console.log('[UAZAPI] Instance already connected, no QR needed');
+
+              // Fix: ensure DB status matches reality so UI doesn't show "Conectando"
+              await supabaseClient
+                .from('maturador_instances')
+                .update({
+                  status: 'connected',
+                  qrcode: null,
+                  last_seen: new Date().toISOString(),
+                })
+                .eq('instance_name', instanceName)
+                .eq('user_id', user.id);
+
               result = { base64: null, connected: true };
               break;
             }
@@ -1083,7 +1095,7 @@ Regras:
                 config,
                 '/instance/connect',
                 'POST',
-                undefined,
+                { instanceName },
                 false,
                 inst.uazapi_token || undefined
               );
@@ -2476,61 +2488,8 @@ Regras IMPORTANTES:
               message_type: messageType,
             });
             
-          // Check if we should make a call (only if calls_enabled is true)
-          const callsEnabled = conversation.enable_calls === true;
-          if (callsEnabled) {
-            // Get message count for this specific instance (count AFTER insert, so -1 for "before this message")
-            const { count: instanceMsgCount } = await supabaseClient
-              .from('maturador_messages')
-              .select('*', { count: 'exact', head: true })
-              .eq('conversation_id', conversationId)
-              .eq('from_instance_id', fromInstance.id);
-              
-            const myMsgCount = instanceMsgCount || 0;
-            
-            // Total messages in conversation
-            const { count: totalMsgCount } = await supabaseClient
-              .from('maturador_messages')
-              .select('*', { count: 'exact', head: true })
-              .eq('conversation_id', conversationId);
-              
-            const totalMessages = totalMsgCount || 0;
-            
-            console.log(`[CALL-CHECK] Instance ${fromInstance.instance_name}: myMsgCount=${myMsgCount}, totalMessages=${totalMessages}, callsEnabled=${callsEnabled}`);
-            
-            // Call on 4th message from this instance (myMsgCount is AFTER insert, so check for 4)
-            if (myMsgCount === 4) {
-              console.log(`[CALL-CHECK] 🔔 Making call on 4th message from ${fromInstance.instance_name} to ${toPhone}`);
-              try {
-                const callResult = await makeVoiceCall(fromInstance, toPhone);
-                console.log(`[CALL-CHECK] Call result: ${callResult}`);
-              } catch (callError) {
-                console.error(`[CALL-CHECK] Call error:`, callError);
-              }
-            }
-            
-            // Call between 40-60 total messages (call once at message 50)
-            if (totalMessages === 50) {
-              console.log(`[CALL-CHECK] 🔔 Making periodic call at 50 total messages from ${fromInstance.instance_name} to ${toPhone}`);
-              try {
-                const callResult = await makeVoiceCall(fromInstance, toPhone);
-                console.log(`[CALL-CHECK] Periodic call result: ${callResult}`);
-              } catch (callError) {
-                console.error(`[CALL-CHECK] Periodic call error:`, callError);
-              }
-            }
-            
-            // After 100, call every 50 messages
-            if (totalMessages >= 100 && totalMessages % 50 === 0) {
-              console.log(`[CALL-CHECK] 🔔 Making periodic call at ${totalMessages} total messages (every 50)`);
-              try {
-                const callResult = await makeVoiceCall(fromInstance, toPhone);
-                console.log(`[CALL-CHECK] Periodic call result: ${callResult}`);
-              } catch (callError) {
-                console.error(`[CALL-CHECK] Periodic call error:`, callError);
-              }
-            }
-          }
+           // Calls are disabled (removed from maturador)
+           // (kept intentionally empty)
 
         } catch (error) {
           console.error(`Error sending ${messageType} message:`, error);
