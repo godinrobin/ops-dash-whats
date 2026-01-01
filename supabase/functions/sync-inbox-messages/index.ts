@@ -164,43 +164,94 @@ serve(async (req) => {
       }
 
       const cleanPhone = String(contact.phone || '').replace(/\D/g, '');
-      const chatid = (contact as any).remote_jid || (cleanPhone ? `${cleanPhone}@s.whatsapp.net` : null);
 
-      if (!chatid) {
+      // UazAPI chatid can differ from the contact phone (ex: BR numbers without the extra 9)
+      const computeChatIdCandidates = (phone: string, savedChatId?: string | null): string[] => {
+        const candidates: string[] = [];
+
+        if (savedChatId && typeof savedChatId === 'string') {
+          candidates.push(savedChatId);
+        }
+
+        if (phone) {
+          candidates.push(`${phone}@s.whatsapp.net`);
+
+          // Brazil heuristic: 55 + DDD(2) + 9 + 8 digits => remove the extra 9
+          // Example: 5531998284929 -> 553198284929
+          if (phone.startsWith('55') && phone.length === 13 && phone[4] === '9') {
+            const withoutExtra9 = phone.slice(0, 4) + phone.slice(5);
+            candidates.push(`${withoutExtra9}@s.whatsapp.net`);
+          }
+        }
+
+        return Array.from(new Set(candidates)).filter(Boolean);
+      };
+
+      const chatIdCandidates = computeChatIdCandidates(cleanPhone, (contact as any).remote_jid);
+
+      if (chatIdCandidates.length === 0) {
         return new Response(JSON.stringify({ inserted: 0, reason: 'Sem chatid para sincronizar' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
-      console.log(`[UAZAPI-SYNC] Fetching messages for chatid=${chatid}`);
+      const fetchMessagesForChatId = async (chatid: string) => {
+        console.log(`[UAZAPI-SYNC] Fetching messages for chatid=${chatid}`);
 
-      const resp = await fetch(`${baseUrl}/message/find`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          token,
-        },
-        body: JSON.stringify({ chatid, limit, offset: 0 }),
-      });
-
-      const txt = await resp.text();
-      let payload: any = null;
-      try {
-        payload = JSON.parse(txt);
-      } catch {
-        payload = { raw: txt };
-      }
-
-      if (!resp.ok) {
-        console.error('[UAZAPI-SYNC] Error:', resp.status, payload);
-        return new Response(JSON.stringify({ inserted: 0, error: 'Falha ao sincronizar mensagens', details: payload }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        const resp = await fetch(`${baseUrl}/message/find`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            token,
+          },
+          body: JSON.stringify({ chatid, limit, offset: 0 }),
         });
+
+        const txt = await resp.text();
+        let payload: any = null;
+        try {
+          payload = JSON.parse(txt);
+        } catch {
+          payload = { raw: txt };
+        }
+
+        return { resp, payload };
+      };
+
+      let chosenChatId = chatIdCandidates[0];
+      let payload: any = null;
+      let lastResp: Response | null = null;
+
+      for (const cid of chatIdCandidates) {
+        const r = await fetchMessagesForChatId(cid);
+        lastResp = r.resp;
+        payload = r.payload;
+
+        if (!r.resp.ok) {
+          console.error('[UAZAPI-SYNC] Error:', r.resp.status, payload);
+          return new Response(
+            JSON.stringify({ inserted: 0, error: 'Falha ao sincronizar mensagens', details: payload }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+
+        const msgs = Array.isArray(payload?.messages) ? payload.messages : [];
+        if (msgs.length > 0) {
+          chosenChatId = cid;
+          break;
+        }
       }
 
       const messages: any[] = Array.isArray(payload?.messages) ? payload.messages : [];
-      console.log(`[UAZAPI-SYNC] Received messages: ${messages.length}`);
+      console.log(`[UAZAPI-SYNC] Received messages: ${messages.length} (chatid=${chosenChatId})`);
+
+      // Persist the working chatid to avoid future mismatches
+      if ((contact as any).remote_jid !== chosenChatId) {
+        await supabaseAdmin.from('inbox_contacts').update({ remote_jid: chosenChatId }).eq('id', contact.id);
+      }
 
       const toIsoFromAnyTs = (v: any): string => {
         const n = typeof v === 'string' ? Number(v) : typeof v === 'number' ? v : NaN;
@@ -209,24 +260,41 @@ serve(async (req) => {
         return new Date(ms).toISOString();
       };
 
+      const normalizeUazType = (raw: string): string => {
+        const t = (raw || '').toLowerCase();
+        if (t.includes('document')) return 'document';
+        if (t.includes('image')) return 'image';
+        if (t.includes('video')) return 'video';
+        if (t.includes('audio') || t.includes('ptt') || t.includes('voice')) return 'audio';
+        if (t.includes('sticker')) return 'sticker';
+        return 'text';
+      };
+
       const normalizeMsg = (m: any) => {
-        const remoteId = String(m?.id || m?.key?.id || m?.messageId || m?.msgid || '');
+        const remoteId = String(m?.id || m?.key?.id || m?.messageId || m?.msgid || m?.messageid || '');
         const fromMe = Boolean(m?.fromMe ?? m?.key?.fromMe ?? false);
         const createdAt = toIsoFromAnyTs(m?.timestamp ?? m?.messageTimestamp ?? m?.t ?? m?.time ?? m?.date ?? Date.now());
-        const messageType = String(
-          m?.type || m?.messageType ||
-          (m?.message?.imageMessage ? 'image' :
-           m?.message?.videoMessage ? 'video' :
-           m?.message?.audioMessage ? 'audio' :
-           m?.message?.documentMessage ? 'document' : 'text')
-        );
-        const content =
+
+        const rawType = String(m?.type || m?.messageType || '');
+        const messageType = normalizeUazType(rawType);
+
+        const contentFromText =
           (typeof m?.text === 'string' ? m.text : null) ||
           (typeof m?.body === 'string' ? m.body : null) ||
           (typeof m?.message?.conversation === 'string' ? m.message.conversation : null) ||
           (typeof m?.message?.extendedTextMessage?.text === 'string' ? m.message.extendedTextMessage.text : null) ||
           '';
+
+        const contentFromDoc =
+          (typeof m?.content?.fileName === 'string' ? m.content.fileName : null) ||
+          (typeof m?.content?.caption === 'string' ? m.content.caption : null) ||
+          '';
+
+        const content = messageType === 'document' ? (contentFromDoc || contentFromText) : contentFromText;
+
         const mediaUrl =
+          (typeof m?.content?.URL === 'string' ? m.content.URL : null) ||
+          (typeof m?.content?.url === 'string' ? m.content.url : null) ||
           (typeof m?.url === 'string' ? m.url : null) ||
           (typeof m?.file === 'string' ? m.file : null) ||
           (typeof m?.mediaUrl === 'string' ? m.mediaUrl : null) ||
