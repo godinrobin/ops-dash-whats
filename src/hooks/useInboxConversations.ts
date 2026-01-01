@@ -270,7 +270,7 @@ export const useInboxConversations = (instanceId?: string) => {
     };
   }, [user, instanceId, fetchContacts]);
 
-  // Fallback polling: refresh contacts every 30 seconds to catch any missed realtime events
+  // Fallback polling: refresh contacts periodically to catch any missed realtime events
   useEffect(() => {
     if (!user) return;
     
@@ -280,18 +280,19 @@ export const useInboxConversations = (instanceId?: string) => {
       isTabVisible = document.visibilityState === 'visible';
       // Refetch when tab becomes visible again
       if (isTabVisible) {
+        console.log('[useInboxConversations] Tab became visible, refetching contacts');
         fetchContacts();
       }
     };
     
     document.addEventListener('visibilitychange', handleVisibilityChange);
     
-    // Poll every 30 seconds as fallback
+    // Poll every 10 seconds as fallback for realtime issues
     const intervalId = setInterval(() => {
       if (isTabVisible) {
         fetchContacts();
       }
-    }, 30000);
+    }, 10000);
     
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
