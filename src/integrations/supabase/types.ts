@@ -2483,6 +2483,107 @@ export type Database = {
         }
         Relationships: []
       }
+      tag_whats_configs: {
+        Row: {
+          created_at: string
+          filter_images: boolean
+          filter_pdfs: boolean
+          id: string
+          instance_id: string
+          is_active: boolean
+          pago_label_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          filter_images?: boolean
+          filter_pdfs?: boolean
+          id?: string
+          instance_id: string
+          is_active?: boolean
+          pago_label_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          filter_images?: boolean
+          filter_pdfs?: boolean
+          id?: string
+          instance_id?: string
+          is_active?: boolean
+          pago_label_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tag_whats_configs_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tag_whats_logs: {
+        Row: {
+          ai_response: Json | null
+          config_id: string
+          contact_phone: string
+          created_at: string
+          error_message: string | null
+          id: string
+          instance_id: string
+          is_pix_payment: boolean
+          label_applied: boolean
+          message_type: string
+          user_id: string
+        }
+        Insert: {
+          ai_response?: Json | null
+          config_id: string
+          contact_phone: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          instance_id: string
+          is_pix_payment?: boolean
+          label_applied?: boolean
+          message_type: string
+          user_id: string
+        }
+        Update: {
+          ai_response?: Json | null
+          config_id?: string
+          contact_phone?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          instance_id?: string
+          is_pix_payment?: boolean
+          label_applied?: boolean
+          message_type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tag_whats_logs_config_id_fkey"
+            columns: ["config_id"]
+            isOneToOne: false
+            referencedRelation: "tag_whats_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tag_whats_logs_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tracked_offers: {
         Row: {
           ad_library_link: string

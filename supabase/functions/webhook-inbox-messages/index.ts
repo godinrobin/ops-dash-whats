@@ -928,6 +928,54 @@ serve(async (req) => {
           })
           .eq('id', contact.id);
         
+        // For inbound messages with image/document, trigger Tag Whats processing
+        if (direction === 'inbound' && (messageType === 'image' || messageType === 'document')) {
+          try {
+            // Check if Tag Whats is configured for this instance
+            const { data: tagWhatsConfig } = await supabaseClient
+              .from('tag_whats_configs')
+              .select('id, is_active, filter_images, filter_pdfs')
+              .eq('instance_id', instanceId)
+              .eq('is_active', true)
+              .maybeSingle();
+            
+            if (tagWhatsConfig) {
+              const shouldProcess = 
+                (messageType === 'image' && tagWhatsConfig.filter_images) ||
+                (messageType === 'document' && tagWhatsConfig.filter_pdfs);
+              
+              if (shouldProcess) {
+                console.log(`[UAZAPI-WEBHOOK] Tag Whats active, triggering processing for ${messageType}`);
+                
+                // Call the tag-whats-process function asynchronously (fire and forget)
+                const supabaseUrl = Deno.env.get('SUPABASE_URL');
+                fetch(`${supabaseUrl}/functions/v1/tag-whats-process`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    event: 'messages',
+                    instanceName: instanceNameForLookup,
+                    data: {
+                      key: {
+                        remoteJid: uazChatid,
+                        fromMe: uazFromMe,
+                        id: uazMessageId,
+                      },
+                      message: messageType === 'image' 
+                        ? { imageMessage: { caption: uazText } }
+                        : { documentMessage: { fileName: uazText, mimetype: 'application/pdf' } },
+                      messageType: uazMessageType,
+                      pushName: uazSenderName,
+                    },
+                  }),
+                }).catch(err => console.error('[UAZAPI-WEBHOOK] Tag Whats call failed:', err));
+              }
+            }
+          } catch (tagWhatsErr) {
+            console.error('[UAZAPI-WEBHOOK] Error checking Tag Whats config:', tagWhatsErr);
+          }
+        }
+        
         // For inbound messages, check if we need to trigger a flow
         if (direction === 'inbound' && !uazFromMe) {
           // Check if flow is paused for this contact
