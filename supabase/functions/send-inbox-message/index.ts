@@ -583,58 +583,6 @@ serve(async (req) => {
     // From here on, use finalApiResult for success flow
     const apiResult = finalApiResult;
 
-    if (!apiResponse.ok) {
-      console.error('API error:', apiResult);
-      
-      // Update message status to failed if we have messageId
-      if (messageId) {
-        await supabaseAdmin
-          .from('inbox_messages')
-          .update({ status: 'failed' })
-          .eq('id', messageId);
-      }
-      
-      // Parse specific error messages for better user feedback
-      const errorMessage = apiResult?.message || apiResult?.response?.message;
-      const errorDetails = Array.isArray(errorMessage) ? errorMessage.join(', ') : errorMessage;
-      
-      let userFriendlyError = 'Falha ao enviar mensagem';
-      let errorCode = 'SEND_FAILED';
-      
-      if (errorDetails?.includes('Connection Closed') || errorDetails?.includes('connection closed')) {
-        userFriendlyError = 'Conexão fechada. O número pode não ter WhatsApp ou a instância perdeu conexão.';
-        errorCode = 'CONNECTION_CLOSED';
-      } else if (errorDetails?.includes('not registered') || errorDetails?.includes('not on whatsapp')) {
-        userFriendlyError = 'Este número não possui WhatsApp';
-        errorCode = 'NUMBER_NOT_ON_WHATSAPP';
-      } else if (errorDetails?.includes('disconnected') || errorDetails?.includes('logged out')) {
-        userFriendlyError = 'A instância do WhatsApp está desconectada. Reconecte e tente novamente.';
-        errorCode = 'INSTANCE_DISCONNECTED';
-      }
-
-      // Persist disconnected status AND last_error_at so UI can warn even without sending
-      if (instanceId && (errorCode === 'CONNECTION_CLOSED' || errorCode === 'INSTANCE_DISCONNECTED')) {
-        const { error: statusErr } = await supabaseAdmin
-          .from('maturador_instances')
-          .update({ 
-            status: 'disconnected',
-            last_error_at: new Date().toISOString()
-          })
-          .eq('id', instanceId);
-
-        if (statusErr) console.warn('Failed to mark instance as disconnected:', statusErr);
-      }
-      
-      return new Response(JSON.stringify({ 
-        error: userFriendlyError,
-        errorCode,
-        details: apiResult 
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     // Extract message ID from response
     const remoteMessageId = apiResult.key?.id || apiResult.messageId || apiResult.id || null;
 
