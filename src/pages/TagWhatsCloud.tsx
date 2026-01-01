@@ -1,0 +1,462 @@
+import { Header } from "@/components/Header";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { ArrowLeft, Cloud, Plus, RefreshCw, QrCode, Settings, Image, FileText, CheckCircle2, XCircle, Loader2, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useState, useEffect, useCallback } from "react";
+import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+
+interface Instance {
+  id: string;
+  instance_name: string;
+  phone_number: string | null;
+  status: string;
+  uazapi_token: string | null;
+  label: string | null;
+}
+
+interface TagWhatsConfig {
+  id: string;
+  instance_id: string;
+  is_active: boolean;
+  filter_images: boolean;
+  filter_pdfs: boolean;
+  pago_label_id: string | null;
+  created_at: string;
+}
+
+const TagWhatsCloud = () => {
+  useActivityTracker("page_visit", "Tag Whats - Cloud");
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const [instances, setInstances] = useState<Instance[]>([]);
+  const [configs, setConfigs] = useState<TagWhatsConfig[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [selectedInstance, setSelectedInstance] = useState<Instance | null>(null);
+  const [filterImages, setFilterImages] = useState(true);
+  const [filterPdfs, setFilterPdfs] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [configToDelete, setConfigToDelete] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
+    if (!user) return;
+    setLoading(true);
+    try {
+      // Fetch UazAPI instances
+      const { data: instancesData, error: instancesError } = await supabase
+        .from('maturador_instances')
+        .select('id, instance_name, phone_number, status, uazapi_token, label')
+        .eq('user_id', user.id)
+        .not('uazapi_token', 'is', null);
+
+      if (instancesError) throw instancesError;
+      setInstances(instancesData || []);
+
+      // Fetch Tag Whats configs
+      const { data: configsData, error: configsError } = await supabase
+        .from('tag_whats_configs')
+        .select('*')
+        .eq('user_id', user.id);
+
+      if (configsError) throw configsError;
+      setConfigs(configsData || []);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      toast.error('Erro ao carregar dados');
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const getConfigForInstance = (instanceId: string) => {
+    return configs.find(c => c.instance_id === instanceId);
+  };
+
+  const handleOpenConfig = (instance: Instance) => {
+    const existingConfig = getConfigForInstance(instance.id);
+    setSelectedInstance(instance);
+    setFilterImages(existingConfig?.filter_images ?? true);
+    setFilterPdfs(existingConfig?.filter_pdfs ?? true);
+    setConfigModalOpen(true);
+  };
+
+  const handleSaveConfig = async () => {
+    if (!selectedInstance || !user) return;
+    setSaving(true);
+
+    try {
+      const existingConfig = getConfigForInstance(selectedInstance.id);
+
+      if (existingConfig) {
+        // Update existing config
+        const { error } = await supabase
+          .from('tag_whats_configs')
+          .update({
+            filter_images: filterImages,
+            filter_pdfs: filterPdfs,
+            is_active: true,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingConfig.id);
+
+        if (error) throw error;
+        toast.success('Configuração atualizada!');
+      } else {
+        // Create new config
+        const { error } = await supabase
+          .from('tag_whats_configs')
+          .insert({
+            user_id: user.id,
+            instance_id: selectedInstance.id,
+            filter_images: filterImages,
+            filter_pdfs: filterPdfs,
+            is_active: true
+          });
+
+        if (error) throw error;
+        toast.success('Tag Whats ativado para este número!');
+      }
+
+      setConfigModalOpen(false);
+      fetchData();
+    } catch (error) {
+      console.error('Error saving config:', error);
+      toast.error('Erro ao salvar configuração');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleActive = async (configId: string, isActive: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('tag_whats_configs')
+        .update({ is_active: isActive, updated_at: new Date().toISOString() })
+        .eq('id', configId);
+
+      if (error) throw error;
+      toast.success(isActive ? 'Tag Whats ativado!' : 'Tag Whats desativado!');
+      fetchData();
+    } catch (error) {
+      console.error('Error toggling config:', error);
+      toast.error('Erro ao alterar configuração');
+    }
+  };
+
+  const handleDeleteConfig = async () => {
+    if (!configToDelete) return;
+    try {
+      const { error } = await supabase
+        .from('tag_whats_configs')
+        .delete()
+        .eq('id', configToDelete);
+
+      if (error) throw error;
+      toast.success('Configuração removida');
+      setDeleteDialogOpen(false);
+      setConfigToDelete(null);
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting config:', error);
+      toast.error('Erro ao remover configuração');
+    }
+  };
+
+  const connectedInstances = instances.filter(i => i.status === 'connected');
+  const configuredInstanceIds = configs.map(c => c.instance_id);
+  const availableInstances = connectedInstances.filter(i => !configuredInstanceIds.includes(i.id));
+
+  return (
+    <>
+      <Header />
+      <div className="h-14 md:h-16" />
+      <div className="min-h-screen bg-background p-6 md:p-10">
+        <div className="container mx-auto max-w-5xl">
+          <Button
+            variant="ghost"
+            onClick={() => navigate("/tag-whats")}
+            className="mb-6"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Voltar
+          </Button>
+
+          <header className="text-center mb-8">
+            <div className="flex items-center justify-center gap-3 mb-2">
+              <Cloud className="h-8 w-8 text-emerald-500" />
+              <h1 className="text-3xl md:text-4xl font-bold">Tag Whats em Nuvem</h1>
+            </div>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              Detecta automaticamente comprovantes PIX em imagens e PDFs e marca a etiqueta "Pago" no WhatsApp Business
+            </p>
+          </header>
+
+          {/* Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <Card className="border-emerald-500/20">
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-emerald-500">{configs.filter(c => c.is_active).length}</p>
+                <p className="text-sm text-muted-foreground">Números Ativos</p>
+              </CardContent>
+            </Card>
+            <Card className="border-blue-500/20">
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-blue-500">{connectedInstances.length}</p>
+                <p className="text-sm text-muted-foreground">Números Conectados</p>
+              </CardContent>
+            </Card>
+            <Card className="border-purple-500/20">
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-purple-500">{configs.length}</p>
+                <p className="text-sm text-muted-foreground">Configurações</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Add Number */}
+          {availableInstances.length > 0 && (
+            <Card className="mb-6 border-dashed border-2 border-emerald-500/30 bg-emerald-500/5">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold">Adicionar Número</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {availableInstances.length} número(s) disponível(is) para configurar
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    {availableInstances.map(instance => (
+                      <Button
+                        key={instance.id}
+                        variant="outline"
+                        size="sm"
+                        className="border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/10"
+                        onClick={() => handleOpenConfig(instance)}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        {instance.phone_number || instance.instance_name}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* No instances warning */}
+          {instances.length === 0 && !loading && (
+            <Card className="mb-6 border-yellow-500/30 bg-yellow-500/5">
+              <CardContent className="p-6 text-center">
+                <QrCode className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+                <h3 className="font-semibold text-lg mb-2">Nenhum número conectado</h3>
+                <p className="text-muted-foreground mb-4">
+                  Você precisa conectar um número no Maturador primeiro para usar o Tag Whats em nuvem.
+                </p>
+                <Button onClick={() => navigate("/maturador/instances")} className="bg-yellow-600 hover:bg-yellow-700">
+                  Conectar Número
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Configured Numbers */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold">Números Configurados</h2>
+              <Button variant="ghost" size="sm" onClick={fetchData} disabled={loading}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                Atualizar
+              </Button>
+            </div>
+
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : configs.length === 0 ? (
+              <Card className="border-muted">
+                <CardContent className="p-8 text-center">
+                  <Settings className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="font-semibold text-lg mb-2">Nenhuma configuração</h3>
+                  <p className="text-muted-foreground">
+                    Configure um número para começar a detectar comprovantes automaticamente.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              configs.map(config => {
+                const instance = instances.find(i => i.id === config.instance_id);
+                if (!instance) return null;
+
+                return (
+                  <Card key={config.id} className={`border-2 ${config.is_active ? 'border-emerald-500/30' : 'border-muted'}`}>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className={`w-12 h-12 rounded-full flex items-center justify-center ${config.is_active ? 'bg-emerald-500/20' : 'bg-muted'}`}>
+                            {config.is_active ? (
+                              <CheckCircle2 className="h-6 w-6 text-emerald-500" />
+                            ) : (
+                              <XCircle className="h-6 w-6 text-muted-foreground" />
+                            )}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold">
+                                {instance.phone_number || instance.instance_name}
+                              </h3>
+                              <Badge variant={instance.status === 'connected' ? 'default' : 'secondary'} className="text-xs">
+                                {instance.status === 'connected' ? 'Conectado' : 'Desconectado'}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
+                              <span className="flex items-center gap-1">
+                                <Image className="h-3 w-3" />
+                                Imagens: {config.filter_images ? 'Sim' : 'Não'}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <FileText className="h-3 w-3" />
+                                PDFs: {config.filter_pdfs ? 'Sim' : 'Não'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Switch
+                            checked={config.is_active}
+                            onCheckedChange={(checked) => handleToggleActive(config.id, checked)}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleOpenConfig(instance)}
+                          >
+                            <Settings className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => {
+                              setConfigToDelete(config.id);
+                              setDeleteDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
+          </div>
+
+          <footer className="mt-16 text-center text-xs text-muted-foreground/50">
+            Criado por <a href="https://instagram.com/joaolucassps" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground transition-colors">@joaolucassps</a>
+          </footer>
+        </div>
+      </div>
+
+      {/* Config Modal */}
+      <Dialog open={configModalOpen} onOpenChange={setConfigModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Configurar Tag Whats</DialogTitle>
+            <DialogDescription>
+              Configure como o Tag Whats deve monitorar este número: {selectedInstance?.phone_number || selectedInstance?.instance_name}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            <div className="space-y-4">
+              <h4 className="font-medium">Filtrar por tipo de mídia:</h4>
+              
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <Image className="h-5 w-5 text-blue-500" />
+                  <div>
+                    <Label>Imagens</Label>
+                    <p className="text-xs text-muted-foreground">Detectar comprovantes em imagens</p>
+                  </div>
+                </div>
+                <Switch checked={filterImages} onCheckedChange={setFilterImages} />
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <FileText className="h-5 w-5 text-red-500" />
+                  <div>
+                    <Label>PDFs</Label>
+                    <p className="text-xs text-muted-foreground">Detectar comprovantes em PDFs</p>
+                  </div>
+                </div>
+                <Switch checked={filterPdfs} onCheckedChange={setFilterPdfs} />
+              </div>
+            </div>
+
+            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4">
+              <h4 className="font-medium text-emerald-400 mb-2">Como funciona:</h4>
+              <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
+                <li>O sistema monitora mensagens recebidas</li>
+                <li>IA analisa imagens e PDFs automaticamente</li>
+                <li>Se for um comprovante PIX, marca como "Pago"</li>
+                <li>A etiqueta aparece no WhatsApp Business</li>
+              </ol>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfigModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleSaveConfig} 
+              disabled={saving || (!filterImages && !filterPdfs)}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Salvar Configuração
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover Configuração</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja remover esta configuração? O sistema deixará de monitorar comprovantes neste número.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfig} className="bg-destructive hover:bg-destructive/90">
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+};
+
+export default TagWhatsCloud;
