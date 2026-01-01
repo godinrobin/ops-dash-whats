@@ -893,96 +893,178 @@ serve(async (req) => {
         
         // For inbound messages, check if we need to trigger a flow
         if (direction === 'inbound' && !uazFromMe) {
-          // Check for active flow session waiting for input
-          const { data: activeSession } = await supabaseClient
-            .from('inbox_flow_sessions')
-            .select('*')
-            .eq('contact_id', contact.id)
-            .eq('status', 'active')
-            .order('last_interaction', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          
-          if (activeSession) {
-            console.log(`[UAZAPI-WEBHOOK] Found active session ${activeSession.id}, triggering flow processing`);
-            
-            // Invoke process-inbox-flow with user input
-            supabaseClient.functions.invoke('process-inbox-flow', {
-              body: { sessionId: activeSession.id, userInput: uazText }
-            }).catch(e => console.error('[UAZAPI-WEBHOOK] Error invoking flow:', e));
+          // Check if flow is paused for this contact
+          if (contact.flow_paused === true) {
+            console.log(`[UAZAPI-WEBHOOK] Flow is paused for contact ${contact.id}, skipping flow processing`);
           } else {
-            // Check for flows to trigger based on keywords
-            console.log(`[UAZAPI-WEBHOOK] No active session, checking for flow triggers`);
+            // Check for active flow session waiting for input
+            const { data: activeSession } = await supabaseClient
+              .from('inbox_flow_sessions')
+              .select('*, flow:inbox_flows(*)')
+              .eq('contact_id', contact.id)
+              .eq('status', 'active')
+              .order('last_interaction', { ascending: false })
+              .limit(1)
+              .maybeSingle();
             
-            const { data: flows } = await supabaseClient
-              .from('inbox_flows')
-              .select('*')
-              .eq('user_id', userId)
-              .eq('is_active', true)
-              .order('priority', { ascending: false });
-            
-            if (flows && flows.length > 0 && uazText) {
-              for (const flow of flows) {
-                const assignedInstances = flow.assigned_instances as string[] || [];
-                if (assignedInstances.length > 0 && !assignedInstances.includes(instanceId)) {
-                  continue;
+            if (activeSession) {
+              // Get the current node to check if it's waiting for input
+              const flowNodes = (activeSession.flow?.nodes || []) as Array<{ id: string; type: string; data: Record<string, unknown> }>;
+              const currentNode = flowNodes.find((n: { id: string }) => n.id === activeSession.current_node_id);
+              
+              // Check if session is locked
+              if (activeSession.processing) {
+                const lockAge = activeSession.processing_started_at 
+                  ? Date.now() - new Date(activeSession.processing_started_at).getTime() 
+                  : 0;
+                
+                if (lockAge < 60000) {
+                  console.log(`[UAZAPI-WEBHOOK] Session ${activeSession.id} is locked (${lockAge}ms), skipping`);
+                } else {
+                  console.log(`[UAZAPI-WEBHOOK] Session ${activeSession.id} has stale lock (${lockAge}ms), proceeding`);
                 }
+              }
+              
+              // Check if current node is waiting for input (waitInput or menu)
+              if (currentNode && (currentNode.type === 'waitInput' || currentNode.type === 'menu')) {
+                console.log(`[UAZAPI-WEBHOOK] Found active session ${activeSession.id} waiting for input at node ${currentNode.id} (type: ${currentNode.type})`);
                 
-                let shouldTrigger = false;
+                // Check if message is media without text content - if so, IGNORE it
+                const isMediaMessage = ['image', 'audio', 'video', 'document', 'sticker'].includes(messageType);
+                const hasTextContent = uazText && uazText.trim().length > 0;
                 
-                if (flow.trigger_type === 'all') {
-                  // Count messages to check if first
-                  const { count } = await supabaseClient
-                    .from('inbox_messages')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('contact_id', contact.id)
-                    .eq('direction', 'inbound');
+                if (isMediaMessage && !hasTextContent) {
+                  console.log(`[UAZAPI-WEBHOOK] Ignoring media message (${messageType}) without caption - flow continues waiting for text input`);
+                } else {
+                  console.log(`[UAZAPI-WEBHOOK] Valid input received: "${uazText?.substring(0, 50)}"`);
                   
-                  if ((count || 0) <= 1) {
-                    shouldTrigger = true;
+                  // Cancel any pending timeout job for this session
+                  await supabaseClient
+                    .from('inbox_flow_delay_jobs')
+                    .update({ 
+                      status: 'done',
+                      updated_at: new Date().toISOString()
+                    })
+                    .eq('session_id', activeSession.id)
+                    .eq('status', 'scheduled');
+                  
+                  // Clear timeout_at from session
+                  await supabaseClient
+                    .from('inbox_flow_sessions')
+                    .update({ timeout_at: null })
+                    .eq('id', activeSession.id);
+                  
+                  // Process the user's input and continue the flow using HTTP call with service role
+                  try {
+                    const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+                    const processResponse = await fetch(processUrl, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                      },
+                      body: JSON.stringify({ sessionId: activeSession.id, userInput: uazText }),
+                    });
+                    
+                    if (!processResponse.ok) {
+                      const errorText = await processResponse.text();
+                      console.error('[UAZAPI-WEBHOOK] Error processing user input:', errorText);
+                    } else {
+                      console.log('[UAZAPI-WEBHOOK] User input processed, flow continued');
+                    }
+                  } catch (flowError) {
+                    console.error('[UAZAPI-WEBHOOK] Error calling process-inbox-flow for input:', flowError);
                   }
-                } else if (flow.trigger_type === 'keyword') {
-                  const keywords = flow.trigger_keywords as string[] || [];
-                  const lowerContent = uazText.toLowerCase();
-                  for (const kw of keywords) {
-                    if (lowerContent.includes(kw.toLowerCase())) {
+                }
+              } else {
+                console.log(`[UAZAPI-WEBHOOK] Active session exists but not waiting for input (node: ${currentNode?.type || 'unknown'})`);
+              }
+            } else {
+              // Check for flows to trigger based on keywords
+              console.log(`[UAZAPI-WEBHOOK] No active session, checking for flow triggers`);
+              
+              const { data: flows } = await supabaseClient
+                .from('inbox_flows')
+                .select('*')
+                .eq('user_id', userId)
+                .eq('is_active', true)
+                .order('priority', { ascending: false });
+              
+              if (flows && flows.length > 0) {
+                for (const flow of flows) {
+                  const assignedInstances = flow.assigned_instances as string[] || [];
+                  if (assignedInstances.length > 0 && !assignedInstances.includes(instanceId)) {
+                    continue;
+                  }
+                  
+                  let shouldTrigger = false;
+                  
+                  if (flow.trigger_type === 'all') {
+                    // Count messages to check if first
+                    const { count } = await supabaseClient
+                      .from('inbox_messages')
+                      .select('*', { count: 'exact', head: true })
+                      .eq('contact_id', contact.id)
+                      .eq('direction', 'inbound');
+                    
+                    if ((count || 0) <= 1) {
                       shouldTrigger = true;
-                      break;
+                    }
+                  } else if (flow.trigger_type === 'keyword') {
+                    const keywords = flow.trigger_keywords as string[] || [];
+                    const lowerContent = (uazText || '').toLowerCase();
+                    for (const kw of keywords) {
+                      if (lowerContent.includes(kw.toLowerCase())) {
+                        shouldTrigger = true;
+                        break;
+                      }
                     }
                   }
-                }
-                
-                if (shouldTrigger) {
-                  console.log(`[UAZAPI-WEBHOOK] Triggering flow ${flow.name}`);
                   
-                  // Create session
-                  const { data: newSession } = await supabaseClient
-                    .from('inbox_flow_sessions')
-                    .insert({
-                      flow_id: flow.id,
-                      contact_id: contact.id,
-                      instance_id: instanceId,
-                      user_id: userId,
-                      current_node_id: 'start-1',
-                      variables: { 
-                        nome: contact.name || '',
-                        telefone: phone,
-                        resposta: '',
-                        lastMessage: uazText,
-                        contactName: contact.name || phone,
-                      },
-                      status: 'active',
-                    })
-                    .select()
-                    .single();
-                  
-                  if (newSession) {
-                    supabaseClient.functions.invoke('process-inbox-flow', {
-                      body: { sessionId: newSession.id }
-                    }).catch(e => console.error('[UAZAPI-WEBHOOK] Error invoking flow:', e));
+                  if (shouldTrigger) {
+                    console.log(`[UAZAPI-WEBHOOK] Triggering flow ${flow.name}`);
+                    
+                    // Create session
+                    const { data: newSession } = await supabaseClient
+                      .from('inbox_flow_sessions')
+                      .insert({
+                        flow_id: flow.id,
+                        contact_id: contact.id,
+                        instance_id: instanceId,
+                        user_id: userId,
+                        current_node_id: 'start-1',
+                        variables: { 
+                          nome: contact.name || '',
+                          telefone: phone,
+                          resposta: '',
+                          lastMessage: uazText || '',
+                          contactName: contact.name || phone,
+                        },
+                        status: 'active',
+                      })
+                      .select()
+                      .single();
+                    
+                    if (newSession) {
+                      // Use HTTP call with service role for reliability
+                      try {
+                        const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+                        await fetch(processUrl, {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                          },
+                          body: JSON.stringify({ sessionId: newSession.id }),
+                        });
+                        console.log(`[UAZAPI-WEBHOOK] Flow triggered for session ${newSession.id}`);
+                      } catch (e) {
+                        console.error('[UAZAPI-WEBHOOK] Error invoking flow:', e);
+                      }
+                    }
+                    
+                    break;
                   }
-                  
-                  break;
                 }
               }
             }
