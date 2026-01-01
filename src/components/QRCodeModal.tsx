@@ -97,11 +97,11 @@ export function QRCodeModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col items-center justify-center py-4 min-h-[320px]">
+        <div className="flex flex-col items-center justify-center py-4 min-h-[320px] w-full">
           {loading ? (
-            <div className="flex flex-col items-center gap-4">
+            <div className="flex flex-col items-center gap-4 w-full">
               {/* Skeleton animado do QR Code */}
-              <div className="relative">
+              <div className="relative mx-auto">
                 <Skeleton className="w-64 h-64 rounded-lg" />
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="flex flex-col items-center gap-3">
@@ -114,7 +114,7 @@ export function QRCodeModal({
                 </div>
               </div>
               {/* Barra de progresso animada */}
-              <div className="w-64 h-1 bg-muted rounded-full overflow-hidden">
+              <div className="w-64 h-1 bg-muted rounded-full overflow-hidden mx-auto">
                 <div className="h-full bg-primary animate-pulse" style={{ 
                   animation: 'progress 2s ease-in-out infinite',
                 }} />
@@ -128,17 +128,17 @@ export function QRCodeModal({
               `}</style>
             </div>
           ) : showSuccess ? (
-            <div className="flex flex-col items-center gap-4">
+            <div className="flex flex-col items-center gap-4 w-full">
               <CheckCircle2 className="h-16 w-16 text-green-500 animate-in zoom-in duration-300" />
               <p className="text-lg font-medium text-green-600">WhatsApp conectado!</p>
             </div>
           ) : qrCode ? (
-            <div className="space-y-4">
-              <div className="border rounded-lg p-4 bg-white shadow-sm">
+            <div className="flex flex-col items-center gap-4 w-full">
+              <div className="border rounded-lg p-4 bg-white shadow-sm mx-auto">
                 <img
                   src={formatQrCodeSrc(qrCode)}
                   alt="QR Code"
-                  className="w-64 h-64"
+                  className="w-64 h-64 object-contain"
                 />
               </div>
               <div className="text-center space-y-2">
@@ -151,7 +151,7 @@ export function QRCodeModal({
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-4">
+            <div className="flex flex-col items-center gap-4 w-full">
               <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center">
                 <QrCode className="h-8 w-8 text-destructive" />
               </div>

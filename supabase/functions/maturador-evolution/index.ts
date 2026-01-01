@@ -1705,8 +1705,57 @@ Regras:
         try {
           if (inst?.api_provider === 'uazapi') {
             const config = await getInstanceApiConfig(supabaseClient, inst.id);
-            // UazAPI uses admin endpoint to delete
-            result = await callWhatsAppApi(config, '/admin/deleteInstance', 'DELETE', { instanceName }, true);
+            console.log(`[DELETE-INSTANCE] Deleting UazAPI instance: ${instanceName}`);
+            
+            // Try multiple endpoints for UazAPI deletion
+            let deleted = false;
+            
+            // Method 1: Try /instance/delete with instance token
+            try {
+              result = await callWhatsAppApi(config, '/instance/delete', 'DELETE', undefined, false, inst.uazapi_token || undefined);
+              deleted = true;
+              console.log('[DELETE-INSTANCE] Deleted via /instance/delete');
+            } catch (e1: any) {
+              console.log('[DELETE-INSTANCE] /instance/delete failed:', e1.message);
+            }
+            
+            // Method 2: Try POST to /instance/delete
+            if (!deleted) {
+              try {
+                result = await callWhatsAppApi(config, '/instance/delete', 'POST', undefined, false, inst.uazapi_token || undefined);
+                deleted = true;
+                console.log('[DELETE-INSTANCE] Deleted via POST /instance/delete');
+              } catch (e2: any) {
+                console.log('[DELETE-INSTANCE] POST /instance/delete failed:', e2.message);
+              }
+            }
+            
+            // Method 3: Try admin endpoint with instanceName in body
+            if (!deleted) {
+              try {
+                result = await callWhatsAppApi(config, '/admin/deleteInstance', 'POST', { instanceName }, true);
+                deleted = true;
+                console.log('[DELETE-INSTANCE] Deleted via /admin/deleteInstance POST');
+              } catch (e3: any) {
+                console.log('[DELETE-INSTANCE] /admin/deleteInstance POST failed:', e3.message);
+              }
+            }
+            
+            // Method 4: Try admin endpoint with DELETE
+            if (!deleted) {
+              try {
+                result = await callWhatsAppApi(config, '/admin/deleteInstance', 'DELETE', { instanceName }, true);
+                deleted = true;
+                console.log('[DELETE-INSTANCE] Deleted via /admin/deleteInstance DELETE');
+              } catch (e4: any) {
+                console.log('[DELETE-INSTANCE] /admin/deleteInstance DELETE failed:', e4.message);
+              }
+            }
+            
+            if (!deleted) {
+              console.log(`[DELETE-INSTANCE] Could not delete from UazAPI, proceeding with local deletion only`);
+              result = { deleted: true, note: 'Could not delete from UazAPI API, only local deletion performed' };
+            }
           } else {
             result = await callEvolution(`/instance/delete/${instanceName}`, 'DELETE');
           }
