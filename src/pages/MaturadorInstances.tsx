@@ -12,7 +12,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { splashedToast as toast } from "@/hooks/useSplashedToast";
-import { QRCodeModal, getQrCodeFromCache, setQrCodeCache } from "@/components/QRCodeModal";
+import { QRCodeModal, getQrCodeFromCache, setQrCodeCache, clearQrCodeCache } from "@/components/QRCodeModal";
 
 interface Instance {
   id: string;
@@ -256,18 +256,35 @@ export default function MaturadorInstances() {
     setLoadingQr(true);
     setQrCode(null);
     
+    // Clear cache to force fresh QR
+    clearQrCodeCache(currentQrInstance.instance_name);
+    
     try {
       const { data, error } = await supabase.functions.invoke('maturador-evolution', {
-        body: { action: 'get-qrcode', instanceName: currentQrInstance.instance_name },
+        body: { 
+          action: 'get-qrcode', 
+          instanceName: currentQrInstance.instance_name,
+          forceNew: true // Force new QR code generation
+        },
       });
 
       if (error) throw error;
       if (data.error) throw new Error(data.error);
+      
+      // Check if instance is already connected
+      if (data.connected) {
+        toast.success('WhatsApp já está conectado!');
+        setQrModalOpen(false);
+        await fetchInstances();
+        return;
+      }
 
       const qr = data.base64 || data.qrcode?.base64;
       if (qr) {
         setQrCodeCache(currentQrInstance.instance_name, qr);
         setQrCode(qr);
+      } else {
+        toast.error('QR Code não disponível');
       }
     } catch (error: any) {
       console.error('Error refreshing QR code:', error);
