@@ -404,10 +404,11 @@ serve(async (req) => {
       } else {
         endpoint = '/send/media';
 
+        // UazAPI uses 'ptt' (push-to-talk) for audio/voice messages
         const uazType =
           messageType === 'image' ? 'image'
           : messageType === 'video' ? 'video'
-          : messageType === 'audio' ? 'audio'
+          : messageType === 'audio' ? 'ptt'
           : messageType === 'document' ? 'document'
           : 'document';
 
@@ -415,7 +416,7 @@ serve(async (req) => {
           number: String(sendDestination),
           type: uazType,
           file: urlToSend,
-          ...(typeof content === 'string' && content ? { text: content } : {}),
+          ...(typeof content === 'string' && content && messageType !== 'audio' ? { text: content } : {}),
           ...(uazType === 'document'
             ? { docName: typeof content === 'string' && content ? content : 'document' }
             : {}),
