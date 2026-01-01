@@ -3,16 +3,21 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { ColoredSwitch } from "@/components/ui/colored-switch";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Cloud, Plus, RefreshCw, QrCode, Settings, Image, FileText, CheckCircle2, XCircle, Loader2, Trash2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ArrowLeft, Cloud, Plus, RefreshCw, QrCode, Settings, Image, FileText, CheckCircle2, XCircle, Loader2, Trash2, TrendingUp, ShoppingBag } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { format, subDays, startOfDay, endOfDay } from "date-fns";
+import { toZonedTime } from "date-fns-tz";
 
 interface Instance {
   id: string;
@@ -33,6 +38,19 @@ interface TagWhatsConfig {
   created_at: string;
 }
 
+interface TagWhatsLog {
+  id: string;
+  instance_id: string;
+  created_at: string;
+  label_applied: boolean;
+}
+
+// Generate colors for chart lines
+const CHART_COLORS = [
+  '#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', 
+  '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'
+];
+
 const TagWhatsCloud = () => {
   useActivityTracker("page_visit", "Tag Whats - Cloud");
   const navigate = useNavigate();
@@ -40,6 +58,7 @@ const TagWhatsCloud = () => {
 
   const [instances, setInstances] = useState<Instance[]>([]);
   const [configs, setConfigs] = useState<TagWhatsConfig[]>([]);
+  const [logs, setLogs] = useState<TagWhatsLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [configModalOpen, setConfigModalOpen] = useState(false);
   const [selectedInstance, setSelectedInstance] = useState<Instance | null>(null);
@@ -48,6 +67,7 @@ const TagWhatsCloud = () => {
   const [saving, setSaving] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [configToDelete, setConfigToDelete] = useState<string | null>(null);
+  const [chartPeriod, setChartPeriod] = useState<'7' | '30'>('7');
 
   const fetchData = useCallback(async () => {
     if (!user) return;
@@ -71,6 +91,18 @@ const TagWhatsCloud = () => {
 
       if (configsError) throw configsError;
       setConfigs(configsData || []);
+
+      // Fetch logs for chart (last 30 days to cover both filter options)
+      const thirtyDaysAgo = subDays(new Date(), 30).toISOString();
+      const { data: logsData, error: logsError } = await (supabase
+        .from('tag_whats_logs' as any)
+        .select('id, instance_id, created_at, label_applied')
+        .eq('user_id', user.id)
+        .eq('label_applied', true)
+        .gte('created_at', thirtyDaysAgo) as any);
+
+      if (logsError) throw logsError;
+      setLogs(logsData || []);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Erro ao carregar dados');
@@ -181,6 +213,53 @@ const TagWhatsCloud = () => {
   const configuredInstanceIds = configs.map(c => c.instance_id);
   const availableInstances = connectedInstances.filter(i => !configuredInstanceIds.includes(i.id));
 
+  // Calculate total labels applied (all time)
+  const totalLabelsApplied = logs.length;
+
+  // Get instance name by ID
+  const getInstanceName = (instanceId: string) => {
+    const instance = instances.find(i => i.id === instanceId);
+    return instance?.phone_number || instance?.instance_name || 'Desconhecido';
+  };
+
+  // Get unique instance IDs that have logs
+  const instancesWithLogs = useMemo(() => {
+    const ids = new Set(logs.map(l => l.instance_id));
+    return Array.from(ids);
+  }, [logs]);
+
+  // Prepare chart data
+  const chartData = useMemo(() => {
+    const days = parseInt(chartPeriod);
+    const result: any[] = [];
+    const spTimezone = 'America/Sao_Paulo';
+
+    for (let i = days - 1; i >= 0; i--) {
+      const date = subDays(new Date(), i);
+      const zonedDate = toZonedTime(date, spTimezone);
+      const dayStart = startOfDay(zonedDate);
+      const dayEnd = endOfDay(zonedDate);
+      const dateStr = format(zonedDate, 'dd/MM');
+
+      const dayData: any = { date: dateStr };
+      
+      // Count labels for each instance on this day
+      instancesWithLogs.forEach((instanceId) => {
+        const count = logs.filter(l => {
+          const logDate = toZonedTime(new Date(l.created_at), spTimezone);
+          return l.instance_id === instanceId && 
+                 logDate >= dayStart && 
+                 logDate <= dayEnd;
+        }).length;
+        dayData[instanceId] = count;
+      });
+
+      result.push(dayData);
+    }
+
+    return result;
+  }, [logs, chartPeriod, instancesWithLogs]);
+
   return (
     <>
       <Header />
@@ -220,13 +299,77 @@ const TagWhatsCloud = () => {
                 <p className="text-sm text-muted-foreground">Números Conectados</p>
               </CardContent>
             </Card>
-            <Card className="border-purple-500/20">
-              <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-purple-500">{configs.length}</p>
-                <p className="text-sm text-muted-foreground">Configurações</p>
+            <Card className="border-amber-500/20">
+              <CardContent className="p-4 text-center flex flex-col items-center justify-center">
+                <ShoppingBag className="h-5 w-5 text-amber-500 mb-1" />
+                <p className="text-2xl font-bold text-amber-500">{totalLabelsApplied}</p>
+                <p className="text-sm text-muted-foreground">Vendas Totais</p>
               </CardContent>
             </Card>
           </div>
+
+          {/* Chart */}
+          {instancesWithLogs.length > 0 && (
+            <Card className="mb-6 border-emerald-500/20">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-emerald-500" />
+                    <CardTitle className="text-lg">Etiquetas por Número</CardTitle>
+                  </div>
+                  <Select value={chartPeriod} onValueChange={(v: '7' | '30') => setChartPeriod(v)}>
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue placeholder="Período" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="7">Últimos 7 dias</SelectItem>
+                      <SelectItem value="30">Últimos 30 dias</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <defs>
+                        {instancesWithLogs.map((instanceId, index) => (
+                          <linearGradient key={instanceId} id={`gradient-${instanceId}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor={CHART_COLORS[index % CHART_COLORS.length]} stopOpacity={0.3} />
+                            <stop offset="95%" stopColor={CHART_COLORS[index % CHART_COLORS.length]} stopOpacity={0} />
+                          </linearGradient>
+                        ))}
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis dataKey="date" className="text-xs" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                      <YAxis allowDecimals={false} className="text-xs" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: 'hsl(var(--card))', 
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px'
+                        }}
+                        labelStyle={{ color: 'hsl(var(--foreground))' }}
+                        formatter={(value: number, name: string) => [value, getInstanceName(name)]}
+                      />
+                      <Legend formatter={(value) => getInstanceName(value)} />
+                      {instancesWithLogs.map((instanceId, index) => (
+                        <Area
+                          key={instanceId}
+                          type="monotone"
+                          dataKey={instanceId}
+                          name={instanceId}
+                          stroke={CHART_COLORS[index % CHART_COLORS.length]}
+                          fill={`url(#gradient-${instanceId})`}
+                          strokeWidth={2}
+                        />
+                      ))}
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Important Note */}
           <Card className="mb-6 border-amber-500/30 bg-amber-500/5">
@@ -355,7 +498,7 @@ const TagWhatsCloud = () => {
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <Switch
+                          <ColoredSwitch
                             checked={config.is_active}
                             onCheckedChange={(checked) => handleToggleActive(config.id, checked)}
                           />
@@ -414,7 +557,7 @@ const TagWhatsCloud = () => {
                     <p className="text-xs text-muted-foreground">Detectar comprovantes em imagens</p>
                   </div>
                 </div>
-                <Switch checked={filterImages} onCheckedChange={setFilterImages} />
+                <ColoredSwitch checked={filterImages} onCheckedChange={setFilterImages} />
               </div>
 
               <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
@@ -425,7 +568,7 @@ const TagWhatsCloud = () => {
                     <p className="text-xs text-muted-foreground">Detectar comprovantes em PDFs</p>
                   </div>
                 </div>
-                <Switch checked={filterPdfs} onCheckedChange={setFilterPdfs} />
+                <ColoredSwitch checked={filterPdfs} onCheckedChange={setFilterPdfs} />
               </div>
             </div>
 
