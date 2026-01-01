@@ -317,7 +317,7 @@ export default function InboxDashboard() {
     setCurrentQrInstance(instance);
     setQrModalOpen(true);
     
-    // Verifica cache primeiro
+    // Check cache first
     const cachedQr = getQrCodeFromCache(instance.instance_name);
     if (cachedQr) {
       setQrCode(cachedQr);
@@ -335,7 +335,16 @@ export default function InboxDashboard() {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
       
-      const qr = data.base64 || data.qrcode?.base64;
+      // Check if already connected
+      if (data.connected) {
+        toast.success('WhatsApp já está conectado!');
+        setQrModalOpen(false);
+        await fetchData();
+        return;
+      }
+      
+      // UazAPI returns QR as data URI inside base64 or as instance.qrcode
+      const qr = data.base64 || data.qrcode?.base64 || data.qrcode;
       if (qr) {
         setQrCodeCache(instance.instance_name, qr);
         setQrCode(qr);
@@ -356,15 +365,26 @@ export default function InboxDashboard() {
     
     try {
       const { data, error } = await supabase.functions.invoke('maturador-evolution', {
-        body: { action: 'get-qrcode', instanceName: currentQrInstance.instance_name },
+        body: { action: 'get-qrcode', instanceName: currentQrInstance.instance_name, forceNew: true },
       });
       if (error) throw error;
       if (data.error) throw new Error(data.error);
       
-      const qr = data.base64 || data.qrcode?.base64;
+      // Check if already connected
+      if (data.connected) {
+        toast.success('WhatsApp já está conectado!');
+        setQrModalOpen(false);
+        await fetchData();
+        return;
+      }
+      
+      // UazAPI returns QR as data URI inside base64 or as instance.qrcode
+      const qr = data.base64 || data.qrcode?.base64 || data.qrcode;
       if (qr) {
         setQrCodeCache(currentQrInstance.instance_name, qr);
         setQrCode(qr);
+      } else {
+        toast.error('QR Code não disponível');
       }
     } catch (error: any) {
       console.error('Error refreshing QR code:', error);
@@ -382,9 +402,27 @@ export default function InboxDashboard() {
         body: { action: 'check-status', instanceName: currentQrInstance.instance_name },
       });
       if (error) throw error;
-      if (data.instance?.state === 'open') {
+      
+      // Check if status is "connecting" FIRST - takes priority
+      const rawInstanceStatus = data?.instance?.status;
+      const isConnecting = 
+        rawInstanceStatus === 'connecting' ||
+        data?.status === 'connecting';
+
+      // Check for connection status
+      const isConnected = !isConnecting && (
+        data.instance?.state === 'open' ||
+        data.status?.connected === true ||
+        rawInstanceStatus === 'connected' ||
+        data.connected === true
+      );
+      
+      if (isConnected) {
         toast.success('WhatsApp conectado com sucesso!');
         setQrModalOpen(false);
+        await fetchData();
+      } else if (isConnecting) {
+        toast.info('Conectando... aguarde a sincronização');
         await fetchData();
       } else {
         toast.info('Aguardando leitura do QR Code...');

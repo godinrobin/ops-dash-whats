@@ -1223,59 +1223,64 @@ Regras:
           }
 
           // UazAPI returns different formats for connection status
-          // Check multiple possible response shapes
-          const isConnected = Boolean(
+          // IMPORTANT: Check connecting FIRST because status="connecting" should never be treated as "connected"
+          
+          // Check for explicit "connecting" state - this takes priority
+          const rawInstanceStatus = result?.instance?.status;
+          const rawStatus = result?.status;
+          
+          const isConnecting = Boolean(
+            rawInstanceStatus === 'connecting' ||
+            rawStatus === 'connecting' ||
+            result?.state === 'connecting' ||
+            result?.instance?.state === 'connecting' ||
+            result?.connection === 'connecting' ||
+            (typeof rawStatus === 'object' && rawStatus?.state === 'connecting')
+          );
+          
+          // Check for explicit "connected" state - BUT only if NOT connecting
+          const isConnected = !isConnecting && Boolean(
             // Direct connected field
             result?.connected === true ||
-            // Nested in status object
-            result?.status?.connected === true ||
+            // Nested in status object (when status is an object)
+            (typeof rawStatus === 'object' && rawStatus?.connected === true) ||
             // Nested in instance object
             result?.instance?.connected === true ||
             // Nested in data object
             result?.data?.connected === true ||
             // Check state field (some UazAPI versions use this)
             result?.state === 'open' ||
-            result?.status?.state === 'open' ||
+            (typeof rawStatus === 'object' && rawStatus?.state === 'open') ||
             result?.instance?.state === 'open' ||
             // Check connection field
             result?.connection === 'open' ||
-            result?.status?.connection === 'open' ||
-            // Check explicit status string
-            result?.status === 'connected' ||
-            result?.instance?.status === 'connected'
-          );
-          
-          // Check for connecting state (important: must distinguish from connected)
-          const isConnecting = Boolean(
-            result?.status === 'connecting' ||
-            result?.instance?.status === 'connecting' ||
-            result?.state === 'connecting' ||
-            result?.instance?.state === 'connecting' ||
-            result?.connection === 'connecting' ||
-            result?.status?.state === 'connecting'
+            (typeof rawStatus === 'object' && rawStatus?.connection === 'open') ||
+            // Check explicit status string = "connected"
+            rawStatus === 'connected' ||
+            rawInstanceStatus === 'connected'
           );
           
           // Also check for explicit disconnected states
-          const isDisconnected = Boolean(
+          const isDisconnected = !isConnected && !isConnecting && Boolean(
             result?.connected === false ||
-            result?.status?.connected === false ||
+            (typeof rawStatus === 'object' && rawStatus?.connected === false) ||
             result?.state === 'close' ||
             result?.state === 'disconnected' ||
-            result?.status === 'disconnected' ||
-            result?.instance?.status === 'disconnected' ||
+            rawStatus === 'disconnected' ||
+            rawInstanceStatus === 'disconnected' ||
             result?.connection === 'close' ||
-            result?.status?.state === 'close'
+            (typeof rawStatus === 'object' && rawStatus?.state === 'close')
           );
 
-          console.log(`[UAZAPI-STATUS] Instance ${instanceName}: connected=${isConnected}, connecting=${isConnecting}, disconnected=${isDisconnected}`);
-          console.log(`[UAZAPI-STATUS] Raw result.status: ${result?.status}, result.instance?.status: ${result?.instance?.status}`);
+          console.log(`[UAZAPI-STATUS] Instance ${instanceName}: rawInstanceStatus=${rawInstanceStatus}, rawStatus=${typeof rawStatus === 'object' ? JSON.stringify(rawStatus) : rawStatus}`);
+          console.log(`[UAZAPI-STATUS] Result: connected=${isConnected}, connecting=${isConnecting}, disconnected=${isDisconnected}`);
 
-          // Determine the new status: connected > connecting > disconnected
+          // Determine the new status: priority order connecting > connected > disconnected
           let newStatus = 'disconnected';
-          if (isConnected && !isConnecting) {
-            newStatus = 'connected';
-          } else if (isConnecting) {
+          if (isConnecting) {
             newStatus = 'connecting';
+          } else if (isConnected) {
+            newStatus = 'connected';
           }
           
           await supabaseClient
