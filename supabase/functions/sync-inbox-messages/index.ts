@@ -139,12 +139,19 @@ serve(async (req) => {
 
     const { data: instance } = await supabaseClient
       .from("maturador_instances")
-      .select("instance_name")
+      .select("instance_name, api_provider")
       .eq("id", contact.instance_id)
       .eq("user_id", user.id)
       .single();
 
     const instanceName = instance?.instance_name;
+
+    // UazAPI: message sync is handled via webhooks; Evolution polling endpoints won't work.
+    if (instance?.api_provider === 'uazapi') {
+      return new Response(JSON.stringify({ inserted: 0, reason: 'UazAPI uses webhook-based sync' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     if (!instanceName) {
       return new Response(JSON.stringify({ inserted: 0, reason: "Instance not found" }), {
