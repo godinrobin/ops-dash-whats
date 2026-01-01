@@ -288,7 +288,16 @@ export default function MaturadorInstances() {
 
       if (error) throw error;
 
-      if (data.instance?.state === 'open') {
+      // Check for connection status - support both Evolution and UazAPI formats
+      const isConnected = 
+        // Evolution API format
+        data.instance?.state === 'open' ||
+        // UazAPI format - multiple possible response shapes
+        data.status?.connected === true ||
+        data.instance?.status === 'connected' ||
+        data.connected === true;
+
+      if (isConnected) {
         toast.success('WhatsApp conectado com sucesso!');
         setQrModalOpen(false);
         await fetchInstances();
