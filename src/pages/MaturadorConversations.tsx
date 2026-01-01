@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Plus, Loader2, MessageSquare, Trash2, Pencil, Play, Pause, Send, Square, MessageCircle } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, MessageSquare, Trash2, Pencil, Play, Pause, Send, Square, MessageCircle, Phone } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -70,7 +70,54 @@ export default function MaturadorConversations() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [testingCall, setTestingCall] = useState<string | null>(null);
 
+  // Test call function
+  const testCall = async (conversation: Conversation) => {
+    if (!conversation.chip_a_id || !conversation.chip_b_id) {
+      toast.error('Conversa sem números configurados');
+      return;
+    }
+
+    // Get phone numbers from instances
+    const instanceA = instances.find(i => i.id === conversation.chip_a_id);
+    const instanceB = instances.find(i => i.id === conversation.chip_b_id);
+
+    if (!instanceA || !instanceB) {
+      toast.error('Instâncias não encontradas');
+      return;
+    }
+
+    if (!instanceB.phone_number) {
+      toast.error('Número B não tem telefone configurado. Sincronize os números primeiro.');
+      return;
+    }
+
+    setTestingCall(conversation.id);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('maturador-evolution', {
+        body: {
+          action: 'test-call',
+          instanceId: instanceA.id,
+          targetPhone: instanceB.phone_number,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast.success('Chamada de teste iniciada com sucesso!');
+      } else {
+        toast.error(data?.error || 'Erro ao fazer chamada de teste');
+      }
+    } catch (error: any) {
+      console.error('Test call error:', error);
+      toast.error(error.message || 'Erro ao fazer chamada de teste');
+    } finally {
+      setTestingCall(null);
+    }
+  };
   const fetchData = async () => {
     if (!user) return;
 
@@ -447,6 +494,24 @@ export default function MaturadorConversations() {
                       <Pencil className="h-3 w-3 mr-1" />
                       Editar
                     </Button>
+
+                    {/* Test Call button - only visible when calls are enabled */}
+                    {conversation.enable_calls && (
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        className="border-orange-500/30 text-orange-500 hover:bg-orange-500/10"
+                        onClick={() => testCall(conversation)}
+                        disabled={testingCall === conversation.id}
+                      >
+                        {testingCall === conversation.id ? (
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        ) : (
+                          <Phone className="h-3 w-3 mr-1" />
+                        )}
+                        Testar Chamada
+                      </Button>
+                    )}
                     
                     <Button 
                       size="sm" 
