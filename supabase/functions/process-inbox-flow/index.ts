@@ -362,15 +362,30 @@ serve(async (req) => {
         }
       }
 
-      // Get instance for sending messages
+      // Get instance for sending messages - including api_provider and token
       const { data: instance } = await supabaseClient
         .from('maturador_instances')
-        .select('instance_name')
+        .select('instance_name, api_provider, uazapi_token, evolution_api_key, evolution_base_url')
         .eq('id', session.instance_id)
         .single();
 
       const instanceName = instance?.instance_name;
       const phone = contact.phone;
+      const apiProvider = instance?.api_provider || 'evolution';
+      const instanceUazapiToken = instance?.uazapi_token;
+
+      // For UazAPI instances, get the base URL from whatsapp_api_config (singleton table)
+      let uazapiBaseUrl = '';
+      if (apiProvider === 'uazapi') {
+        const { data: apiConfig } = await supabaseClient
+          .from('whatsapp_api_config')
+          .select('uazapi_base_url')
+          .limit(1)
+          .maybeSingle();
+        
+        uazapiBaseUrl = apiConfig?.uazapi_base_url?.replace(/\/$/, '') || '';
+        console.log(`[${runId}] UazAPI instance detected. Base URL: ${uazapiBaseUrl}, Token: ${instanceUazapiToken ? 'present' : 'missing'}`);
+      }
 
       if (!instanceName) {
         console.error(`[${runId}] Instance not found for session ${sessionId}`);
@@ -383,6 +398,26 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+
+      // Validate UazAPI configuration
+      if (apiProvider === 'uazapi' && (!uazapiBaseUrl || !instanceUazapiToken)) {
+        console.error(`[${runId}] UazAPI configuration incomplete: baseUrl=${uazapiBaseUrl}, token=${instanceUazapiToken ? 'present' : 'missing'}`);
+        await releaseLock();
+        return new Response(JSON.stringify({ 
+          error: 'UazAPI configuration incomplete',
+          hasBaseUrl: !!uazapiBaseUrl,
+          hasToken: !!instanceUazapiToken
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Determine the correct base URL and API key based on provider
+      const effectiveBaseUrl = apiProvider === 'uazapi' ? uazapiBaseUrl : evolutionBaseUrl;
+      const effectiveApiKey = apiProvider === 'uazapi' ? instanceUazapiToken : evolutionApiKey;
+
+      console.log(`[${runId}] Using API provider: ${apiProvider}, baseUrl: ${effectiveBaseUrl}`);
 
       // Process nodes until we hit a wait point or end
       let continueProcessing = true;
@@ -495,14 +530,14 @@ serve(async (req) => {
             // Send text message
             const message = replaceVariables(currentNode.data.message as string || '', variables);
             if (instanceName && phone && message) {
-              // Check if presence (typing) should be shown before sending
-              if (currentNode.data.showPresence) {
+              // Check if presence (typing) should be shown before sending (Evolution only)
+              if (currentNode.data.showPresence && apiProvider !== 'uazapi') {
                 const presenceDelaySeconds = (currentNode.data.presenceDelay as number) || 3;
-                await sendPresence(evolutionBaseUrl, evolutionApiKey, instanceName, phone, 'composing', presenceDelaySeconds * 1000);
+                await sendPresence(effectiveBaseUrl, effectiveApiKey, instanceName, phone, 'composing', presenceDelaySeconds * 1000);
                 processedActions.push(`Showed typing for ${presenceDelaySeconds}s`);
               }
               
-              const sendResult = await sendMessage(evolutionBaseUrl, evolutionApiKey, instanceName, phone, message, 'text');
+              const sendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, message, 'text', undefined, undefined, apiProvider, instanceUazapiToken);
               
               // Save message with correct status based on send result
               const messageStatus = sendResult.ok ? 'sent' : 'failed';
@@ -557,19 +592,19 @@ serve(async (req) => {
             console.log(`[${runId}] phone: ${phone}`);
             
             if (instanceName && phone && mediaUrl) {
-              // Check if presence should be shown before sending (audio = recording, others = composing)
-              if (currentNode.data.showPresence) {
+              // Check if presence should be shown before sending (audio = recording, others = composing) - Evolution only
+              if (currentNode.data.showPresence && apiProvider !== 'uazapi') {
                 const presenceDelaySeconds = (currentNode.data.presenceDelay as number) || 3;
                 const presenceType = currentNode.type === 'audio' ? 'recording' : 'composing';
-                await sendPresence(evolutionBaseUrl, evolutionApiKey, instanceName, phone, presenceType, presenceDelaySeconds * 1000);
+                await sendPresence(effectiveBaseUrl, effectiveApiKey, instanceName, phone, presenceType, presenceDelaySeconds * 1000);
                 processedActions.push(`Showed ${presenceType} for ${presenceDelaySeconds}s`);
               }
               
-              console.log(`[${runId}] Sending ${currentNode.type} message...`);
+              console.log(`[${runId}] Sending ${currentNode.type} message via ${apiProvider}...`);
               // For images/videos, send caption. For documents, send fileName.
               // DO NOT send fileName as caption for image/video - that causes the filename to appear to the user
               const contentToSend = currentNode.type === 'document' ? fileName : caption;
-              const mediaSendResult = await sendMessage(evolutionBaseUrl, evolutionApiKey, instanceName, phone, contentToSend, currentNode.type, mediaUrl, fileName);
+              const mediaSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, contentToSend, currentNode.type, mediaUrl, fileName, apiProvider, instanceUazapiToken);
               
               // Save message with correct status based on send result
               const mediaStatus = mediaSendResult.ok ? 'sent' : 'failed';

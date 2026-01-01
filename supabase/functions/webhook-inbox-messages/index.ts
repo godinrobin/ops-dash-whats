@@ -693,7 +693,307 @@ serve(async (req) => {
     });
 
     // Handle messages.upsert event (new incoming message)
-    if (event === 'messages.upsert' || event === 'message' || event === 'MESSAGES_UPSERT') {
+    // UazAPI uses event: "messages" with payload directly containing message fields (chatid, sender, text, etc.)
+    // Evolution API uses event: "messages.upsert" with data.key structure
+    if (event === 'messages.upsert' || event === 'message' || event === 'MESSAGES_UPSERT' || event === 'messages') {
+      
+      // DETECT UAZAPI FORMAT: UazAPI sends chatid, sender, text directly in payload
+      // Check if this is a UazAPI format message (has chatid but no data.key structure)
+      const isUazapiFormat = !!(payload.chatid || data.chatid) && !(data.key || data.message?.key);
+      
+      if (isUazapiFormat) {
+        console.log('[UAZAPI-WEBHOOK] Detected UazAPI message format');
+        
+        // UazAPI format: { chatid, sender, senderName, text, messageType, fromMe, messageid, messageTimestamp, ... }
+        const uazMsg = payload.chatid ? payload : data;
+        const uazChatid = uazMsg.chatid || '';
+        const uazSender = uazMsg.sender || '';
+        const uazSenderName = uazMsg.senderName || uazMsg.pushName || '';
+        const uazText = uazMsg.text || '';
+        const uazMessageType = uazMsg.messageType || 'conversation';
+        const uazFromMe = uazMsg.fromMe === true || uazMsg.fromMe === 'true';
+        const uazMessageId = uazMsg.messageid || uazMsg.id || '';
+        const uazTimestamp = uazMsg.messageTimestamp || Date.now();
+        const uazFileUrl = uazMsg.fileURL || '';
+        const uazWasSentByApi = uazMsg.wasSentByApi === true;
+        
+        console.log(`[UAZAPI-WEBHOOK] chatid=${uazChatid}, sender=${uazSender}, fromMe=${uazFromMe}, text=${uazText.substring(0, 50)}, wasSentByApi=${uazWasSentByApi}`);
+        
+        // Skip messages sent by API to prevent loops
+        if (uazWasSentByApi) {
+          console.log('[UAZAPI-WEBHOOK] Skipping message sent by API (wasSentByApi=true)');
+          return new Response(JSON.stringify({ success: true, skipped: true, reason: 'sent_by_api' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
+        // Skip outbound messages already in our system
+        if (uazFromMe && uazMessageId) {
+          const { data: existingMessage } = await supabaseClient
+            .from('inbox_messages')
+            .select('id')
+            .eq('remote_message_id', uazMessageId)
+            .maybeSingle();
+          
+          if (existingMessage) {
+            console.log('[UAZAPI-WEBHOOK] Skipping outgoing message sent by platform:', uazMessageId);
+            return new Response(JSON.stringify({ success: true, skipped: true, reason: 'sent_by_platform' }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
+        
+        // Skip group messages
+        if (uazChatid.includes('@g.us') || uazMsg.isGroup === true) {
+          console.log('[UAZAPI-WEBHOOK] Skipping group message');
+          return new Response(JSON.stringify({ success: true, skipped: true, reason: 'group_message' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
+        // Extract phone from chatid (format: 5531999999999@s.whatsapp.net)
+        const phone = uazChatid.split('@')[0].replace(/\D/g, '');
+        if (phone.length < 10 || phone.length > 15) {
+          console.log(`[UAZAPI-WEBHOOK] Invalid phone length: ${phone.length}`);
+          return new Response(JSON.stringify({ success: true, skipped: true, reason: 'invalid_phone' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
+        console.log(`[UAZAPI-WEBHOOK] Processing message from phone: ${phone}`);
+        
+        // Find instance by instance_name
+        const instanceNameForLookup = instanceName !== 'unknown' ? instanceName : (uazMsg.owner || '').split('@')[0];
+        const { data: instanceInfo } = await supabaseClient
+          .from('maturador_instances')
+          .select('id, user_id')
+          .eq('instance_name', instanceNameForLookup)
+          .maybeSingle();
+        
+        if (!instanceInfo) {
+          console.log(`[UAZAPI-WEBHOOK] Instance not found: ${instanceNameForLookup}`);
+          return new Response(JSON.stringify({ success: true, skipped: true, reason: 'instance_not_found' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
+        const instanceId = instanceInfo.id;
+        const userId = instanceInfo.user_id;
+        
+        console.log(`[UAZAPI-WEBHOOK] Instance found: ${instanceId}, user: ${userId}`);
+        
+        // Find or create contact
+        let contact;
+        const { data: existingContact } = await supabaseClient
+          .from('inbox_contacts')
+          .select('*')
+          .eq('phone', phone)
+          .eq('user_id', userId)
+          .maybeSingle();
+        
+        if (existingContact) {
+          contact = existingContact;
+          // Update name if we have a better one
+          if (uazSenderName && !existingContact.name) {
+            await supabaseClient
+              .from('inbox_contacts')
+              .update({ name: uazSenderName, updated_at: new Date().toISOString() })
+              .eq('id', existingContact.id);
+            contact.name = uazSenderName;
+          }
+        } else {
+          // Create new contact
+          const { data: newContact, error: contactError } = await supabaseClient
+            .from('inbox_contacts')
+            .insert({
+              phone,
+              name: uazSenderName || null,
+              user_id: userId,
+              instance_id: instanceId,
+              remote_jid: uazChatid,
+              status: 'active',
+            })
+            .select()
+            .single();
+          
+          if (contactError) {
+            console.error('[UAZAPI-WEBHOOK] Error creating contact:', contactError);
+            return new Response(JSON.stringify({ success: false, error: 'Failed to create contact' }), {
+              status: 500,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          contact = newContact;
+          console.log(`[UAZAPI-WEBHOOK] Created new contact: ${contact.id}`);
+        }
+        
+        // Map UazAPI message type to our types
+        let messageType = 'text';
+        let mediaUrl = uazFileUrl || null;
+        const msgTypeLower = (uazMessageType || '').toLowerCase();
+        if (msgTypeLower.includes('image')) messageType = 'image';
+        else if (msgTypeLower.includes('audio') || msgTypeLower.includes('ptt')) messageType = 'audio';
+        else if (msgTypeLower.includes('video')) messageType = 'video';
+        else if (msgTypeLower.includes('document')) messageType = 'document';
+        else if (msgTypeLower.includes('sticker')) messageType = 'sticker';
+        
+        // Check if message already exists
+        if (uazMessageId) {
+          const { data: existingMsg } = await supabaseClient
+            .from('inbox_messages')
+            .select('id')
+            .eq('remote_message_id', uazMessageId)
+            .maybeSingle();
+          
+          if (existingMsg) {
+            console.log(`[UAZAPI-WEBHOOK] Message already exists: ${uazMessageId}`);
+            return new Response(JSON.stringify({ success: true, skipped: true, reason: 'duplicate' }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
+        
+        // Insert message
+        const direction = uazFromMe ? 'outbound' : 'inbound';
+        const { data: insertedMessage, error: msgError } = await supabaseClient
+          .from('inbox_messages')
+          .insert({
+            contact_id: contact.id,
+            instance_id: instanceId,
+            user_id: userId,
+            direction,
+            message_type: messageType,
+            content: uazText || null,
+            media_url: mediaUrl,
+            status: 'received',
+            remote_message_id: uazMessageId || null,
+            is_from_flow: false,
+          })
+          .select()
+          .single();
+        
+        if (msgError) {
+          console.error('[UAZAPI-WEBHOOK] Error inserting message:', msgError);
+          return new Response(JSON.stringify({ success: false, error: 'Failed to insert message' }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
+        console.log(`[UAZAPI-WEBHOOK] Message inserted: ${insertedMessage.id}`);
+        
+        // Update contact last_message_at
+        await supabaseClient
+          .from('inbox_contacts')
+          .update({ 
+            last_message_at: new Date().toISOString(),
+            unread_count: contact.unread_count + (direction === 'inbound' ? 1 : 0)
+          })
+          .eq('id', contact.id);
+        
+        // For inbound messages, check if we need to trigger a flow
+        if (direction === 'inbound' && !uazFromMe) {
+          // Check for active flow session waiting for input
+          const { data: activeSession } = await supabaseClient
+            .from('inbox_flow_sessions')
+            .select('*')
+            .eq('contact_id', contact.id)
+            .eq('status', 'active')
+            .order('last_interaction', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          
+          if (activeSession) {
+            console.log(`[UAZAPI-WEBHOOK] Found active session ${activeSession.id}, triggering flow processing`);
+            
+            // Invoke process-inbox-flow with user input
+            supabaseClient.functions.invoke('process-inbox-flow', {
+              body: { sessionId: activeSession.id, userInput: uazText }
+            }).catch(e => console.error('[UAZAPI-WEBHOOK] Error invoking flow:', e));
+          } else {
+            // Check for flows to trigger based on keywords
+            console.log(`[UAZAPI-WEBHOOK] No active session, checking for flow triggers`);
+            
+            const { data: flows } = await supabaseClient
+              .from('inbox_flows')
+              .select('*')
+              .eq('user_id', userId)
+              .eq('is_active', true)
+              .order('priority', { ascending: false });
+            
+            if (flows && flows.length > 0 && uazText) {
+              for (const flow of flows) {
+                const assignedInstances = flow.assigned_instances as string[] || [];
+                if (assignedInstances.length > 0 && !assignedInstances.includes(instanceId)) {
+                  continue;
+                }
+                
+                let shouldTrigger = false;
+                
+                if (flow.trigger_type === 'all') {
+                  // Count messages to check if first
+                  const { count } = await supabaseClient
+                    .from('inbox_messages')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('contact_id', contact.id)
+                    .eq('direction', 'inbound');
+                  
+                  if ((count || 0) <= 1) {
+                    shouldTrigger = true;
+                  }
+                } else if (flow.trigger_type === 'keyword') {
+                  const keywords = flow.trigger_keywords as string[] || [];
+                  const lowerContent = uazText.toLowerCase();
+                  for (const kw of keywords) {
+                    if (lowerContent.includes(kw.toLowerCase())) {
+                      shouldTrigger = true;
+                      break;
+                    }
+                  }
+                }
+                
+                if (shouldTrigger) {
+                  console.log(`[UAZAPI-WEBHOOK] Triggering flow ${flow.name}`);
+                  
+                  // Create session
+                  const { data: newSession } = await supabaseClient
+                    .from('inbox_flow_sessions')
+                    .insert({
+                      flow_id: flow.id,
+                      contact_id: contact.id,
+                      instance_id: instanceId,
+                      user_id: userId,
+                      current_node_id: 'start-1',
+                      variables: { 
+                        nome: contact.name || '',
+                        telefone: phone,
+                        resposta: '',
+                        lastMessage: uazText,
+                        contactName: contact.name || phone,
+                      },
+                      status: 'active',
+                    })
+                    .select()
+                    .single();
+                  
+                  if (newSession) {
+                    supabaseClient.functions.invoke('process-inbox-flow', {
+                      body: { sessionId: newSession.id }
+                    }).catch(e => console.error('[UAZAPI-WEBHOOK] Error invoking flow:', e));
+                  }
+                  
+                  break;
+                }
+              }
+            }
+          }
+        }
+        
+        return new Response(JSON.stringify({ success: true, messageId: insertedMessage.id }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
       // Evolution API v2 structure: data.key contains remoteJid/remoteJidAlt, data.message contains content
       // Fallback to old structure (data.message.key) for backwards compatibility
       const key = data.key || data.message?.key || {};
