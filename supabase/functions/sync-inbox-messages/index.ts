@@ -348,6 +348,90 @@ serve(async (req) => {
         });
       }
 
+      // === CONTINUE FLOW WHEN WAITING FOR INPUT ===
+      // When messages are ingested via sync (polling), we must also advance any active waitInput/menu session.
+      try {
+        // Only consider newly inserted inbound messages that actually have text content
+        const inboundInputs = newOnes
+          .filter((m) => !m.fromMe)
+          .map((m) => ({
+            createdAt: m.createdAt,
+            messageType: m.messageType,
+            content: (m.content || '').trim(),
+          }))
+          .filter((m) => m.content.length > 0)
+          // process from oldest to newest
+          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+        if (inboundInputs.length > 0) {
+          const { data: activeSession } = await supabaseAdmin
+            .from('inbox_flow_sessions')
+            .select('id, current_node_id, processing, processing_started_at')
+            .eq('contact_id', contactId)
+            .eq('status', 'active')
+            .order('last_interaction', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          const nodeId = String(activeSession?.current_node_id || '');
+          const isWaitingNode = nodeId.startsWith('waitInput') || nodeId.startsWith('menu');
+
+          if (activeSession && isWaitingNode) {
+            // Avoid calling while session is actively processing (lock)
+            if (activeSession.processing) {
+              const lockAge = activeSession.processing_started_at
+                ? Date.now() - new Date(activeSession.processing_started_at).getTime()
+                : 0;
+
+              if (lockAge < 60000) {
+                console.log(`[UAZAPI-SYNC] Session ${activeSession.id} locked (${lockAge}ms), skipping auto-continue`);
+              } else {
+                console.log(`[UAZAPI-SYNC] Session ${activeSession.id} has stale lock (${lockAge}ms), proceeding`);
+              }
+            }
+
+            // Always take the latest input (user might send multiple quickly)
+            const latest = inboundInputs[inboundInputs.length - 1];
+            console.log(`[UAZAPI-SYNC] Continuing session ${activeSession.id} (node=${nodeId}) with input: "${latest.content.substring(0, 80)}"`);
+
+            // Cancel any scheduled timeout jobs for this session (if any)
+            await supabaseAdmin
+              .from('inbox_flow_delay_jobs')
+              .update({ status: 'done', updated_at: new Date().toISOString() })
+              .eq('session_id', activeSession.id)
+              .eq('status', 'scheduled');
+
+            // Clear timeout_at
+            await supabaseAdmin
+              .from('inbox_flow_sessions')
+              .update({ timeout_at: null })
+              .eq('id', activeSession.id);
+
+            // Call process-inbox-flow with service role JWT
+            const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+            const resp = await fetch(processUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${serviceKey}`,
+              },
+              body: JSON.stringify({ sessionId: activeSession.id, userInput: latest.content }),
+            });
+
+            if (!resp.ok) {
+              const errorText = await resp.text();
+              console.error('[UAZAPI-SYNC] process-inbox-flow error:', resp.status, errorText);
+            } else {
+              console.log('[UAZAPI-SYNC] process-inbox-flow called successfully');
+            }
+          } else {
+            console.log(`[UAZAPI-SYNC] No active waitInput/menu session to continue (session=${activeSession?.id || 'none'}, node=${nodeId || 'none'})`);
+          }
+        }
+      } catch (e) {
+        console.error('[UAZAPI-SYNC] Error while continuing flow:', e);
+      }
+
       return new Response(JSON.stringify({ inserted: inserts.length }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
