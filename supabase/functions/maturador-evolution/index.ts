@@ -1050,12 +1050,25 @@ Regras:
             );
             console.log('[UAZAPI] get-qrcode status response:', JSON.stringify(statusResult).substring(0, 1200));
             
-            // Check if already connected
-            const isConnected = Boolean(
-              statusResult?.status?.connected === true ||
-              statusResult?.instance?.status === 'connected' ||
-              statusResult?.status === 'connected'
+            // Parse status from UazAPI response - check for both object and string formats
+            const rawInstanceStatus = statusResult?.instance?.status;
+            const rawStatusObj = statusResult?.status;
+            
+            // Check if connecting FIRST (takes priority)
+            const isConnecting = Boolean(
+              rawInstanceStatus === 'connecting' ||
+              rawStatusObj === 'connecting' ||
+              (typeof rawStatusObj === 'object' && rawStatusObj?.connected === false && rawStatusObj?.loggedIn === true)
             );
+            
+            // Check if already connected - only if NOT connecting
+            const isConnected = !isConnecting && Boolean(
+              (typeof rawStatusObj === 'object' && rawStatusObj?.connected === true) ||
+              rawInstanceStatus === 'connected' ||
+              rawStatusObj === 'connected'
+            );
+            
+            console.log(`[UAZAPI-QRCODE] Status check: rawInstanceStatus=${rawInstanceStatus}, isConnecting=${isConnecting}, isConnected=${isConnected}`);
             
             if (isConnected) {
               console.log('[UAZAPI] Instance already connected, no QR needed');
@@ -1073,6 +1086,15 @@ Regras:
 
               result = { base64: null, connected: true };
               break;
+            }
+            
+            // If connecting (not connected), update DB status to "connecting"
+            if (isConnecting) {
+              await supabaseClient
+                .from('maturador_instances')
+                .update({ status: 'connecting' })
+                .eq('instance_name', instanceName)
+                .eq('user_id', user.id);
             }
             
             // Extract QR from status response (UazAPI returns it inside instance.qrcode)
