@@ -122,11 +122,20 @@ serve(async (req) => {
       .select("id, phone, instance_id, user_id, remote_jid")
       .eq("id", contactId)
       .eq("user_id", user.id)
-      .single();
+      .maybeSingle();
 
-    if (contactError || !contact) {
-      return new Response(JSON.stringify({ error: "Contact not found" }), {
-        status: 404,
+    if (contactError) {
+      console.error('[sync-inbox-messages] Error fetching contact:', contactError);
+      return new Response(JSON.stringify({ inserted: 0, error: 'Failed to fetch contact', details: contactError }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // If contact was deleted (common when user clicks delete while sync is running),
+    // return success so the client can stop polling without showing a hard error.
+    if (!contact) {
+      return new Response(JSON.stringify({ inserted: 0, reason: 'contact_deleted' }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -321,6 +330,21 @@ serve(async (req) => {
         });
       }
 
+      // Contact may have been deleted while we were syncing (race condition).
+      // If so, stop gracefully instead of throwing a 500.
+      const { data: contactStillThere } = await supabaseAdmin
+        .from('inbox_contacts')
+        .select('id')
+        .eq('id', contactId)
+        .maybeSingle();
+
+      if (!contactStillThere) {
+        console.log(`[UAZAPI-SYNC] Contact ${contactId} was deleted during sync. Skipping insert.`);
+        return new Response(JSON.stringify({ inserted: 0, reason: 'contact_deleted' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       const inserts = newOnes.map((m) => ({
         contact_id: contactId,
         instance_id: contact.instance_id,
@@ -342,6 +366,14 @@ serve(async (req) => {
 
       if (insertErr) {
         console.error('[UAZAPI-SYNC] Insert error:', insertErr);
+
+        // If contact was deleted between our check and insert, handle gracefully
+        if ((insertErr as any)?.code === '23503') {
+          return new Response(JSON.stringify({ inserted: 0, reason: 'contact_deleted', details: insertErr }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
         return new Response(JSON.stringify({ inserted: 0, error: 'Falha ao salvar mensagens', details: insertErr }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
