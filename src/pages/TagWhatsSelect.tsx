@@ -79,7 +79,7 @@ const TagWhatsSelect = () => {
                 <div className="mx-auto w-20 h-20 rounded-full bg-emerald-500/20 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                   <Cloud className="h-10 w-10 text-emerald-500" />
                 </div>
-                <CardTitle className="text-2xl text-emerald-400">Versão em Nuvem</CardTitle>
+                <CardTitle className="text-2xl text-emerald-400">Versão Cloud</CardTitle>
                 <CardDescription className="text-base">
                   Escaneie o QR Code e a cada comprovante recebido, marque automaticamente como pago
                 </CardDescription>
@@ -103,7 +103,7 @@ const TagWhatsSelect = () => {
                 </div>
                 <Button className="w-full bg-emerald-600 hover:bg-emerald-700">
                   <Power className="h-4 w-4 mr-2" />
-                  Acessar Versão em Nuvem
+                  Acessar Versão Cloud
                 </Button>
               </CardContent>
             </Card>
