@@ -34,6 +34,8 @@ interface WebhookPayload {
 const PAGO_LABEL_NAME = "Pago";
 
 serve(async (req) => {
+  console.log("[TAG-WHATS] ====== FUNCTION STARTED ======");
+  
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -41,21 +43,42 @@ serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const openaiKey = Deno.env.get("OPENAI_API_KEY");
+  
+  console.log("[TAG-WHATS] Environment check:", { 
+    hasSupabaseUrl: !!supabaseUrl, 
+    hasServiceKey: !!supabaseServiceKey, 
+    hasOpenaiKey: !!openaiKey 
+  });
+  
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const payload: WebhookPayload = await req.json();
-    console.log("[TAG-WHATS] Received webhook:", JSON.stringify(payload).substring(0, 500));
+    const rawBody = await req.text();
+    console.log("[TAG-WHATS] Raw request body:", rawBody.substring(0, 1000));
+    
+    const payload: WebhookPayload = JSON.parse(rawBody);
+    console.log("[TAG-WHATS] Parsed payload - event:", payload.event, "instanceName:", payload.instanceName);
 
     // Only process message events
     if (payload.event !== "messages" && payload.event !== "messages.upsert") {
+      console.log("[TAG-WHATS] Ignoring event:", payload.event);
       return new Response(JSON.stringify({ success: true, message: "Ignored event" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const data = payload.data;
+    console.log("[TAG-WHATS] Data check:", { 
+      hasData: !!data, 
+      hasKey: !!data?.key, 
+      fromMe: data?.key?.fromMe,
+      messageId: data?.key?.id,
+      hasImageMessage: !!data?.message?.imageMessage,
+      hasDocumentMessage: !!data?.message?.documentMessage
+    });
+    
     if (!data || !data.key || data.key.fromMe) {
+      console.log("[TAG-WHATS] Ignoring: no data or fromMe");
       return new Response(JSON.stringify({ success: true, message: "Ignored message" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -65,7 +88,10 @@ serve(async (req) => {
     const isImage = !!data.message?.imageMessage;
     const isPdf = data.message?.documentMessage?.mimetype === "application/pdf";
     
+    console.log("[TAG-WHATS] Media check:", { isImage, isPdf });
+    
     if (!isImage && !isPdf) {
+      console.log("[TAG-WHATS] Not image or PDF, exiting");
       return new Response(JSON.stringify({ success: true, message: "Not image or PDF" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -75,6 +101,8 @@ serve(async (req) => {
     const remoteJid = data.key.remoteJid || "";
     const phone = remoteJid.replace(/@.*$/, "");
     const instanceName = payload.instanceName || "";
+    
+    console.log("[TAG-WHATS] Processing:", { messageType, phone, instanceName, messageId: data.key.id });
     
     console.log(`[TAG-WHATS] Processing ${messageType} from ${phone} on instance ${instanceName}`);
 

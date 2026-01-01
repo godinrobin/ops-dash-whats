@@ -929,51 +929,73 @@ serve(async (req) => {
           .eq('id', contact.id);
         
         // For inbound messages with image/document, trigger Tag Whats processing
+        console.log(`[TAG-WHATS-TRIGGER] Checking: direction=${direction}, messageType=${messageType}, instanceId=${instanceId}`);
+        
         if (direction === 'inbound' && (messageType === 'image' || messageType === 'document')) {
+          console.log(`[TAG-WHATS-TRIGGER] Eligible message detected, checking config for instance ${instanceId}`);
           try {
             // Check if Tag Whats is configured for this instance
-            const { data: tagWhatsConfig } = await supabaseClient
+            const { data: tagWhatsConfig, error: tagWhatsConfigError } = await supabaseClient
               .from('tag_whats_configs')
               .select('id, is_active, filter_images, filter_pdfs')
               .eq('instance_id', instanceId)
               .eq('is_active', true)
               .maybeSingle();
             
+            console.log(`[TAG-WHATS-TRIGGER] Config query result:`, { tagWhatsConfig, tagWhatsConfigError });
+            
             if (tagWhatsConfig) {
               const shouldProcess = 
                 (messageType === 'image' && tagWhatsConfig.filter_images) ||
                 (messageType === 'document' && tagWhatsConfig.filter_pdfs);
               
+              console.log(`[TAG-WHATS-TRIGGER] shouldProcess=${shouldProcess}, filter_images=${tagWhatsConfig.filter_images}, filter_pdfs=${tagWhatsConfig.filter_pdfs}`);
+              
               if (shouldProcess) {
-                console.log(`[UAZAPI-WEBHOOK] Tag Whats active, triggering processing for ${messageType}`);
+                console.log(`[TAG-WHATS-TRIGGER] Tag Whats active, triggering processing for ${messageType}`);
                 
-                // Call the tag-whats-process function asynchronously (fire and forget)
                 const supabaseUrl = Deno.env.get('SUPABASE_URL');
-                fetch(`${supabaseUrl}/functions/v1/tag-whats-process`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    event: 'messages',
-                    instanceName: instanceNameForLookup,
-                    data: {
-                      key: {
-                        remoteJid: uazChatid,
-                        fromMe: uazFromMe,
-                        id: uazMessageId,
-                      },
-                      message: messageType === 'image' 
-                        ? { imageMessage: { caption: uazText } }
-                        : { documentMessage: { fileName: uazText, mimetype: 'application/pdf' } },
-                      messageType: uazMessageType,
-                      pushName: uazSenderName,
+                const tagWhatsPayload = {
+                  event: 'messages',
+                  instanceName: instanceNameForLookup,
+                  data: {
+                    key: {
+                      remoteJid: uazChatid,
+                      fromMe: uazFromMe,
+                      id: uazMessageId,
                     },
-                  }),
-                }).catch(err => console.error('[UAZAPI-WEBHOOK] Tag Whats call failed:', err));
+                    message: messageType === 'image' 
+                      ? { imageMessage: { caption: uazText } }
+                      : { documentMessage: { fileName: uazText, mimetype: 'application/pdf' } },
+                    messageType: uazMessageType,
+                    pushName: uazSenderName,
+                  },
+                };
+                
+                console.log(`[TAG-WHATS-TRIGGER] Calling tag-whats-process with payload:`, JSON.stringify(tagWhatsPayload).substring(0, 500));
+                
+                // Make the call and await it for better error handling
+                try {
+                  const tagWhatsResponse = await fetch(`${supabaseUrl}/functions/v1/tag-whats-process`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(tagWhatsPayload),
+                  });
+                  
+                  const tagWhatsResult = await tagWhatsResponse.text();
+                  console.log(`[TAG-WHATS-TRIGGER] Response: status=${tagWhatsResponse.status}, body=${tagWhatsResult.substring(0, 300)}`);
+                } catch (fetchErr) {
+                  console.error('[TAG-WHATS-TRIGGER] Fetch error:', fetchErr);
+                }
               }
+            } else {
+              console.log(`[TAG-WHATS-TRIGGER] No active config found for instance ${instanceId}`);
             }
           } catch (tagWhatsErr) {
-            console.error('[UAZAPI-WEBHOOK] Error checking Tag Whats config:', tagWhatsErr);
+            console.error('[TAG-WHATS-TRIGGER] Error checking Tag Whats config:', tagWhatsErr);
           }
+        } else {
+          console.log(`[TAG-WHATS-TRIGGER] Skipped: direction=${direction}, messageType=${messageType}`);
         }
         
         // For inbound messages, check if we need to trigger a flow
