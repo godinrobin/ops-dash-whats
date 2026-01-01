@@ -725,15 +725,24 @@ serve(async (req) => {
     // Evolution API uses event: "messages.upsert" with data.key structure
     if (event === 'messages.upsert' || event === 'message' || event === 'MESSAGES_UPSERT' || event === 'messages') {
       
-      // DETECT UAZAPI FORMAT: UazAPI sends chatid, sender, text directly in payload
-      // Check if this is a UazAPI format message (has chatid but no data.key structure)
-      const isUazapiFormat = !!(payload.chatid || data.chatid) && !(data.key || data.message?.key);
-      
+      // DETECT UAZAPI FORMAT
+      // UazAPI can send the message either:
+      // 1) directly in the payload: { chatid, sender, text, ... }
+      // 2) nested under payload.message: { message: { chatid, sender, text, ... }, chat: {...}, instanceName, ... }
+      const uazCandidate =
+        (payload && payload.chatid ? payload : null) ||
+        (payload && payload.message && payload.message.chatid ? payload.message : null) ||
+        (data && data.chatid ? data : null) ||
+        (data && data.message && data.message.chatid ? data.message : null);
+
+      // Check if this is a UazAPI format message (has chatid but no Evolution data.key structure)
+      const isUazapiFormat = !!uazCandidate && !(data.key || data.message?.key);
+
       if (isUazapiFormat) {
         console.log('[UAZAPI-WEBHOOK] Detected UazAPI message format');
-        
-        // UazAPI format: { chatid, sender, senderName, text, messageType, fromMe, messageid, messageTimestamp, ... }
-        const uazMsg = payload.chatid ? payload : data;
+
+        const uazMsg = uazCandidate;
+        // UazAPI message object: { chatid, sender, senderName, text, messageType, fromMe, messageid, messageTimestamp, ... }
         const uazChatid = uazMsg.chatid || '';
         const uazSender = uazMsg.sender || '';
         const uazSenderName = uazMsg.senderName || uazMsg.pushName || '';
