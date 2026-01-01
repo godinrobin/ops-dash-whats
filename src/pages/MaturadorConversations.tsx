@@ -122,6 +122,16 @@ export default function MaturadorConversations() {
     fetchData();
   }, [user]);
 
+  // Refresh message counts periodically when any loop is active
+  useEffect(() => {
+    if (activeLoops.size > 0) {
+      const interval = setInterval(() => {
+        fetchData();
+      }, 10000); // Refresh every 10 seconds
+      return () => clearInterval(interval);
+    }
+  }, [activeLoops.size, user]);
+
   const resetForm = () => {
     setName("");
     setChipAId("");
