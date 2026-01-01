@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+// @ts-ignore - pdf-lib for PDF text extraction
+import { PDFDocument } from "https://esm.sh/pdf-lib@1.17.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -32,6 +34,135 @@ interface WebhookPayload {
 }
 
 const PAGO_LABEL_NAME = "Pago";
+
+// Function to extract text from PDF using pdf-lib
+async function extractPdfText(base64Data: string): Promise<string> {
+  try {
+    console.log("[TAG-WHATS] Starting PDF text extraction...");
+    
+    // Decode base64 to Uint8Array
+    const binaryString = atob(base64Data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    // Load PDF document
+    const pdfDoc = await PDFDocument.load(bytes, { ignoreEncryption: true });
+    const pages = pdfDoc.getPages();
+    
+    console.log("[TAG-WHATS] PDF has", pages.length, "pages");
+    
+    // pdf-lib doesn't have direct text extraction, so we'll use a different approach
+    // We'll extract what metadata and info we can, then use AI to analyze based on that
+    
+    const form = pdfDoc.getForm();
+    let extractedInfo: string[] = [];
+    
+    // Try to get form field values if any
+    try {
+      const fields = form.getFields();
+      for (const field of fields) {
+        const name = field.getName();
+        extractedInfo.push(`Field: ${name}`);
+      }
+    } catch (e) {
+      console.log("[TAG-WHATS] No form fields found");
+    }
+    
+    // Get document metadata
+    const title = pdfDoc.getTitle();
+    const author = pdfDoc.getAuthor();
+    const subject = pdfDoc.getSubject();
+    const keywords = pdfDoc.getKeywords();
+    const creator = pdfDoc.getCreator();
+    const producer = pdfDoc.getProducer();
+    
+    if (title) extractedInfo.push(`Título: ${title}`);
+    if (author) extractedInfo.push(`Autor: ${author}`);
+    if (subject) extractedInfo.push(`Assunto: ${subject}`);
+    if (keywords) extractedInfo.push(`Palavras-chave: ${keywords}`);
+    if (creator) extractedInfo.push(`Criador: ${creator}`);
+    if (producer) extractedInfo.push(`Produtor: ${producer}`);
+    
+    // Since pdf-lib can't extract text content directly, we'll use a workaround:
+    // Send basic info and let the AI know this is a PDF that needs analysis
+    const basicInfo = extractedInfo.length > 0 
+      ? extractedInfo.join("\n") 
+      : "PDF document received - metadata not available";
+    
+    console.log("[TAG-WHATS] Extracted PDF info:", basicInfo);
+    
+    return basicInfo;
+  } catch (error) {
+    console.error("[TAG-WHATS] PDF extraction error:", error);
+    return `Error extracting PDF: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
+// Alternative: Use pdfjs-dist for actual text extraction
+async function extractPdfTextWithPdfJs(base64Data: string): Promise<string> {
+  try {
+    console.log("[TAG-WHATS] Attempting PDF text extraction with alternative method...");
+    
+    // Use Lovable AI (Gemini) which supports PDFs natively
+    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+    
+    if (!lovableApiKey) {
+      console.log("[TAG-WHATS] No LOVABLE_API_KEY, falling back to basic extraction");
+      return await extractPdfText(base64Data);
+    }
+    
+    // Gemini 2.5 Flash supports PDF documents natively
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${lovableApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          {
+            role: "system",
+            content: "Você é um extrator de texto de documentos PDF. Extraia TODO o texto visível do documento PDF fornecido, mantendo a estrutura original o máximo possível. Retorne apenas o texto extraído, sem comentários adicionais."
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Extraia todo o texto deste documento PDF:"
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:application/pdf;base64,${base64Data}`
+                }
+              }
+            ]
+          }
+        ],
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[TAG-WHATS] Lovable AI extraction error:", errorText);
+      return await extractPdfText(base64Data);
+    }
+    
+    const result = await response.json();
+    const extractedText = result.choices?.[0]?.message?.content || "";
+    
+    console.log("[TAG-WHATS] Extracted text from PDF (preview):", extractedText.substring(0, 500));
+    
+    return extractedText;
+  } catch (error) {
+    console.error("[TAG-WHATS] PDF text extraction with Lovable AI failed:", error);
+    return await extractPdfText(base64Data);
+  }
+}
 
 serve(async (req) => {
   console.log("[TAG-WHATS] ====== FUNCTION STARTED ======");
@@ -250,14 +381,6 @@ serve(async (req) => {
       });
     }
 
-    // For PDFs, we need to extract text
-    let contentToAnalyze = "";
-    if (isPdf) {
-      // For now, we'll send the PDF base64 to GPT-4 Vision which can read PDFs
-      // In production, you might want to use a PDF parsing library
-      contentToAnalyze = `This is a PDF document. Please analyze if this is a PIX payment receipt.`;
-    }
-
     // Analyze with ChatGPT
     if (!openaiKey) {
       console.error("[TAG-WHATS] No OpenAI API key configured");
@@ -286,64 +409,120 @@ Critérios para identificar um comprovante PIX:
 
 Se não for possível determinar ou a imagem não for clara, retorne is_pix_payment: false.`;
 
-    // Construct proper data URL with correct mimetype
-    const imageDataUrl = `data:${mediaMimetype};base64,${mediaBase64}`;
-    console.log("[TAG-WHATS] Sending to OpenAI for analysis. Data URL length:", imageDataUrl.length);
+    let aiContent = "";
+    
+    if (isPdf) {
+      // For PDFs: Extract text first, then analyze with GPT
+      console.log("[TAG-WHATS] PDF detected - extracting text first...");
+      
+      const extractedText = await extractPdfTextWithPdfJs(mediaBase64);
+      console.log("[TAG-WHATS] PDF text extracted, length:", extractedText.length);
+      
+      // Now analyze the extracted text with GPT
+      const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${openaiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: systemPrompt },
+            {
+              role: "user",
+              content: `Analise o seguinte texto extraído de um documento PDF e determine se é um comprovante de pagamento PIX:\n\n---\n${extractedText}\n---`,
+            },
+          ],
+          max_tokens: 200,
+        }),
+      });
 
-    const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${openaiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: [
-              {
-                type: "image_url",
-                image_url: {
-                  url: imageDataUrl,
-                  detail: "low",
+      if (!openaiResponse.ok) {
+        const errorText = await openaiResponse.text();
+        console.error("[TAG-WHATS] OpenAI error (PDF text analysis):", errorText);
+        
+        await supabase.from("tag_whats_logs").insert({
+          user_id: instance.user_id,
+          config_id: config.id,
+          instance_id: instance.id,
+          contact_phone: phone,
+          message_type: messageType,
+          is_pix_payment: false,
+          label_applied: false,
+          error_message: `OpenAI error: ${errorText.substring(0, 200)}`,
+        });
+        
+        return new Response(JSON.stringify({ success: false, error: "OpenAI error" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const aiResult = await openaiResponse.json();
+      aiContent = aiResult.choices?.[0]?.message?.content || "";
+      
+    } else {
+      // For images: Use GPT-4 Vision directly
+      const imageDataUrl = `data:${mediaMimetype};base64,${mediaBase64}`;
+      console.log("[TAG-WHATS] Sending image to OpenAI for analysis. Data URL length:", imageDataUrl.length);
+
+      const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${openaiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: systemPrompt },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "image_url",
+                  image_url: {
+                    url: imageDataUrl,
+                    detail: "low",
+                  },
                 },
-              },
-              {
-                type: "text",
-                text: isPdf ? contentToAnalyze : "Analise esta imagem e determine se é um comprovante de pagamento PIX.",
-              },
-            ],
-          },
-        ],
-        max_tokens: 200,
-      }),
-    });
+                {
+                  type: "text",
+                  text: "Analise esta imagem e determine se é um comprovante de pagamento PIX.",
+                },
+              ],
+            },
+          ],
+          max_tokens: 200,
+        }),
+      });
 
-    if (!openaiResponse.ok) {
-      const errorText = await openaiResponse.text();
-      console.error("[TAG-WHATS] OpenAI error:", errorText);
-      
-      await supabase.from("tag_whats_logs").insert({
-        user_id: instance.user_id,
-        config_id: config.id,
-        instance_id: instance.id,
-        contact_phone: phone,
-        message_type: messageType,
-        is_pix_payment: false,
-        label_applied: false,
-        error_message: `OpenAI error: ${errorText.substring(0, 200)}`,
-      });
-      
-      return new Response(JSON.stringify({ success: false, error: "OpenAI error" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      if (!openaiResponse.ok) {
+        const errorText = await openaiResponse.text();
+        console.error("[TAG-WHATS] OpenAI error:", errorText);
+        
+        await supabase.from("tag_whats_logs").insert({
+          user_id: instance.user_id,
+          config_id: config.id,
+          instance_id: instance.id,
+          contact_phone: phone,
+          message_type: messageType,
+          is_pix_payment: false,
+          label_applied: false,
+          error_message: `OpenAI error: ${errorText.substring(0, 200)}`,
+        });
+        
+        return new Response(JSON.stringify({ success: false, error: "OpenAI error" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const aiResult = await openaiResponse.json();
+      aiContent = aiResult.choices?.[0]?.message?.content || "";
     }
-
-    const aiResult = await openaiResponse.json();
-    const aiContent = aiResult.choices?.[0]?.message?.content || "";
+    
     console.log("[TAG-WHATS] AI response:", aiContent);
 
     // Parse AI response
