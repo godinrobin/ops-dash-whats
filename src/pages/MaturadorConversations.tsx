@@ -95,25 +95,54 @@ export default function MaturadorConversations() {
 
     setTestingCall(conversation.id);
 
+    const isNetworkishError = (err: any) => {
+      const msg = String(err?.message || '');
+      const name = String(err?.name || '');
+      return (
+        name.includes('FunctionsFetchError') ||
+        msg.includes('Failed to fetch') ||
+        msg.includes('Failed to send a request')
+      );
+    };
+
     try {
-      const { data, error } = await supabase.functions.invoke('maturador-evolution', {
-        body: {
-          action: 'test-call',
-          instanceId: instanceA.id,
-          targetPhone: instanceB.phone_number,
-        },
-      });
+      // Retry a few times because "Failed to fetch" can be transient in the preview environment
+      const maxAttempts = 3;
+      let lastErr: any = null;
 
-      if (error) throw error;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const { data, error } = await supabase.functions.invoke('maturador-evolution', {
+            body: {
+              action: 'test-call',
+              instanceId: instanceA.id,
+              targetPhone: instanceB.phone_number,
+            },
+          });
 
-      if (data?.success) {
-        toast.success('Chamada de teste iniciada com sucesso!');
-      } else {
-        toast.error(data?.error || 'Erro ao fazer chamada de teste');
+          if (error) throw error;
+
+          if (data?.success) {
+            toast.success('Chamada de teste iniciada com sucesso!');
+          } else {
+            toast.error(data?.error || 'Erro ao fazer chamada de teste');
+          }
+
+          return;
+        } catch (err: any) {
+          lastErr = err;
+          if (attempt < maxAttempts && isNetworkishError(err)) {
+            await new Promise((r) => setTimeout(r, 700 * attempt));
+            continue;
+          }
+          throw err;
+        }
       }
+
+      throw lastErr;
     } catch (error: any) {
       console.error('Test call error:', error);
-      toast.error(error.message || 'Erro ao fazer chamada de teste');
+      toast.error(error?.message || 'Erro ao fazer chamada de teste');
     } finally {
       setTestingCall(null);
     }
