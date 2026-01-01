@@ -147,6 +147,7 @@ serve(async (req) => {
     // PRIORITY: 1) Instance config, 2) User config, 3) Admin config, 4) Global whatsapp_api_config, 5) Global secrets
     let API_BASE_URL = '';
     let API_KEY = '';
+    let UAZ_ADMIN_TOKEN = '';
     let configSource = 'none';
 
     // For UazAPI, we need to get the base URL from whatsapp_api_config
@@ -154,12 +155,13 @@ serve(async (req) => {
       // Get UazAPI base URL from whatsapp_api_config table
       const { data: apiConfig } = await supabaseAdmin
         .from('whatsapp_api_config')
-        .select('uazapi_base_url, uazapi_api_token')
+        .select('uazapi_base_url, uazapi_api_token, uazapi_admin_header')
         .limit(1)
         .single();
       
       if (apiConfig?.uazapi_base_url) {
         API_BASE_URL = apiConfig.uazapi_base_url.replace(/\/$/, '');
+        UAZ_ADMIN_TOKEN = apiConfig.uazapi_api_token || '';
         API_KEY = instanceToken || apiConfig.uazapi_api_token || '';
         configSource = 'whatsapp_api_config';
         console.log(`[SEND-MESSAGE] UazAPI using whatsapp_api_config: ${API_BASE_URL}`);
@@ -366,9 +368,35 @@ serve(async (req) => {
       return { res, json };
     };
 
+    const tryGetJson = async (endpoint: string, params: Record<string, string>) => {
+      const url = new URL(`${API_BASE_URL}${endpoint}`);
+      for (const [k, v] of Object.entries(params)) {
+        if (typeof v === 'string' && v.length) url.searchParams.set(k, v);
+      }
+      console.log(`[${apiProvider.toUpperCase()}] Calling API: GET ${url.toString()}`);
+      const res = await fetch(url.toString(), {
+        method: 'GET',
+        headers: {
+          ...authHeader,
+          'Content-Type': 'application/json',
+        },
+      });
+      let json: any = null;
+      try {
+        json = await res.json();
+      } catch {
+        const text = await res.text().catch(() => '');
+        json = { message: text };
+      }
+      return { res, json };
+    };
+
     if (apiProvider === 'uazapi') {
       // UazAPI - token header. Some deployments return 405 on /message/sendText, so we try a small set of known variants.
       authHeader = { token: (instanceToken || API_KEY) as string };
+      if (UAZ_ADMIN_TOKEN) {
+        authHeader['admintoken'] = UAZ_ADMIN_TOKEN;
+      }
 
       const attempts: Array<{ endpoint: string; body: Record<string, unknown>; label: string }> = [];
 
@@ -429,6 +457,42 @@ serve(async (req) => {
         if (res.ok) break;
         // If it's not a method/route issue, don't shotgun too much
         if (![404, 405].includes(res.status)) break;
+      }
+
+      // Some UazAPI deployments expose sendText as GET (returns 405 on POST).
+      if (apiResponse && !apiResponse.ok && apiResponse.status === 405 && messageType === 'text') {
+        const contentText = typeof content === 'string' ? content : String(content ?? '');
+        const getAttempts: Array<{ endpoint: string; params: Record<string, string>; label: string }> = [
+          {
+            endpoint: '/message/sendText',
+            params: { number: String(sendDestination), text: contentText },
+            label: 'uazapi:GET /message/sendText ?number&text',
+          },
+          {
+            endpoint: '/message/sendText',
+            params: { phone: String(sendDestination), message: contentText },
+            label: 'uazapi:GET /message/sendText ?phone&message',
+          },
+          {
+            endpoint: '/message/send-text',
+            params: { to: String(sendDestination), text: contentText },
+            label: 'uazapi:GET /message/send-text ?to&text',
+          },
+          {
+            endpoint: '/chat/send/text',
+            params: { Phone: String(sendDestination), Body: contentText },
+            label: 'uazapi:GET /chat/send/text ?Phone&Body',
+          },
+        ];
+
+        for (const g of getAttempts) {
+          const { res, json } = await tryGetJson(g.endpoint, g.params);
+          console.log(`[UAZAPI] Attempt ${g.label} -> ${res.status}`);
+          apiResponse = res;
+          apiResult = json;
+          if (res.ok) break;
+          if (![404, 405].includes(res.status)) break;
+        }
       }
 
       if (!apiResponse) {
