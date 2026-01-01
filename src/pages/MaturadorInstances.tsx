@@ -260,7 +260,7 @@ export default function MaturadorInstances() {
   }, []);
 
   const handleRefreshQrCode = useCallback(async () => {
-    if (!currentQrInstance) return;
+    if (!currentQrInstance || loadingQr) return; // Prevent multiple calls
     setLoadingQr(true);
     setQrCode(null);
     
@@ -289,6 +289,7 @@ export default function MaturadorInstances() {
         if (data.connected) {
           toast.success('WhatsApp já está conectado!');
           setQrModalOpen(false);
+          setLoadingQr(false);
           await fetchInstances();
           return;
         }
@@ -299,6 +300,7 @@ export default function MaturadorInstances() {
           console.log(`[QR-REFRESH] Got QR code, length: ${qr.length}`);
           setQrCodeCache(currentQrInstance.instance_name, qr);
           setQrCode(qr);
+          setLoadingQr(false);
           return; // Success - exit retry loop
         } else {
           console.log('[QR-REFRESH] No QR in response:', JSON.stringify(data).substring(0, 200));
@@ -324,7 +326,7 @@ export default function MaturadorInstances() {
     }
     
     setLoadingQr(false);
-  }, [currentQrInstance]);
+  }, [currentQrInstance, loadingQr]);
 
   const handleCheckQrStatus = async () => {
     if (!currentQrInstance) return;
@@ -618,45 +620,14 @@ export default function MaturadorInstances() {
                 <p className="text-xs text-muted-foreground">Apenas letras minúsculas, números e underscores</p>
               </div>
 
-              <Collapsible open={proxyEnabled} onOpenChange={setProxyEnabled}>
-                <CollapsibleTrigger asChild>
-                  <Button variant="outline" size="sm" className="w-full justify-between">
-                    <span>Configurar Proxy (opcional)</span>
-                    {proxyEnabled ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="pt-4 space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label>Host</Label>
-                      <Input placeholder="proxy.example.com" value={proxyHost} onChange={(e) => setProxyHost(e.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Porta</Label>
-                      <Input placeholder="8080" value={proxyPort} onChange={(e) => setProxyPort(e.target.value)} />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Protocolo</Label>
-                    <select className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm" value={proxyProtocol} onChange={(e) => setProxyProtocol(e.target.value)}>
-                      <option value="http">HTTP</option>
-                      <option value="https">HTTPS</option>
-                      <option value="socks4">SOCKS4</option>
-                      <option value="socks5">SOCKS5</option>
-                    </select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label>Usuário (opcional)</Label>
-                      <Input placeholder="username" value={proxyUsername} onChange={(e) => setProxyUsername(e.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Senha (opcional)</Label>
-                      <Input type="password" placeholder="password" value={proxyPassword} onChange={(e) => setProxyPassword(e.target.value)} />
-                    </div>
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
+              <div className="relative">
+                <Button variant="outline" size="sm" className="w-full justify-between opacity-60 cursor-not-allowed" disabled>
+                  <span>Configurar Proxy (opcional)</span>
+                  <Badge variant="outline" className="ml-2 text-[10px] bg-yellow-500/20 text-yellow-500 border-yellow-500/30">
+                    Em breve
+                  </Badge>
+                </Button>
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setCreateModalOpen(false)}>
