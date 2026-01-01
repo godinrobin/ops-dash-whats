@@ -18,6 +18,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
+import { NeonGradientCard } from "@/components/ui/neon-gradient-card";
+import { GlowingCard } from "@/components/ui/glowing-card";
 
 interface Instance {
   id: string;
@@ -287,87 +289,101 @@ const TagWhatsCloud = () => {
 
           {/* Stats */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            <Card className="border-emerald-500/20">
-              <CardContent className="p-4 text-center">
+            <NeonGradientCard 
+              borderSize={2} 
+              borderRadius={12}
+              neonColors={{ firstColor: "#10b981", secondColor: "#34d399" }}
+            >
+              <div className="text-center">
                 <p className="text-2xl font-bold text-emerald-500">{configs.filter(c => c.is_active).length}</p>
                 <p className="text-sm text-muted-foreground">Números Ativos</p>
-              </CardContent>
-            </Card>
-            <Card className="border-blue-500/20">
-              <CardContent className="p-4 text-center">
+              </div>
+            </NeonGradientCard>
+            <NeonGradientCard 
+              borderSize={2} 
+              borderRadius={12}
+              neonColors={{ firstColor: "#3b82f6", secondColor: "#60a5fa" }}
+            >
+              <div className="text-center">
                 <p className="text-2xl font-bold text-blue-500">{connectedInstances.length}</p>
                 <p className="text-sm text-muted-foreground">Números Conectados</p>
-              </CardContent>
-            </Card>
-            <Card className="border-amber-500/20">
-              <CardContent className="p-4 text-center flex flex-col items-center justify-center">
+              </div>
+            </NeonGradientCard>
+            <NeonGradientCard 
+              borderSize={2} 
+              borderRadius={12}
+              neonColors={{ firstColor: "#f59e0b", secondColor: "#fbbf24" }}
+            >
+              <div className="text-center">
                 <p className="text-2xl font-bold text-amber-500">{totalLabelsApplied}</p>
                 <p className="text-sm text-muted-foreground">Vendas Totais</p>
-              </CardContent>
-            </Card>
+              </div>
+            </NeonGradientCard>
           </div>
 
           {/* Chart */}
           {instancesWithLogs.length > 0 && (
-            <Card className="mb-6 border-emerald-500/20">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5 text-emerald-500" />
-                    <CardTitle className="text-lg">Etiquetas por Número</CardTitle>
+            <GlowingCard className="mb-6" glowColor="rgba(16, 185, 129, 0.5)">
+              <Card className="border-emerald-500/20">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5 text-emerald-500" />
+                      <CardTitle className="text-lg">Etiquetas por Número</CardTitle>
+                    </div>
+                    <Select value={chartPeriod} onValueChange={(v: '7' | '30') => setChartPeriod(v)}>
+                      <SelectTrigger className="w-[140px]">
+                        <SelectValue placeholder="Período" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="7">Últimos 7 dias</SelectItem>
+                        <SelectItem value="30">Últimos 30 dias</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <Select value={chartPeriod} onValueChange={(v: '7' | '30') => setChartPeriod(v)}>
-                    <SelectTrigger className="w-[140px]">
-                      <SelectValue placeholder="Período" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="7">Últimos 7 dias</SelectItem>
-                      <SelectItem value="30">Últimos 30 dias</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                      <defs>
-                        {instancesWithLogs.map((instanceId, index) => (
-                          <linearGradient key={instanceId} id={`gradient-${instanceId}`} x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor={CHART_COLORS[index % CHART_COLORS.length]} stopOpacity={0.3} />
-                            <stop offset="95%" stopColor={CHART_COLORS[index % CHART_COLORS.length]} stopOpacity={0} />
-                          </linearGradient>
-                        ))}
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis dataKey="date" className="text-xs" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                      <YAxis allowDecimals={false} className="text-xs" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: 'hsl(var(--card))', 
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px'
-                        }}
-                        labelStyle={{ color: 'hsl(var(--foreground))' }}
-                        formatter={(value: number, name: string) => [value, getInstanceName(name)]}
-                      />
-                      <Legend formatter={(value) => getInstanceName(value)} />
-                      {instancesWithLogs.map((instanceId, index) => (
-                        <Area
-                          key={instanceId}
-                          type="monotone"
-                          dataKey={instanceId}
-                          name={instanceId}
-                          stroke={CHART_COLORS[index % CHART_COLORS.length]}
-                          fill={`url(#gradient-${instanceId})`}
-                          strokeWidth={2}
+                </CardHeader>
+                <CardContent>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <defs>
+                          {instancesWithLogs.map((instanceId, index) => (
+                            <linearGradient key={instanceId} id={`gradient-${instanceId}`} x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor={CHART_COLORS[index % CHART_COLORS.length]} stopOpacity={0.3} />
+                              <stop offset="95%" stopColor={CHART_COLORS[index % CHART_COLORS.length]} stopOpacity={0} />
+                            </linearGradient>
+                          ))}
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis dataKey="date" className="text-xs" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                        <YAxis allowDecimals={false} className="text-xs" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: 'hsl(var(--card))', 
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px'
+                          }}
+                          labelStyle={{ color: 'hsl(var(--foreground))' }}
+                          formatter={(value: number, name: string) => [value, getInstanceName(name)]}
                         />
-                      ))}
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
+                        <Legend formatter={(value) => getInstanceName(value)} />
+                        {instancesWithLogs.map((instanceId, index) => (
+                          <Area
+                            key={instanceId}
+                            type="monotone"
+                            dataKey={instanceId}
+                            name={instanceId}
+                            stroke={CHART_COLORS[index % CHART_COLORS.length]}
+                            fill={`url(#gradient-${instanceId})`}
+                            strokeWidth={2}
+                          />
+                        ))}
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            </GlowingCard>
           )}
 
           {/* Important Note */}
