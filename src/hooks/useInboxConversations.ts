@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { InboxContact } from '@/types/inbox';
 import { useAuth } from '@/contexts/AuthContext';
@@ -9,6 +9,8 @@ export const useInboxConversations = (instanceId?: string) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [connectedInstanceIds, setConnectedInstanceIds] = useState<Set<string>>(new Set());
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const messagesChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // Fetch connected instances
   const fetchConnectedInstances = useCallback(async () => {
@@ -99,62 +101,117 @@ export const useInboxConversations = (instanceId?: string) => {
     fetchContacts();
   }, [fetchContacts]);
 
-  // Subscribe to contact changes
+  // Subscribe to contact changes with proper cleanup
   useEffect(() => {
+    // Cleanup previous channels
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+    if (messagesChannelRef.current) {
+      supabase.removeChannel(messagesChannelRef.current);
+      messagesChannelRef.current = null;
+    }
+
     if (!user) return;
 
+    const channelName = `inbox-contacts-changes-${user.id}-${Date.now()}`;
+    console.log(`[useInboxConversations] Subscribing to contacts channel: ${channelName}`);
+    
     const contactsChannel = supabase
-      .channel('inbox-contacts-changes')
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'INSERT',
           schema: 'public',
           table: 'inbox_contacts',
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          if (payload.eventType === 'INSERT') {
-            const newContact = payload.new as any;
-            setContacts(prev => [{
+          console.log('[useInboxConversations] Realtime INSERT received:', payload);
+          const newContact = payload.new as any;
+          
+          // Check if we should include this contact based on instanceId filter
+          if (instanceId && newContact.instance_id !== instanceId) {
+            console.log('[useInboxConversations] Ignoring INSERT - different instance');
+            return;
+          }
+          
+          setContacts(prev => {
+            // Check if already exists
+            if (prev.some(c => c.id === newContact.id)) {
+              console.log('[useInboxConversations] Contact already exists, skipping');
+              return prev;
+            }
+            
+            const formattedContact = {
               ...newContact,
               tags: Array.isArray(newContact.tags) ? (newContact.tags as any[]).map((t: any) => String(t)) : [],
               status: newContact.status as 'active' | 'archived'
-            } as InboxContact, ...prev]);
-          } else if (payload.eventType === 'UPDATE') {
-            const updated = payload.new as any;
-            setContacts(prev => {
-              const existingContact = prev.find(c => c.id === updated.id);
-              
-              // Guard: Only reorder if last_message_at or unread_count actually changed
-              const lastMessageChanged = existingContact?.last_message_at !== updated.last_message_at;
-              const unreadChanged = existingContact?.unread_count !== updated.unread_count;
-              
-              const newList = prev.map(c => c.id === updated.id ? {
-                ...updated,
-                tags: Array.isArray(updated.tags) ? (updated.tags as any[]).map((t: any) => String(t)) : [],
-                status: updated.status as 'active' | 'archived'
-              } as InboxContact : c);
-              
-              // Only re-sort if there was a meaningful change that affects ordering
-              if (lastMessageChanged || unreadChanged) {
-                return newList.sort((a, b) => 
-                  new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime()
-                );
-              }
-              
-              return newList;
-            });
-          } else if (payload.eventType === 'DELETE') {
-            setContacts(prev => prev.filter(c => c.id !== payload.old.id));
-          }
+            } as InboxContact;
+            
+            console.log('[useInboxConversations] Adding new contact to list:', formattedContact.id);
+            return [formattedContact, ...prev];
+          });
         }
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'inbox_contacts',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const updated = payload.new as any;
+          setContacts(prev => {
+            const existingContact = prev.find(c => c.id === updated.id);
+            
+            // Guard: Only reorder if last_message_at or unread_count actually changed
+            const lastMessageChanged = existingContact?.last_message_at !== updated.last_message_at;
+            const unreadChanged = existingContact?.unread_count !== updated.unread_count;
+            
+            const newList = prev.map(c => c.id === updated.id ? {
+              ...updated,
+              tags: Array.isArray(updated.tags) ? (updated.tags as any[]).map((t: any) => String(t)) : [],
+              status: updated.status as 'active' | 'archived'
+            } as InboxContact : c);
+            
+            // Only re-sort if there was a meaningful change that affects ordering
+            if (lastMessageChanged || unreadChanged) {
+              return newList.sort((a, b) => 
+                new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime()
+              );
+            }
+            
+            return newList;
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'inbox_contacts',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          setContacts(prev => prev.filter(c => c.id !== payload.old.id));
+        }
+      )
+      .subscribe((status) => {
+        console.log(`[useInboxConversations] Contacts channel status: ${status}`);
+      });
+
+    channelRef.current = contactsChannel;
 
     // Subscribe to new messages to update contact's last_message_at and move to top
+    const messagesChannelName = `inbox-messages-for-contacts-${user.id}-${Date.now()}`;
     const messagesChannel = supabase
-      .channel('inbox-messages-for-contacts')
+      .channel(messagesChannelName)
       .on(
         'postgres_changes',
         {
@@ -167,6 +224,16 @@ export const useInboxConversations = (instanceId?: string) => {
           const newMessage = payload.new as any;
           // Update the contact's last_message_at and re-sort
           setContacts(prev => {
+            // Check if contact exists in list
+            const contactExists = prev.some(c => c.id === newMessage.contact_id);
+            
+            if (!contactExists) {
+              // Contact not in list yet - trigger a refetch to get it
+              console.log('[useInboxConversations] Message for unknown contact, refetching...');
+              fetchContacts();
+              return prev;
+            }
+            
             const newList = prev.map(c => {
               if (c.id === newMessage.contact_id) {
                 return {
@@ -184,13 +251,53 @@ export const useInboxConversations = (instanceId?: string) => {
           });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log(`[useInboxConversations] Messages channel status: ${status}`);
+      });
+
+    messagesChannelRef.current = messagesChannel;
 
     return () => {
-      supabase.removeChannel(contactsChannel);
-      supabase.removeChannel(messagesChannel);
+      console.log('[useInboxConversations] Cleaning up channels');
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+      if (messagesChannelRef.current) {
+        supabase.removeChannel(messagesChannelRef.current);
+        messagesChannelRef.current = null;
+      }
     };
-  }, [user]);
+  }, [user, instanceId, fetchContacts]);
+
+  // Fallback polling: refresh contacts every 30 seconds to catch any missed realtime events
+  useEffect(() => {
+    if (!user) return;
+    
+    let isTabVisible = true;
+    
+    const handleVisibilityChange = () => {
+      isTabVisible = document.visibilityState === 'visible';
+      // Refetch when tab becomes visible again
+      if (isTabVisible) {
+        fetchContacts();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Poll every 30 seconds as fallback
+    const intervalId = setInterval(() => {
+      if (isTabVisible) {
+        fetchContacts();
+      }
+    }, 30000);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(intervalId);
+    };
+  }, [user, fetchContacts]);
 
   return { contacts, loading, error, refetch: fetchContacts };
 };
