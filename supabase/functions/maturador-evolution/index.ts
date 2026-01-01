@@ -2020,39 +2020,99 @@ Regras:
           });
         }
 
-        // Fetch phone numbers from Evolution API if not in DB
-        const allEvolutionInstances = await callEvolution('/instance/fetchInstances', 'GET');
-        console.log('Evolution instances for conversation:', JSON.stringify(allEvolutionInstances, null, 2));
-        
-        const phoneMap = new Map<string, string>();
-        if (Array.isArray(allEvolutionInstances)) {
-          for (const inst of allEvolutionInstances) {
-            const name = inst?.instance?.instanceName || inst?.instanceName || inst?.name;
-            const phone = extractPhoneFromInstance(inst);
-            if (name && phone) {
-              phoneMap.set(name, phone);
-              console.log(`Mapped ${name} -> ${phone}`);
+        // Helper to get phone from UazAPI /instance/status
+        const getPhoneFromUazApiStatus = async (inst: any): Promise<string | null> => {
+          try {
+            const config = await getInstanceApiConfig(supabaseClient, inst.id);
+            if (config.provider !== 'uazapi') return null;
+            
+            console.log(`[getPhoneFromUazApiStatus] Fetching status for ${inst.instance_name}`);
+            const statusResult = await callWhatsAppApi(
+              config,
+              '/instance/status',
+              'GET',
+              undefined,
+              false,
+              inst.uazapi_token || undefined
+            );
+            
+            console.log(`[getPhoneFromUazApiStatus] Status result:`, JSON.stringify(statusResult, null, 2));
+            
+            // UazAPI returns jid.user with the phone number when connected
+            // Example: { status: { jid: { user: "5511999999999", ... } } }
+            const jidUser = statusResult?.status?.jid?.user;
+            if (jidUser) {
+              const phone = jidUser.replace(/\D/g, '');
+              if (phone.length >= 8) {
+                console.log(`[getPhoneFromUazApiStatus] Found phone: ${phone}`);
+                return phone;
+              }
             }
+            
+            // Also check instance.profileName for phone-like patterns
+            const profileName = statusResult?.instance?.profileName;
+            if (profileName) {
+              const cleaned = profileName.replace(/\D/g, '');
+              if (cleaned.length >= 10) {
+                console.log(`[getPhoneFromUazApiStatus] Found phone from profileName: ${cleaned}`);
+                return cleaned;
+              }
+            }
+            
+            return null;
+          } catch (err) {
+            console.error(`[getPhoneFromUazApiStatus] Error:`, err);
+            return null;
           }
-        }
+        };
 
-        // Resolve phone for each instance
+        // Resolve phone for each instance - supports both Evolution and UazAPI
         const resolvePhone = async (inst: any): Promise<string | null> => {
           // First try from DB
           if (inst.phone_number && inst.phone_number.length >= 8) {
+            console.log(`Phone for ${inst.instance_name} from DB: ${inst.phone_number}`);
             return inst.phone_number;
           }
-          // Then try from Evolution map
-          const fromMap = phoneMap.get(inst.instance_name);
-          if (fromMap) {
-            // Update DB with this phone
-            await supabaseClient
-              .from('maturador_instances')
-              .update({ phone_number: fromMap })
-              .eq('id', inst.id)
-              .eq('user_id', user.id);
-            return fromMap;
+          
+          // Check if it's UazAPI instance
+          if (inst.api_provider === 'uazapi' && inst.uazapi_token) {
+            console.log(`Instance ${inst.instance_name} is UazAPI, fetching phone from /instance/status`);
+            const phone = await getPhoneFromUazApiStatus(inst);
+            if (phone) {
+              // Update DB with this phone
+              await supabaseClient
+                .from('maturador_instances')
+                .update({ phone_number: phone })
+                .eq('id', inst.id)
+                .eq('user_id', user.id);
+              return phone;
+            }
+          } else {
+            // Evolution API - try to get from fetchInstances
+            try {
+              const allEvolutionInstances = await callEvolution('/instance/fetchInstances', 'GET');
+              if (Array.isArray(allEvolutionInstances)) {
+                for (const evoInst of allEvolutionInstances) {
+                  const name = evoInst?.instance?.instanceName || evoInst?.instanceName || evoInst?.name;
+                  if (name === inst.instance_name) {
+                    const phone = extractPhoneFromInstance(evoInst);
+                    if (phone) {
+                      // Update DB with this phone
+                      await supabaseClient
+                        .from('maturador_instances')
+                        .update({ phone_number: phone })
+                        .eq('id', inst.id)
+                        .eq('user_id', user.id);
+                      return phone;
+                    }
+                  }
+                }
+              }
+            } catch (err) {
+              console.error('Error fetching Evolution instances:', err);
+            }
           }
+          
           return null;
         };
 
@@ -2102,6 +2162,73 @@ Regras:
         let messageSent: any = null;
         let messageBody = '';
 
+        // Helper to send message via correct API provider
+        const sendMessageViaApi = async (
+          inst: any,
+          type: 'text' | 'audio' | 'image',
+          toPhone: string,
+          payload: any
+        ) => {
+          const config = await getInstanceApiConfig(supabaseClient, inst.id);
+          console.log(`[sendMessageViaApi] Provider: ${config.provider}, Type: ${type}, To: ${toPhone}`);
+          
+          if (config.provider === 'uazapi') {
+            // UazAPI endpoints
+            let endpoint: string;
+            let body: any;
+            
+            if (type === 'text') {
+              // UazAPI: POST /send/text with { number, text }
+              endpoint = '/send/text';
+              body = { number: toPhone, text: payload.text };
+            } else if (type === 'audio') {
+              // UazAPI: POST /send/media with type=ptt or audio
+              endpoint = '/send/media';
+              body = { 
+                number: toPhone, 
+                type: 'ptt',
+                media: payload.audio.startsWith('data:') ? payload.audio : `data:audio/ogg;base64,${payload.audio}`
+              };
+            } else if (type === 'image') {
+              // UazAPI: POST /send/media with type=image
+              endpoint = '/send/media';
+              body = { 
+                number: toPhone, 
+                type: 'image',
+                media: payload.media,
+                caption: payload.caption || ''
+              };
+            } else {
+              throw new Error(`Unknown message type: ${type}`);
+            }
+            
+            console.log(`[sendMessageViaApi] UazAPI endpoint: ${endpoint}`);
+            return await callWhatsAppApi(config, endpoint, 'POST', body, false, inst.uazapi_token || undefined);
+          } else {
+            // Evolution API endpoints
+            if (type === 'text') {
+              return await callWhatsAppApi(config, `/message/sendText/${inst.instance_name}`, 'POST', {
+                number: toPhone,
+                text: payload.text,
+              }, false);
+            } else if (type === 'audio') {
+              return await callWhatsAppApi(config, `/message/sendWhatsAppAudio/${inst.instance_name}`, 'POST', {
+                number: toPhone,
+                audio: payload.audio,
+              }, false);
+            } else if (type === 'image') {
+              return await callWhatsAppApi(config, `/message/sendMedia/${inst.instance_name}`, 'POST', {
+                number: toPhone,
+                mediatype: 'image',
+                mimetype: 'image/png',
+                caption: payload.caption || '',
+                media: payload.media,
+                fileName: 'image.png',
+              }, false);
+            }
+          }
+        };
+
         try {
           if (messageType === 'audio') {
             // Generate audio
@@ -2110,14 +2237,9 @@ Regras:
             console.log('Audio copy:', audioCopy);
             
             const audioBase64 = await generateAudioWithElevenLabs(audioCopy);
-            console.log('Audio generated, sending via Evolution API...');
+            console.log('Audio generated, sending...');
 
-            // Send audio via Evolution API
-            // Evolution expects raw base64 (no data: prefix) on the WhatsApp audio endpoint.
-            const sendResult = await callEvolution(`/message/sendWhatsAppAudio/${fromInstance.instance_name}`, 'POST', {
-              number: toPhone,
-              audio: audioBase64,
-            });
+            const sendResult = await sendMessageViaApi(fromInstance, 'audio', toPhone, { audio: audioBase64 });
 
             console.log('Audio send result:', JSON.stringify(sendResult, null, 2));
             messageBody = `[ÁUDIO] ${audioCopy}`;
@@ -2129,15 +2251,7 @@ Regras:
             const imageUrl = await generateImageWithDallE(topicsText);
             console.log('Image URL:', imageUrl);
 
-            // Send image via Evolution API
-            const sendResult = await callEvolution(`/message/sendMedia/${fromInstance.instance_name}`, 'POST', {
-              number: toPhone,
-              mediatype: 'image',
-              mimetype: 'image/png',
-              caption: '',
-              media: imageUrl,
-              fileName: 'image.png',
-            });
+            const sendResult = await sendMessageViaApi(fromInstance, 'image', toPhone, { media: imageUrl, caption: '' });
 
             console.log('Image send result:', JSON.stringify(sendResult, null, 2));
             messageBody = `[IMAGEM] ${topicsText}`;
@@ -2227,10 +2341,7 @@ Regras IMPORTANTES:
 
             console.log(`Sending text message from ${fromInstance.instance_name} to ${toPhone}: ${message}`);
             
-            const sendResult = await callEvolution(`/message/sendText/${fromInstance.instance_name}`, 'POST', {
-              number: toPhone,
-              text: message,
-            });
+            const sendResult = await sendMessageViaApi(fromInstance, 'text', toPhone, { text: message });
 
             console.log('Send result:', JSON.stringify(sendResult, null, 2));
             messageBody = message;
