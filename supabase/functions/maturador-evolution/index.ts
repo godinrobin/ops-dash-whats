@@ -2038,18 +2038,32 @@ Regras:
             
             console.log(`[getPhoneFromUazApiStatus] Status result:`, JSON.stringify(statusResult, null, 2));
             
-            // UazAPI returns jid.user with the phone number when connected
-            // Example: { status: { jid: { user: "5511999999999", ... } } }
-            const jidUser = statusResult?.status?.jid?.user;
-            if (jidUser) {
-              const phone = jidUser.replace(/\D/g, '');
-              if (phone.length >= 8) {
-                console.log(`[getPhoneFromUazApiStatus] Found phone: ${phone}`);
-                return phone;
+            // UazAPI returns jid as a STRING in format "phoneNumber:suffix@s.whatsapp.net"
+            // Example: { status: { jid: "553173316485:9@s.whatsapp.net" } }
+            const jid = statusResult?.status?.jid;
+            if (typeof jid === 'string' && jid.includes('@')) {
+              // Extract phone number before the colon or @ symbol
+              // Format: "553173316485:9@s.whatsapp.net" -> "553173316485"
+              const phonePart = jid.split('@')[0]; // "553173316485:9"
+              const phone = phonePart.split(':')[0]; // "553173316485"
+              const cleaned = phone.replace(/\D/g, '');
+              if (cleaned.length >= 8) {
+                console.log(`[getPhoneFromUazApiStatus] Found phone from jid string: ${cleaned}`);
+                return cleaned;
               }
             }
             
-            // Also check instance.profileName for phone-like patterns
+            // Also try instance.owner field which contains the phone number
+            const owner = statusResult?.instance?.owner;
+            if (owner) {
+              const cleaned = owner.replace(/\D/g, '');
+              if (cleaned.length >= 8) {
+                console.log(`[getPhoneFromUazApiStatus] Found phone from owner: ${cleaned}`);
+                return cleaned;
+              }
+            }
+            
+            // Also check instance.profileName for phone-like patterns (last resort)
             const profileName = statusResult?.instance?.profileName;
             if (profileName) {
               const cleaned = profileName.replace(/\D/g, '');

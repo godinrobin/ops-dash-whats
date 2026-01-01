@@ -314,9 +314,20 @@ export default function MaturadorInstances() {
         data.instance?.status === 'connected' ||
         data.connected === true;
 
+      // Check if status is "connecting" - keep modal open but inform user
+      const isConnecting = 
+        data.instance?.status === 'connecting' ||
+        data.status === 'connecting' ||
+        (data.status?.loggedIn === true && data.status?.connected === false);
+
       if (isConnected) {
         toast.success('WhatsApp conectado com sucesso!');
         setQrModalOpen(false);
+        await fetchInstances();
+      } else if (isConnecting) {
+        // Keep modal open when connecting - user needs to wait
+        toast.info('Conectando... aguarde a sincronização');
+        // Refresh instances to update status but keep modal open
         await fetchInstances();
       } else {
         toast.info('Aguardando leitura do QR Code...');
@@ -638,21 +649,37 @@ export default function MaturadorInstances() {
         />
 
         {/* Delete Confirmation Dialog */}
-        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialog open={deleteDialogOpen} onOpenChange={(open) => !deleting && setDeleteDialogOpen(open)}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Excluir Número</AlertDialogTitle>
+              <AlertDialogTitle>
+                {deleting ? 'Excluindo...' : 'Excluir Número'}
+              </AlertDialogTitle>
               <AlertDialogDescription>
-                Tem certeza que deseja excluir "{instanceToDelete?.label || instanceToDelete?.phone_number || instanceToDelete?.instance_name}"? 
-                Esta ação não pode ser desfeita.
+                {deleting ? (
+                  <div className="flex flex-col items-center gap-4 py-4">
+                    <Loader2 className="h-10 w-10 animate-spin text-destructive" />
+                    <p className="text-center">
+                      Removendo "{instanceToDelete?.label || instanceToDelete?.phone_number || instanceToDelete?.instance_name}" do sistema...
+                    </p>
+                    <p className="text-xs text-muted-foreground">Isso pode levar alguns segundos</p>
+                  </div>
+                ) : (
+                  <>
+                    Tem certeza que deseja excluir "{instanceToDelete?.label || instanceToDelete?.phone_number || instanceToDelete?.instance_name}"? 
+                    Esta ação não pode ser desfeita.
+                  </>
+                )}
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDelete} disabled={deleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Excluir'}
-              </AlertDialogAction>
-            </AlertDialogFooter>
+            {!deleting && (
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDelete} disabled={deleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                  Excluir
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            )}
           </AlertDialogContent>
         </AlertDialog>
       </div>
