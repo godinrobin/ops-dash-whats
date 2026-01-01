@@ -218,7 +218,7 @@ export default function MaturadorInstances() {
     setCurrentQrInstance(instance);
     setQrModalOpen(true);
     
-    // Verifica cache primeiro
+    // Check cache first
     const cachedQr = getQrCodeFromCache(instance.instance_name);
     if (cachedQr) {
       setQrCode(cachedQr);
@@ -236,11 +236,22 @@ export default function MaturadorInstances() {
 
       if (error) throw error;
       if (data.error) throw new Error(data.error);
-
-      const qr = data.base64 || data.qrcode?.base64;
+      
+      // Check if already connected
+      if (data.connected) {
+        toast.success('WhatsApp já está conectado!');
+        setQrModalOpen(false);
+        await fetchInstances();
+        return;
+      }
+      
+      // UazAPI returns QR as data URI inside base64 or as instance.qrcode
+      const qr = data.base64 || data.qrcode?.base64 || data.qrcode;
       if (qr) {
         setQrCodeCache(instance.instance_name, qr);
         setQrCode(qr);
+      } else {
+        console.log('[GET-QR] No QR in response:', JSON.stringify(data).substring(0, 200));
       }
     } catch (error: any) {
       console.error('Error getting QR code:', error);
@@ -259,39 +270,63 @@ export default function MaturadorInstances() {
     // Clear cache to force fresh QR
     clearQrCodeCache(currentQrInstance.instance_name);
     
-    try {
-      const { data, error } = await supabase.functions.invoke('maturador-evolution', {
-        body: { 
-          action: 'get-qrcode', 
-          instanceName: currentQrInstance.instance_name,
-          forceNew: true // Force new QR code generation
-        },
-      });
+    const maxAttempts = 2;
+    let lastError: any = null;
+    
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        console.log(`[QR-REFRESH] Attempt ${attempt}/${maxAttempts} for ${currentQrInstance.instance_name}`);
+        
+        const { data, error } = await supabase.functions.invoke('maturador-evolution', {
+          body: { 
+            action: 'get-qrcode', 
+            instanceName: currentQrInstance.instance_name,
+            forceNew: true // Force new QR code generation
+          },
+        });
 
-      if (error) throw error;
-      if (data.error) throw new Error(data.error);
-      
-      // Check if instance is already connected
-      if (data.connected) {
-        toast.success('WhatsApp já está conectado!');
-        setQrModalOpen(false);
-        await fetchInstances();
-        return;
-      }
+        if (error) throw error;
+        if (data.error) throw new Error(data.error);
+        
+        // Check if instance is already connected
+        if (data.connected) {
+          toast.success('WhatsApp já está conectado!');
+          setQrModalOpen(false);
+          await fetchInstances();
+          return;
+        }
 
-      const qr = data.base64 || data.qrcode?.base64;
-      if (qr) {
-        setQrCodeCache(currentQrInstance.instance_name, qr);
-        setQrCode(qr);
-      } else {
-        toast.error('QR Code não disponível');
+        // UazAPI returns QR as data URI inside base64 or as instance.qrcode
+        const qr = data.base64 || data.qrcode?.base64 || data.qrcode;
+        if (qr) {
+          console.log(`[QR-REFRESH] Got QR code, length: ${qr.length}`);
+          setQrCodeCache(currentQrInstance.instance_name, qr);
+          setQrCode(qr);
+          return; // Success - exit retry loop
+        } else {
+          console.log('[QR-REFRESH] No QR in response:', JSON.stringify(data).substring(0, 200));
+          if (attempt < maxAttempts) {
+            await new Promise(r => setTimeout(r, 1000)); // Wait before retry
+            continue;
+          }
+          toast.error('QR Code não disponível');
+        }
+      } catch (error: any) {
+        console.error(`[QR-REFRESH] Error on attempt ${attempt}:`, error);
+        lastError = error;
+        if (attempt < maxAttempts) {
+          await new Promise(r => setTimeout(r, 1000)); // Wait before retry
+          continue;
+        }
       }
-    } catch (error: any) {
-      console.error('Error refreshing QR code:', error);
-      toast.error(error.message || 'Erro ao atualizar QR Code');
-    } finally {
-      setLoadingQr(false);
     }
+    
+    // All attempts failed
+    if (lastError) {
+      toast.error(lastError.message || 'Erro ao atualizar QR Code');
+    }
+    
+    setLoadingQr(false);
   }, [currentQrInstance]);
 
   const handleCheckQrStatus = async () => {
@@ -305,20 +340,23 @@ export default function MaturadorInstances() {
 
       if (error) throw error;
 
+      // Check if status is "connecting" FIRST - takes priority
+      const rawInstanceStatus = data?.instance?.status;
+      const isConnecting = 
+        rawInstanceStatus === 'connecting' ||
+        data?.status === 'connecting' ||
+        (data?.status?.loggedIn === true && data?.status?.connected === false);
+
       // Check for connection status - support both Evolution and UazAPI formats
-      const isConnected = 
+      // BUT only if NOT connecting
+      const isConnected = !isConnecting && (
         // Evolution API format
         data.instance?.state === 'open' ||
         // UazAPI format - multiple possible response shapes
         data.status?.connected === true ||
-        data.instance?.status === 'connected' ||
-        data.connected === true;
-
-      // Check if status is "connecting" - keep modal open but inform user
-      const isConnecting = 
-        data.instance?.status === 'connecting' ||
-        data.status === 'connecting' ||
-        (data.status?.loggedIn === true && data.status?.connected === false);
+        rawInstanceStatus === 'connected' ||
+        data.connected === true
+      );
 
       if (isConnected) {
         toast.success('WhatsApp conectado com sucesso!');
