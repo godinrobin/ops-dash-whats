@@ -346,39 +346,147 @@ serve(async (req) => {
     let apiBody: Record<string, unknown> = {};
     let authHeader: Record<string, string> = {};
 
-    if (apiProvider === 'uazapi') {
-      // UazAPI v2 endpoints (per OpenAPI spec) - use token header
-      authHeader = { 'token': instanceToken || API_KEY };
-      
-      switch (messageType) {
-        case 'text':
-          apiEndpoint = `/message/sendText`;
-          apiBody = { number: sendDestination, text: content };
-          break;
-        case 'image':
-          apiEndpoint = `/message/sendMedia`;
-          apiBody = { number: sendDestination, mediatype: 'image', media: urlToSend, caption: content || '' };
-          break;
-        case 'audio':
-          apiEndpoint = `/message/sendAudio`;
-          apiBody = { number: sendDestination, audio: urlToSend };
-          break;
-        case 'video':
-          apiEndpoint = `/message/sendMedia`;
-          apiBody = { number: sendDestination, mediatype: 'video', media: urlToSend, caption: content || '' };
-          break;
-        case 'document':
-          apiEndpoint = `/message/sendMedia`;
-          apiBody = { number: sendDestination, mediatype: 'document', media: urlToSend, fileName: content || 'document' };
-          break;
-        default:
-          apiEndpoint = `/message/sendText`;
-          apiBody = { number: sendDestination, text: content };
+    const tryPostJson = async (endpoint: string, body: Record<string, unknown>) => {
+      console.log(`[${apiProvider.toUpperCase()}] Calling API: POST ${API_BASE_URL}${endpoint}`);
+      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          ...authHeader,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+      let json: any = null;
+      try {
+        json = await res.json();
+      } catch {
+        const text = await res.text().catch(() => '');
+        json = { message: text };
       }
+      return { res, json };
+    };
+
+    if (apiProvider === 'uazapi') {
+      // UazAPI - token header. Some deployments return 405 on /message/sendText, so we try a small set of known variants.
+      authHeader = { token: (instanceToken || API_KEY) as string };
+
+      const attempts: Array<{ endpoint: string; body: Record<string, unknown>; label: string }> = [];
+
+      if (messageType === 'text') {
+        // Attempt A: current assumed endpoint
+        attempts.push({
+          endpoint: '/message/sendText',
+          body: { number: sendDestination, text: content },
+          label: 'uazapi:/message/sendText {number,text}',
+        });
+        // Attempt B: alternative body keys (used elsewhere in codebase)
+        attempts.push({
+          endpoint: '/message/sendText',
+          body: { phone: sendDestination, message: content },
+          label: 'uazapi:/message/sendText {phone,message}',
+        });
+        // Attempt C: alternative endpoint seen in some WhatsApp gateways
+        attempts.push({
+          endpoint: '/chat/send/text',
+          body: { Phone: sendDestination, Body: content },
+          label: 'uazapi:/chat/send/text {Phone,Body}',
+        });
+        // Attempt D: kebab-case endpoint variant
+        attempts.push({
+          endpoint: '/message/send-text',
+          body: { to: sendDestination, text: content },
+          label: 'uazapi:/message/send-text {to,text}',
+        });
+      } else if (messageType === 'audio') {
+        attempts.push({
+          endpoint: '/message/sendAudio',
+          body: { number: sendDestination, audio: urlToSend },
+          label: 'uazapi:/message/sendAudio',
+        });
+      } else {
+        // image/video/document
+        const mediaType = messageType === 'image' ? 'image' : messageType === 'video' ? 'video' : 'document';
+        attempts.push({
+          endpoint: '/message/sendMedia',
+          body: {
+            number: sendDestination,
+            mediatype: mediaType,
+            media: urlToSend,
+            caption: typeof content === 'string' ? content : '',
+            ...(mediaType === 'document' ? { fileName: typeof content === 'string' && content ? content : 'document' } : {}),
+          },
+          label: 'uazapi:/message/sendMedia',
+        });
+      }
+
+      let apiResponse: Response | null = null;
+      let apiResult: any = null;
+      for (const a of attempts) {
+        const { res, json } = await tryPostJson(a.endpoint, a.body);
+        console.log(`[UAZAPI] Attempt ${a.label} -> ${res.status}`);
+        apiResponse = res;
+        apiResult = json;
+        if (res.ok) break;
+        // If it's not a method/route issue, don't shotgun too much
+        if (![404, 405].includes(res.status)) break;
+      }
+
+      if (!apiResponse) {
+        return new Response(JSON.stringify({ error: 'Falha ao enviar mensagem' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      console.log('API response:', JSON.stringify(apiResult, null, 2));
+
+      if (!apiResponse.ok) {
+        console.error('API error:', apiResult);
+
+        // Update message status to failed if we have messageId
+        if (messageId) {
+          await supabaseAdmin
+            .from('inbox_messages')
+            .update({ status: 'failed' })
+            .eq('id', messageId);
+        }
+
+        const errorMessage = apiResult?.message || apiResult?.response?.message;
+        const errorDetails = Array.isArray(errorMessage) ? errorMessage.join(', ') : errorMessage;
+
+        let userFriendlyError = 'Falha ao enviar mensagem';
+        let errorCode = 'SEND_FAILED';
+
+        if (errorDetails?.includes('disconnected') || errorDetails?.includes('logged out')) {
+          userFriendlyError = 'A instância do WhatsApp está desconectada. Reconecte e tente novamente.';
+          errorCode = 'INSTANCE_DISCONNECTED';
+        }
+
+        // Persist disconnected status AND last_error_at so UI can warn even without sending
+        if (instanceId && errorCode === 'INSTANCE_DISCONNECTED') {
+          const { error: statusErr } = await supabaseAdmin
+            .from('maturador_instances')
+            .update({ status: 'disconnected', last_error_at: new Date().toISOString() })
+            .eq('id', instanceId);
+          if (statusErr) console.warn('Failed to mark instance as disconnected:', statusErr);
+        }
+
+        return new Response(JSON.stringify({
+          error: userFriendlyError,
+          errorCode,
+          details: apiResult,
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Success path continues below (we'll reuse apiResult when needed)
+      var finalApiResult = apiResult;
     } else {
-      // Evolution API endpoints - use apikey header  
-      authHeader = { 'apikey': API_KEY };
-      
+      // Evolution API endpoints - use apikey header
+      authHeader = { apikey: API_KEY };
+
       switch (messageType) {
         case 'text':
           apiEndpoint = `/message/sendText/${instanceName}`;
@@ -404,21 +512,76 @@ serve(async (req) => {
           apiEndpoint = `/message/sendText/${instanceName}`;
           apiBody = { number: sendDestination, text: content };
       }
+
+      const apiResponse = await fetch(`${API_BASE_URL}${apiEndpoint}`, {
+        method: 'POST',
+        headers: {
+          ...authHeader,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(apiBody),
+      });
+
+      const apiResult = await apiResponse.json();
+      console.log('API response:', JSON.stringify(apiResult, null, 2));
+
+      if (!apiResponse.ok) {
+        console.error('API error:', apiResult);
+
+        // Update message status to failed if we have messageId
+        if (messageId) {
+          await supabaseAdmin
+            .from('inbox_messages')
+            .update({ status: 'failed' })
+            .eq('id', messageId);
+        }
+
+        // Parse specific error messages for better user feedback
+        const errorMessage = apiResult?.message || apiResult?.response?.message;
+        const errorDetails = Array.isArray(errorMessage) ? errorMessage.join(', ') : errorMessage;
+
+        let userFriendlyError = 'Falha ao enviar mensagem';
+        let errorCode = 'SEND_FAILED';
+
+        if (errorDetails?.includes('Connection Closed') || errorDetails?.includes('connection closed')) {
+          userFriendlyError = 'Conexão fechada. O número pode não ter WhatsApp ou a instância perdeu conexão.';
+          errorCode = 'CONNECTION_CLOSED';
+        } else if (errorDetails?.includes('not registered') || errorDetails?.includes('not on whatsapp')) {
+          userFriendlyError = 'Este número não possui WhatsApp';
+          errorCode = 'NUMBER_NOT_ON_WHATSAPP';
+        } else if (errorDetails?.includes('disconnected') || errorDetails?.includes('logged out')) {
+          userFriendlyError = 'A instância do WhatsApp está desconectada. Reconecte e tente novamente.';
+          errorCode = 'INSTANCE_DISCONNECTED';
+        }
+
+        // Persist disconnected status AND last_error_at so UI can warn even without sending
+        if (instanceId && (errorCode === 'CONNECTION_CLOSED' || errorCode === 'INSTANCE_DISCONNECTED')) {
+          const { error: statusErr } = await supabaseAdmin
+            .from('maturador_instances')
+            .update({
+              status: 'disconnected',
+              last_error_at: new Date().toISOString(),
+            })
+            .eq('id', instanceId);
+
+          if (statusErr) console.warn('Failed to mark instance as disconnected:', statusErr);
+        }
+
+        return new Response(JSON.stringify({
+          error: userFriendlyError,
+          errorCode,
+          details: apiResult,
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      var finalApiResult = apiResult;
     }
 
-    console.log(`[${apiProvider.toUpperCase()}] Calling API: POST ${API_BASE_URL}${apiEndpoint}`);
-
-    const apiResponse = await fetch(`${API_BASE_URL}${apiEndpoint}`, {
-      method: 'POST',
-      headers: {
-        ...authHeader,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(apiBody),
-    });
-
-    const apiResult = await apiResponse.json();
-    console.log('API response:', JSON.stringify(apiResult, null, 2));
+    // From here on, use finalApiResult for success flow
+    const apiResult = finalApiResult;
 
     if (!apiResponse.ok) {
       console.error('API error:', apiResult);

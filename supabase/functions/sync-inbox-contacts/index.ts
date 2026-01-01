@@ -184,10 +184,23 @@ serve(async (req) => {
       });
     }
 
+    // UazAPI: contact sync is handled via webhooks; Evolution chat endpoints won't work.
+    if ((instance as any)?.api_provider === 'uazapi') {
+      return new Response(JSON.stringify({
+        success: true,
+        imported: 0,
+        updated: 0,
+        skipped: 0,
+        total: 0,
+        instanceName: instance.instance_name,
+        message: 'UazAPI uses webhook-based sync'
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Get Evolution API config with multiple fallback strategies
-    let evolutionBaseUrl: string | undefined;
-    let evolutionApiKey: string | undefined;
-    let configSource = 'none';
 
     // Strategy 1: User's own maturador_config
     const { data: userConfig } = await supabaseClient
