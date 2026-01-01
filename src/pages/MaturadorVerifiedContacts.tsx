@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
+
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ArrowLeft, Loader2, Send, ShieldCheck, User, AlertCircle, Plus, Pencil, Trash2 } from "lucide-react";
@@ -493,11 +493,11 @@ export default function MaturadorVerifiedContacts() {
                           type="checkbox"
                           checked={isSelected}
                           onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedInstanceIds([...selectedInstanceIds, instance.id]);
-                            } else {
-                              setSelectedInstanceIds(selectedInstanceIds.filter(id => id !== instance.id));
-                            }
+                            const checked = e.target.checked;
+                            setSelectedInstanceIds((prev) => {
+                              if (checked) return prev.includes(instance.id) ? prev : [...prev, instance.id];
+                              return prev.filter((id) => id !== instance.id);
+                            });
                           }}
                           className="h-4 w-4 accent-primary"
                         />
