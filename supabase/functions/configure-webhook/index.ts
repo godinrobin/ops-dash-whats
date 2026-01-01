@@ -131,7 +131,7 @@ serve(async (req) => {
 
     // Handle UazAPI instances differently
     if (instance.api_provider === 'uazapi') {
-      // UazAPI: /instance/setWebhooks with instance token header
+      // UazAPI: POST /webhook with instance token header
       if (!instance.uazapi_token) {
         return new Response(JSON.stringify({ error: 'Instance token not found (uazapi_token)' }), {
           status: 400,
@@ -152,45 +152,31 @@ serve(async (req) => {
 
       const instanceToken = instance.uazapi_token;
 
+      // UazAPI v2 webhook format - POST /webhook
+      // According to OpenAPI docs: events is an array, excludeMessages is also array
       const uazapiWebhookPayload = {
+        enabled: true,
         url: webhookUrl,
-        addUrlEvents: true,
-        addUrlTypesMessages: true,
-        events: 'messages',
-        excludeMessages: 'wasSentByApi,isGroupYes',
+        events: ['messages', 'messages_update'],
+        excludeMessages: ['wasSentByApi', 'isGroupYes'],
+        addUrlEvents: false,
+        addUrlTypesMessages: false,
       };
 
       console.log('[CONFIGURE-WEBHOOK] UazAPI webhook payload:', JSON.stringify(uazapiWebhookPayload));
       console.log('[CONFIGURE-WEBHOOK] UazAPI base URL:', uazapiUrl);
+      console.log('[CONFIGURE-WEBHOOK] Using endpoint: POST /webhook');
 
-      // Try POST first, fallback to PUT if server returns 405
-      let webhookRes = await fetch(`${uazapiUrl}/instance/setWebhooks`, {
+      const webhookRes = await fetch(`${uazapiUrl}/webhook`, {
         method: 'POST',
         headers: {
-          token: instanceToken,
+          'token': instanceToken,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(uazapiWebhookPayload),
       });
 
-      let responseText = await webhookRes.text();
-
-      if (!webhookRes.ok && webhookRes.status === 405) {
-        const allow = webhookRes.headers.get('allow') || webhookRes.headers.get('Allow');
-        console.log(`[CONFIGURE-WEBHOOK] POST returned 405. Allow=${allow ?? 'unknown'}. Retrying with PUT...`);
-
-        webhookRes = await fetch(`${uazapiUrl}/instance/setWebhooks`, {
-          method: 'PUT',
-          headers: {
-            token: instanceToken,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(uazapiWebhookPayload),
-        });
-
-        responseText = await webhookRes.text();
-      }
-
+      const responseText = await webhookRes.text();
       console.log('[CONFIGURE-WEBHOOK] UazAPI response:', webhookRes.status, responseText);
 
       if (webhookRes.ok) {
@@ -221,6 +207,7 @@ serve(async (req) => {
           details: responseText,
           webhookUrl,
           baseUrl: uazapiUrl,
+          endpoint: '/webhook',
         }),
         {
           status: 500,
