@@ -301,7 +301,6 @@ const TagWhatsCloud = () => {
             </Card>
             <Card className="border-amber-500/20">
               <CardContent className="p-4 text-center flex flex-col items-center justify-center">
-                <ShoppingBag className="h-5 w-5 text-amber-500 mb-1" />
                 <p className="text-2xl font-bold text-amber-500">{totalLabelsApplied}</p>
                 <p className="text-sm text-muted-foreground">Vendas Totais</p>
               </CardContent>
@@ -481,7 +480,10 @@ const TagWhatsCloud = () => {
                               <h3 className="font-semibold">
                                 {instance.phone_number || instance.instance_name}
                               </h3>
-                              <Badge variant={instance.status === 'connected' ? 'default' : 'secondary'} className="text-xs">
+                              <Badge 
+                                variant={instance.status === 'connected' ? 'default' : 'secondary'} 
+                                className={`text-xs ${instance.status === 'connected' ? 'bg-green-500 hover:bg-green-600 text-white' : ''}`}
+                              >
                                 {instance.status === 'connected' ? 'Conectado' : 'Desconectado'}
                               </Badge>
                             </div>
