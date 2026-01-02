@@ -1251,7 +1251,12 @@ serve(async (req) => {
                     });
                   }
 
-                  const { data: newSession, error: newSessionError } = await supabaseClient
+                  // Use upsert-like logic: first try to insert, if fails due to unique constraint, update the existing session
+                  let newSession: any = null;
+                  let newSessionError: any = null;
+
+                  // First try inserting a new session
+                  const insertResult = await supabaseClient
                     .from('inbox_flow_sessions')
                     .insert({
                       flow_id: matchedFlow.id,
@@ -1273,6 +1278,77 @@ serve(async (req) => {
                     })
                     .select()
                     .single();
+
+                  if (insertResult.error && insertResult.error.message.includes('unique constraint')) {
+                    // Race condition: another webhook already created the session or the old one wasn't updated yet
+                    // Forcefully update any active session for this contact to restart it
+                    console.log('[UAZAPI-WEBHOOK] Unique constraint hit, forcefully resetting existing session');
+
+                    const { data: existingSession } = await supabaseClient
+                      .from('inbox_flow_sessions')
+                      .select('id')
+                      .eq('contact_id', contact.id)
+                      .eq('status', 'active')
+                      .limit(1)
+                      .maybeSingle();
+
+                    if (existingSession) {
+                      const { data: updatedSession, error: updateError } = await supabaseClient
+                        .from('inbox_flow_sessions')
+                        .update({
+                          flow_id: matchedFlow.id,
+                          current_node_id: 'start-1',
+                          variables: {
+                            nome: contact.name || '',
+                            telefone: phone,
+                            resposta: inboundText,
+                            lastMessage: inboundText,
+                            ultima_mensagem: inboundText,
+                            contactName: contact.name || phone,
+                          },
+                          started_at: new Date().toISOString(),
+                          last_interaction: new Date().toISOString(),
+                          processing: false,
+                          processing_started_at: null,
+                        })
+                        .eq('id', existingSession.id)
+                        .select()
+                        .single();
+
+                      newSession = updatedSession;
+                      newSessionError = updateError;
+                    } else {
+                      // Session was completed in between, try insert again
+                      const retryResult = await supabaseClient
+                        .from('inbox_flow_sessions')
+                        .insert({
+                          flow_id: matchedFlow.id,
+                          contact_id: contact.id,
+                          instance_id: instanceId,
+                          user_id: userId,
+                          current_node_id: 'start-1',
+                          variables: {
+                            nome: contact.name || '',
+                            telefone: phone,
+                            resposta: inboundText,
+                            lastMessage: inboundText,
+                            ultima_mensagem: inboundText,
+                            contactName: contact.name || phone,
+                          },
+                          status: 'active',
+                          processing: false,
+                          processing_started_at: null,
+                        })
+                        .select()
+                        .single();
+
+                      newSession = retryResult.data;
+                      newSessionError = retryResult.error;
+                    }
+                  } else {
+                    newSession = insertResult.data;
+                    newSessionError = insertResult.error;
+                  }
 
                   logWebhookDiagnostic(supabaseClient, {
                     instanceId,
