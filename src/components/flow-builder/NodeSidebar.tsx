@@ -14,7 +14,8 @@ import {
   Shuffle,
   Receipt,
   QrCode,
-  Banknote
+  Banknote,
+  Phone
 } from 'lucide-react';
 
 const nodeCategories = [
@@ -47,6 +48,7 @@ const nodeCategories = [
     title: 'Ações',
     nodes: [
       { type: 'tag', label: 'Tag', icon: Tag, color: 'bg-amber-500' },
+      { type: 'call', label: 'Ligar', icon: Phone, color: 'bg-sky-500' },
       { type: 'paymentIdentifier', label: 'Identificar Pagamento', icon: Receipt, color: 'bg-emerald-500' },
       { type: 'sendPixKey', label: 'Enviar Chave PIX', icon: QrCode, color: 'bg-teal-500' },
       { type: 'sendCharge', label: 'Enviar Cobrança', icon: Banknote, color: 'bg-lime-500' },

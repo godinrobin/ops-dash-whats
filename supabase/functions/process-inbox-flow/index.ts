@@ -1852,71 +1852,44 @@ serve(async (req) => {
 
           case 'call':
             // Call node - makes a brief call to the contact using UazAPI /call/make endpoint
-            // According to UazAPI docs: the phone will ring but it's a "ghost call" - no audio is transmitted
-            console.log(`[${runId}] === CALL NODE START ===`);
-            console.log(`[${runId}] Raw phone from contact: "${phone}"`);
-            console.log(`[${runId}] API Provider: ${apiProvider}, UazAPI Token: ${instanceUazapiToken ? 'present' : 'missing'}, Base URL: ${uazapiBaseUrl}`);
-            
-            // Get configurable wait time (default 3 seconds, max 30)
-            const waitAfterCall = Math.min(30, Math.max(1, (currentNode.data.waitAfterCall as number) || 3)) * 1000;
-            console.log(`[${runId}] Wait after call configured: ${waitAfterCall}ms`);
+            console.log(`[${runId}] Call node: attempting to call contact`);
             
             if (apiProvider === 'uazapi' && instanceUazapiToken && uazapiBaseUrl) {
-              // Clean the phone number - keep only digits
               const callNumber = phone.replace(/\D/g, '');
-              console.log(`[${runId}] Cleaned phone number for call: "${callNumber}"`);
+              console.log(`[${runId}] Making call to: ${callNumber}`);
               
-              // Validate phone number format
-              if (!callNumber || callNumber.length < 10) {
-                console.error(`[${runId}] Invalid phone number for call: "${callNumber}" (length: ${callNumber.length})`);
-                processedActions.push(`Call skipped: invalid phone number`);
-              } else {
-                try {
-                  // Small delay before call to ensure WhatsApp is ready
-                  console.log(`[${runId}] Waiting 1s before making call...`);
-                  await new Promise(resolve => setTimeout(resolve, 1000));
-                  
-                  console.log(`[${runId}] Making call to: ${callNumber} via ${uazapiBaseUrl}/call/make`);
-                  const callResponse = await fetch(`${uazapiBaseUrl}/call/make`, {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'token': instanceUazapiToken,
-                    },
-                    body: JSON.stringify({
-                      number: callNumber,
-                    }),
-                  });
-                  
-                  const callResult = await callResponse.json();
-                  console.log(`[${runId}] Call API response status: ${callResponse.status}`);
-                  console.log(`[${runId}] Call API response body:`, JSON.stringify(callResult));
-                  
-                  if (callResponse.ok && callResult.response === 'Call successful') {
-                    console.log(`[${runId}] Call initiated successfully to ${callNumber}`);
-                    processedActions.push(`Call initiated to ${callNumber}`);
-                    
-                    // Wait after the call to allow it to ring (configurable)
-                    console.log(`[${runId}] Waiting ${waitAfterCall}ms after call to allow ringing...`);
-                    await new Promise(resolve => setTimeout(resolve, waitAfterCall));
-                  } else {
-                    console.error(`[${runId}] Call failed:`, JSON.stringify(callResult));
-                    processedActions.push(`Call error: ${callResult.error || callResult.message || 'unknown error'}`);
-                  }
-                } catch (callErr) {
-                  console.error(`[${runId}] Call exception:`, callErr);
-                  processedActions.push(`Call error: ${callErr instanceof Error ? callErr.message : 'exception'}`);
+              try {
+                const callResponse = await fetch(`${uazapiBaseUrl}/call/make`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'token': instanceUazapiToken,
+                  },
+                  body: JSON.stringify({
+                    number: callNumber,
+                  }),
+                });
+                
+                const callResult = await callResponse.json();
+                console.log(`[${runId}] Call response:`, JSON.stringify(callResult));
+                
+                if (callResponse.ok && callResult.response === 'Call successful') {
+                  processedActions.push(`Call initiated to ${callNumber}`);
+                } else {
+                  console.error(`[${runId}] Call error:`, callResult);
+                  processedActions.push(`Call error: ${callResult.error || 'unknown'}`);
                 }
+              } catch (callErr) {
+                console.error(`[${runId}] Call exception:`, callErr);
+                processedActions.push('Call error: exception');
               }
             } else if (apiProvider !== 'uazapi') {
-              console.log(`[${runId}] Call node only supported on UazAPI instances (current: ${apiProvider})`);
+              console.log(`[${runId}] Call node only supported on UazAPI`);
               processedActions.push('Call not supported (requires UazAPI)');
             } else {
-              console.log(`[${runId}] Missing UazAPI configuration for call - baseUrl: ${uazapiBaseUrl || 'missing'}, token: ${instanceUazapiToken ? 'present' : 'missing'}`);
+              console.log(`[${runId}] Missing UazAPI configuration for call`);
               processedActions.push('Call skipped (missing config)');
             }
-            
-            console.log(`[${runId}] === CALL NODE END ===`);
             
             const callEdge = edges.find(e => e.source === currentNodeId);
             if (callEdge) {
