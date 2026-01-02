@@ -1213,6 +1213,18 @@ serve(async (req) => {
                     .eq('contact_id', contact.id)
                     .eq('status', 'active');
 
+                  logWebhookDiagnostic(supabaseClient, {
+                    instanceId,
+                    instanceName: instanceNameForLookup,
+                    eventType: 'keyword-cancel-check',
+                    userId,
+                    payloadPreview: JSON.stringify({
+                      contactId: contact.id,
+                      sessionsToCancelCount: sessionsToCancel?.length || 0,
+                      sessionIds: (sessionsToCancel || []).map((s: any) => s.id).slice(0, 10),
+                    }).slice(0, 500),
+                  });
+
                   if (sessionsToCancel?.length) {
                     await supabaseClient
                       .from('inbox_flow_delay_jobs')
@@ -1226,6 +1238,17 @@ serve(async (req) => {
                       .in('id', sessionsToCancel.map((s: any) => s.id));
 
                     console.log(`[UAZAPI-WEBHOOK] Canceled ${sessionsToCancel.length} active session(s) for keyword restart`);
+
+                    logWebhookDiagnostic(supabaseClient, {
+                      instanceId,
+                      instanceName: instanceNameForLookup,
+                      eventType: 'keyword-cancelled',
+                      userId,
+                      payloadPreview: JSON.stringify({
+                        contactId: contact.id,
+                        cancelledCount: sessionsToCancel.length,
+                      }).slice(0, 500),
+                    });
                   }
 
                   const { data: newSession, error: newSessionError } = await supabaseClient
@@ -1250,6 +1273,19 @@ serve(async (req) => {
                     })
                     .select()
                     .single();
+
+                  logWebhookDiagnostic(supabaseClient, {
+                    instanceId,
+                    instanceName: instanceNameForLookup,
+                    eventType: newSession ? 'keyword-session-created' : 'keyword-session-error',
+                    userId,
+                    payloadPreview: JSON.stringify({
+                      contactId: contact.id,
+                      flowId: matchedFlow.id,
+                      sessionId: newSession?.id || null,
+                      error: newSessionError?.message || null,
+                    }).slice(0, 500),
+                  });
 
                   if (newSession && !newSessionError) {
                     try {
