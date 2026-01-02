@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useMemo } from 'react';
+import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { User, MessageSquare, Smartphone, ChevronDown, Tag, X, Plus, Pause, Play, Mail, MailOpen, Trash2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -143,7 +143,7 @@ export const ChatPanel = ({
   onContactDeleted,
 }: ChatPanelProps) => {
   const navigate = useNavigate();
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
   const [instances, setInstances] = useState<Instance[]>([]);
   const [instanceName, setInstanceName] = useState<string | null>(null);
   const [addingLabel, setAddingLabel] = useState(false);
@@ -153,6 +153,21 @@ export const ChatPanel = ({
   const [flowPaused, setFlowPaused] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [connectionError, setConnectionError] = useState<{ show: boolean; errorCode?: string; instanceName?: string }>({ show: false });
+
+  const scrollToBottom = useCallback(() => {
+    const root = scrollAreaRef.current;
+    if (!root) return;
+
+    const viewport = root.querySelector('[data-radix-scroll-area-viewport]') as HTMLDivElement | null;
+    if (!viewport) return;
+
+    // Ensure layout has committed before scrolling
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        viewport.scrollTop = viewport.scrollHeight;
+      });
+    });
+  }, []);
 
   // Predefined labels with colors
   const predefinedLabels = [
@@ -236,11 +251,15 @@ export const ChatPanel = ({
     setFlowPaused((contact as any).flow_paused || false);
   }, [contact]);
 
+  // Always open the conversation at the latest message
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
+    scrollToBottom();
+  }, [scrollToBottom, contact?.id]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [scrollToBottom, messages.length]);
+
 
   const handleAddLabel = async (labelName: string) => {
     if (!contact || addingLabel || contactLabels.includes(labelName)) return;
@@ -702,7 +721,7 @@ export const ChatPanel = ({
       </div>
 
       {/* Messages Area */}
-      <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+      <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
         {loading && visibleMessages.length === 0 ? (
           <div className="space-y-4">
             {[1, 2, 3, 4].map((i) => (

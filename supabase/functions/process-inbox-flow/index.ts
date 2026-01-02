@@ -1286,37 +1286,60 @@ serve(async (req) => {
             }
             break;
 
-          case 'paymentIdentifier':
-            // Payment Identifier node - analyze if message contains a PIX payment receipt
-            // Similar logic to tag-whats-process for consistency
+          case 'paymentIdentifier': {
+            // Payment Identifier node - analyze PIX payment receipts in inbound media
+            // IMPORTANT: attempts are counted per *media analyzed* (not per invocation).
             const checkImage = (currentNode.data.checkImage as boolean) ?? true;
             const checkPdf = (currentNode.data.checkPdf as boolean) ?? true;
             const markAsPaid = (currentNode.data.markAsPaid as boolean) || false;
             const maxAttempts = (currentNode.data.maxAttempts as number) || 3;
-            const errorMessage = currentNode.data.errorMessage as string || '';
-            
-            // Initialize attempt counter + cursor to avoid re-processing old media
+            const errorMessage = (currentNode.data.errorMessage as string) || '';
+
             const paymentAttemptKey = `_payment_attempts_${currentNodeId}`;
             const paymentSinceKey = `_payment_since_${currentNodeId}`;
-            const currentAttempts = (variables[paymentAttemptKey] as number) || 0;
+            const paymentLastMsgKey = `_payment_last_media_msg_${currentNodeId}`;
+            const paymentLastAnalysisKey = `_payment_last_media_analysis_${currentNodeId}`;
 
-            // Anchor: only consider media that arrived AFTER we reached this node.
-            // This prevents marking as paid based on older receipts in chat history.
+            let attempts = Number(variables[paymentAttemptKey] ?? 0);
+
+            // Anchor: only consider media after we reached this node.
             if (!variables[paymentSinceKey]) {
               variables[paymentSinceKey] = session.last_interaction || session.started_at;
             }
-            const sinceIso = (variables[paymentSinceKey] as string) || session.last_interaction || session.started_at;
-            
-            console.log(`[${runId}] PaymentIdentifier: attempt ${currentAttempts + 1}/${maxAttempts}, checkImage=${checkImage}, checkPdf=${checkPdf}, since=${sinceIso}`);
-            
-            // Get the last NEW MEDIA message from the contact (image or document)
+
+            const sinceIso = String(variables[paymentSinceKey] || session.last_interaction || session.started_at);
+
             const mediaTypeFilters: string[] = [];
             if (checkImage) mediaTypeFilters.push('image');
             if (checkPdf) mediaTypeFilters.push('document');
-            
-            console.log(`[${runId}] Looking for NEW media types since ${sinceIso}: ${mediaTypeFilters.join(', ')}`);
-            
-            const { data: lastMediaMessages } = await supabaseClient
+
+            const remainingAttempts = Math.max(0, maxAttempts - attempts);
+
+            console.log(
+              `[${runId}] PaymentIdentifier: attemptsUsed=${attempts}/${maxAttempts}, remaining=${remainingAttempts}, checkImage=${checkImage}, checkPdf=${checkPdf}, since=${sinceIso}`,
+            );
+
+            if (remainingAttempts <= 0) {
+              console.log(`[${runId}] ❌ PaymentIdentifier: no remaining attempts, routing NOT PAID`);
+              delete variables[paymentAttemptKey];
+              delete variables[paymentSinceKey];
+              delete variables[paymentLastMsgKey];
+              delete variables[paymentLastAnalysisKey];
+
+              const notPaidEdge = edges.find((e) => e.source === currentNodeId && e.sourceHandle === 'notPaid');
+              if (notPaidEdge) {
+                currentNodeId = notPaidEdge.target;
+              } else {
+                continueProcessing = false;
+              }
+              processedActions.push(`Payment not identified after ${maxAttempts} attempts: NOT PAID`);
+              break;
+            }
+
+            // Fetch NEW media since cursor, in chronological order.
+            // This guarantees that if the user sends multiple medias before the flow runs,
+            // we still analyze each one and count attempts correctly.
+            const { data: newMediaMessages, error: mediaFetchError } = await supabaseClient
               .from('inbox_messages')
               .select('*')
               .eq('contact_id', contact.id)
@@ -1324,178 +1347,15 @@ serve(async (req) => {
               .eq('direction', 'inbound')
               .in('message_type', mediaTypeFilters)
               .gt('created_at', sinceIso)
-              .order('created_at', { ascending: false })
-              .limit(1);
-            
-            const lastMediaMessage = lastMediaMessages?.[0];
-            let isPaymentReceipt = false;
-            let paymentAnalysisResult = '';
-            
-            if (lastMediaMessage) {
-              const messageType = lastMediaMessage.message_type;
-              const mediaUrl = lastMediaMessage.media_url;
-              const remoteMessageId = lastMediaMessage.remote_message_id;
-              
-              console.log(`[${runId}] Found media message: type=${messageType}, hasMediaUrl=${!!mediaUrl}, remoteId=${remoteMessageId}`);
-              
-              const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-              
-              if (LOVABLE_API_KEY) {
-                try {
-                  let mediaBase64 = '';
-                  let mediaMimetype = messageType === 'document' ? 'application/pdf' : 'image/jpeg';
-                  
-                  // PRIORITY: Always try UAZAPI /message/download first for the most recent media
-                  // This ensures we get the actual latest image, not a cached/stored one
-                  if (apiProvider === 'uazapi' && instanceUazapiToken && remoteMessageId) {
-                    console.log(`[${runId}] PRIORITY: Trying UAZAPI /message/download for message: ${remoteMessageId}`);
-                    
-                    try {
-                      const downloadResponse = await fetch(`${uazapiBaseUrl}/message/download`, {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          'token': instanceUazapiToken,
-                        },
-                        body: JSON.stringify({
-                          id: remoteMessageId,
-                          return_base64: true,
-                          return_link: false,
-                        }),
-                      });
-                      
-                      if (downloadResponse.ok) {
-                        const downloadData = await downloadResponse.json();
-                        mediaBase64 = downloadData.base64Data || downloadData.base64 || downloadData.data || '';
-                        mediaMimetype = downloadData.mimetype || mediaMimetype;
-                        console.log(`[${runId}] UAZAPI download successful: ${mediaBase64.length} chars, mimetype=${mediaMimetype}`);
-                      } else {
-                        console.error(`[${runId}] UAZAPI download failed:`, await downloadResponse.text());
-                      }
-                    } catch (uazErr) {
-                      console.error(`[${runId}] UAZAPI download error:`, uazErr);
-                    }
-                  }
-                  
-                  // Fallback: Try to download media directly from stored URL if UAZAPI failed
-                  if (!mediaBase64 && mediaUrl) {
-                    try {
-                      console.log(`[${runId}] Fallback: Trying direct media fetch from: ${mediaUrl}`);
-                      const mediaResponse = await fetch(mediaUrl);
-                      if (mediaResponse.ok) {
-                        const mediaBuffer = await mediaResponse.arrayBuffer();
-                        mediaBase64 = btoa(String.fromCharCode(...new Uint8Array(mediaBuffer)));
-                        mediaMimetype = mediaResponse.headers.get('content-type') || mediaMimetype;
-                        console.log(`[${runId}] Direct fetch successful: ${mediaBuffer.byteLength} bytes`);
-                      }
-                    } catch (directErr) {
-                      console.log(`[${runId}] Direct fetch failed:`, directErr);
-                    }
-                  }
-                  
-                  // Analyze with AI if we have media
-                  if (mediaBase64) {
-                    const isPdfMedia = mediaMimetype.includes('pdf') || messageType === 'document';
-                    console.log(`[${runId}] Analyzing media: isPdf=${isPdfMedia}, base64Length=${mediaBase64.length}`);
-                    
-                    const systemPrompt = `Você é um analisador de comprovantes de pagamento PIX. 
-Analise a imagem/documento e determine se é um comprovante de pagamento PIX válido.
+              .order('created_at', { ascending: true })
+              .limit(Math.min(remainingAttempts, 10));
 
-Responda APENAS com um JSON no formato:
-{
-  "is_pix_payment": true/false,
-  "confidence": 0-100,
-  "reason": "breve explicação"
-}
-
-Critérios para identificar um comprovante PIX:
-- Presença de informações como "Pix", "Transferência", "Comprovante"
-- Dados de origem e destino (nome, CPF/CNPJ parcial, banco)
-- Valor da transação
-- Data e hora
-- Código de autenticação ou ID da transação
-- Logotipos de bancos conhecidos (Nubank, Itaú, Bradesco, etc)
-
-Se não for possível determinar ou a imagem não for clara, retorne is_pix_payment: false.`;
-
-                    let aiMessages: any[];
-                    
-                    if (isPdfMedia) {
-                      aiMessages = [
-                        { role: 'system', content: systemPrompt },
-                        {
-                          role: 'user',
-                          content: [
-                            { type: 'text', text: 'Analise este documento e determine se é um comprovante de pagamento PIX.' },
-                            { type: 'image_url', image_url: { url: `data:application/pdf;base64,${mediaBase64}` } }
-                          ]
-                        }
-                      ];
-                    } else {
-                      aiMessages = [
-                        { role: 'system', content: systemPrompt },
-                        {
-                          role: 'user',
-                          content: [
-                            { type: 'text', text: 'Analise esta imagem e determine se é um comprovante de pagamento PIX.' },
-                            { type: 'image_url', image_url: { url: `data:${mediaMimetype};base64,${mediaBase64}` } }
-                          ]
-                        }
-                      ];
-                    }
-                    
-                    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-                      method: 'POST',
-                      headers: {
-                        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-                        'Content-Type': 'application/json',
-                      },
-                      body: JSON.stringify({
-                        model: 'google/gemini-2.5-flash',
-                        messages: aiMessages,
-                      }),
-                    });
-                    
-                    if (aiResponse.ok) {
-                      const aiData = await aiResponse.json();
-                      paymentAnalysisResult = aiData.choices?.[0]?.message?.content || '';
-                      console.log(`[${runId}] AI analysis result: ${paymentAnalysisResult}`);
-                      
-                      // Parse JSON result
-                      try {
-                        const jsonMatch = paymentAnalysisResult.match(/\{[\s\S]*\}/);
-                        if (jsonMatch) {
-                          const parsed = JSON.parse(jsonMatch[0]);
-                          isPaymentReceipt = parsed.is_pix_payment === true && (parsed.confidence || 0) >= 60;
-                          console.log(`[${runId}] Parsed result: isPayment=${isPaymentReceipt}, confidence=${parsed.confidence}`);
-                        }
-                      } catch (parseErr) {
-                        console.error(`[${runId}] Error parsing AI response:`, parseErr);
-                      }
-                    } else {
-                      console.error(`[${runId}] AI API error:`, await aiResponse.text());
-                    }
-                  } else {
-                    console.log(`[${runId}] No media data available for analysis`);
-                  }
-                } catch (analysisErr) {
-                  console.error(`[${runId}] Error analyzing payment:`, analysisErr);
-                }
-              } else {
-                console.error(`[${runId}] LOVABLE_API_KEY not configured for payment analysis`);
-              }
-            } else {
-              console.log(`[${runId}] No media message found for payment analysis`);
+            if (mediaFetchError) {
+              console.error(`[${runId}] PaymentIdentifier: failed to fetch media messages:`, mediaFetchError);
             }
 
-            // Advance cursor so we never reprocess the same media again
-            if (lastMediaMessage?.created_at) {
-              variables[paymentSinceKey] = lastMediaMessage.created_at;
-            }
-
-            // If there is no NEW media since our cursor, just wait (do NOT count as an attempt)
-            if (!lastMediaMessage) {
-              console.log(`[${runId}] Waiting for NEW payment media since ${sinceIso}`);
+            if (!newMediaMessages || newMediaMessages.length === 0) {
+              console.log(`[${runId}] PaymentIdentifier: waiting for NEW payment media since ${sinceIso}`);
 
               await supabaseClient
                 .from('inbox_flow_sessions')
@@ -1508,7 +1368,7 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
                 })
                 .eq('id', sessionId);
 
-              processedActions.push(`Waiting for payment media (attempts used: ${currentAttempts}/${maxAttempts})`);
+              processedActions.push(`Waiting for payment media (attempts used: ${attempts}/${maxAttempts})`);
               continueProcessing = false;
 
               return new Response(
@@ -1517,183 +1377,345 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
                   currentNode: currentNodeId,
                   actions: processedActions,
                   waitingForPayment: true,
-                  attempt: currentAttempts,
+                  attempt: attempts,
                   maxAttempts,
                 }),
-                {
-                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                }
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
               );
             }
-            
-            // Determine outcome
-            if (isPaymentReceipt) {
-              console.log(`[${runId}] ✅ Payment receipt confirmed!`);
-              
-              // Mark contact as paid if configured
-              if (markAsPaid) {
-                const currentTags = (contact.tags as string[]) || [];
-                if (!currentTags.includes('pago')) {
-                  await supabaseClient
-                    .from('inbox_contacts')
-                    .update({ tags: [...currentTags, 'pago'] })
-                    .eq('id', contact.id);
-                  console.log(`[${runId}] Contact marked as paid`);
-                }
+
+            const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+            let isPaymentReceipt = false;
+            let lastAnalysis = '';
+            let processedAnyThisRun = false;
+
+            const analyzeMessage = async (msg: any) => {
+              const messageType = msg.message_type as string;
+              const mediaUrl = msg.media_url as string | null;
+              const remoteMessageId = msg.remote_message_id as string | null;
+
+              console.log(
+                `[${runId}] PaymentIdentifier: analyzing media msg id=${msg.id}, type=${messageType}, hasMediaUrl=${!!mediaUrl}, remoteId=${remoteMessageId}`,
+              );
+
+              if (!LOVABLE_API_KEY) {
+                console.error(`[${runId}] LOVABLE_API_KEY not configured for payment analysis`);
+                return { ok: false, isPayment: false, analysisText: '' };
               }
-              
-              // Apply "Pago" label natively in WhatsApp via UAZAPI
-              if (apiProvider === 'uazapi' && instanceUazapiToken && contact.remote_jid) {
-                console.log(`[${runId}] Applying 'Pago' label via UAZAPI...`);
-                try {
-                  // First, find or create the "Pago" label
-                  const labelsResponse = await fetch(`${uazapiBaseUrl}/chat/label/get`, {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'token': instanceUazapiToken,
-                    },
-                    body: JSON.stringify({}),
-                  });
-                  
-                  let pagoLabelId: string | null = null;
-                  
-                  if (labelsResponse.ok) {
-                    const labelsData = await labelsResponse.json();
-                    const labels = labelsData.labels || labelsData || [];
-                    console.log(`[${runId}] Available labels:`, JSON.stringify(labels));
-                    
-                    // Find "Pago" label (case-insensitive)
-                    const pagoLabel = labels.find((l: any) => 
-                      l.name?.toLowerCase() === 'pago' || 
-                      l.Name?.toLowerCase() === 'pago'
-                    );
-                    
-                    if (pagoLabel) {
-                      pagoLabelId = pagoLabel.id || pagoLabel.Id || pagoLabel.labelId;
-                      console.log(`[${runId}] Found existing 'Pago' label: ${pagoLabelId}`);
-                    } else {
-                      // Create the "Pago" label with green color
-                      console.log(`[${runId}] Creating 'Pago' label...`);
-                      const createLabelResponse = await fetch(`${uazapiBaseUrl}/chat/label/create`, {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          'token': instanceUazapiToken,
-                        },
-                        body: JSON.stringify({
-                          name: 'Pago',
-                          color: 5, // Green color in WhatsApp
-                        }),
-                      });
-                      
-                      if (createLabelResponse.ok) {
-                        const createData = await createLabelResponse.json();
-                        pagoLabelId = createData.id || createData.labelId || createData.Id;
-                        console.log(`[${runId}] Created 'Pago' label: ${pagoLabelId}`);
-                      } else {
-                        console.error(`[${runId}] Failed to create label:`, await createLabelResponse.text());
-                      }
-                    }
-                  }
-                  
-                  // Apply the label to the chat
-                  if (pagoLabelId) {
-                    const applyLabelResponse = await fetch(`${uazapiBaseUrl}/chat/label/add`, {
+
+              try {
+                let mediaBase64 = '';
+                let mediaMimetype = messageType === 'document' ? 'application/pdf' : 'image/jpeg';
+
+                // PRIORITY: UazAPI /message/download for the exact message id
+                if (apiProvider === 'uazapi' && instanceUazapiToken && remoteMessageId) {
+                  try {
+                    const downloadResponse = await fetch(`${uazapiBaseUrl}/message/download`, {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json',
-                        'token': instanceUazapiToken,
+                        token: instanceUazapiToken,
                       },
                       body: JSON.stringify({
-                        chatId: contact.remote_jid,
-                        labelId: pagoLabelId,
+                        id: remoteMessageId,
+                        return_base64: true,
+                        return_link: false,
                       }),
                     });
-                    
-                    if (applyLabelResponse.ok) {
-                      console.log(`[${runId}] ✅ 'Pago' label applied successfully to chat ${contact.remote_jid}`);
+
+                    if (downloadResponse.ok) {
+                      const downloadData = await downloadResponse.json();
+                      mediaBase64 = downloadData.base64Data || downloadData.base64 || downloadData.data || '';
+                      mediaMimetype = downloadData.mimetype || mediaMimetype;
+                      console.log(
+                        `[${runId}] PaymentIdentifier: UAZAPI download ok (len=${mediaBase64.length}, mimetype=${mediaMimetype})`,
+                      );
                     } else {
-                      console.error(`[${runId}] Failed to apply label:`, await applyLabelResponse.text());
+                      console.error(
+                        `[${runId}] PaymentIdentifier: UAZAPI download failed:`,
+                        await downloadResponse.text(),
+                      );
                     }
+                  } catch (uazErr) {
+                    console.error(`[${runId}] PaymentIdentifier: UAZAPI download error:`, uazErr);
                   }
-                } catch (labelErr) {
-                  console.error(`[${runId}] Error applying WhatsApp label:`, labelErr);
+                }
+
+                // Fallback: try direct URL fetch (stored media)
+                if (!mediaBase64 && mediaUrl) {
+                  try {
+                    const mediaResponse = await fetch(mediaUrl);
+                    if (mediaResponse.ok) {
+                      const buf = await mediaResponse.arrayBuffer();
+                      mediaBase64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+                      mediaMimetype = mediaResponse.headers.get('content-type') || mediaMimetype;
+                      console.log(`[${runId}] PaymentIdentifier: direct fetch ok (${buf.byteLength} bytes)`);
+                    }
+                  } catch (directErr) {
+                    console.log(`[${runId}] PaymentIdentifier: direct fetch failed:`, directErr);
+                  }
+                }
+
+                if (!mediaBase64) {
+                  console.log(`[${runId}] PaymentIdentifier: no mediaBase64 available for analysis`);
+                  return { ok: true, isPayment: false, analysisText: '' };
+                }
+
+                const isPdfMedia = mediaMimetype.includes('pdf') || messageType === 'document';
+
+                const systemPrompt = `Você é um analisador de comprovantes de pagamento PIX.\n\nAnalise a imagem/documento e determine se é um comprovante de pagamento PIX válido.\n\nResponda APENAS com um JSON no formato:\n{\n  "is_pix_payment": true/false,\n  "confidence": 0-100,\n  "reason": "breve explicação"\n}\n\nCritérios para identificar um comprovante PIX:\n- Termos como "Pix", "Transferência", "Comprovante"\n- Dados de origem e destino (nome, CPF/CNPJ parcial, banco)\n- Valor, data/hora e ID/autenticação quando presentes\n\nImportante: mesmo que o comprovante esteja parcialmente visível, se houver sinais claros de transação PIX (ex.: "Pix" + banco + dados de origem/destino), marque como is_pix_payment:true com a confiança apropriada.`;
+
+                const messagesToSend = isPdfMedia
+                  ? [
+                      { role: 'system', content: systemPrompt },
+                      {
+                        role: 'user',
+                        content: [
+                          { type: 'text', text: 'Analise este PDF e determine se é um comprovante de pagamento PIX.' },
+                          { type: 'image_url', image_url: { url: `data:application/pdf;base64,${mediaBase64}` } },
+                        ],
+                      },
+                    ]
+                  : [
+                      { role: 'system', content: systemPrompt },
+                      {
+                        role: 'user',
+                        content: [
+                          { type: 'text', text: 'Analise esta imagem e determine se é um comprovante de pagamento PIX.' },
+                          { type: 'image_url', image_url: { url: `data:${mediaMimetype};base64,${mediaBase64}` } },
+                        ],
+                      },
+                    ];
+
+                const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    model: 'google/gemini-2.5-flash',
+                    messages: messagesToSend,
+                  }),
+                });
+
+                if (!aiResponse.ok) {
+                  console.error(`[${runId}] PaymentIdentifier: AI API error:`, await aiResponse.text());
+                  return { ok: false, isPayment: false, analysisText: '' };
+                }
+
+                const aiData = await aiResponse.json();
+                const analysisText = aiData.choices?.[0]?.message?.content || '';
+                console.log(`[${runId}] PaymentIdentifier: AI result: ${analysisText}`);
+
+                let isPayment = false;
+                try {
+                  const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+                  if (jsonMatch) {
+                    const parsed = JSON.parse(jsonMatch[0]);
+                    const confRaw = parsed.confidence;
+                    const conf = typeof confRaw === 'number' ? confRaw : Number(confRaw ?? 0);
+                    const hasConfidence = confRaw !== undefined && confRaw !== null && confRaw !== '';
+
+                    // Slightly more permissive threshold to reduce false negatives.
+                    isPayment = parsed.is_pix_payment === true && (!hasConfidence || conf >= 55);
+                    console.log(`[${runId}] PaymentIdentifier: parsed isPayment=${isPayment}, confidence=${conf}`);
+                  }
+                } catch (parseErr) {
+                  console.error(`[${runId}] PaymentIdentifier: error parsing AI response:`, parseErr);
+                }
+
+                return { ok: true, isPayment, analysisText };
+              } catch (analysisErr) {
+                console.error(`[${runId}] PaymentIdentifier: error analyzing media:`, analysisErr);
+                return { ok: false, isPayment: false, analysisText: '' };
+              }
+            };
+
+            // Process each new media in order until we either:
+            // - confirm payment
+            // - exhaust attempts
+            // - run out of new media (then wait)
+            for (const msg of newMediaMessages) {
+              if (attempts >= maxAttempts) break;
+              processedAnyThisRun = true;
+
+              const { isPayment, analysisText } = await analyzeMessage(msg);
+              lastAnalysis = analysisText;
+
+              // Advance cursor so we never reprocess the same media
+              if (msg.created_at) {
+                variables[paymentSinceKey] = msg.created_at;
+              }
+              variables[paymentLastMsgKey] = msg.id;
+              variables[paymentLastAnalysisKey] = lastAnalysis;
+
+              if (isPayment) {
+                isPaymentReceipt = true;
+                break;
+              }
+
+              // Count this media as an attempt (it was processed and did NOT confirm payment)
+              attempts += 1;
+              variables[paymentAttemptKey] = attempts;
+            }
+
+            if (isPaymentReceipt) {
+              console.log(`[${runId}] ✅ Payment receipt confirmed!`);
+
+              if (markAsPaid) {
+                const currentTags = Array.isArray(contact.tags) ? (contact.tags as string[]) : [];
+                const hasPaidTag = currentTags.some((t) => String(t).toLowerCase() === 'pago');
+
+                if (!hasPaidTag) {
+                  await supabaseClient
+                    .from('inbox_contacts')
+                    .update({ tags: [...currentTags, 'Pago'] })
+                    .eq('id', contact.id);
+                  console.log(`[${runId}] Contact tagged as 'Pago' (local)`);
                 }
               }
-              
-              // Clear attempt counter + cursor
+
+              // Apply "Pago" label in WhatsApp (UazAPI)
+              if (apiProvider === 'uazapi' && instanceUazapiToken) {
+                const phoneDigits = String(contact.phone || phone || '').replace(/\D/g, '');
+
+                if (phoneDigits) {
+                  console.log(`[${runId}] Applying 'Pago' label via UazAPI to ${phoneDigits}...`);
+                  try {
+                    const labelsResponse = await fetch(`${uazapiBaseUrl}/labels`, {
+                      method: 'GET',
+                      headers: { token: instanceUazapiToken },
+                    });
+
+                    if (!labelsResponse.ok) {
+                      console.error(`[${runId}] Failed to fetch labels:`, await labelsResponse.text());
+                    } else {
+                      const labels = await labelsResponse.json();
+                      const pagoLabel = (Array.isArray(labels) ? labels : []).find(
+                        (l: any) => String(l?.name || '').toLowerCase() === 'pago',
+                      );
+
+                      const pagoLabelId = pagoLabel?.labelid || pagoLabel?.id || null;
+
+                      if (!pagoLabelId) {
+                        console.error(`[${runId}] 'Pago' label not found in UazAPI. Create it in WhatsApp Business.`);
+                      } else {
+                        const applyLabelResponse = await fetch(`${uazapiBaseUrl}/chat/labels`, {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            token: instanceUazapiToken,
+                          },
+                          body: JSON.stringify({
+                            number: phoneDigits,
+                            add_labelid: String(pagoLabelId),
+                          }),
+                        });
+
+                        const applyText = await applyLabelResponse.text();
+                        if (applyLabelResponse.ok) {
+                          console.log(`[${runId}] ✅ 'Pago' label applied successfully. Response=${applyText}`);
+                        } else {
+                          console.error(`[${runId}] Failed to apply 'Pago' label:`, applyText);
+                        }
+                      }
+                    }
+                  } catch (labelErr) {
+                    console.error(`[${runId}] Error applying WhatsApp label:`, labelErr);
+                  }
+                } else {
+                  console.warn(`[${runId}] Could not apply label: missing phoneDigits`);
+                }
+              }
+
+              // Clear attempt/cursor state
               delete variables[paymentAttemptKey];
               delete variables[paymentSinceKey];
-              
-              // Go to "paid" output
-              const paidEdge = edges.find(e => e.source === currentNodeId && e.sourceHandle === 'paid');
+              delete variables[paymentLastMsgKey];
+              delete variables[paymentLastAnalysisKey];
+
+              const paidEdge = edges.find((e) => e.source === currentNodeId && e.sourceHandle === 'paid');
               if (paidEdge) {
                 currentNodeId = paidEdge.target;
               } else {
                 continueProcessing = false;
               }
               processedActions.push('Payment identified: PAID');
-              
-            } else {
-              // Not a payment receipt - increment attempts
-              const newAttempts = currentAttempts + 1;
-              variables[paymentAttemptKey] = newAttempts;
-              
-              if (newAttempts >= maxAttempts) {
-                console.log(`[${runId}] ❌ Max attempts reached (${newAttempts}/${maxAttempts})`);
-                
-                // Clear attempt counter + cursor
-                delete variables[paymentAttemptKey];
-                delete variables[paymentSinceKey];
-                
-                // Go to "notPaid" output
-                const notPaidEdge = edges.find(e => e.source === currentNodeId && e.sourceHandle === 'notPaid');
-                if (notPaidEdge) {
-                  currentNodeId = notPaidEdge.target;
-                } else {
-                  continueProcessing = false;
-                }
-                processedActions.push(`Payment not identified after ${newAttempts} attempts: NOT PAID`);
-                
-              } else {
-                console.log(`[${runId}] Attempt ${newAttempts}/${maxAttempts} failed, waiting for next message`);
-                
-                // Send error message if configured
-                if (errorMessage && instanceName && phone) {
-                  const errorMsgReplaced = replaceVariables(errorMessage, variables);
-                  await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, errorMsgReplaced, 'text', undefined, undefined, apiProvider, instanceUazapiToken);
-                  await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, errorMsgReplaced, 'text', flow.id);
-                }
-                
-                // Save state and wait for next input
-                await supabaseClient
-                  .from('inbox_flow_sessions')
-                  .update({
-                    current_node_id: currentNodeId,
-                    variables,
-                    last_interaction: new Date().toISOString(),
-                    processing: false,
-                    processing_started_at: null,
-                  })
-                  .eq('id', sessionId);
-                
-                processedActions.push(`Payment check attempt ${newAttempts}/${maxAttempts}, waiting for next message`);
-                continueProcessing = false;
-                
-                return new Response(JSON.stringify({ 
-                  success: true, 
-                  currentNode: currentNodeId,
-                  actions: processedActions,
-                  waitingForPayment: true,
-                  attempt: newAttempts,
-                  maxAttempts
-                }), {
-                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                });
-              }
+              break;
             }
-            break;
+
+            if (attempts >= maxAttempts) {
+              console.log(`[${runId}] ❌ Max attempts reached (${attempts}/${maxAttempts})`);
+
+              delete variables[paymentAttemptKey];
+              delete variables[paymentSinceKey];
+              delete variables[paymentLastMsgKey];
+              delete variables[paymentLastAnalysisKey];
+
+              const notPaidEdge = edges.find((e) => e.source === currentNodeId && e.sourceHandle === 'notPaid');
+              if (notPaidEdge) {
+                currentNodeId = notPaidEdge.target;
+              } else {
+                continueProcessing = false;
+              }
+              processedActions.push(`Payment not identified after ${attempts} attempts: NOT PAID`);
+              break;
+            }
+
+            // Still waiting for more media
+            if (processedAnyThisRun && errorMessage && instanceName && phone) {
+              const errorMsgReplaced = replaceVariables(errorMessage, variables);
+              await sendMessage(
+                effectiveBaseUrl,
+                effectiveApiKey,
+                instanceName,
+                phone,
+                errorMsgReplaced,
+                'text',
+                undefined,
+                undefined,
+                apiProvider,
+                instanceUazapiToken,
+              );
+              await saveOutboundMessage(
+                supabaseClient,
+                contact.id,
+                session.instance_id,
+                session.user_id,
+                errorMsgReplaced,
+                'text',
+                flow.id,
+              );
+            }
+
+            await supabaseClient
+              .from('inbox_flow_sessions')
+              .update({
+                current_node_id: currentNodeId,
+                variables,
+                last_interaction: new Date().toISOString(),
+                processing: false,
+                processing_started_at: null,
+              })
+              .eq('id', sessionId);
+
+            processedActions.push(`Payment check attempts used: ${attempts}/${maxAttempts}, waiting for next media`);
+            continueProcessing = false;
+
+            return new Response(
+              JSON.stringify({
+                success: true,
+                currentNode: currentNodeId,
+                actions: processedActions,
+                waitingForPayment: true,
+                attempt: attempts,
+                maxAttempts,
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+            );
+          }
+
 
           case 'sendPixKey':
             // Send PIX Key node - sends a native WhatsApp PIX button
