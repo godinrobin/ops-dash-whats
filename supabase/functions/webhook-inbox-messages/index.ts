@@ -2052,7 +2052,25 @@ serve(async (req) => {
       
       // Get data.sender field (alternative location in some API versions)
       const dataSender = data.sender || '';
-      
+
+      // UazAPI (zapdata) often sends non-Evolution events like /chats and /messages_update.
+      // In those cases we may not have remoteJid/participant, but we DO have the chat id.
+      const uazChat = (payload as any)?.chat || (data as any)?.chat;
+      const uazWaChatId = typeof uazChat?.wa_chatid === 'string' ? uazChat.wa_chatid : '';
+      const uazEventChat = typeof (payload as any)?.event?.Chat === 'string' ? (payload as any).event.Chat : '';
+      const uazEventSender = typeof (payload as any)?.event?.Sender === 'string' ? (payload as any).event.Sender : '';
+
+      // Skip group chats (we don't create contacts/sessions for groups)
+      if (
+        (typeof uazChat?.wa_isGroup === 'boolean' && uazChat.wa_isGroup) ||
+        (uazWaChatId && uazWaChatId.includes('@g.us')) ||
+        (uazEventChat && uazEventChat.includes('@g.us'))
+      ) {
+        return new Response(JSON.stringify({ success: true, skipped: true, reason: 'group_chat' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       // Get pushName for last-resort phone extraction (some rare cases)
       const pushNameRaw = data.pushName || '';
       const pushNamePhone = pushNameRaw.match(/^\+?(\d{10,15})$/)?.[1] || '';
@@ -2065,16 +2083,36 @@ serve(async (req) => {
       console.log(`  contextInfo.participant=${contextParticipant}`);
       console.log(`  payload.sender=${sender}`);
       console.log(`  data.sender=${dataSender}`);
+      console.log(`  uazChat.wa_chatid=${uazWaChatId}`);
+      console.log(`  uazEvent.Chat=${uazEventChat}`);
+      console.log(`  uazEvent.Sender=${uazEventSender}`);
       console.log(`  pushName=${pushNameRaw} (extracted phone: ${pushNamePhone})`);
       console.log(`  addressingMode=${key.addressingMode || 'none'}`);
       
       // isValidPhoneJid is defined above (before group check)
       
-      // Priority order: participantAlt > remoteJid > remoteJidAlt > participant > contextInfo
-      // participantAlt is prioritized because it often has the real phone for ad messages
-      
+      // Priority order:
+      // 0) UazAPI chat id (when present)
+      // 1) participantAlt > remoteJid > remoteJidAlt > participant > contextInfo
+      // (participantAlt is prioritized because it often has the real phone for ad messages)
+
+      if (isValidPhoneJid(uazWaChatId)) {
+        jidForPhone = uazWaChatId;
+        phoneSource = 'uazapi.chat.wa_chatid';
+        console.log(`[UAZAPI] Found phone in chat.wa_chatid: ${uazWaChatId}`);
+      }
+      else if (isValidPhoneJid(uazEventChat)) {
+        jidForPhone = uazEventChat;
+        phoneSource = 'uazapi.event.Chat';
+        console.log(`[UAZAPI] Found phone in event.Chat: ${uazEventChat}`);
+      }
+      else if (isValidPhoneJid(uazEventSender)) {
+        jidForPhone = uazEventSender;
+        phoneSource = 'uazapi.event.Sender';
+        console.log(`[UAZAPI] Found phone in event.Sender: ${uazEventSender}`);
+      }
       // 1. Try participantAlt FIRST (most reliable for Facebook ad messages)
-      if (isValidPhoneJid(participantAlt)) {
+      else if (isValidPhoneJid(participantAlt)) {
         jidForPhone = participantAlt;
         phoneSource = 'participantAlt';
         console.log(`[AD-LEAD] Found phone in participantAlt: ${participantAlt}`);
@@ -2297,6 +2335,18 @@ serve(async (req) => {
       let content = extracted.content;
       let messageType = extracted.messageType;
       let mediaUrl = extracted.mediaUrl;
+
+      // UazAPI fallback (chats event): content comes from chat.wa_lastMessageTextVote
+      const uazLastText = typeof (uazChat as any)?.wa_lastMessageTextVote === 'string'
+        ? String((uazChat as any).wa_lastMessageTextVote).trim()
+        : '';
+
+      if ((!content || !String(content).trim()) && uazLastText) {
+        content = uazLastText;
+        messageType = 'text';
+        mediaUrl = null;
+        console.log(`[UAZAPI] Using chat.wa_lastMessageTextVote as content: ${uazLastText.substring(0, 80)}`);
+      }
       
       // pushName is at data root level in Evolution API v2
       // CRITICAL: For outbound messages (fromMe=true), pushName is the SENDER's name (the instance)
