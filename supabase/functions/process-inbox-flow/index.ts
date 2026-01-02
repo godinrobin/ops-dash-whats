@@ -273,11 +273,17 @@ serve(async (req) => {
     }
 
     // Acquire lock (with checkpoint if userInput was provided)
-    const { error: lockError } = await supabaseClient
+    const staleBeforeIso = new Date(Date.now() - LOCK_TIMEOUT_MS).toISOString();
+
+    const { data: lockedRow, error: lockError } = await supabaseClient
       .from('inbox_flow_sessions')
       .update(lockUpdate)
-      .eq('id', sessionId);
-    
+      .eq('id', sessionId)
+      // Atomic compare-and-swap style lock: only one runner can flip processing->true
+      .or(`processing.is.null,processing.eq.false,processing_started_at.lt.${staleBeforeIso}`)
+      .select('id')
+      .maybeSingle();
+
     if (lockError) {
       console.error(`[${runId}] Failed to acquire lock:`, lockError);
       return new Response(JSON.stringify({ error: 'Failed to acquire lock' }), {
@@ -285,6 +291,14 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    if (!lockedRow?.id) {
+      console.log(`[${runId}] Lock already acquired by another process, skipping`);
+      return new Response(JSON.stringify({ success: true, skipped: true, reason: 'session_locked_race' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     console.log(`[${runId}] Lock acquired for session ${sessionId}`);
 
     // Helper function to release lock

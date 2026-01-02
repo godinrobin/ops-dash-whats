@@ -789,21 +789,39 @@ serve(async (req) => {
         const uazText = uazMsg.text || '';
         const uazMessageType = uazMsg.messageType || 'conversation';
         const uazFromMe = uazMsg.fromMe === true || uazMsg.fromMe === 'true';
-        const uazMessageId = uazMsg.messageid || uazMsg.id || '';
+
+        // UazAPI can send multiple different IDs for the same message across events.
+        // Example: sometimes it sends a timestamp-like id ("1767...") and later the real message id.
+        // We canonicalize to a stable id to avoid duplicate rows and duplicate flow triggers.
+        const rawMessageId = uazMsg.messageid || '';
+        const rawId = uazMsg.id || '';
         const uazTimestamp = uazMsg.messageTimestamp || Date.now();
+        const timestampId = uazTimestamp ? String(uazTimestamp) : '';
+
+        const normMessageId = normalizeRemoteMessageId(rawMessageId);
+        const normId = normalizeRemoteMessageId(rawId);
+        const normTimestampId = normalizeRemoteMessageId(timestampId);
+
+        const isLikelyTimestampId = (id: string | null) => !!id && /^\d{12,}$/.test(id);
+        const pickCanonicalId = (ids: Array<string | null>) => {
+          const uniq = Array.from(new Set(ids.filter(Boolean) as string[]));
+          if (uniq.length === 0) return { canonical: null as string | null, candidates: [] as string[] };
+
+          // Prefer non-timestamp IDs when present
+          const nonTs = uniq.filter((x) => !isLikelyTimestampId(x));
+          const canonical = (nonTs[0] || uniq[0]) ?? null;
+          return { canonical, candidates: uniq };
+        };
+
+        const { canonical: uazMessageIdNormalized, candidates: uazMessageIdCandidates } = pickCanonicalId([
+          normMessageId,
+          normId,
+          normTimestampId,
+        ]);
+
         const uazFileUrl = uazMsg.fileURL || '';
-        const uazWasSentByApi = uazMsg.wasSentByApi === true;
         
         console.log(`[UAZAPI-WEBHOOK] chatid=${uazChatid}, sender=${uazSender}, fromMe=${uazFromMe}, text=${uazText.substring(0, 50)}, wasSentByApi=${uazWasSentByApi}`);
-        
-        // Skip messages sent by API to prevent loops
-        if (uazWasSentByApi) {
-          console.log('[UAZAPI-WEBHOOK] Skipping message sent by API (wasSentByApi=true)');
-          return new Response(JSON.stringify({ success: true, skipped: true, reason: 'sent_by_api' }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-        const uazMessageIdNormalized = normalizeRemoteMessageId(uazMessageId);
         
         // Skip outbound messages already in our system
         if (uazFromMe && uazMessageIdNormalized) {
@@ -916,17 +934,42 @@ serve(async (req) => {
         else if (msgTypeLower.includes('document')) messageType = 'document';
         else if (msgTypeLower.includes('sticker')) messageType = 'sticker';
         
-        // Check if message already exists (use normalized ID)
-        if (uazMessageIdNormalized) {
+        // Canonical dedupe across the different ID variants we might receive for the same message
+        if (uazMessageIdNormalized && uazMessageIdCandidates?.length) {
           const { data: existingMsg } = await supabaseClient
             .from('inbox_messages')
-            .select('id')
-            .eq('remote_message_id', uazMessageIdNormalized)
+            .select('id, remote_message_id')
+            .eq('contact_id', contact.id)
+            .in('remote_message_id', uazMessageIdCandidates)
             .maybeSingle();
-          
+
           if (existingMsg) {
-            console.log(`[UAZAPI-WEBHOOK] Message already exists: ${uazMessageIdNormalized}`);
-            return new Response(JSON.stringify({ success: true, skipped: true, reason: 'duplicate' }), {
+            const existingRemoteId = normalizeRemoteMessageId(existingMsg.remote_message_id);
+
+            // If the existing row used a timestamp-like id, but we now have a stable id, upgrade it.
+            if (
+              existingRemoteId &&
+              uazMessageIdNormalized &&
+              existingRemoteId !== uazMessageIdNormalized &&
+              typeof existingRemoteId === 'string' &&
+              typeof uazMessageIdNormalized === 'string' &&
+              /^\d{12,}$/.test(existingRemoteId) &&
+              !/^\d{12,}$/.test(uazMessageIdNormalized)
+            ) {
+              const { error: fixIdError } = await supabaseClient
+                .from('inbox_messages')
+                .update({ remote_message_id: uazMessageIdNormalized })
+                .eq('id', existingMsg.id);
+
+              if (fixIdError) {
+                console.warn('[UAZAPI-WEBHOOK] Failed to upgrade message remote id (non-fatal):', fixIdError);
+              } else {
+                console.log(`[UAZAPI-WEBHOOK] Upgraded message id ${existingRemoteId} -> ${uazMessageIdNormalized}`);
+              }
+            }
+
+            console.log(`[UAZAPI-WEBHOOK] Message already exists (canonical dedupe): ${existingRemoteId}`);
+            return new Response(JSON.stringify({ success: true, skipped: true, reason: 'duplicate_canonical' }), {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
           }
@@ -1278,109 +1321,44 @@ serve(async (req) => {
                     });
                   }
 
-                  // Use upsert-like logic: first try to insert, if fails due to unique constraint, update the existing session
-                  let newSession: any = null;
-                  let newSessionError: any = null;
+                  // Create/restart the session for this (flow_id, contact_id) pair.
+                  // IMPORTANT: the DB enforces uniqueness for (flow_id, contact_id), and the session might be "completed".
+                  // Using UPSERT guarantees we restart the flow even if a previous session exists.
+                  const nowIso = new Date().toISOString();
 
-                  // First try inserting a new session
-                  const insertResult = await supabaseClient
+                  const { data: newSession, error: newSessionError } = await supabaseClient
                     .from('inbox_flow_sessions')
-                    .insert({
-                      flow_id: matchedFlow.id,
-                      contact_id: contact.id,
-                      instance_id: instanceId,
-                      user_id: userId,
-                      current_node_id: 'start-1',
-                      variables: {
-                        nome: contact.name || '',
-                        telefone: phone,
-                        resposta: inboundText,
-                        lastMessage: inboundText,
-                        ultima_mensagem: inboundText,
-                        contactName: contact.name || phone,
+                    .upsert(
+                      {
+                        flow_id: matchedFlow.id,
+                        contact_id: contact.id,
+                        instance_id: instanceId,
+                        user_id: userId,
+                        current_node_id: 'start-1',
+                        variables: {
+                          nome: contact.name || '',
+                          telefone: phone,
+                          resposta: inboundText,
+                          lastMessage: inboundText,
+                          ultima_mensagem: inboundText,
+                          contactName: contact.name || phone,
+                          _sent_node_ids: [],
+                        },
+                        status: 'active',
+                        started_at: nowIso,
+                        last_interaction: nowIso,
+                        processing: false,
+                        processing_started_at: null,
                       },
-                      status: 'active',
-                      processing: false,
-                      processing_started_at: null,
-                    })
+                      { onConflict: 'flow_id,contact_id' },
+                    )
                     .select()
                     .single();
-
-                  if (insertResult.error && insertResult.error.message.includes('unique constraint')) {
-                    // Race condition: another webhook already created the session or the old one wasn't updated yet
-                    // Forcefully update any active session for this contact to restart it
-                    console.log('[UAZAPI-WEBHOOK] Unique constraint hit, forcefully resetting existing session');
-
-                    const { data: existingSession } = await supabaseClient
-                      .from('inbox_flow_sessions')
-                      .select('id')
-                      .eq('contact_id', contact.id)
-                      .eq('status', 'active')
-                      .limit(1)
-                      .maybeSingle();
-
-                    if (existingSession) {
-                      const { data: updatedSession, error: updateError } = await supabaseClient
-                        .from('inbox_flow_sessions')
-                        .update({
-                          flow_id: matchedFlow.id,
-                          current_node_id: 'start-1',
-                          variables: {
-                            nome: contact.name || '',
-                            telefone: phone,
-                            resposta: inboundText,
-                            lastMessage: inboundText,
-                            ultima_mensagem: inboundText,
-                            contactName: contact.name || phone,
-                          },
-                          started_at: new Date().toISOString(),
-                          last_interaction: new Date().toISOString(),
-                          processing: false,
-                          processing_started_at: null,
-                        })
-                        .eq('id', existingSession.id)
-                        .select()
-                        .single();
-
-                      newSession = updatedSession;
-                      newSessionError = updateError;
-                    } else {
-                      // Session was completed in between, try insert again
-                      const retryResult = await supabaseClient
-                        .from('inbox_flow_sessions')
-                        .insert({
-                          flow_id: matchedFlow.id,
-                          contact_id: contact.id,
-                          instance_id: instanceId,
-                          user_id: userId,
-                          current_node_id: 'start-1',
-                          variables: {
-                            nome: contact.name || '',
-                            telefone: phone,
-                            resposta: inboundText,
-                            lastMessage: inboundText,
-                            ultima_mensagem: inboundText,
-                            contactName: contact.name || phone,
-                          },
-                          status: 'active',
-                          processing: false,
-                          processing_started_at: null,
-                        })
-                        .select()
-                        .single();
-
-                      newSession = retryResult.data;
-                      newSessionError = retryResult.error;
-                    }
-                  } else {
-                    newSession = insertResult.data;
-                    newSessionError = insertResult.error;
-                  }
 
                   logWebhookDiagnostic(supabaseClient, {
                     instanceId,
                     instanceName: instanceNameForLookup,
-                    eventType: newSession ? 'keyword-session-created' : 'keyword-session-error',
+                    eventType: newSession ? 'keyword-session-upserted' : 'keyword-session-error',
                     userId,
                     payloadPreview: JSON.stringify({
                       contactId: contact.id,
@@ -1392,16 +1370,14 @@ serve(async (req) => {
 
                   if (newSession && !newSessionError) {
                     try {
-                      const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
-                      await fetch(processUrl, {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-                        },
-                        body: JSON.stringify({ sessionId: newSession.id }),
+                      const { error: invokeError } = await supabaseClient.functions.invoke('process-inbox-flow', {
+                        body: { sessionId: newSession.id },
                       });
-                      console.log(`[UAZAPI-WEBHOOK] Keyword flow triggered for session ${newSession.id}`);
+                      if (invokeError) {
+                        console.error('[UAZAPI-WEBHOOK] Error invoking keyword flow (pre-check):', invokeError);
+                      } else {
+                        console.log(`[UAZAPI-WEBHOOK] Keyword flow triggered for session ${newSession.id}`);
+                      }
                     } catch (e) {
                       console.error('[UAZAPI-WEBHOOK] Error invoking keyword flow (pre-check):', e);
                     }
@@ -1500,41 +1476,47 @@ serve(async (req) => {
                     console.log(`[UAZAPI-WEBHOOK] Canceled ${sessionsToCancel.length} active session(s) for keyword restart`);
                   }
 
+                  const nowIso = new Date().toISOString();
+
                   const { data: newSession, error: newSessionError } = await supabaseClient
                     .from('inbox_flow_sessions')
-                    .insert({
-                      flow_id: keywordFlowToTrigger.id,
-                      contact_id: contact.id,
-                      instance_id: instanceId,
-                      user_id: userId,
-                      current_node_id: 'start-1',
-                      variables: {
-                        nome: contact.name || '',
-                        telefone: phone,
-                        resposta: inboundText,
-                        lastMessage: inboundText,
-                        ultima_mensagem: inboundText,
-                        contactName: contact.name || phone,
+                    .upsert(
+                      {
+                        flow_id: keywordFlowToTrigger.id,
+                        contact_id: contact.id,
+                        instance_id: instanceId,
+                        user_id: userId,
+                        current_node_id: 'start-1',
+                        variables: {
+                          nome: contact.name || '',
+                          telefone: phone,
+                          resposta: inboundText,
+                          lastMessage: inboundText,
+                          ultima_mensagem: inboundText,
+                          contactName: contact.name || phone,
+                          _sent_node_ids: [],
+                        },
+                        status: 'active',
+                        started_at: nowIso,
+                        last_interaction: nowIso,
+                        processing: false,
+                        processing_started_at: null,
                       },
-                      status: 'active',
-                      processing: false,
-                      processing_started_at: null,
-                    })
+                      { onConflict: 'flow_id,contact_id' },
+                    )
                     .select()
                     .single();
 
                   if (newSession && !newSessionError) {
                     try {
-                      const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
-                      await fetch(processUrl, {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-                        },
-                        body: JSON.stringify({ sessionId: newSession.id }),
+                      const { error: invokeError } = await supabaseClient.functions.invoke('process-inbox-flow', {
+                        body: { sessionId: newSession.id },
                       });
-                      console.log(`[UAZAPI-WEBHOOK] Keyword flow triggered for session ${newSession.id}`);
+                      if (invokeError) {
+                        console.error('[UAZAPI-WEBHOOK] Error invoking keyword flow:', invokeError);
+                      } else {
+                        console.log(`[UAZAPI-WEBHOOK] Keyword flow triggered for session ${newSession.id}`);
+                      }
                     } catch (e) {
                       console.error('[UAZAPI-WEBHOOK] Error invoking keyword flow:', e);
                     }

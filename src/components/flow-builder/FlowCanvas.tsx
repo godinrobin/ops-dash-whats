@@ -1,4 +1,5 @@
 import { useCallback, useState, useEffect, useRef, useMemo } from 'react';
+import { useTheme } from 'next-themes';
 import {
   ReactFlow,
   Background,
@@ -334,14 +335,19 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
           onInit={onInit}
           nodeTypes={nodeTypes}
           fitView
-          colorMode="dark"
+          colorMode={flowColorMode}
           proOptions={{ hideAttribution: true }}
           deleteKeyCode={['Backspace', 'Delete']}
           onEdgeClick={(_, edge) => {
             setEdges((eds) => eds.filter((e) => e.id !== edge.id));
           }}
         >
-          <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
+          <Background
+            variant={BackgroundVariant.Dots}
+            gap={20}
+            size={1}
+            color="hsl(var(--muted-foreground) / 0.35)"
+          />
           <Controls />
         </ReactFlow>
       </div>
