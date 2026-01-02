@@ -341,15 +341,16 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
           colorMode={flowColorMode}
           proOptions={{ hideAttribution: true }}
           deleteKeyCode={['Backspace', 'Delete']}
+          style={{ background: 'hsl(var(--flow-canvas))' }}
           onEdgeClick={(_, edge) => {
             setEdges((eds) => eds.filter((e) => e.id !== edge.id));
           }}
         >
           <Background
             variant={BackgroundVariant.Dots}
-            gap={20}
+            gap={24}
             size={1}
-            color="hsl(var(--muted-foreground) / 0.35)"
+            color="hsl(var(--foreground) / 0.08)"
           />
           <Controls />
         </ReactFlow>
