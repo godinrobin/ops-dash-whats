@@ -780,7 +780,9 @@ serve(async (req) => {
         const lastTsRaw = (chat as any).wa_lastMsgTimestamp;
         const msgTs = typeof lastTsRaw === 'number' ? lastTsRaw : Number(lastTsRaw);
 
-        if (!waChatId.includes('@') || !lastText || !msgTs) return null;
+        // Skip if no chat id with @ symbol OR no timestamp
+        // NOTE: We now allow empty text to be processed (image/audio messages have empty text)
+        if (!waChatId.includes('@') || !msgTs) return null;
 
         // Skip group chats
         if (waChatId.includes('@g.us') || (chat as any).wa_isGroup === true) return null;
@@ -790,6 +792,8 @@ serve(async (req) => {
         const lastSenderDigits = lastSender.split('@')[0].replace(/\D/g, '');
         const fromMe = ownerDigits ? lastSenderDigits === ownerDigits : false;
 
+        // For non-owner messages, the sender may be @lid but we need the real phone from wa_chatid
+        // Use wa_chatid as the primary chatid (it contains the real phone number)
         const msgId = `chat-${String((chat as any).wa_fastid || waChatId)}-${msgTs}-${fromMe ? 'out' : 'in'}`;
 
         console.log('[UAZAPI-WEBHOOK] Using chats snapshot as message candidate', {
@@ -797,13 +801,14 @@ serve(async (req) => {
           lastSender,
           fromMe,
           msgTs,
+          lastText: lastText.substring(0, 50),
         });
 
         return {
-          chatid: waChatId,
-          sender: lastSender || waChatId,
+          chatid: waChatId, // Use wa_chatid which has the real phone
+          sender: waChatId, // Also use wa_chatid as sender (more reliable than @lid sender)
           senderName: String((chat as any).wa_contactName || (chat as any).wa_name || (chat as any).name || ''),
-          text: lastText,
+          text: lastText || '', // Allow empty text for media messages
           messageType: String((chat as any).wa_lastMessageType || 'conversation'),
           fromMe,
           wasSentByApi: false,
