@@ -1097,6 +1097,217 @@ export const PropertiesPanel = ({
           </div>
         );
 
+      case 'paymentIdentifier':
+        return (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Identifica se a mensagem do usuário contém um comprovante de pagamento PIX.
+            </p>
+            
+            <div className="space-y-3">
+              <Label className="text-xs text-muted-foreground uppercase">Verificar</Label>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="checkImage"
+                  checked={(nodeData.checkImage as boolean) ?? true}
+                  onCheckedChange={(checked) => onUpdateNode(selectedNode.id, { checkImage: checked })}
+                />
+                <Label htmlFor="checkImage" className="text-sm cursor-pointer">
+                  Imagens
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="checkPdf"
+                  checked={(nodeData.checkPdf as boolean) ?? true}
+                  onCheckedChange={(checked) => onUpdateNode(selectedNode.id, { checkPdf: checked })}
+                />
+                <Label htmlFor="checkPdf" className="text-sm cursor-pointer">
+                  PDFs/Documentos
+                </Label>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="markAsPaid"
+                  checked={(nodeData.markAsPaid as boolean) || false}
+                  onCheckedChange={(checked) => onUpdateNode(selectedNode.id, { markAsPaid: checked })}
+                />
+                <Label htmlFor="markAsPaid" className="text-sm cursor-pointer">
+                  Marcar contato como "pago" se comprovante for válido
+                </Label>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Tentativas máximas</Label>
+              <Input
+                type="number"
+                min={1}
+                max={10}
+                value={(nodeData.maxAttempts as number) || 3}
+                onChange={(e) => onUpdateNode(selectedNode.id, { maxAttempts: parseInt(e.target.value) || 3 })}
+              />
+              <p className="text-xs text-muted-foreground">
+                Número de mensagens que serão analisadas antes de ir para a saída "Não Pagou"
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Mensagem de erro (opcional)</Label>
+              <Textarea
+                placeholder="Por favor, envie o comprovante de pagamento..."
+                value={(nodeData.errorMessage as string) || ''}
+                onChange={(e) => onUpdateNode(selectedNode.id, { errorMessage: e.target.value })}
+                rows={2}
+              />
+              <p className="text-xs text-muted-foreground">
+                Enviada após cada tentativa inválida
+              </p>
+            </div>
+
+            <div className="p-2 rounded bg-muted/50 text-xs">
+              <strong>Saídas:</strong>
+              <div className="flex gap-4 mt-1">
+                <span className="text-emerald-500">✓ Pagou</span>
+                <span className="text-red-500">✗ Não Pagou</span>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'sendPixKey':
+        return (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Envia um botão nativo do WhatsApp com sua chave PIX para pagamento.
+            </p>
+            
+            <div className="space-y-2">
+              <Label>Tipo da Chave PIX</Label>
+              <Select
+                value={(nodeData.pixType as string) || 'EVP'}
+                onValueChange={(value) => onUpdateNode(selectedNode.id, { pixType: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CPF">CPF</SelectItem>
+                  <SelectItem value="CNPJ">CNPJ</SelectItem>
+                  <SelectItem value="PHONE">Telefone</SelectItem>
+                  <SelectItem value="EMAIL">E-mail</SelectItem>
+                  <SelectItem value="EVP">Chave Aleatória (EVP)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Chave PIX</Label>
+              <Input
+                placeholder="Sua chave PIX..."
+                value={(nodeData.pixKey as string) || ''}
+                onChange={(e) => onUpdateNode(selectedNode.id, { pixKey: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Nome do Recebedor</Label>
+              <Input
+                placeholder="Nome exibido para o cliente"
+                value={(nodeData.pixName as string) || ''}
+                onChange={(e) => onUpdateNode(selectedNode.id, { pixName: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                Nome que aparecerá para o cliente no momento do pagamento
+              </p>
+            </div>
+          </div>
+        );
+
+      case 'sendCharge':
+        return (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Envia uma cobrança nativa do WhatsApp com botão "Revisar e pagar".
+            </p>
+            
+            <div className="space-y-2">
+              <Label>Valor (R$)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0,00"
+                value={(nodeData.amount as number) || ''}
+                onChange={(e) => onUpdateNode(selectedNode.id, { amount: parseFloat(e.target.value) || 0 })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Nome do Item/Produto</Label>
+              <Input
+                placeholder="Ex: Produto XYZ"
+                value={(nodeData.itemName as string) || ''}
+                onChange={(e) => onUpdateNode(selectedNode.id, { itemName: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Descrição/Mensagem</Label>
+              <Textarea
+                placeholder="Descrição da cobrança..."
+                value={(nodeData.description as string) || ''}
+                onChange={(e) => onUpdateNode(selectedNode.id, { description: e.target.value })}
+                rows={2}
+              />
+            </div>
+
+            <div className="border-t pt-4 mt-4">
+              <Label className="text-xs text-muted-foreground uppercase mb-3 block">Dados PIX para Recebimento</Label>
+              
+              <div className="space-y-2">
+                <Label>Tipo da Chave PIX</Label>
+                <Select
+                  value={(nodeData.pixType as string) || 'EVP'}
+                  onValueChange={(value) => onUpdateNode(selectedNode.id, { pixType: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CPF">CPF</SelectItem>
+                    <SelectItem value="CNPJ">CNPJ</SelectItem>
+                    <SelectItem value="PHONE">Telefone</SelectItem>
+                    <SelectItem value="EMAIL">E-mail</SelectItem>
+                    <SelectItem value="EVP">Chave Aleatória (EVP)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2 mt-2">
+                <Label>Chave PIX</Label>
+                <Input
+                  placeholder="Sua chave PIX..."
+                  value={(nodeData.pixKey as string) || ''}
+                  onChange={(e) => onUpdateNode(selectedNode.id, { pixKey: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-2 mt-2">
+                <Label>Nome do Recebedor</Label>
+                <Input
+                  placeholder="Nome exibido para o cliente"
+                  value={(nodeData.pixName as string) || ''}
+                  onChange={(e) => onUpdateNode(selectedNode.id, { pixName: e.target.value })}
+                />
+              </div>
+            </div>
+          </div>
+        );
+
       default:
         return null;
     }
