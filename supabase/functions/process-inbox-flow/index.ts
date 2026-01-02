@@ -1288,26 +1288,35 @@ serve(async (req) => {
             const maxAttempts = (currentNode.data.maxAttempts as number) || 3;
             const errorMessage = currentNode.data.errorMessage as string || '';
             
-            // Initialize attempt counter
+            // Initialize attempt counter + cursor to avoid re-processing old media
             const paymentAttemptKey = `_payment_attempts_${currentNodeId}`;
+            const paymentSinceKey = `_payment_since_${currentNodeId}`;
             const currentAttempts = (variables[paymentAttemptKey] as number) || 0;
+
+            // Anchor: only consider media that arrived AFTER we reached this node.
+            // This prevents marking as paid based on older receipts in chat history.
+            if (!variables[paymentSinceKey]) {
+              variables[paymentSinceKey] = session.last_interaction || session.started_at;
+            }
+            const sinceIso = (variables[paymentSinceKey] as string) || session.last_interaction || session.started_at;
             
-            console.log(`[${runId}] PaymentIdentifier: attempt ${currentAttempts + 1}/${maxAttempts}, checkImage=${checkImage}, checkPdf=${checkPdf}`);
+            console.log(`[${runId}] PaymentIdentifier: attempt ${currentAttempts + 1}/${maxAttempts}, checkImage=${checkImage}, checkPdf=${checkPdf}, since=${sinceIso}`);
             
-            // Get the last MEDIA message from the contact (image or document)
-            // We need to look for media messages specifically, not just any message
+            // Get the last NEW MEDIA message from the contact (image or document)
             const mediaTypeFilters: string[] = [];
             if (checkImage) mediaTypeFilters.push('image');
             if (checkPdf) mediaTypeFilters.push('document');
             
-            console.log(`[${runId}] Looking for media types: ${mediaTypeFilters.join(', ')}`);
+            console.log(`[${runId}] Looking for NEW media types since ${sinceIso}: ${mediaTypeFilters.join(', ')}`);
             
             const { data: lastMediaMessages } = await supabaseClient
               .from('inbox_messages')
               .select('*')
               .eq('contact_id', contact.id)
+              .eq('instance_id', session.instance_id)
               .eq('direction', 'inbound')
               .in('message_type', mediaTypeFilters)
+              .gt('created_at', sinceIso)
               .order('created_at', { ascending: false })
               .limit(1);
             
@@ -1471,6 +1480,44 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
             } else {
               console.log(`[${runId}] No media message found for payment analysis`);
             }
+
+            // Advance cursor so we never reprocess the same media again
+            if (lastMediaMessage?.created_at) {
+              variables[paymentSinceKey] = lastMediaMessage.created_at;
+            }
+
+            // If there is no NEW media since our cursor, just wait (do NOT count as an attempt)
+            if (!lastMediaMessage) {
+              console.log(`[${runId}] Waiting for NEW payment media since ${sinceIso}`);
+
+              await supabaseClient
+                .from('inbox_flow_sessions')
+                .update({
+                  current_node_id: currentNodeId,
+                  variables,
+                  last_interaction: new Date().toISOString(),
+                  processing: false,
+                  processing_started_at: null,
+                })
+                .eq('id', sessionId);
+
+              processedActions.push(`Waiting for payment media (attempts used: ${currentAttempts}/${maxAttempts})`);
+              continueProcessing = false;
+
+              return new Response(
+                JSON.stringify({
+                  success: true,
+                  currentNode: currentNodeId,
+                  actions: processedActions,
+                  waitingForPayment: true,
+                  attempt: currentAttempts,
+                  maxAttempts,
+                }),
+                {
+                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                }
+              );
+            }
             
             // Determine outcome
             if (isPaymentReceipt) {
@@ -1568,8 +1615,9 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
                 }
               }
               
-              // Clear attempt counter
+              // Clear attempt counter + cursor
               delete variables[paymentAttemptKey];
+              delete variables[paymentSinceKey];
               
               // Go to "paid" output
               const paidEdge = edges.find(e => e.source === currentNodeId && e.sourceHandle === 'paid');
@@ -1588,8 +1636,9 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
               if (newAttempts >= maxAttempts) {
                 console.log(`[${runId}] ❌ Max attempts reached (${newAttempts}/${maxAttempts})`);
                 
-                // Clear attempt counter
+                // Clear attempt counter + cursor
                 delete variables[paymentAttemptKey];
+                delete variables[paymentSinceKey];
                 
                 // Go to "notPaid" output
                 const notPaidEdge = edges.find(e => e.source === currentNodeId && e.sourceHandle === 'notPaid');
