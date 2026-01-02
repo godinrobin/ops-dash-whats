@@ -18,7 +18,7 @@ export const ImageNode = ({ id, data }: NodeProps) => {
           <div className="p-1.5 rounded bg-purple-500">
             <Image className="h-3.5 w-3.5 text-white" />
           </div>
-          <span className="font-medium text-sm">Imagem</span>
+          <span className="font-medium text-sm text-card-foreground">Imagem</span>
         </div>
         {hasMedia ? (
           <div className="relative">
