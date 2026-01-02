@@ -2436,80 +2436,8 @@ serve(async (req) => {
         }
       }
 
-      // Check if there's already ANY active session for this contact
-      // This prevents duplicate flows from triggering
-      const { data: allActiveSessions } = await supabaseClient
-        .from('inbox_flow_sessions')
-        .select('id, started_at, current_node_id, flow_id, variables')
-        .eq('contact_id', contact.id)
-        .eq('status', 'active')
-        .order('started_at', { ascending: false });
-
-      // Auto-correction: if there are multiple active sessions, keep only the most recent one
-      if (allActiveSessions && allActiveSessions.length > 1) {
-        console.log(`Found ${allActiveSessions.length} active sessions for contact ${contact.id}, cleaning up duplicates`);
-        const [mostRecent, ...duplicates] = allActiveSessions;
-        
-        // Mark duplicates as completed
-        for (const dup of duplicates) {
-          await supabaseClient
-            .from('inbox_flow_sessions')
-            .update({ status: 'completed' })
-            .eq('id', dup.id);
-          console.log(`Marked duplicate session ${dup.id} as completed`);
-        }
-      }
-
-      const anyActiveSession = allActiveSessions?.[0];
-
-      if (anyActiveSession) {
-        const sessionAge = Date.now() - new Date(anyActiveSession.started_at).getTime();
-        // Check if session has a pending delay - these should NOT be marked as stale
-        const sessionVars = (anyActiveSession.variables || {}) as Record<string, unknown>;
-        const hasPendingDelay = !!(sessionVars._pendingDelay);
-        
-        // If there's an active session (regardless of age), don't trigger new flow
-        // This prevents duplicate flows when user sends multiple messages quickly
-        // The existing session will handle the messages through waitInput/menu nodes
-        console.log(`Active session ${anyActiveSession.id} exists (${sessionAge}ms old, at node: ${anyActiveSession.current_node_id}, hasPendingDelay: ${hasPendingDelay})`);
-        
-        // NEVER mark session as stale if it has a pending delay
-        // For sessions without delay, use 24 hours as stale threshold (instead of 1 hour)
-        const staleThreshold = 86400000; // 24 hours in ms
-        
-        if (hasPendingDelay) {
-          console.log(`Skipping flow trigger - session has pending delay, not stale`);
-          return new Response(JSON.stringify({ success: true, skipped: true, reason: 'session_has_pending_delay' }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        } else if (sessionAge < staleThreshold) {
-          console.log(`Skipping flow trigger - active session exists and is not stale`);
-          return new Response(JSON.stringify({ success: true, skipped: true, reason: 'active_session_exists' }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        } else {
-          console.log(`Session is stale (${sessionAge}ms, no pending delay), marking as completed and allowing new flow`);
-          await supabaseClient
-            .from('inbox_flow_sessions')
-            .update({ status: 'completed' })
-            .eq('id', anyActiveSession.id);
-        }
-      }
-
-      // Check for recently completed sessions to prevent flow restart
-      // If a flow completed recently (within 1 hour), don't trigger the same flow again
-      const { data: recentlyCompletedSession } = await supabaseClient
-        .from('inbox_flow_sessions')
-        .select('id, flow_id, status')
-        .eq('contact_id', contact.id)
-        .eq('status', 'completed')
-        .order('last_interaction', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      
-      const completedFlowId = recentlyCompletedSession?.flow_id;
-
-      // Check for active flows to trigger (only if no active session is waiting for input)
+      // === FLOW TRIGGER LOGIC ===
+      // Fetch all active flows for this user
       const { data: flows, error: flowsError } = await supabaseClient
         .from('inbox_flows')
         .select('*')
@@ -2529,184 +2457,259 @@ serve(async (req) => {
         });
       }
 
-      if (!content || content.trim() === '') {
+      // Check if message has text content for keyword matching
+      const hasTextContent = content && content.trim() !== '';
+      if (!hasTextContent) {
         console.log('[FLOW DEBUG] Message has no text content (type=' + messageType + '), skipping keyword flow trigger');
-        console.log('[FLOW DEBUG] Note: Media messages (audio, image, video) without text won\'t trigger keyword-based flows');
         return new Response(JSON.stringify({ success: true, noContent: true, messageType }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
-      // Count total messages from this contact to determine if this is first message
+      // Get all active sessions for this contact
+      const { data: allActiveSessions } = await supabaseClient
+        .from('inbox_flow_sessions')
+        .select('id, started_at, current_node_id, flow_id, variables')
+        .eq('contact_id', contact.id)
+        .eq('status', 'active')
+        .order('started_at', { ascending: false });
+
+      // Count total messages from this contact to determine if this is first message ever
       const { count: messageCount } = await supabaseClient
         .from('inbox_messages')
         .select('*', { count: 'exact', head: true })
         .eq('contact_id', contact.id)
         .eq('direction', 'inbound');
       
-      const isFirstMessage = (messageCount || 0) <= 1;
-      console.log(`[FLOW DEBUG] Contact ${contact.id} message count: ${messageCount}, isFirstMessage: ${isFirstMessage}`);
+      const isFirstMessageEver = (messageCount || 0) <= 1;
+      console.log(`[FLOW DEBUG] Contact ${contact.id} message count: ${messageCount}, isFirstMessageEver: ${isFirstMessageEver}`);
 
+      // Check if any keyword flow matches first - keyword flows have priority and always restart
+      let keywordFlowToTrigger: typeof flows[0] | null = null;
+      const lowerContent = content.toLowerCase();
+      
       for (const flow of flows) {
-        console.log(`[FLOW DEBUG] Checking flow "${flow.name}" (id: ${flow.id})`);
-        console.log(`[FLOW DEBUG] - trigger_type: ${flow.trigger_type}`);
-        console.log(`[FLOW DEBUG] - trigger_keywords: ${JSON.stringify(flow.trigger_keywords)}`);
-        console.log(`[FLOW DEBUG] - assigned_instances: ${JSON.stringify(flow.assigned_instances)}`);
-        console.log(`[FLOW DEBUG] - current instanceId: ${instanceId}`);
+        if (flow.trigger_type !== 'keyword') continue;
         
-        let shouldTrigger = false;
-
-        // Check if this flow is assigned to specific instances
+        // Check instance assignment
         const assignedInstances = flow.assigned_instances as string[] || [];
         if (assignedInstances.length > 0 && !assignedInstances.includes(instanceId)) {
-          console.log(`[FLOW DEBUG] Flow "${flow.name}" NOT assigned to instance ${instanceId}, skipping`);
+          console.log(`[FLOW DEBUG] Keyword flow "${flow.name}" NOT assigned to instance ${instanceId}, skipping`);
           continue;
         }
-        console.log(`[FLOW DEBUG] Flow "${flow.name}" instance check PASSED`);
-
-        // IMPORTANT: Check if this flow was already completed for this contact
-        // This prevents the flow from restarting after it finishes
-        if (completedFlowId === flow.id) {
-          console.log(`[FLOW DEBUG] Flow "${flow.name}" already completed for contact ${contact.id}, skipping`);
+        
+        const keywords = flow.trigger_keywords as string[] || [];
+        if (keywords.length === 0) {
+          console.log(`[FLOW DEBUG] Keyword flow "${flow.name}" has NO keywords configured, skipping`);
           continue;
         }
-        console.log(`[FLOW DEBUG] Flow "${flow.name}" completion check PASSED (completedFlowId: ${completedFlowId})`);
-
-        if (flow.trigger_type === 'all') {
-          // For 'all' trigger type, only trigger on FIRST message to prevent looping
-          if (isFirstMessage) {
-            shouldTrigger = true;
-            console.log(`[FLOW DEBUG] Flow "${flow.name}" triggered (trigger_type: all, first message)`);
-          } else {
-            console.log(`[FLOW DEBUG] Flow "${flow.name}" skipped - trigger_type 'all' only on first message`);
+        
+        console.log(`[FLOW DEBUG] Checking keywords: ${JSON.stringify(keywords)} against content: "${lowerContent}"`);
+        for (const kw of keywords) {
+          if (lowerContent.includes(kw.toLowerCase())) {
+            console.log(`[FLOW DEBUG] KEYWORD MATCH! Flow "${flow.name}" triggered by keyword "${kw}"`);
+            keywordFlowToTrigger = flow;
+            break;
           }
-        } else if (flow.trigger_type === 'keyword') {
-          const keywords = flow.trigger_keywords as string[] || [];
-          if (keywords.length === 0) {
-            console.log(`[FLOW DEBUG] Flow "${flow.name}" has NO keywords configured, skipping`);
-            continue;
-          }
-          const lowerContent = content.toLowerCase();
-          console.log(`[FLOW DEBUG] Checking keywords: ${JSON.stringify(keywords)} against content: "${lowerContent}"`);
-          for (const kw of keywords) {
-            const match = lowerContent.includes(kw.toLowerCase());
-            console.log(`[FLOW DEBUG] - keyword "${kw}" match: ${match}`);
-            if (match) {
-              shouldTrigger = true;
-              console.log(`[FLOW DEBUG] Flow "${flow.name}" TRIGGERED by keyword "${kw}"`);
-              break;
-            }
-          }
-          if (!shouldTrigger) {
-            console.log(`[FLOW DEBUG] Flow "${flow.name}" no keyword match`);
-          }
-        } else {
-          console.log(`[FLOW DEBUG] Flow "${flow.name}" has unknown trigger_type: ${flow.trigger_type}`);
         }
+        if (keywordFlowToTrigger) break;
+      }
 
-        if (shouldTrigger) {
-            // Check if this is a media message and flow has pause_on_media enabled
-            // Only pause for image or document (PDF), NOT for video or audio
-            if ((messageType === 'image' || messageType === 'document') && flow.pause_on_media === true) {
-              console.log(`Media message (${messageType}) received and flow ${flow.name} has pause_on_media enabled`);
-              
-              // Pause the flow for this contact
-              await supabaseClient
-                .from('inbox_contacts')
-                .update({ flow_paused: true })
-                .eq('id', contact.id);
-              
-              console.log(`Flow paused for contact ${contact.id} due to media message`);
-              
-              // Don't trigger the flow, just pause
-              return new Response(JSON.stringify({ success: true, flowPausedByMedia: true }), {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              });
-            }
+      // If a keyword flow matches, it ALWAYS triggers (restarts from beginning)
+      // This cancels any existing sessions and starts fresh
+      if (keywordFlowToTrigger) {
+        console.log(`[FLOW DEBUG] === KEYWORD FLOW TRIGGER: "${keywordFlowToTrigger.name}" ===`);
+        
+        // Cancel ALL active sessions for this contact (keyword triggers always restart)
+        if (allActiveSessions && allActiveSessions.length > 0) {
+          console.log(`[FLOW DEBUG] Canceling ${allActiveSessions.length} active session(s) for keyword restart`);
+          for (const session of allActiveSessions) {
+            // Cancel any pending delay jobs
+            await supabaseClient
+              .from('inbox_flow_delay_jobs')
+              .update({ status: 'cancelled' })
+              .eq('session_id', session.id)
+              .eq('status', 'pending');
             
-            console.log(`[FLOW DEBUG] *** TRIGGERING FLOW "${flow.name}" for contact ${contact.id} ***`);
-            
-            // Use upsert with ON CONFLICT to prevent duplicate active sessions
-            // The unique index idx_inbox_flow_sessions_unique_active ensures only one active session per flow+contact
-            const sessionPayload = {
-              flow_id: flow.id,
-              contact_id: contact.id,
-              instance_id: instanceId,
-              user_id: userId,
-              current_node_id: 'start-1',
-              variables: { 
-                nome: contact.name || '',
-                telefone: phone,
-                resposta: '',
-                lastMessage: content,
-                contactName: contact.name || phone,
-                ultima_mensagem: content,
-              },
-              status: 'active',
-              processing: false,
-              processing_started_at: null,
-            };
-            console.log(`[FLOW DEBUG] Session payload:`, JSON.stringify(sessionPayload));
-            
-            const { data: newSession, error: sessionError } = await supabaseClient
+            // Mark session as completed
+            await supabaseClient
               .from('inbox_flow_sessions')
-              .upsert(sessionPayload, {
-                onConflict: 'flow_id,contact_id',
-                ignoreDuplicates: false,
-              })
-              .select()
-              .single();
-
-            // Execute the flow immediately after creating/updating session
-            if (newSession && !sessionError) {
-              console.log(`[FLOW DEBUG] Session created successfully: ${newSession.id}`);
-              console.log(`[FLOW DEBUG] Executing flow for session ${newSession.id}`);
-              try {
-                const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
-                console.log(`[FLOW DEBUG] Calling process-inbox-flow at: ${processUrl}`);
-                const processResponse = await fetch(processUrl, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-                  },
-                  body: JSON.stringify({ sessionId: newSession.id }),
-                });
-                
-                if (!processResponse.ok) {
-                  const errorText = await processResponse.text();
-                  console.error('[FLOW DEBUG] Error executing flow:', errorText);
-                } else {
-                  const responseText = await processResponse.text();
-                  console.log(`[FLOW DEBUG] Flow executed successfully, response: ${responseText}`);
-                }
-              } catch (flowError) {
-                console.error('[FLOW DEBUG] Error calling process-inbox-flow:', flowError);
-              }
-            } else if (sessionError) {
-              console.error('[FLOW DEBUG] Error creating/upserting session:', sessionError);
-              console.error('[FLOW DEBUG] Session error details:', JSON.stringify(sessionError));
-              
-              // If upsert failed due to unique constraint, try to find existing session
-              if (sessionError.code === '23505') {
-                console.log('Session already exists (unique constraint), fetching existing session');
-                const { data: existingSession } = await supabaseClient
-                  .from('inbox_flow_sessions')
-                  .select('id')
-                  .eq('flow_id', flow.id)
-                  .eq('contact_id', contact.id)
-                  .eq('status', 'active')
-                  .single();
-                
-                if (existingSession) {
-                  console.log(`Using existing session ${existingSession.id}`);
-                }
-              }
-            }
-
-            break; // Only trigger one flow
+              .update({ status: 'completed' })
+              .eq('id', session.id);
+            console.log(`[FLOW DEBUG] Canceled session ${session.id}`);
           }
         }
+
+        // Create new session from the beginning
+        const sessionPayload = {
+          flow_id: keywordFlowToTrigger.id,
+          contact_id: contact.id,
+          instance_id: instanceId,
+          user_id: userId,
+          current_node_id: 'start-1',
+          variables: { 
+            nome: contact.name || '',
+            telefone: phone,
+            resposta: content,
+            lastMessage: content,
+            contactName: contact.name || phone,
+            ultima_mensagem: content,
+          },
+          status: 'active',
+          processing: false,
+          processing_started_at: null,
+        };
+        
+        // Use insert instead of upsert to always create new session
+        const { data: newSession, error: sessionError } = await supabaseClient
+          .from('inbox_flow_sessions')
+          .insert(sessionPayload)
+          .select()
+          .single();
+
+        if (newSession && !sessionError) {
+          console.log(`[FLOW DEBUG] Keyword flow session created: ${newSession.id}`);
+          try {
+            const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+            const processResponse = await fetch(processUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+              },
+              body: JSON.stringify({ sessionId: newSession.id }),
+            });
+            
+            if (!processResponse.ok) {
+              const errorText = await processResponse.text();
+              console.error('[FLOW DEBUG] Error executing keyword flow:', errorText);
+            } else {
+              console.log(`[FLOW DEBUG] Keyword flow executed successfully`);
+            }
+          } catch (flowError) {
+            console.error('[FLOW DEBUG] Error calling process-inbox-flow:', flowError);
+          }
+        } else if (sessionError) {
+          console.error('[FLOW DEBUG] Error creating keyword flow session:', sessionError);
+        }
+        
+        return new Response(JSON.stringify({ success: true, keywordFlowTriggered: keywordFlowToTrigger.name }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // === No keyword flow matched - check for "all" trigger type ===
+      // "All" flows only trigger ONCE per contact - checked via tags or session history
+      
+      // If there's an active session, don't trigger new "all" flows - let existing flow handle it
+      const anyActiveSession = allActiveSessions?.[0];
+      if (anyActiveSession) {
+        const sessionVars = (anyActiveSession.variables || {}) as Record<string, unknown>;
+        const hasPendingDelay = !!(sessionVars._pendingDelay);
+        console.log(`[FLOW DEBUG] Active session ${anyActiveSession.id} exists (node: ${anyActiveSession.current_node_id}, hasPendingDelay: ${hasPendingDelay})`);
+        console.log(`[FLOW DEBUG] No keyword matched, skipping "all" flow trigger due to active session`);
+        return new Response(JSON.stringify({ success: true, skipped: true, reason: 'active_session_exists_no_keyword_match' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Check for "all" trigger flows (only if no active session and no keyword matched)
+      for (const flow of flows) {
+        if (flow.trigger_type !== 'all') continue;
+        
+        console.log(`[FLOW DEBUG] Checking "all" flow "${flow.name}" (id: ${flow.id})`);
+        
+        // Check instance assignment
+        const assignedInstances = flow.assigned_instances as string[] || [];
+        if (assignedInstances.length > 0 && !assignedInstances.includes(instanceId)) {
+          console.log(`[FLOW DEBUG] "All" flow "${flow.name}" NOT assigned to instance ${instanceId}, skipping`);
+          continue;
+        }
+
+        // "All" flows only trigger ONCE per contact per flow - check if already triggered
+        // We check for ANY session (active or completed) with this flow+contact combo
+        const { data: existingSession } = await supabaseClient
+          .from('inbox_flow_sessions')
+          .select('id, status')
+          .eq('flow_id', flow.id)
+          .eq('contact_id', contact.id)
+          .limit(1)
+          .maybeSingle();
+        
+        if (existingSession) {
+          console.log(`[FLOW DEBUG] "All" flow "${flow.name}" already triggered for contact (session: ${existingSession.id}, status: ${existingSession.status}), skipping`);
+          continue;
+        }
+
+        console.log(`[FLOW DEBUG] === "ALL" FLOW TRIGGER: "${flow.name}" (first time for this contact) ===`);
+
+        // Check if this is a media message and flow has pause_on_media enabled
+        if ((messageType === 'image' || messageType === 'document') && flow.pause_on_media === true) {
+          console.log(`Media message (${messageType}) received and flow ${flow.name} has pause_on_media enabled`);
+          await supabaseClient
+            .from('inbox_contacts')
+            .update({ flow_paused: true })
+            .eq('id', contact.id);
+          console.log(`Flow paused for contact ${contact.id} due to media message`);
+          return new Response(JSON.stringify({ success: true, flowPausedByMedia: true }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Create new session for "all" flow
+        const sessionPayload = {
+          flow_id: flow.id,
+          contact_id: contact.id,
+          instance_id: instanceId,
+          user_id: userId,
+          current_node_id: 'start-1',
+          variables: { 
+            nome: contact.name || '',
+            telefone: phone,
+            resposta: content,
+            lastMessage: content,
+            contactName: contact.name || phone,
+            ultima_mensagem: content,
+          },
+          status: 'active',
+          processing: false,
+          processing_started_at: null,
+        };
+        
+        const { data: newSession, error: sessionError } = await supabaseClient
+          .from('inbox_flow_sessions')
+          .insert(sessionPayload)
+          .select()
+          .single();
+
+        if (newSession && !sessionError) {
+          console.log(`[FLOW DEBUG] "All" flow session created: ${newSession.id}`);
+          try {
+            const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+            const processResponse = await fetch(processUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+              },
+              body: JSON.stringify({ sessionId: newSession.id }),
+            });
+            
+            if (!processResponse.ok) {
+              const errorText = await processResponse.text();
+              console.error('[FLOW DEBUG] Error executing "all" flow:', errorText);
+            } else {
+              console.log(`[FLOW DEBUG] "All" flow executed successfully`);
+            }
+          } catch (flowError) {
+            console.error('[FLOW DEBUG] Error calling process-inbox-flow:', flowError);
+          }
+        } else if (sessionError) {
+          console.error('[FLOW DEBUG] Error creating "all" flow session:', sessionError);
+        }
+
+        break; // Only trigger one "all" flow
+      }
       
 
       console.log('Message processed successfully');
