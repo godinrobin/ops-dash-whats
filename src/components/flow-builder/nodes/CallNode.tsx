@@ -3,7 +3,8 @@ import { Phone } from 'lucide-react';
 import { NodeAnalyticsWrapper } from '../NodeAnalyticsWrapper';
 
 export const CallNode = ({ id, data }: NodeProps) => {
-  const nodeData = data as { duration?: number };
+  const nodeData = data as { waitAfterCall?: number };
+  const waitTime = nodeData.waitAfterCall || 3;
 
   return (
     <NodeAnalyticsWrapper nodeId={id}>
@@ -20,7 +21,7 @@ export const CallNode = ({ id, data }: NodeProps) => {
           <span className="font-medium text-sm">Ligar</span>
         </div>
         <div className="text-xs text-muted-foreground">
-          {nodeData.duration ? `${nodeData.duration}s` : 'Ligação breve'}
+          Ligação breve ({waitTime}s)
         </div>
         <Handle
           type="source"
