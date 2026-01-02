@@ -40,38 +40,35 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
   
   // Function to recover media via fallback endpoint
   const recoverMedia = useCallback(async () => {
+    // Prevent multiple attempts or if already recovered
     if (isRecoveringMedia || recoveryFailed || recoveredMediaUrl) return;
     
     setIsRecoveringMedia(true);
-    console.log(`[ChatMessage] Attempting to recover media for message: ${message.id}`);
     
     try {
-      const { data, error } = await supabase.functions.invoke('get-media-fallback', {
+      const response = await supabase.functions.invoke('get-media-fallback', {
         body: { messageId: message.id }
       });
       
-      if (error) {
-        // Log silently - don't throw or show as app crash
-        console.log('[ChatMessage] Media recovery unavailable:', error.message);
+      // Handle both error object and non-success response
+      if (response.error || !response.data?.success) {
+        // This is expected for old messages - don't log as error
         setRecoveryFailed(true);
         return;
       }
       
-      if (data?.success && data?.media_url) {
-        console.log(`[ChatMessage] Media recovered: ${data.media_url}`);
-        setRecoveredMediaUrl(data.media_url);
+      if (response.data?.media_url) {
+        setRecoveredMediaUrl(response.data.media_url);
         // Reset error states since we have a new URL
         setImageError(false);
         setAudioError(false);
         setVideoError(false);
         setAudioRetryCount(0);
       } else {
-        console.log('[ChatMessage] Media recovery failed:', data?.error || 'No URL returned');
         setRecoveryFailed(true);
       }
-    } catch (err) {
-      // Silently handle - this is expected for old messages
-      console.log('[ChatMessage] Media recovery not available');
+    } catch {
+      // Silently handle - this is expected for old/expired messages
       setRecoveryFailed(true);
     } finally {
       setIsRecoveringMedia(false);
