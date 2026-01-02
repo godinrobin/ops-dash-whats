@@ -840,13 +840,14 @@ serve(async (req) => {
         
         console.log(`[UAZAPI-WEBHOOK] Instance found: ${instanceId}, user: ${userId}`);
         
-        // Find or create contact
+        // Find or create contact - IMPORTANT: contact is unique per phone + instance combination
         let contact;
         const { data: existingContact } = await supabaseClient
           .from('inbox_contacts')
           .select('*')
           .eq('phone', phone)
           .eq('user_id', userId)
+          .eq('instance_id', instanceId)
           .maybeSingle();
         
         if (existingContact) {
@@ -860,7 +861,7 @@ serve(async (req) => {
             contact.name = uazSenderName;
           }
         } else {
-          // Create new contact
+          // Create new contact - one per phone + instance combination
           const { data: newContact, error: contactError } = await supabaseClient
             .from('inbox_contacts')
             .insert({
@@ -882,7 +883,7 @@ serve(async (req) => {
             });
           }
           contact = newContact;
-          console.log(`[UAZAPI-WEBHOOK] Created new contact: ${contact.id}`);
+          console.log(`[UAZAPI-WEBHOOK] Created new contact: ${contact.id} for instance ${instanceId}`);
         }
         
         // Map UazAPI message type to our types
@@ -908,6 +909,94 @@ serve(async (req) => {
             return new Response(JSON.stringify({ success: true, skipped: true, reason: 'duplicate' }), {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
+          }
+        }
+        
+        // For media messages, persist to storage immediately so media is available right away
+        if (messageType !== 'text' && uazMessageIdNormalized) {
+          console.log(`[UAZAPI-WEBHOOK] Media message detected (${messageType}), attempting to persist...`);
+          
+          // Get instance token for UazAPI download
+          const { data: instanceData } = await supabaseClient
+            .from('maturador_instances')
+            .select('uazapi_token')
+            .eq('id', instanceId)
+            .single();
+          
+          const uazapiToken = instanceData?.uazapi_token;
+          
+          if (uazapiToken) {
+            // Get global UazAPI config
+            const { data: globalConfig } = await supabaseClient
+              .from('whatsapp_api_config')
+              .select('uazapi_base_url')
+              .limit(1)
+              .maybeSingle();
+            
+            const uazapiBaseUrl = globalConfig?.uazapi_base_url?.replace(/\/$/, '') || 'https://zapdata.uazapi.com';
+            
+            try {
+              console.log(`[UAZAPI-WEBHOOK] Downloading media via UAZAPI: ${uazapiBaseUrl}/message/download, id=${uazMessageIdNormalized}`);
+              
+              const downloadResponse = await fetch(`${uazapiBaseUrl}/message/download`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'token': uazapiToken,
+                },
+                body: JSON.stringify({
+                  id: uazMessageIdNormalized,
+                  return_base64: true,
+                  return_link: false,
+                }),
+              });
+              
+              if (downloadResponse.ok) {
+                const downloadData = await downloadResponse.json();
+                const mediaBase64 = downloadData.base64Data || downloadData.base64 || downloadData.data || '';
+                const mediaMimetype = downloadData.mimetype || 'application/octet-stream';
+                
+                if (mediaBase64 && mediaBase64.length > 0) {
+                  console.log(`[UAZAPI-WEBHOOK] Media downloaded: ${mediaBase64.length} chars, mimetype=${mediaMimetype}`);
+                  
+                  // Convert base64 to ArrayBuffer
+                  const binaryString = atob(mediaBase64);
+                  const bytes = new Uint8Array(binaryString.length);
+                  for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                  }
+                  
+                  // Upload to storage
+                  const ext = guessExtension(mediaMimetype, messageType === 'image' ? 'jpg' : messageType === 'audio' ? 'ogg' : 'bin');
+                  const objectPath = `inbox-media/${userId}/${instanceId}/${messageType}/${uazMessageIdNormalized}.${ext}`;
+                  
+                  const { error: uploadError } = await supabaseClient
+                    .storage
+                    .from(INBOX_MEDIA_BUCKET)
+                    .upload(objectPath, bytes, {
+                      contentType: mediaMimetype,
+                      upsert: true,
+                      cacheControl: '31536000',
+                    });
+                  
+                  if (!uploadError) {
+                    const { data: urlData } = await supabaseClient.storage.from(INBOX_MEDIA_BUCKET).getPublicUrl(objectPath);
+                    if (urlData?.publicUrl) {
+                      mediaUrl = urlData.publicUrl;
+                      console.log(`[UAZAPI-WEBHOOK] Media persisted to storage: ${mediaUrl}`);
+                    }
+                  } else {
+                    console.error(`[UAZAPI-WEBHOOK] Upload failed:`, uploadError);
+                  }
+                } else {
+                  console.log(`[UAZAPI-WEBHOOK] No base64 data in download response`);
+                }
+              } else {
+                console.log(`[UAZAPI-WEBHOOK] Download failed: ${downloadResponse.status}`);
+              }
+            } catch (downloadErr) {
+              console.error(`[UAZAPI-WEBHOOK] Media download error:`, downloadErr);
+            }
           }
         }
         
