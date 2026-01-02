@@ -8,7 +8,6 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { MemberRoute } from "@/components/MemberRoute";
 import { AdminRoute } from "@/components/AdminRoute";
 import { AnnouncementPopup } from "@/components/AnnouncementPopup";
-import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 
 import Toaster, { ToasterRef } from "@/components/ui/toast";
 import { setGlobalToasterRef } from "@/hooks/useSplashedToast";
@@ -72,7 +71,6 @@ const App = () => {
           <AuthProvider>
             <FacebookOAuthHandler />
             <AnnouncementPopup />
-            <ImpersonationBanner />
             
             <Routes>
               <Route path="/auth" element={<Auth />} />

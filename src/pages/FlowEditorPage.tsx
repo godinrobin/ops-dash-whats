@@ -56,7 +56,6 @@ const FlowEditorPage = () => {
   const [pauseOnMedia, setPauseOnMedia] = useState(false);
   const [instances, setInstances] = useState<Instance[]>([]);
   const [assignedInstances, setAssignedInstances] = useState<string[]>([]);
-  const [didHydrateAssignedInstances, setDidHydrateAssignedInstances] = useState(false);
   const [analyticsDateFilter, setAnalyticsDateFilter] = useState<DateFilter>('today');
 
   // Dynamic activity tracking based on route
@@ -78,21 +77,6 @@ const FlowEditorPage = () => {
     };
     fetchInstances();
   }, [user]);
-
-  // If the flow is set to "all instances" (assigned_instances empty), hydrate the UI by selecting all current instances
-  // so the settings screen matches what the card/behavior indicates.
-  useEffect(() => {
-    if (didHydrateAssignedInstances) return;
-    if (!flow) return;
-    if (!instances.length) return;
-
-    const dbAssigned = (flow.assigned_instances || []) as string[];
-    if (dbAssigned.length === 0) {
-      setAssignedInstances(instances.map(i => i.id));
-    }
-
-    setDidHydrateAssignedInstances(true);
-  }, [didHydrateAssignedInstances, flow, instances]);
 
   // Determine the back route based on where we came from
   const getBackRoute = () => {

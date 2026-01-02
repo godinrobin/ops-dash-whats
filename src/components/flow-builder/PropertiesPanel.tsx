@@ -1111,7 +1111,6 @@ export const PropertiesPanel = ({
                   id="checkImage"
                   checked={(nodeData.checkImage as boolean) ?? true}
                   onCheckedChange={(checked) => onUpdateNode(selectedNode.id, { checkImage: checked })}
-                  className={`${(nodeData.checkImage as boolean) ?? true ? 'data-[state=checked]:bg-green-500 data-[state=checked]:border-green-500' : 'border-red-500 bg-red-500/20'}`}
                 />
                 <Label htmlFor="checkImage" className="text-sm cursor-pointer">
                   Imagens
@@ -1122,7 +1121,6 @@ export const PropertiesPanel = ({
                   id="checkPdf"
                   checked={(nodeData.checkPdf as boolean) ?? true}
                   onCheckedChange={(checked) => onUpdateNode(selectedNode.id, { checkPdf: checked })}
-                  className={`${(nodeData.checkPdf as boolean) ?? true ? 'data-[state=checked]:bg-green-500 data-[state=checked]:border-green-500' : 'border-red-500 bg-red-500/20'}`}
                 />
                 <Label htmlFor="checkPdf" className="text-sm cursor-pointer">
                   PDFs/Documentos
@@ -1136,7 +1134,6 @@ export const PropertiesPanel = ({
                   id="markAsPaid"
                   checked={(nodeData.markAsPaid as boolean) || false}
                   onCheckedChange={(checked) => onUpdateNode(selectedNode.id, { markAsPaid: checked })}
-                  className={`${(nodeData.markAsPaid as boolean) ? 'data-[state=checked]:bg-green-500 data-[state=checked]:border-green-500' : 'border-red-500 bg-red-500/20'}`}
                 />
                 <Label htmlFor="markAsPaid" className="text-sm cursor-pointer">
                   Marcar contato como "pago" se comprovante for válido
@@ -1155,6 +1152,19 @@ export const PropertiesPanel = ({
               />
               <p className="text-xs text-muted-foreground">
                 Número de mensagens que serão analisadas antes de ir para a saída "Não Pagou"
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Mensagem de erro (opcional)</Label>
+              <Textarea
+                placeholder="Por favor, envie o comprovante de pagamento..."
+                value={(nodeData.errorMessage as string) || ''}
+                onChange={(e) => onUpdateNode(selectedNode.id, { errorMessage: e.target.value })}
+                rows={2}
+              />
+              <p className="text-xs text-muted-foreground">
+                Enviada após cada tentativa inválida
               </p>
             </div>
 

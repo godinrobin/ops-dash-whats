@@ -69,6 +69,8 @@ const GlowCard: React.FC<GlowCardProps> = ({
       '--spread': spread,
       '--radius': '14',
       '--border': '2',
+      '--backdrop': 'hsl(0 0% 10% / 0.8)',
+      '--backup-border': 'hsl(0 0% 20% / 0.5)',
       '--size': '200',
       '--outer': '1',
       '--border-size': 'calc(var(--border, 2) * 1px)',
@@ -80,9 +82,11 @@ const GlowCard: React.FC<GlowCardProps> = ({
         calc(var(--y, 0) * 1px),
         hsl(var(--hue, 210) calc(var(--saturation, 100) * 1%) calc(var(--lightness, 70) * 1%) / var(--bg-spot-opacity, 0.1)), transparent
       )`,
+      backgroundColor: 'var(--backdrop, transparent)',
       backgroundSize: 'calc(100% + (2 * var(--border-size))) calc(100% + (2 * var(--border-size)))',
       backgroundPosition: '50% 50%',
       backgroundAttachment: 'fixed',
+      border: 'var(--border-size) solid var(--backup-border)',
       position: 'relative' as const,
       touchAction: 'none' as const,
     }
@@ -165,11 +169,10 @@ const GlowCard: React.FC<GlowCardProps> = ({
           ${getSizeClasses()}
           rounded-2xl 
           relative 
-          shadow-[0_1rem_2rem_-1rem_black] dark:shadow-[0_1rem_2rem_-1rem_black] shadow-[0_0.5rem_1.5rem_-0.5rem_rgba(0,0,0,0.15)]
+          shadow-[0_1rem_2rem_-1rem_black] 
           p-6
           backdrop-blur-[5px]
           transition-transform duration-200 hover:scale-[1.02]
-          bg-card border border-border/50
           ${className}
         `}
       >
