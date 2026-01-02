@@ -1281,6 +1281,7 @@ serve(async (req) => {
 
           case 'paymentIdentifier':
             // Payment Identifier node - analyze if message contains a PIX payment receipt
+            // Similar logic to tag-whats-process for consistency
             const checkImage = (currentNode.data.checkImage as boolean) ?? true;
             const checkPdf = (currentNode.data.checkPdf as boolean) ?? true;
             const markAsPaid = (currentNode.data.markAsPaid as boolean) || false;
@@ -1293,43 +1294,92 @@ serve(async (req) => {
             
             console.log(`[${runId}] PaymentIdentifier: attempt ${currentAttempts + 1}/${maxAttempts}, checkImage=${checkImage}, checkPdf=${checkPdf}`);
             
-            // Get the last message from the contact
-            const { data: lastMessages } = await supabaseClient
+            // Get the last MEDIA message from the contact (image or document)
+            // We need to look for media messages specifically, not just any message
+            const mediaTypeFilters: string[] = [];
+            if (checkImage) mediaTypeFilters.push('image');
+            if (checkPdf) mediaTypeFilters.push('document');
+            
+            console.log(`[${runId}] Looking for media types: ${mediaTypeFilters.join(', ')}`);
+            
+            const { data: lastMediaMessages } = await supabaseClient
               .from('inbox_messages')
               .select('*')
               .eq('contact_id', contact.id)
               .eq('direction', 'inbound')
+              .in('message_type', mediaTypeFilters)
               .order('created_at', { ascending: false })
               .limit(1);
             
-            const lastMessage = lastMessages?.[0];
+            const lastMediaMessage = lastMediaMessages?.[0];
             let isPaymentReceipt = false;
             let paymentAnalysisResult = '';
             
-            if (lastMessage) {
-              const messageType = lastMessage.message_type;
-              const mediaUrl = lastMessage.media_url;
+            if (lastMediaMessage) {
+              const messageType = lastMediaMessage.message_type;
+              const mediaUrl = lastMediaMessage.media_url;
+              const remoteMessageId = lastMediaMessage.remote_message_id;
               
-              console.log(`[${runId}] Analyzing message: type=${messageType}, hasMedia=${!!mediaUrl}`);
+              console.log(`[${runId}] Found media message: type=${messageType}, hasMediaUrl=${!!mediaUrl}, remoteId=${remoteMessageId}`);
               
-              // Check if we should analyze this message type
-              const shouldAnalyze = (messageType === 'image' && checkImage) || 
-                                   (messageType === 'document' && checkPdf);
+              const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
               
-              if (shouldAnalyze && mediaUrl) {
-                const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-                
-                if (LOVABLE_API_KEY) {
-                  try {
-                    // Fetch the media
-                    const mediaResponse = await fetch(mediaUrl);
-                    const mediaBuffer = await mediaResponse.arrayBuffer();
-                    const mediaBase64 = btoa(String.fromCharCode(...new Uint8Array(mediaBuffer)));
-                    const mediaMimetype = mediaResponse.headers.get('content-type') || 'image/jpeg';
+              if (LOVABLE_API_KEY) {
+                try {
+                  let mediaBase64 = '';
+                  let mediaMimetype = messageType === 'document' ? 'application/pdf' : 'image/jpeg';
+                  
+                  // Try to download media directly from URL first
+                  if (mediaUrl) {
+                    try {
+                      console.log(`[${runId}] Trying direct media fetch from: ${mediaUrl}`);
+                      const mediaResponse = await fetch(mediaUrl);
+                      if (mediaResponse.ok) {
+                        const mediaBuffer = await mediaResponse.arrayBuffer();
+                        mediaBase64 = btoa(String.fromCharCode(...new Uint8Array(mediaBuffer)));
+                        mediaMimetype = mediaResponse.headers.get('content-type') || mediaMimetype;
+                        console.log(`[${runId}] Direct fetch successful: ${mediaBuffer.byteLength} bytes`);
+                      }
+                    } catch (directErr) {
+                      console.log(`[${runId}] Direct fetch failed:`, directErr);
+                    }
+                  }
+                  
+                  // If direct fetch failed and we're using UazAPI, try the /message/download endpoint
+                  if (!mediaBase64 && apiProvider === 'uazapi' && instanceUazapiToken && remoteMessageId) {
+                    console.log(`[${runId}] Trying UAZAPI /message/download for message: ${remoteMessageId}`);
                     
+                    try {
+                      const downloadResponse = await fetch(`${uazapiBaseUrl}/message/download`, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'token': instanceUazapiToken,
+                        },
+                        body: JSON.stringify({
+                          id: remoteMessageId,
+                          return_base64: true,
+                          return_link: false,
+                        }),
+                      });
+                      
+                      if (downloadResponse.ok) {
+                        const downloadData = await downloadResponse.json();
+                        mediaBase64 = downloadData.base64Data || downloadData.base64 || downloadData.data || '';
+                        mediaMimetype = downloadData.mimetype || mediaMimetype;
+                        console.log(`[${runId}] UAZAPI download successful: ${mediaBase64.length} chars, mimetype=${mediaMimetype}`);
+                      } else {
+                        console.error(`[${runId}] UAZAPI download failed:`, await downloadResponse.text());
+                      }
+                    } catch (uazErr) {
+                      console.error(`[${runId}] UAZAPI download error:`, uazErr);
+                    }
+                  }
+                  
+                  // Analyze with AI if we have media
+                  if (mediaBase64) {
                     const isPdfMedia = mediaMimetype.includes('pdf') || messageType === 'document';
-                    
-                    console.log(`[${runId}] Media fetched: ${mediaMimetype}, isPdf=${isPdfMedia}, size=${mediaBuffer.byteLength}`);
+                    console.log(`[${runId}] Analyzing media: isPdf=${isPdfMedia}, base64Length=${mediaBase64.length}`);
                     
                     const systemPrompt = `Você é um analisador de comprovantes de pagamento PIX. 
 Analise a imagem/documento e determine se é um comprovante de pagamento PIX válido.
@@ -1347,13 +1397,13 @@ Critérios para identificar um comprovante PIX:
 - Valor da transação
 - Data e hora
 - Código de autenticação ou ID da transação
+- Logotipos de bancos conhecidos (Nubank, Itaú, Bradesco, etc)
 
 Se não for possível determinar ou a imagem não for clara, retorne is_pix_payment: false.`;
 
                     let aiMessages: any[];
                     
                     if (isPdfMedia) {
-                      // For PDFs - Gemini supports PDFs natively
                       aiMessages = [
                         { role: 'system', content: systemPrompt },
                         {
@@ -1365,7 +1415,6 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
                         }
                       ];
                     } else {
-                      // For images
                       aiMessages = [
                         { role: 'system', content: systemPrompt },
                         {
@@ -1409,13 +1458,17 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
                     } else {
                       console.error(`[${runId}] AI API error:`, await aiResponse.text());
                     }
-                  } catch (analysisErr) {
-                    console.error(`[${runId}] Error analyzing payment:`, analysisErr);
+                  } else {
+                    console.log(`[${runId}] No media data available for analysis`);
                   }
-                } else {
-                  console.error(`[${runId}] LOVABLE_API_KEY not configured for payment analysis`);
+                } catch (analysisErr) {
+                  console.error(`[${runId}] Error analyzing payment:`, analysisErr);
                 }
+              } else {
+                console.error(`[${runId}] LOVABLE_API_KEY not configured for payment analysis`);
               }
+            } else {
+              console.log(`[${runId}] No media message found for payment analysis`);
             }
             
             // Determine outcome
