@@ -1560,88 +1560,66 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
             break;
 
           case 'sendCharge':
-            // Send Charge node - sends a formatted charge message
+            // Send Charge node - sends a native WhatsApp payment request
             const chargeAmount = (currentNode.data.amount as number) || 0;
             const chargeItemName = replaceVariables(currentNode.data.itemName as string || '', variables);
             const chargeDescription = replaceVariables(currentNode.data.description as string || '', variables);
+            const chargePixKey = replaceVariables(currentNode.data.pixKey as string || '', variables);
+            const chargePixType = (currentNode.data.pixType as string) || 'EVP';
+            const chargePixName = replaceVariables(currentNode.data.pixName as string || '', variables);
             
-            if (chargeAmount > 0 && chargeItemName) {
-              console.log(`[${runId}] Sending charge message: amount=${chargeAmount}, item=${chargeItemName}`);
+            // Validate required fields
+            if (!chargeAmount || chargeAmount <= 0) {
+              console.log(`[${runId}] Charge skipped: invalid amount (${chargeAmount})`);
+              processedActions.push('Charge skipped: valor inválido');
+            } else if (!chargeItemName) {
+              console.log(`[${runId}] Charge skipped: missing item name`);
+              processedActions.push('Charge skipped: nome do item obrigatório');
+            } else if (!chargePixKey) {
+              console.log(`[${runId}] Charge skipped: missing PIX key`);
+              processedActions.push('Charge skipped: chave PIX obrigatória');
+            } else if (!chargePixName) {
+              console.log(`[${runId}] Charge skipped: missing PIX name`);
+              processedActions.push('Charge skipped: nome do recebedor obrigatório');
+            } else if (apiProvider === 'uazapi' && instanceUazapiToken) {
+              console.log(`[${runId}] Sending native charge: amount=${chargeAmount}, item=${chargeItemName}, pixKey=${chargePixKey.substring(0, 4)}...`);
               
-              // Format charge as a nice message
-              const formattedAmount = new Intl.NumberFormat('pt-BR', { 
-                style: 'currency', 
-                currency: 'BRL' 
-              }).format(chargeAmount);
-              
-              let chargeMessage = `💰 *Cobrança*\n\n`;
-              chargeMessage += `*Item:* ${chargeItemName}\n`;
-              chargeMessage += `*Valor:* ${formattedAmount}\n`;
-              if (chargeDescription) {
-                chargeMessage += `\n${chargeDescription}`;
-              }
-              
-              // Send as regular text message
-              if (apiProvider === 'uazapi' && instanceUazapiToken) {
-                try {
-                  const chargeResponse = await fetch(`${uazapiBaseUrl}/send/text`, {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'token': instanceUazapiToken,
-                    },
-                    body: JSON.stringify({
-                      number: phone.replace(/\D/g, ''),
-                      text: chargeMessage,
-                    }),
-                  });
-                  
-                  const chargeResult = await chargeResponse.json();
-                  console.log(`[${runId}] Charge message response:`, JSON.stringify(chargeResult));
-                  
-                  if (chargeResponse.ok && (chargeResult.status === 'PENDING' || chargeResult.messageid || chargeResult.success !== false)) {
-                    processedActions.push(`Sent charge: ${formattedAmount} - ${chargeItemName}`);
-                    await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, chargeMessage, 'text', flow.id);
-                  } else {
-                    console.error(`[${runId}] Charge message error:`, chargeResult);
-                    processedActions.push(`Charge error: ${JSON.stringify(chargeResult)}`);
-                  }
-                } catch (chargeErr) {
-                  console.error(`[${runId}] Charge message exception:`, chargeErr);
-                  processedActions.push('Charge error');
+              try {
+                const chargeResponse = await fetch(`${uazapiBaseUrl}/send/payment-request`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'token': instanceUazapiToken,
+                  },
+                  body: JSON.stringify({
+                    number: phone.replace(/\D/g, ''),
+                    amount: chargeAmount,
+                    text: chargeDescription || '',
+                    itemName: chargeItemName,
+                    pixKey: chargePixKey,
+                    pixType: chargePixType,
+                    pixName: chargePixName,
+                  }),
+                });
+                
+                const chargeResult = await chargeResponse.json();
+                console.log(`[${runId}] Charge response:`, JSON.stringify(chargeResult));
+                
+                if (chargeResponse.ok && (chargeResult.status === 'PENDING' || chargeResult.messageid || chargeResult.success !== false)) {
+                  const formattedAmount = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(chargeAmount);
+                  processedActions.push(`Sent native charge: ${formattedAmount} - ${chargeItemName}`);
+                  await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, `[Cobrança: ${formattedAmount} - ${chargeItemName}]`, 'text', flow.id);
+                } else {
+                  console.error(`[${runId}] Charge error:`, chargeResult);
+                  processedActions.push(`Charge error: ${chargeResult.error || chargeResult.message || 'unknown error'}`);
                 }
-              } else if (apiProvider === 'evolution') {
-                try {
-                  const chargeResponse = await fetch(`${evolutionBaseUrl}/message/sendText/${instanceName}`, {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'apikey': evolutionApiKey,
-                    },
-                    body: JSON.stringify({
-                      number: phone.replace(/\D/g, ''),
-                      text: chargeMessage,
-                    }),
-                  });
-                  
-                  const chargeResult = await chargeResponse.json();
-                  console.log(`[${runId}] Charge message response:`, JSON.stringify(chargeResult));
-                  
-                  if (chargeResponse.ok) {
-                    processedActions.push(`Sent charge: ${formattedAmount} - ${chargeItemName}`);
-                    await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, chargeMessage, 'text', flow.id);
-                  } else {
-                    console.error(`[${runId}] Charge message error:`, chargeResult);
-                  }
-                } catch (chargeErr) {
-                  console.error(`[${runId}] Charge message exception:`, chargeErr);
-                }
-              } else {
-                console.log(`[${runId}] No API configured for charge`);
+              } catch (chargeErr) {
+                console.error(`[${runId}] Charge exception:`, chargeErr);
+                processedActions.push('Charge error: exception');
               }
             } else {
-              console.log(`[${runId}] Missing charge configuration (amount=${chargeAmount}, item=${chargeItemName})`);
-              processedActions.push('Charge skipped (missing amount or item name)');
+              console.log(`[${runId}] Charge requires UazAPI provider`);
+              processedActions.push('Charge not supported (requires UazAPI)');
             }
             
             const chargeEdge = edges.find(e => e.source === currentNodeId);
