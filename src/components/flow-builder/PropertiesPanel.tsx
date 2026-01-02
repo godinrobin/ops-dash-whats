@@ -1308,36 +1308,6 @@ export const PropertiesPanel = ({
           </div>
         );
 
-      case 'call':
-        return (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Faz uma ligação breve para o contato. O telefone tocará, mas ao atender não haverá áudio - é apenas para chamar a atenção.
-            </p>
-            
-            <div className="space-y-2">
-              <Label>Tempo de espera após chamada (segundos)</Label>
-              <Input
-                type="number"
-                min={1}
-                max={30}
-                value={(nodeData.waitAfterCall as number) || 3}
-                onChange={(e) => onUpdateNode(selectedNode.id, { waitAfterCall: parseInt(e.target.value) || 3 })}
-                placeholder="3"
-              />
-              <p className="text-xs text-muted-foreground">
-                Quanto tempo aguardar após iniciar a chamada para permitir que o telefone toque (1-30s)
-              </p>
-            </div>
-            
-            <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-500/30">
-              <p className="text-xs text-amber-500">
-                <strong>Nota:</strong> Funciona apenas com UazAPI. A ligação é iniciada mas não há comunicação de voz real.
-              </p>
-            </div>
-          </div>
-        );
-
       default:
         return null;
     }
