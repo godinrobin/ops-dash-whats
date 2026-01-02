@@ -7,6 +7,9 @@ export const SendChargeNode = ({ id, data }: NodeProps) => {
     amount?: number; 
     itemName?: string;
     description?: string;
+    pixKey?: string;
+    pixType?: string;
+    pixName?: string;
   };
   
   const formatCurrency = (value: number) => {
