@@ -79,6 +79,9 @@ interface FlowCanvasProps {
 }
 
 const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, triggerKeywords, onUpdateFlowSettings, flowId }: FlowCanvasProps) => {
+  const { resolvedTheme } = useTheme();
+  const flowColorMode = resolvedTheme === 'dark' ? 'dark' : 'light';
+
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
   

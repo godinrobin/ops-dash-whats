@@ -820,9 +820,18 @@ serve(async (req) => {
         ]);
 
         const uazFileUrl = uazMsg.fileURL || '';
+        const uazWasSentByApi = uazMsg.wasSentByApi === true;
         
         console.log(`[UAZAPI-WEBHOOK] chatid=${uazChatid}, sender=${uazSender}, fromMe=${uazFromMe}, text=${uazText.substring(0, 50)}, wasSentByApi=${uazWasSentByApi}`);
         
+        // Skip messages sent by API to prevent loops
+        if (uazWasSentByApi) {
+          console.log('[UAZAPI-WEBHOOK] Skipping message sent by API (wasSentByApi=true)');
+          return new Response(JSON.stringify({ success: true, skipped: true, reason: 'sent_by_api' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
         // Skip outbound messages already in our system
         if (uazFromMe && uazMessageIdNormalized) {
           const { data: existingMessage } = await supabaseClient
@@ -832,7 +841,7 @@ serve(async (req) => {
             .maybeSingle();
           
           if (existingMessage) {
-            console.log('[UAZAPI-WEBHOOK] Skipping outgoing message sent by platform:', uazMessageId);
+            console.log('[UAZAPI-WEBHOOK] Skipping outgoing message sent by platform:', uazMessageIdNormalized);
             return new Response(JSON.stringify({ success: true, skipped: true, reason: 'sent_by_platform' }), {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
@@ -1186,7 +1195,7 @@ serve(async (req) => {
                     key: {
                       remoteJid: uazChatid,
                       fromMe: uazFromMe,
-                      id: uazMessageId,
+                      id: uazMessageIdNormalized || rawMessageId,
                     },
                     message: messageType === 'image' 
                       ? { imageMessage: { caption: uazText } }
