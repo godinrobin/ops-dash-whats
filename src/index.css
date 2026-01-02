@@ -108,12 +108,19 @@ All colors MUST be HSL.
 
 @layer base {
   .react-flow {
-    background: hsl(var(--flow-canvas));
-    --xy-background-color: hsl(var(--flow-canvas));
+    background: hsl(var(--flow-canvas)) !important;
+    --xy-background-color: hsl(var(--flow-canvas)) !important;
   }
 
   .react-flow__pane {
-    background: hsl(var(--flow-canvas));
+    background: hsl(var(--flow-canvas)) !important;
+  }
+
+  /* Force black background in dark mode for Flow Builder */
+  .dark .react-flow,
+  .dark .react-flow__pane {
+    background: hsl(0 0% 0%) !important;
+    --xy-background-color: hsl(0 0% 0%) !important;
   }
 }
 

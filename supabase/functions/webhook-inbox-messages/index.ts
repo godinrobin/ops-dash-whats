@@ -1231,11 +1231,22 @@ serve(async (req) => {
           console.log(`[TAG-WHATS-TRIGGER] Skipped: direction=${direction}, messageType=${messageType}`);
         }
         
-        // For inbound messages (or manual outbound), check if we need to trigger a flow
+        // For inbound messages only, check if we need to trigger a flow
+        // uazFromMe=false means the message was RECEIVED by the instance (inbound)
         const shouldEvaluateFlowTriggers =
-          ((direction === 'inbound' && !uazFromMe) ||
-            (direction === 'outbound' && uazFromMe && !uazWasSentByApi)) &&
-          insertedMessage?.is_from_flow !== true;
+          !uazFromMe && // Message received (not sent by instance)
+          !uazWasSentByApi && // Not sent via API (prevents loops)
+          insertedMessage?.is_from_flow !== true; // Not a flow response
+
+        console.log(`[KEYWORD-DEBUG] Evaluating flow triggers:`, {
+          direction,
+          uazFromMe,
+          uazWasSentByApi,
+          isFromFlow: insertedMessage?.is_from_flow,
+          shouldEvaluate: shouldEvaluateFlowTriggers,
+          contactId: contact?.id,
+          instanceId,
+        });
 
         if (shouldEvaluateFlowTriggers) {
           // Check if flow is paused for this contact
@@ -1258,29 +1269,40 @@ serve(async (req) => {
                   console.error('[UAZAPI-WEBHOOK] Error fetching keyword flows (pre-check):', keywordFlowsError);
                 }
 
+                console.log(`[KEYWORD-DEBUG] Found ${keywordFlows?.length || 0} keyword flows for user ${userId}`);
+
                 const lowerContent = inboundText.toLowerCase();
                 let matchedFlow: any | null = null;
                 let matchedKeyword: string | null = null;
 
                 for (const flow of keywordFlows || []) {
                   const assignedInstances = (flow.assigned_instances as string[]) || [];
-                  if (assignedInstances.length > 0 && !assignedInstances.includes(instanceId)) continue;
+                  const instanceMatch = assignedInstances.length === 0 || assignedInstances.includes(instanceId);
+                  
+                  console.log(`[KEYWORD-DEBUG] Checking flow "${flow.name}" (${flow.id}):`, {
+                    assignedInstances,
+                    instanceId,
+                    instanceMatch,
+                    keywords: flow.trigger_keywords,
+                  });
+
+                  if (!instanceMatch) {
+                    console.log(`[KEYWORD-DEBUG] Skipping flow "${flow.name}" - instance not assigned`);
+                    continue;
+                  }
 
                   const keywords = (flow.trigger_keywords as string[]) || [];
                   for (const kw of keywords) {
                     const kwStr = String(kw || '').trim();
                     const kwLower = kwStr.toLowerCase();
 
-                    // Inbound: allow "contains" (more forgiving)
-                    // Manual outbound: require exact match (prevents loops)
-                    const matchesKeyword =
-                      direction === 'outbound'
-                        ? lowerContent === kwLower
-                        : lowerContent.includes(kwLower);
+                    // Use "contains" match for inbound messages (more forgiving)
+                    const matchesKeyword = kwLower && lowerContent.includes(kwLower);
 
-                    if (kwLower && matchesKeyword) {
+                    if (matchesKeyword) {
                       matchedFlow = flow;
                       matchedKeyword = kwStr;
+                      console.log(`[KEYWORD-DEBUG] MATCH! keyword="${kwStr}" in content="${inboundText}"`);
                       break;
                     }
                   }
@@ -1293,7 +1315,7 @@ serve(async (req) => {
                   instanceName: instanceNameForLookup,
                   eventType: 'keyword-debug',
                   userId,
-                  payloadPreview: JSON.stringify({ inboundText, matchedKeyword, matchedFlowId: matchedFlow?.id || null }).slice(0, 500),
+                  payloadPreview: JSON.stringify({ inboundText, matchedKeyword, matchedFlowId: matchedFlow?.id || null, totalFlows: keywordFlows?.length || 0 }).slice(0, 500),
                 });
 
                 if (matchedFlow) {
@@ -1345,38 +1367,70 @@ serve(async (req) => {
                   }
 
                   // Create/restart the session for this (flow_id, contact_id) pair.
-                  // IMPORTANT: the DB enforces uniqueness for (flow_id, contact_id), and the session might be "completed".
-                  // Using UPSERT guarantees we restart the flow even if a previous session exists.
+                  // We use update-first approach to avoid constraint conflicts.
                   const nowIso = new Date().toISOString();
+                  const sessionPayload = {
+                    instance_id: instanceId,
+                    user_id: userId,
+                    current_node_id: 'start-1',
+                    variables: {
+                      nome: contact.name || '',
+                      telefone: phone,
+                      resposta: inboundText,
+                      lastMessage: inboundText,
+                      ultima_mensagem: inboundText,
+                      contactName: contact.name || phone,
+                      _sent_node_ids: [],
+                    },
+                    status: 'active',
+                    started_at: nowIso,
+                    last_interaction: nowIso,
+                    processing: false,
+                    processing_started_at: null,
+                  };
 
-                  const { data: newSession, error: newSessionError } = await supabaseClient
+                  // Try to update existing session first
+                  const { data: updatedSession, error: updateError } = await supabaseClient
                     .from('inbox_flow_sessions')
-                    .upsert(
-                      {
+                    .update(sessionPayload)
+                    .eq('flow_id', matchedFlow.id)
+                    .eq('contact_id', contact.id)
+                    .select()
+                    .maybeSingle();
+
+                  let newSession = updatedSession;
+                  let newSessionError = updateError;
+
+                  // If no existing session was updated, insert a new one
+                  if (!updatedSession && !updateError) {
+                    const { data: insertedSession, error: insertError } = await supabaseClient
+                      .from('inbox_flow_sessions')
+                      .insert({
+                        ...sessionPayload,
                         flow_id: matchedFlow.id,
                         contact_id: contact.id,
-                        instance_id: instanceId,
-                        user_id: userId,
-                        current_node_id: 'start-1',
-                        variables: {
-                          nome: contact.name || '',
-                          telefone: phone,
-                          resposta: inboundText,
-                          lastMessage: inboundText,
-                          ultima_mensagem: inboundText,
-                          contactName: contact.name || phone,
-                          _sent_node_ids: [],
-                        },
-                        status: 'active',
-                        started_at: nowIso,
-                        last_interaction: nowIso,
-                        processing: false,
-                        processing_started_at: null,
-                      },
-                      { onConflict: 'flow_id,contact_id' },
-                    )
-                    .select()
-                    .single();
+                      })
+                      .select()
+                      .single();
+
+                    newSession = insertedSession;
+                    newSessionError = insertError;
+
+                    // Handle race condition: if insert fails due to duplicate, try update again
+                    if (insertError && insertError.message?.includes('duplicate')) {
+                      console.log('[UAZAPI-WEBHOOK] Insert failed due to race condition, retrying update');
+                      const { data: retrySession, error: retryError } = await supabaseClient
+                        .from('inbox_flow_sessions')
+                        .update(sessionPayload)
+                        .eq('flow_id', matchedFlow.id)
+                        .eq('contact_id', contact.id)
+                        .select()
+                        .maybeSingle();
+                      
+                      newSession = retrySession;
+                      newSessionError = retryError;
+                    }
+                  }
 
                   logWebhookDiagnostic(supabaseClient, {
                     instanceId,

@@ -341,7 +341,8 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
           colorMode={flowColorMode}
           proOptions={{ hideAttribution: true }}
           deleteKeyCode={['Backspace', 'Delete']}
-          style={{ background: 'hsl(var(--flow-canvas))' }}
+          style={{ background: 'hsl(0 0% 0%)' }}
+          className="dark:!bg-black"
           onEdgeClick={(_, edge) => {
             setEdges((eds) => eds.filter((e) => e.id !== edge.id));
           }}
