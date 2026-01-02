@@ -46,18 +46,28 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
     setIsRecoveringMedia(true);
     
     try {
-      const response = await supabase.functions.invoke('get-media-fallback', {
-        body: { messageId: message.id }
-      });
-      
-      // Handle both error object and non-success response
-      if (response.error || !response.data?.success) {
-        // This is expected for old messages - don't log as error
+      // Wrap the entire invoke in try-catch since Supabase can throw on 500 errors
+      let response;
+      try {
+        response = await supabase.functions.invoke('get-media-fallback', {
+          body: { messageId: message.id }
+        });
+      } catch {
+        // Supabase throws on network or 500 errors - treat as recovery failed
         setRecoveryFailed(true);
+        setIsRecoveringMedia(false);
         return;
       }
       
-      if (response.data?.media_url) {
+      // Handle both error object and non-success response
+      if (response?.error || !response?.data?.success) {
+        // This is expected for old messages - don't log as error
+        setRecoveryFailed(true);
+        setIsRecoveringMedia(false);
+        return;
+      }
+      
+      if (response?.data?.media_url) {
         setRecoveredMediaUrl(response.data.media_url);
         // Reset error states since we have a new URL
         setImageError(false);
@@ -68,7 +78,7 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
         setRecoveryFailed(true);
       }
     } catch {
-      // Silently handle - this is expected for old/expired messages
+      // Silently handle any other errors
       setRecoveryFailed(true);
     } finally {
       setIsRecoveringMedia(false);
