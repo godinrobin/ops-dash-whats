@@ -51,7 +51,8 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
       });
       
       if (error) {
-        console.error('[ChatMessage] Media recovery error:', error);
+        // Log silently - don't throw or show as app crash
+        console.log('[ChatMessage] Media recovery unavailable:', error.message);
         setRecoveryFailed(true);
         return;
       }
@@ -65,11 +66,12 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
         setVideoError(false);
         setAudioRetryCount(0);
       } else {
-        console.log('[ChatMessage] Media recovery failed:', data?.error);
+        console.log('[ChatMessage] Media recovery failed:', data?.error || 'No URL returned');
         setRecoveryFailed(true);
       }
     } catch (err) {
-      console.error('[ChatMessage] Media recovery exception:', err);
+      // Silently handle - this is expected for old messages
+      console.log('[ChatMessage] Media recovery not available');
       setRecoveryFailed(true);
     } finally {
       setIsRecoveringMedia(false);
