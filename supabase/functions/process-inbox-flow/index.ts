@@ -1329,25 +1329,10 @@ serve(async (req) => {
                   let mediaBase64 = '';
                   let mediaMimetype = messageType === 'document' ? 'application/pdf' : 'image/jpeg';
                   
-                  // Try to download media directly from URL first
-                  if (mediaUrl) {
-                    try {
-                      console.log(`[${runId}] Trying direct media fetch from: ${mediaUrl}`);
-                      const mediaResponse = await fetch(mediaUrl);
-                      if (mediaResponse.ok) {
-                        const mediaBuffer = await mediaResponse.arrayBuffer();
-                        mediaBase64 = btoa(String.fromCharCode(...new Uint8Array(mediaBuffer)));
-                        mediaMimetype = mediaResponse.headers.get('content-type') || mediaMimetype;
-                        console.log(`[${runId}] Direct fetch successful: ${mediaBuffer.byteLength} bytes`);
-                      }
-                    } catch (directErr) {
-                      console.log(`[${runId}] Direct fetch failed:`, directErr);
-                    }
-                  }
-                  
-                  // If direct fetch failed and we're using UazAPI, try the /message/download endpoint
-                  if (!mediaBase64 && apiProvider === 'uazapi' && instanceUazapiToken && remoteMessageId) {
-                    console.log(`[${runId}] Trying UAZAPI /message/download for message: ${remoteMessageId}`);
+                  // PRIORITY: Always try UAZAPI /message/download first for the most recent media
+                  // This ensures we get the actual latest image, not a cached/stored one
+                  if (apiProvider === 'uazapi' && instanceUazapiToken && remoteMessageId) {
+                    console.log(`[${runId}] PRIORITY: Trying UAZAPI /message/download for message: ${remoteMessageId}`);
                     
                     try {
                       const downloadResponse = await fetch(`${uazapiBaseUrl}/message/download`, {
@@ -1373,6 +1358,22 @@ serve(async (req) => {
                       }
                     } catch (uazErr) {
                       console.error(`[${runId}] UAZAPI download error:`, uazErr);
+                    }
+                  }
+                  
+                  // Fallback: Try to download media directly from stored URL if UAZAPI failed
+                  if (!mediaBase64 && mediaUrl) {
+                    try {
+                      console.log(`[${runId}] Fallback: Trying direct media fetch from: ${mediaUrl}`);
+                      const mediaResponse = await fetch(mediaUrl);
+                      if (mediaResponse.ok) {
+                        const mediaBuffer = await mediaResponse.arrayBuffer();
+                        mediaBase64 = btoa(String.fromCharCode(...new Uint8Array(mediaBuffer)));
+                        mediaMimetype = mediaResponse.headers.get('content-type') || mediaMimetype;
+                        console.log(`[${runId}] Direct fetch successful: ${mediaBuffer.byteLength} bytes`);
+                      }
+                    } catch (directErr) {
+                      console.log(`[${runId}] Direct fetch failed:`, directErr);
                     }
                   }
                   
