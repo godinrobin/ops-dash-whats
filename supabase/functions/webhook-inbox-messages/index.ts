@@ -95,6 +95,26 @@ const saveFailedMessage = async (
   }
 };
 
+// Normalize message IDs from different providers (e.g., "owner:MESSAGE_ID" -> "MESSAGE_ID")
+// This ensures consistent deduplication regardless of format variations
+const normalizeRemoteMessageId = (id: string | null | undefined): string | null => {
+  if (!id) return null;
+  const trimmed = String(id).trim();
+  if (!trimmed) return null;
+
+  // UazAPI often prefixes outbound ids with "owner:" (e.g., "553173316464:3EB0...").
+  // Status updates usually come without the prefix.
+  // We extract just the message ID part for consistent matching.
+  if (trimmed.includes(':')) {
+    const parts = trimmed.split(':').filter(Boolean);
+    const last = parts[parts.length - 1];
+    // Message IDs are typically long alphanumeric strings
+    if (last && last.length >= 8) return last;
+  }
+
+  return trimmed;
+};
+
 const INBOX_MEDIA_BUCKET = 'video-clips';
 
 const isStoredMediaUrl = (url: string) => {
@@ -763,13 +783,14 @@ serve(async (req) => {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
+        const uazMessageIdNormalized = normalizeRemoteMessageId(uazMessageId);
         
         // Skip outbound messages already in our system
-        if (uazFromMe && uazMessageId) {
+        if (uazFromMe && uazMessageIdNormalized) {
           const { data: existingMessage } = await supabaseClient
             .from('inbox_messages')
             .select('id')
-            .eq('remote_message_id', uazMessageId)
+            .eq('remote_message_id', uazMessageIdNormalized)
             .maybeSingle();
           
           if (existingMessage) {
@@ -874,23 +895,23 @@ serve(async (req) => {
         else if (msgTypeLower.includes('document')) messageType = 'document';
         else if (msgTypeLower.includes('sticker')) messageType = 'sticker';
         
-        // Check if message already exists
-        if (uazMessageId) {
+        // Check if message already exists (use normalized ID)
+        if (uazMessageIdNormalized) {
           const { data: existingMsg } = await supabaseClient
             .from('inbox_messages')
             .select('id')
-            .eq('remote_message_id', uazMessageId)
+            .eq('remote_message_id', uazMessageIdNormalized)
             .maybeSingle();
           
           if (existingMsg) {
-            console.log(`[UAZAPI-WEBHOOK] Message already exists: ${uazMessageId}`);
+            console.log(`[UAZAPI-WEBHOOK] Message already exists: ${uazMessageIdNormalized}`);
             return new Response(JSON.stringify({ success: true, skipped: true, reason: 'duplicate' }), {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
           }
         }
         
-        // Insert message
+        // Insert message (always use normalized ID)
         const direction = uazFromMe ? 'outbound' : 'inbound';
         const { data: insertedMessage, error: msgError } = await supabaseClient
           .from('inbox_messages')
@@ -903,7 +924,7 @@ serve(async (req) => {
             content: uazText || null,
             media_url: mediaUrl,
             status: 'received',
-            remote_message_id: uazMessageId || null,
+            remote_message_id: uazMessageIdNormalized || null,
             is_from_flow: false,
           })
           .select()
@@ -1186,7 +1207,8 @@ serve(async (req) => {
       // Evolution API v2 structure: data.key contains remoteJid/remoteJidAlt, data.message contains content
       // Fallback to old structure (data.message.key) for backwards compatibility
       const key = data.key || data.message?.key || {};
-      const messageId = key.id;
+      const messageIdRaw = key.id;
+      const messageId = normalizeRemoteMessageId(messageIdRaw);
       const fromMeRaw = (key as any).fromMe;
       const isFromMe =
         fromMeRaw === true ||
