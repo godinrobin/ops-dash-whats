@@ -1585,7 +1585,7 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
               console.log(`[${runId}] Sending native charge: amount=${chargeAmount}, item=${chargeItemName}, pixKey=${chargePixKey.substring(0, 4)}...`);
               
               try {
-                const chargeResponse = await fetch(`${uazapiBaseUrl}/send/payment-request`, {
+                const chargeResponse = await fetch(`${uazapiBaseUrl}/send/request-payment`, {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
