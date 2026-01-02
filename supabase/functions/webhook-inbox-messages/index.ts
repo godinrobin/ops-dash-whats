@@ -1125,14 +1125,17 @@ serve(async (req) => {
               .maybeSingle();
             
             if (activeSession) {
+              console.log(`[UAZAPI-WEBHOOK] Found active session: ${activeSession.id}, node: ${activeSession.current_node_id}`);
+              
               // Get the current node to check if it's waiting for input
               const flowNodes = (activeSession.flow?.nodes || []) as Array<{ id: string; type: string; data: Record<string, unknown> }>;
               const currentNode = flowNodes.find((n: { id: string }) => n.id === activeSession.current_node_id);
 
               // Keyword trigger override: always restart from the beginning when a keyword is detected
               const inboundText = (uazText || '').trim();
+              console.log(`[UAZAPI-WEBHOOK] Checking keyword trigger for: "${inboundText}", userId: ${userId}`);
               if (inboundText) {
-                const { data: flowsForKeyword } = await supabaseClient
+                const { data: flowsForKeyword, error: keywordFlowsError } = await supabaseClient
                   .from('inbox_flows')
                   .select('*')
                   .eq('user_id', userId)
@@ -1140,16 +1143,26 @@ serve(async (req) => {
                   .eq('trigger_type', 'keyword')
                   .order('priority', { ascending: false });
 
+                if (keywordFlowsError) {
+                  console.error('[UAZAPI-WEBHOOK] Error fetching keyword flows:', keywordFlowsError);
+                }
+                console.log(`[UAZAPI-WEBHOOK] Found ${flowsForKeyword?.length || 0} keyword flows for user`);
+
                 const lowerContent = inboundText.toLowerCase();
                 let keywordFlowToTrigger: any | null = null;
 
                 for (const flow of flowsForKeyword || []) {
+                  console.log(`[UAZAPI-WEBHOOK] Checking flow "${flow.name}", keywords: ${JSON.stringify(flow.trigger_keywords)}, assigned: ${JSON.stringify(flow.assigned_instances)}`);
                   const assignedInstances = (flow.assigned_instances as string[]) || [];
-                  if (assignedInstances.length > 0 && !assignedInstances.includes(instanceId)) continue;
+                  if (assignedInstances.length > 0 && !assignedInstances.includes(instanceId)) {
+                    console.log(`[UAZAPI-WEBHOOK] Flow "${flow.name}" skipped - not assigned to instance ${instanceId}`);
+                    continue;
+                  }
 
                   const keywords = (flow.trigger_keywords as string[]) || [];
                   for (const kw of keywords) {
                     const kwStr = String(kw || '').trim();
+                    console.log(`[UAZAPI-WEBHOOK] Checking keyword "${kwStr}" against "${lowerContent}": ${lowerContent.includes(kwStr.toLowerCase())}`);
                     if (kwStr && lowerContent.includes(kwStr.toLowerCase())) {
                       keywordFlowToTrigger = flow;
                       console.log(`[UAZAPI-WEBHOOK] Keyword match -> restarting flow "${flow.name}" by "${kwStr}"`);
@@ -1339,10 +1352,11 @@ serve(async (req) => {
                 console.log(`[UAZAPI-WEBHOOK] Active session exists but not waiting for input (node: ${currentNode?.type || 'unknown'})`);
               }
             } else {
-              // Check triggers (keyword has priority)
-              console.log(`[UAZAPI-WEBHOOK] Checking for flow triggers`);
+              // Check triggers (keyword has priority) - NO active session
+              console.log(`[UAZAPI-WEBHOOK] No active session found, checking for flow triggers`);
 
               const inboundText = (uazText || '').trim();
+              console.log(`[UAZAPI-WEBHOOK] Message text for trigger: "${inboundText}"`);
               const hasInboundText = inboundText.length > 0;
 
               const { data: flows, error: flowsError } = await supabaseClient
