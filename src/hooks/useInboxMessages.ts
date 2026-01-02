@@ -73,12 +73,23 @@ export const useInboxMessages = (contactId: string | null) => {
           console.log('Realtime INSERT received:', payload);
           const newMessage = payload.new as any;
           
-          // Check if message already exists to avoid duplicates
+          // Check if message already exists to avoid duplicates (by id OR by remote_message_id)
           setMessages(prev => {
-            const exists = prev.some(m => m.id === newMessage.id);
-            if (exists) {
-              console.log('Message already exists, skipping duplicate');
+            const existsById = prev.some(m => m.id === newMessage.id);
+            if (existsById) {
+              console.log('Message already exists (by id), skipping duplicate');
               return prev;
+            }
+            
+            // Also check by remote_message_id if present
+            if (newMessage.remote_message_id) {
+              const existsByRemoteId = prev.some(
+                m => m.remote_message_id && m.remote_message_id === newMessage.remote_message_id
+              );
+              if (existsByRemoteId) {
+                console.log('Message already exists (by remote_message_id), skipping duplicate');
+                return prev;
+              }
             }
             
             return [...prev, {
