@@ -240,11 +240,19 @@ serve(async (req) => {
     if (userInput !== undefined && userInput !== null) {
       const currentNode = nodes.find(n => n.id === currentNodeId);
       
+      // Always update lastMessage and resposta when user sends a message
+      const userInputStr = typeof userInput === 'string' ? userInput.trim() : String(userInput || '');
+      variables.lastMessage = userInputStr;
+      variables.resposta = userInputStr;
+      variables.ultima_mensagem = userInputStr;
+      console.log(`[${runId}] Updated system variables: lastMessage/resposta/ultima_mensagem = "${userInputStr.substring(0, 50)}"`);
+      
       // Only do checkpoint skip for waitInput and menu nodes, NOT paymentIdentifier
       if (currentNode?.type !== 'paymentIdentifier') {
         if (currentNode?.type === 'waitInput' && currentNode.data.variableName) {
           const key = normalizeVarKey(currentNode.data.variableName as string);
-          variables[key] = typeof userInput === 'string' ? userInput.trim() : userInput;
+          variables[key] = userInputStr;
+          console.log(`[${runId}] Saved user input to variable "${key}": "${userInputStr.substring(0, 50)}"`);
         }
 
         // Find next node
@@ -1837,6 +1845,55 @@ serve(async (req) => {
             const chargeEdge = edges.find(e => e.source === currentNodeId);
             if (chargeEdge) {
               currentNodeId = chargeEdge.target;
+            } else {
+              continueProcessing = false;
+            }
+            break;
+
+          case 'call':
+            // Call node - makes a brief call to the contact using UazAPI /call/make endpoint
+            console.log(`[${runId}] Call node: attempting to call contact`);
+            
+            if (apiProvider === 'uazapi' && instanceUazapiToken && uazapiBaseUrl) {
+              const callNumber = phone.replace(/\D/g, '');
+              console.log(`[${runId}] Making call to: ${callNumber}`);
+              
+              try {
+                const callResponse = await fetch(`${uazapiBaseUrl}/call/make`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'token': instanceUazapiToken,
+                  },
+                  body: JSON.stringify({
+                    number: callNumber,
+                  }),
+                });
+                
+                const callResult = await callResponse.json();
+                console.log(`[${runId}] Call response:`, JSON.stringify(callResult));
+                
+                if (callResponse.ok && callResult.response === 'Call successful') {
+                  processedActions.push(`Call initiated to ${callNumber}`);
+                } else {
+                  console.error(`[${runId}] Call error:`, callResult);
+                  processedActions.push(`Call error: ${callResult.error || 'unknown'}`);
+                }
+              } catch (callErr) {
+                console.error(`[${runId}] Call exception:`, callErr);
+                processedActions.push('Call error: exception');
+              }
+            } else if (apiProvider !== 'uazapi') {
+              console.log(`[${runId}] Call node only supported on UazAPI`);
+              processedActions.push('Call not supported (requires UazAPI)');
+            } else {
+              console.log(`[${runId}] Missing UazAPI configuration for call`);
+              processedActions.push('Call skipped (missing config)');
+            }
+            
+            const callEdge = edges.find(e => e.source === currentNodeId);
+            if (callEdge) {
+              currentNodeId = callEdge.target;
             } else {
               continueProcessing = false;
             }

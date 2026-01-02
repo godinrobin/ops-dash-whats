@@ -33,6 +33,7 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactIns
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaCaption, setMediaCaption] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [triggeringFlowId, setTriggeringFlowId] = useState<string | null>(null);
 
   // Audio recording
   const [isRecording, setIsRecording] = useState(false);
@@ -349,16 +350,27 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactIns
                       variant="ghost" 
                       className="w-full justify-start gap-2" 
                       size="sm"
+                      disabled={triggeringFlowId === flow.id}
                       onClick={async () => {
                         setShowFlowsMenu(false);
+                        setTriggeringFlowId(flow.id);
+                        toast.loading(`Disparando fluxo "${flow.name}"...`, { id: `flow-trigger-${flow.id}` });
                         try {
                           await onTriggerFlow?.(flow.id);
+                          toast.success(`Fluxo "${flow.name}" disparado!`, { id: `flow-trigger-${flow.id}` });
                         } catch (err) {
                           console.error('Erro ao disparar fluxo:', err);
+                          toast.error('Erro ao disparar fluxo', { id: `flow-trigger-${flow.id}` });
+                        } finally {
+                          setTriggeringFlowId(null);
                         }
                       }}
                     >
-                      <Zap className="h-4 w-4 text-primary" />
+                      {triggeringFlowId === flow.id ? (
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                      ) : (
+                        <Zap className="h-4 w-4 text-primary" />
+                      )}
                       {flow.name}
                     </Button>
                   ))}
