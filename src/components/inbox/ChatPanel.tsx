@@ -437,6 +437,9 @@ export const ChatPanel = ({
     navigate('/maturador/instances');
   };
 
+  // Move useMemo BEFORE early return to avoid violating React's rules of hooks
+  const visibleMessages = useMemo(() => dedupeMessagesForUI(messages), [messages]);
+
   if (!contact) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-muted/30">
@@ -488,7 +491,6 @@ export const ChatPanel = ({
     ? instanceColorMap.get(contact.instance_id) || 'bg-muted'
     : 'bg-muted';
 
-  const visibleMessages = useMemo(() => dedupeMessagesForUI(messages), [messages]);
 
   return (
     <div className="flex-1 flex flex-col bg-background">
