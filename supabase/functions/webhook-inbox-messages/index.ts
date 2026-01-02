@@ -759,61 +759,36 @@ serve(async (req) => {
       // 3) chat list update event (/chats): payload.chat.wa_* fields (last message preview)
 
       const chatsCandidate = (() => {
-        // UazAPI chats event contains the LAST message preview (chat.wa_* fields)
-        // In some setups, this is the only place where we reliably receive the text + wa_chatid.
-        // We convert it into a synthetic "message" object so the inbox + keyword triggers work.
+        if (event !== 'chats') return null;
+        const chat = payload?.chat;
+        const chatid = chat?.wa_chatid || chat?.wa_chatId;
+        if (!chatid) return null;
 
-        const hasDirectChatId =
-          !!((payload as any)?.chatid ||
-            (payload as any)?.message?.chatid ||
-            (data as any)?.chatid ||
-            (data as any)?.message?.chatid);
+        const text = String(chat?.wa_lastMessageTextVote ?? chat?.wa_lastMessageText ?? '').trim();
+        if (!text) return null;
 
-        // Prefer the real message payload when available (avoid duplicates)
-        if (event !== 'chats' && hasDirectChatId) return null;
+        const ownerRaw = String(payload?.owner ?? chat?.owner ?? '');
+        const ownerPhone = ownerRaw.replace(/\D/g, '');
 
-        const chat = (payload as any)?.chat || (data as any)?.chat;
-        if (!chat || typeof chat !== 'object') return null;
+        const senderRaw = String(chat?.wa_lastMessageSender ?? '');
+        const senderPhone = senderRaw.split('@')[0].split(':')[0].replace(/\D/g, '');
 
-        const waChatId = String((chat as any).wa_chatid || '');
-        const lastText = String((chat as any).wa_lastMessageTextVote || '').trim();
-        const lastTsRaw = (chat as any).wa_lastMsgTimestamp;
-        const msgTs = typeof lastTsRaw === 'number' ? lastTsRaw : Number(lastTsRaw);
-
-        // Skip if no chat id with @ symbol OR no timestamp
-        // NOTE: We now allow empty text to be processed (image/audio messages have empty text)
-        if (!waChatId.includes('@') || !msgTs) return null;
-
-        // Skip group chats
-        if (waChatId.includes('@g.us') || (chat as any).wa_isGroup === true) return null;
-
-        const ownerDigits = String((payload as any)?.owner || (chat as any)?.owner || '').replace(/\D/g, '');
-        const lastSender = String((chat as any).wa_lastMessageSender || '');
-        const lastSenderDigits = lastSender.split('@')[0].replace(/\D/g, '');
-        const fromMe = ownerDigits ? lastSenderDigits === ownerDigits : false;
-
-        // For non-owner messages, the sender may be @lid but we need the real phone from wa_chatid
-        // Use wa_chatid as the primary chatid (it contains the real phone number)
-        const msgId = `chat-${String((chat as any).wa_fastid || waChatId)}-${msgTs}-${fromMe ? 'out' : 'in'}`;
-
-        console.log('[UAZAPI-WEBHOOK] Using chats snapshot as message candidate', {
-          waChatId,
-          lastSender,
-          fromMe,
-          msgTs,
-          lastText: lastText.substring(0, 50),
-        });
+        const fromMe = !!ownerPhone && !!senderPhone && senderPhone === ownerPhone;
+        const ts = Number(chat?.wa_lastMsgTimestamp ?? Date.now());
+        const fastId = String(chat?.wa_fastid ?? chatid);
 
         return {
-          chatid: waChatId, // Use wa_chatid which has the real phone
-          sender: waChatId, // Also use wa_chatid as sender (more reliable than @lid sender)
-          senderName: String((chat as any).wa_contactName || (chat as any).wa_name || (chat as any).name || ''),
-          text: lastText || '', // Allow empty text for media messages
-          messageType: String((chat as any).wa_lastMessageType || 'conversation'),
+          chatid: String(chatid),
+          sender: senderRaw,
+          senderName: String(chat?.wa_contactName || chat?.wa_name || chat?.name || ''),
+          text,
+          messageType: String(chat?.wa_lastMessageType || 'conversation'),
           fromMe,
+          messageid: `chat:${fastId}:${ts}`,
+          messageTimestamp: ts,
+          isGroup: String(chatid).includes('@g.us') || chat?.wa_isGroup === true,
           wasSentByApi: false,
-          messageTimestamp: msgTs,
-          messageid: msgId,
+          fileURL: '',
         };
       })();
 
@@ -838,36 +813,8 @@ serve(async (req) => {
         const uazText = uazMsg.text || '';
         const uazMessageType = uazMsg.messageType || 'conversation';
         const uazFromMe = uazMsg.fromMe === true || uazMsg.fromMe === 'true';
-
-        // UazAPI can send multiple different IDs for the same message across events.
-        // Example: sometimes it sends a timestamp-like id ("1767...") and later the real message id.
-        // We canonicalize to a stable id to avoid duplicate rows and duplicate flow triggers.
-        const rawMessageId = uazMsg.messageid || '';
-        const rawId = uazMsg.id || '';
+        const uazMessageId = uazMsg.messageid || uazMsg.id || '';
         const uazTimestamp = uazMsg.messageTimestamp || Date.now();
-        const timestampId = uazTimestamp ? String(uazTimestamp) : '';
-
-        const normMessageId = normalizeRemoteMessageId(rawMessageId);
-        const normId = normalizeRemoteMessageId(rawId);
-        const normTimestampId = normalizeRemoteMessageId(timestampId);
-
-        const isLikelyTimestampId = (id: string | null) => !!id && /^\d{12,}$/.test(id);
-        const pickCanonicalId = (ids: Array<string | null>) => {
-          const uniq = Array.from(new Set(ids.filter(Boolean) as string[]));
-          if (uniq.length === 0) return { canonical: null as string | null, candidates: [] as string[] };
-
-          // Prefer non-timestamp IDs when present
-          const nonTs = uniq.filter((x) => !isLikelyTimestampId(x));
-          const canonical = (nonTs[0] || uniq[0]) ?? null;
-          return { canonical, candidates: uniq };
-        };
-
-        const { canonical: uazMessageIdNormalized, candidates: uazMessageIdCandidates } = pickCanonicalId([
-          normMessageId,
-          normId,
-          normTimestampId,
-        ]);
-
         const uazFileUrl = uazMsg.fileURL || '';
         const uazWasSentByApi = uazMsg.wasSentByApi === true;
         
@@ -880,7 +827,8 @@ serve(async (req) => {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
-
+        const uazMessageIdNormalized = normalizeRemoteMessageId(uazMessageId);
+        
         // Skip outbound messages already in our system
         if (uazFromMe && uazMessageIdNormalized) {
           const { data: existingMessage } = await supabaseClient
@@ -890,7 +838,7 @@ serve(async (req) => {
             .maybeSingle();
           
           if (existingMessage) {
-            console.log('[UAZAPI-WEBHOOK] Skipping outgoing message sent by platform:', uazMessageIdNormalized);
+            console.log('[UAZAPI-WEBHOOK] Skipping outgoing message sent by platform:', uazMessageId);
             return new Response(JSON.stringify({ success: true, skipped: true, reason: 'sent_by_platform' }), {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
@@ -992,42 +940,17 @@ serve(async (req) => {
         else if (msgTypeLower.includes('document')) messageType = 'document';
         else if (msgTypeLower.includes('sticker')) messageType = 'sticker';
         
-        // Canonical dedupe across the different ID variants we might receive for the same message
-        if (uazMessageIdNormalized && uazMessageIdCandidates?.length) {
+        // Check if message already exists (use normalized ID)
+        if (uazMessageIdNormalized) {
           const { data: existingMsg } = await supabaseClient
             .from('inbox_messages')
-            .select('id, remote_message_id')
-            .eq('contact_id', contact.id)
-            .in('remote_message_id', uazMessageIdCandidates)
+            .select('id')
+            .eq('remote_message_id', uazMessageIdNormalized)
             .maybeSingle();
-
+          
           if (existingMsg) {
-            const existingRemoteId = normalizeRemoteMessageId(existingMsg.remote_message_id);
-
-            // If the existing row used a timestamp-like id, but we now have a stable id, upgrade it.
-            if (
-              existingRemoteId &&
-              uazMessageIdNormalized &&
-              existingRemoteId !== uazMessageIdNormalized &&
-              typeof existingRemoteId === 'string' &&
-              typeof uazMessageIdNormalized === 'string' &&
-              /^\d{12,}$/.test(existingRemoteId) &&
-              !/^\d{12,}$/.test(uazMessageIdNormalized)
-            ) {
-              const { error: fixIdError } = await supabaseClient
-                .from('inbox_messages')
-                .update({ remote_message_id: uazMessageIdNormalized })
-                .eq('id', existingMsg.id);
-
-              if (fixIdError) {
-                console.warn('[UAZAPI-WEBHOOK] Failed to upgrade message remote id (non-fatal):', fixIdError);
-              } else {
-                console.log(`[UAZAPI-WEBHOOK] Upgraded message id ${existingRemoteId} -> ${uazMessageIdNormalized}`);
-              }
-            }
-
-            console.log(`[UAZAPI-WEBHOOK] Message already exists (canonical dedupe): ${existingRemoteId}`);
-            return new Response(JSON.stringify({ success: true, skipped: true, reason: 'duplicate_canonical' }), {
+            console.log(`[UAZAPI-WEBHOOK] Message already exists: ${uazMessageIdNormalized}`);
+            return new Response(JSON.stringify({ success: true, skipped: true, reason: 'duplicate' }), {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
           }
@@ -1121,77 +1044,26 @@ serve(async (req) => {
           }
         }
         
-        // Insert message using upsert to handle duplicates gracefully
-        // The unique constraint on (contact_id, remote_message_id) will prevent true duplicates
+        // Insert message (always use normalized ID)
         const direction = uazFromMe ? 'outbound' : 'inbound';
-        
-        // If we have a remote_message_id, use upsert to avoid duplicates
-        let insertedMessage: any = null;
-        let msgError: any = null;
-        
-        if (uazMessageIdNormalized) {
-          // Use upsert with conflict handling on remote_message_id
-          const result = await supabaseClient
-            .from('inbox_messages')
-            .upsert({
-              contact_id: contact.id,
-              instance_id: instanceId,
-              user_id: userId,
-              direction,
-              message_type: messageType,
-              content: uazText || null,
-              media_url: mediaUrl,
-              status: 'received',
-              remote_message_id: uazMessageIdNormalized,
-              is_from_flow: false,
-            }, {
-              onConflict: 'contact_id,remote_message_id',
-              ignoreDuplicates: true,
-            })
-            .select()
-            .maybeSingle();
-          
-          insertedMessage = result.data;
-          msgError = result.error;
-          
-          // If no data returned due to ignoreDuplicates, this is a duplicate - skip
-          if (!insertedMessage && !msgError) {
-            console.log(`[UAZAPI-WEBHOOK] Duplicate message skipped (upsert): ${uazMessageIdNormalized}`);
-            return new Response(JSON.stringify({ success: true, skipped: true, reason: 'duplicate_upsert' }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-          }
-        } else {
-          // No remote_message_id, just insert normally
-          const result = await supabaseClient
-            .from('inbox_messages')
-            .insert({
-              contact_id: contact.id,
-              instance_id: instanceId,
-              user_id: userId,
-              direction,
-              message_type: messageType,
-              content: uazText || null,
-              media_url: mediaUrl,
-              status: 'received',
-              remote_message_id: null,
-              is_from_flow: false,
-            })
-            .select()
-            .single();
-          
-          insertedMessage = result.data;
-          msgError = result.error;
-        }
+        const { data: insertedMessage, error: msgError } = await supabaseClient
+          .from('inbox_messages')
+          .insert({
+            contact_id: contact.id,
+            instance_id: instanceId,
+            user_id: userId,
+            direction,
+            message_type: messageType,
+            content: uazText || null,
+            media_url: mediaUrl,
+            status: 'received',
+            remote_message_id: uazMessageIdNormalized || null,
+            is_from_flow: false,
+          })
+          .select()
+          .single();
         
         if (msgError) {
-          // Check if it's a duplicate key error - if so, skip gracefully
-          if (msgError.code === '23505' || msgError.message?.includes('duplicate') || msgError.message?.includes('unique')) {
-            console.log(`[UAZAPI-WEBHOOK] Duplicate message skipped: ${uazMessageIdNormalized}`);
-            return new Response(JSON.stringify({ success: true, skipped: true, reason: 'duplicate' }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-          }
           console.error('[UAZAPI-WEBHOOK] Error inserting message:', msgError);
           return new Response(JSON.stringify({ success: false, error: 'Failed to insert message' }), {
             status: 500,
@@ -1244,7 +1116,7 @@ serve(async (req) => {
                     key: {
                       remoteJid: uazChatid,
                       fromMe: uazFromMe,
-                      id: uazMessageIdNormalized || rawMessageId,
+                      id: uazMessageId,
                     },
                     message: messageType === 'image' 
                       ? { imageMessage: { caption: uazText } }
@@ -1280,24 +1152,8 @@ serve(async (req) => {
           console.log(`[TAG-WHATS-TRIGGER] Skipped: direction=${direction}, messageType=${messageType}`);
         }
         
-        // For inbound messages only, check if we need to trigger a flow
-        // uazFromMe=false means the message was RECEIVED by the instance (inbound)
-        const shouldEvaluateFlowTriggers =
-          !uazFromMe && // Message received (not sent by instance)
-          !uazWasSentByApi && // Not sent via API (prevents loops)
-          insertedMessage?.is_from_flow !== true; // Not a flow response
-
-        console.log(`[KEYWORD-DEBUG] Evaluating flow triggers:`, {
-          direction,
-          uazFromMe,
-          uazWasSentByApi,
-          isFromFlow: insertedMessage?.is_from_flow,
-          shouldEvaluate: shouldEvaluateFlowTriggers,
-          contactId: contact?.id,
-          instanceId,
-        });
-
-        if (shouldEvaluateFlowTriggers) {
+        // For inbound messages, check if we need to trigger a flow
+        if (direction === 'inbound' && !uazFromMe) {
           // Check if flow is paused for this contact
           if (contact.flow_paused === true) {
             console.log(`[UAZAPI-WEBHOOK] Flow is paused for contact ${contact.id}, skipping flow processing`);
@@ -1318,40 +1174,20 @@ serve(async (req) => {
                   console.error('[UAZAPI-WEBHOOK] Error fetching keyword flows (pre-check):', keywordFlowsError);
                 }
 
-                console.log(`[KEYWORD-DEBUG] Found ${keywordFlows?.length || 0} keyword flows for user ${userId}`);
-
                 const lowerContent = inboundText.toLowerCase();
                 let matchedFlow: any | null = null;
                 let matchedKeyword: string | null = null;
 
                 for (const flow of keywordFlows || []) {
                   const assignedInstances = (flow.assigned_instances as string[]) || [];
-                  const instanceMatch = assignedInstances.length === 0 || assignedInstances.includes(instanceId);
-                  
-                  console.log(`[KEYWORD-DEBUG] Checking flow "${flow.name}" (${flow.id}):`, {
-                    assignedInstances,
-                    instanceId,
-                    instanceMatch,
-                    keywords: flow.trigger_keywords,
-                  });
-
-                  if (!instanceMatch) {
-                    console.log(`[KEYWORD-DEBUG] Skipping flow "${flow.name}" - instance not assigned`);
-                    continue;
-                  }
+                  if (assignedInstances.length > 0 && !assignedInstances.includes(instanceId)) continue;
 
                   const keywords = (flow.trigger_keywords as string[]) || [];
                   for (const kw of keywords) {
                     const kwStr = String(kw || '').trim();
-                    const kwLower = kwStr.toLowerCase();
-
-                    // Use "contains" match for inbound messages (more forgiving)
-                    const matchesKeyword = kwLower && lowerContent.includes(kwLower);
-
-                    if (matchesKeyword) {
+                    if (kwStr && lowerContent.includes(kwStr.toLowerCase())) {
                       matchedFlow = flow;
                       matchedKeyword = kwStr;
-                      console.log(`[KEYWORD-DEBUG] MATCH! keyword="${kwStr}" in content="${inboundText}"`);
                       break;
                     }
                   }
@@ -1364,7 +1200,7 @@ serve(async (req) => {
                   instanceName: instanceNameForLookup,
                   eventType: 'keyword-debug',
                   userId,
-                  payloadPreview: JSON.stringify({ inboundText, matchedKeyword, matchedFlowId: matchedFlow?.id || null, totalFlows: keywordFlows?.length || 0 }).slice(0, 500),
+                  payloadPreview: JSON.stringify({ inboundText, matchedKeyword, matchedFlowId: matchedFlow?.id || null }).slice(0, 500),
                 });
 
                 if (matchedFlow) {
@@ -1376,18 +1212,6 @@ serve(async (req) => {
                     .select('id')
                     .eq('contact_id', contact.id)
                     .eq('status', 'active');
-
-                  logWebhookDiagnostic(supabaseClient, {
-                    instanceId,
-                    instanceName: instanceNameForLookup,
-                    eventType: 'keyword-cancel-check',
-                    userId,
-                    payloadPreview: JSON.stringify({
-                      contactId: contact.id,
-                      sessionsToCancelCount: sessionsToCancel?.length || 0,
-                      sessionIds: (sessionsToCancel || []).map((s: any) => s.id).slice(0, 10),
-                    }).slice(0, 500),
-                  });
 
                   if (sessionsToCancel?.length) {
                     await supabaseClient
@@ -1402,121 +1226,43 @@ serve(async (req) => {
                       .in('id', sessionsToCancel.map((s: any) => s.id));
 
                     console.log(`[UAZAPI-WEBHOOK] Canceled ${sessionsToCancel.length} active session(s) for keyword restart`);
-
-                    logWebhookDiagnostic(supabaseClient, {
-                      instanceId,
-                      instanceName: instanceNameForLookup,
-                      eventType: 'keyword-cancelled',
-                      userId,
-                      payloadPreview: JSON.stringify({
-                        contactId: contact.id,
-                        cancelledCount: sessionsToCancel.length,
-                      }).slice(0, 500),
-                    });
                   }
 
-                  // Create/restart the session for this (flow_id, contact_id) pair.
-                  // We use update-first approach to avoid constraint conflicts.
-                  const nowIso = new Date().toISOString();
-                  const sessionPayload = {
-                    instance_id: instanceId,
-                    user_id: userId,
-                    current_node_id: 'start-1',
-                    variables: {
-                      nome: contact.name || '',
-                      telefone: phone,
-                      resposta: inboundText,
-                      lastMessage: inboundText,
-                      ultima_mensagem: inboundText,
-                      contactName: contact.name || phone,
-                      _sent_node_ids: [],
-                    },
-                    status: 'active',
-                    started_at: nowIso,
-                    last_interaction: nowIso,
-                    processing: false,
-                    processing_started_at: null,
-                  };
-
-                  // Try to update existing session first
-                  const { data: updatedSession, error: updateError } = await supabaseClient
+                  const { data: newSession, error: newSessionError } = await supabaseClient
                     .from('inbox_flow_sessions')
-                    .update(sessionPayload)
-                    .eq('flow_id', matchedFlow.id)
-                    .eq('contact_id', contact.id)
+                    .insert({
+                      flow_id: matchedFlow.id,
+                      contact_id: contact.id,
+                      instance_id: instanceId,
+                      user_id: userId,
+                      current_node_id: 'start-1',
+                      variables: {
+                        nome: contact.name || '',
+                        telefone: phone,
+                        resposta: inboundText,
+                        lastMessage: inboundText,
+                        ultima_mensagem: inboundText,
+                        contactName: contact.name || phone,
+                      },
+                      status: 'active',
+                      processing: false,
+                      processing_started_at: null,
+                    })
                     .select()
-                    .maybeSingle();
-
-                  let newSession = updatedSession;
-                  let newSessionError = updateError;
-
-                  // If no existing session was updated, insert a new one
-                  if (!updatedSession && !updateError) {
-                    const { data: insertedSession, error: insertError } = await supabaseClient
-                      .from('inbox_flow_sessions')
-                      .insert({
-                        ...sessionPayload,
-                        flow_id: matchedFlow.id,
-                        contact_id: contact.id,
-                      })
-                      .select()
-                      .single();
-
-                    newSession = insertedSession;
-                    newSessionError = insertError;
-
-                    // Handle race condition: if insert fails due to duplicate, try update again
-                    if (insertError && insertError.message?.includes('duplicate')) {
-                      console.log('[UAZAPI-WEBHOOK] Insert failed due to race condition, retrying update');
-                      const { data: retrySession, error: retryError } = await supabaseClient
-                        .from('inbox_flow_sessions')
-                        .update(sessionPayload)
-                        .eq('flow_id', matchedFlow.id)
-                        .eq('contact_id', contact.id)
-                        .select()
-                        .maybeSingle();
-                      
-                      newSession = retrySession;
-                      newSessionError = retryError;
-                    }
-                  }
-
-                  logWebhookDiagnostic(supabaseClient, {
-                    instanceId,
-                    instanceName: instanceNameForLookup,
-                    eventType: newSession ? 'keyword-session-upserted' : 'keyword-session-error',
-                    userId,
-                    payloadPreview: JSON.stringify({
-                      contactId: contact.id,
-                      flowId: matchedFlow.id,
-                      sessionId: newSession?.id || null,
-                      error: newSessionError?.message || null,
-                    }).slice(0, 500),
-                  });
+                    .single();
 
                   if (newSession && !newSessionError) {
                     try {
                       const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
-                      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-
-                      const processResponse = await fetch(processUrl, {
+                      await fetch(processUrl, {
                         method: 'POST',
                         headers: {
                           'Content-Type': 'application/json',
-                          'Authorization': `Bearer ${serviceKey}`,
-                          'apikey': serviceKey,
+                          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
                         },
                         body: JSON.stringify({ sessionId: newSession.id }),
                       });
-
-                      const respText = await processResponse.text();
-                      console.log(`[UAZAPI-WEBHOOK] process-inbox-flow(keyword) status=${processResponse.status} body=${respText.substring(0, 200)}`);
-
-                      if (!processResponse.ok) {
-                        console.error('[UAZAPI-WEBHOOK] Error invoking keyword flow (pre-check): non-2xx response');
-                      } else {
-                        console.log(`[UAZAPI-WEBHOOK] Keyword flow triggered for session ${newSession.id}`);
-                      }
+                      console.log(`[UAZAPI-WEBHOOK] Keyword flow triggered for session ${newSession.id}`);
                     } catch (e) {
                       console.error('[UAZAPI-WEBHOOK] Error invoking keyword flow (pre-check):', e);
                     }
@@ -1615,47 +1361,41 @@ serve(async (req) => {
                     console.log(`[UAZAPI-WEBHOOK] Canceled ${sessionsToCancel.length} active session(s) for keyword restart`);
                   }
 
-                  const nowIso = new Date().toISOString();
-
                   const { data: newSession, error: newSessionError } = await supabaseClient
                     .from('inbox_flow_sessions')
-                    .upsert(
-                      {
-                        flow_id: keywordFlowToTrigger.id,
-                        contact_id: contact.id,
-                        instance_id: instanceId,
-                        user_id: userId,
-                        current_node_id: 'start-1',
-                        variables: {
-                          nome: contact.name || '',
-                          telefone: phone,
-                          resposta: inboundText,
-                          lastMessage: inboundText,
-                          ultima_mensagem: inboundText,
-                          contactName: contact.name || phone,
-                          _sent_node_ids: [],
-                        },
-                        status: 'active',
-                        started_at: nowIso,
-                        last_interaction: nowIso,
-                        processing: false,
-                        processing_started_at: null,
+                    .insert({
+                      flow_id: keywordFlowToTrigger.id,
+                      contact_id: contact.id,
+                      instance_id: instanceId,
+                      user_id: userId,
+                      current_node_id: 'start-1',
+                      variables: {
+                        nome: contact.name || '',
+                        telefone: phone,
+                        resposta: inboundText,
+                        lastMessage: inboundText,
+                        ultima_mensagem: inboundText,
+                        contactName: contact.name || phone,
                       },
-                      { onConflict: 'flow_id,contact_id' },
-                    )
+                      status: 'active',
+                      processing: false,
+                      processing_started_at: null,
+                    })
                     .select()
                     .single();
 
                   if (newSession && !newSessionError) {
                     try {
-                      const { error: invokeError } = await supabaseClient.functions.invoke('process-inbox-flow', {
-                        body: { sessionId: newSession.id },
+                      const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+                      await fetch(processUrl, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                        },
+                        body: JSON.stringify({ sessionId: newSession.id }),
                       });
-                      if (invokeError) {
-                        console.error('[UAZAPI-WEBHOOK] Error invoking keyword flow:', invokeError);
-                      } else {
-                        console.log(`[UAZAPI-WEBHOOK] Keyword flow triggered for session ${newSession.id}`);
-                      }
+                      console.log(`[UAZAPI-WEBHOOK] Keyword flow triggered for session ${newSession.id}`);
                     } catch (e) {
                       console.error('[UAZAPI-WEBHOOK] Error invoking keyword flow:', e);
                     }
@@ -2057,25 +1797,7 @@ serve(async (req) => {
       
       // Get data.sender field (alternative location in some API versions)
       const dataSender = data.sender || '';
-
-      // UazAPI (zapdata) often sends non-Evolution events like /chats and /messages_update.
-      // In those cases we may not have remoteJid/participant, but we DO have the chat id.
-      const uazChat = (payload as any)?.chat || (data as any)?.chat;
-      const uazWaChatId = typeof uazChat?.wa_chatid === 'string' ? uazChat.wa_chatid : '';
-      const uazEventChat = typeof (payload as any)?.event?.Chat === 'string' ? (payload as any).event.Chat : '';
-      const uazEventSender = typeof (payload as any)?.event?.Sender === 'string' ? (payload as any).event.Sender : '';
-
-      // Skip group chats (we don't create contacts/sessions for groups)
-      if (
-        (typeof uazChat?.wa_isGroup === 'boolean' && uazChat.wa_isGroup) ||
-        (uazWaChatId && uazWaChatId.includes('@g.us')) ||
-        (uazEventChat && uazEventChat.includes('@g.us'))
-      ) {
-        return new Response(JSON.stringify({ success: true, skipped: true, reason: 'group_chat' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
+      
       // Get pushName for last-resort phone extraction (some rare cases)
       const pushNameRaw = data.pushName || '';
       const pushNamePhone = pushNameRaw.match(/^\+?(\d{10,15})$/)?.[1] || '';
@@ -2088,36 +1810,16 @@ serve(async (req) => {
       console.log(`  contextInfo.participant=${contextParticipant}`);
       console.log(`  payload.sender=${sender}`);
       console.log(`  data.sender=${dataSender}`);
-      console.log(`  uazChat.wa_chatid=${uazWaChatId}`);
-      console.log(`  uazEvent.Chat=${uazEventChat}`);
-      console.log(`  uazEvent.Sender=${uazEventSender}`);
       console.log(`  pushName=${pushNameRaw} (extracted phone: ${pushNamePhone})`);
       console.log(`  addressingMode=${key.addressingMode || 'none'}`);
       
       // isValidPhoneJid is defined above (before group check)
       
-      // Priority order:
-      // 0) UazAPI chat id (when present)
-      // 1) participantAlt > remoteJid > remoteJidAlt > participant > contextInfo
-      // (participantAlt is prioritized because it often has the real phone for ad messages)
-
-      if (isValidPhoneJid(uazWaChatId)) {
-        jidForPhone = uazWaChatId;
-        phoneSource = 'uazapi.chat.wa_chatid';
-        console.log(`[UAZAPI] Found phone in chat.wa_chatid: ${uazWaChatId}`);
-      }
-      else if (isValidPhoneJid(uazEventChat)) {
-        jidForPhone = uazEventChat;
-        phoneSource = 'uazapi.event.Chat';
-        console.log(`[UAZAPI] Found phone in event.Chat: ${uazEventChat}`);
-      }
-      else if (isValidPhoneJid(uazEventSender)) {
-        jidForPhone = uazEventSender;
-        phoneSource = 'uazapi.event.Sender';
-        console.log(`[UAZAPI] Found phone in event.Sender: ${uazEventSender}`);
-      }
+      // Priority order: participantAlt > remoteJid > remoteJidAlt > participant > contextInfo
+      // participantAlt is prioritized because it often has the real phone for ad messages
+      
       // 1. Try participantAlt FIRST (most reliable for Facebook ad messages)
-      else if (isValidPhoneJid(participantAlt)) {
+      if (isValidPhoneJid(participantAlt)) {
         jidForPhone = participantAlt;
         phoneSource = 'participantAlt';
         console.log(`[AD-LEAD] Found phone in participantAlt: ${participantAlt}`);
@@ -2340,18 +2042,6 @@ serve(async (req) => {
       let content = extracted.content;
       let messageType = extracted.messageType;
       let mediaUrl = extracted.mediaUrl;
-
-      // UazAPI fallback (chats event): content comes from chat.wa_lastMessageTextVote
-      const uazLastText = typeof (uazChat as any)?.wa_lastMessageTextVote === 'string'
-        ? String((uazChat as any).wa_lastMessageTextVote).trim()
-        : '';
-
-      if ((!content || !String(content).trim()) && uazLastText) {
-        content = uazLastText;
-        messageType = 'text';
-        mediaUrl = null;
-        console.log(`[UAZAPI] Using chat.wa_lastMessageTextVote as content: ${uazLastText.substring(0, 80)}`);
-      }
       
       // pushName is at data root level in Evolution API v2
       // CRITICAL: For outbound messages (fromMe=true), pushName is the SENDER's name (the instance)

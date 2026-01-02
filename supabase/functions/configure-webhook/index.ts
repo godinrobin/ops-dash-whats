@@ -154,14 +154,13 @@ serve(async (req) => {
 
       // UazAPI v2 webhook format - POST /webhook
       // According to OpenAPI docs: events is an array, excludeMessages is also array
-      // Include ALL relevant events: messages, messages_update, chats, connection
       const uazapiWebhookPayload = {
         enabled: true,
         url: webhookUrl,
-        events: ['messages', 'messages_update', 'chats', 'connection', 'contacts'],
+        events: ['messages', 'messages_update'],
         excludeMessages: ['wasSentByApi', 'isGroupYes'],
-        addUrlEvents: true,  // Adds event type to URL path for easier routing
-        addUrlTypesMessages: true,  // Adds message type to URL path
+        addUrlEvents: false,
+        addUrlTypesMessages: false,
       };
 
       console.log('[CONFIGURE-WEBHOOK] UazAPI webhook payload:', JSON.stringify(uazapiWebhookPayload));

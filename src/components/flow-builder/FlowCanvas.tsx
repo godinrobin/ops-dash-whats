@@ -1,5 +1,4 @@
 import { useCallback, useState, useEffect, useRef, useMemo } from 'react';
-import { useTheme } from 'next-themes';
 import {
   ReactFlow,
   Background,
@@ -79,9 +78,6 @@ interface FlowCanvasProps {
 }
 
 const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, triggerKeywords, onUpdateFlowSettings, flowId }: FlowCanvasProps) => {
-  const { resolvedTheme } = useTheme();
-  const flowColorMode = resolvedTheme === 'dark' ? 'dark' : 'light';
-
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
   
@@ -338,22 +334,15 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
           onInit={onInit}
           nodeTypes={nodeTypes}
           fitView
-          colorMode={flowColorMode}
+          className="bg-background"
           proOptions={{ hideAttribution: true }}
           deleteKeyCode={['Backspace', 'Delete']}
-          style={{ background: 'hsl(0 0% 0%)' }}
-          className="dark:!bg-black"
           onEdgeClick={(_, edge) => {
             setEdges((eds) => eds.filter((e) => e.id !== edge.id));
           }}
         >
-          <Background
-            variant={BackgroundVariant.Dots}
-            gap={24}
-            size={1}
-            color="hsl(var(--foreground) / 0.08)"
-          />
-          <Controls />
+          <Background variant={BackgroundVariant.Dots} gap={20} size={1} className="!bg-background" />
+          <Controls className="!bg-card !border-border !shadow-md" />
         </ReactFlow>
       </div>
 

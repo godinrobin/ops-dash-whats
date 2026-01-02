@@ -18,7 +18,7 @@ export const VideoNode = ({ id, data }: NodeProps) => {
           <div className="p-1.5 rounded bg-pink-500">
             <Video className="h-3.5 w-3.5 text-white" />
           </div>
-          <span className="font-medium text-sm text-card-foreground">Vídeo</span>
+          <span className="font-medium text-sm">Vídeo</span>
         </div>
         {hasMedia ? (
           <div className="w-full">
