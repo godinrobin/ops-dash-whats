@@ -535,18 +535,23 @@ serve(async (req) => {
               if (currentNode.data.showPresence) {
                 const presenceDelaySeconds = (currentNode.data.presenceDelay as number) || 3;
                 textDelayMs = presenceDelaySeconds * 1000;
+                console.log(`[${runId}] 📝 TEXT NODE - showPresence=true, presenceDelay=${presenceDelaySeconds}s, delayMs=${textDelayMs}`);
                 
                 // For Evolution API, send presence separately then wait
                 if (apiProvider !== 'uazapi') {
                   await sendPresence(effectiveBaseUrl, effectiveApiKey, instanceName, phone, 'composing', textDelayMs);
                   processedActions.push(`Showed typing for ${presenceDelaySeconds}s`);
                 } else {
+                  console.log(`[${runId}] 🚀 UazAPI: Will send delay=${textDelayMs}ms in request body to show "Digitando..."`);
                   processedActions.push(`UazAPI typing delay: ${presenceDelaySeconds}s`);
                 }
+              } else {
+                console.log(`[${runId}] 📝 TEXT NODE - showPresence=false, no delay`);
               }
               
               // For UazAPI, pass delay parameter; for Evolution, delay was already handled
               const uazapiDelay = apiProvider === 'uazapi' ? textDelayMs : 0;
+              console.log(`[${runId}] Calling sendMessage with apiProvider=${apiProvider}, uazapiDelay=${uazapiDelay}ms`);
               const sendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, message, 'text', undefined, undefined, apiProvider, instanceUazapiToken, uazapiDelay);
               
               // Save message with correct status based on send result
@@ -608,14 +613,19 @@ serve(async (req) => {
                 const presenceDelaySeconds = (currentNode.data.presenceDelay as number) || 3;
                 mediaDelayMs = presenceDelaySeconds * 1000;
                 const presenceType = currentNode.type === 'audio' ? 'recording' : 'composing';
+                console.log(`[${runId}] 🎵 ${currentNode.type.toUpperCase()} NODE - showPresence=true, presenceDelay=${presenceDelaySeconds}s, delayMs=${mediaDelayMs}, presenceType=${presenceType}`);
                 
                 // For Evolution API, send presence separately then wait
                 if (apiProvider !== 'uazapi') {
                   await sendPresence(effectiveBaseUrl, effectiveApiKey, instanceName, phone, presenceType, mediaDelayMs);
                   processedActions.push(`Showed ${presenceType} for ${presenceDelaySeconds}s`);
                 } else {
+                  const uazapiPresenceLabel = currentNode.type === 'audio' ? 'Gravando áudio...' : 'Digitando...';
+                  console.log(`[${runId}] 🚀 UazAPI: Will send delay=${mediaDelayMs}ms in request body to show "${uazapiPresenceLabel}"`);
                   processedActions.push(`UazAPI ${currentNode.type === 'audio' ? 'recording' : 'typing'} delay: ${presenceDelaySeconds}s`);
                 }
+              } else {
+                console.log(`[${runId}] 🎵 ${currentNode.type.toUpperCase()} NODE - showPresence=false, no delay`);
               }
               
               console.log(`[${runId}] Sending ${currentNode.type} message via ${apiProvider}...`);
@@ -624,6 +634,7 @@ serve(async (req) => {
               const contentToSend = currentNode.type === 'document' ? fileName : caption;
               // For UazAPI, pass delay parameter; for Evolution, delay was already handled
               const uazapiMediaDelay = apiProvider === 'uazapi' ? mediaDelayMs : 0;
+              console.log(`[${runId}] Calling sendMessage with apiProvider=${apiProvider}, uazapiMediaDelay=${uazapiMediaDelay}ms`);
               const mediaSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, contentToSend, currentNode.type, mediaUrl, fileName, apiProvider, instanceUazapiToken, uazapiMediaDelay);
               
               // Save message with correct status based on send result
