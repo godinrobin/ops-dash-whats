@@ -1488,6 +1488,86 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
                 }
               }
               
+              // Apply "Pago" label natively in WhatsApp via UAZAPI
+              if (apiProvider === 'uazapi' && instanceUazapiToken && contact.remote_jid) {
+                console.log(`[${runId}] Applying 'Pago' label via UAZAPI...`);
+                try {
+                  // First, find or create the "Pago" label
+                  const labelsResponse = await fetch(`${uazapiBaseUrl}/chat/label/get`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'token': instanceUazapiToken,
+                    },
+                    body: JSON.stringify({}),
+                  });
+                  
+                  let pagoLabelId: string | null = null;
+                  
+                  if (labelsResponse.ok) {
+                    const labelsData = await labelsResponse.json();
+                    const labels = labelsData.labels || labelsData || [];
+                    console.log(`[${runId}] Available labels:`, JSON.stringify(labels));
+                    
+                    // Find "Pago" label (case-insensitive)
+                    const pagoLabel = labels.find((l: any) => 
+                      l.name?.toLowerCase() === 'pago' || 
+                      l.Name?.toLowerCase() === 'pago'
+                    );
+                    
+                    if (pagoLabel) {
+                      pagoLabelId = pagoLabel.id || pagoLabel.Id || pagoLabel.labelId;
+                      console.log(`[${runId}] Found existing 'Pago' label: ${pagoLabelId}`);
+                    } else {
+                      // Create the "Pago" label with green color
+                      console.log(`[${runId}] Creating 'Pago' label...`);
+                      const createLabelResponse = await fetch(`${uazapiBaseUrl}/chat/label/create`, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'token': instanceUazapiToken,
+                        },
+                        body: JSON.stringify({
+                          name: 'Pago',
+                          color: 5, // Green color in WhatsApp
+                        }),
+                      });
+                      
+                      if (createLabelResponse.ok) {
+                        const createData = await createLabelResponse.json();
+                        pagoLabelId = createData.id || createData.labelId || createData.Id;
+                        console.log(`[${runId}] Created 'Pago' label: ${pagoLabelId}`);
+                      } else {
+                        console.error(`[${runId}] Failed to create label:`, await createLabelResponse.text());
+                      }
+                    }
+                  }
+                  
+                  // Apply the label to the chat
+                  if (pagoLabelId) {
+                    const applyLabelResponse = await fetch(`${uazapiBaseUrl}/chat/label/add`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'token': instanceUazapiToken,
+                      },
+                      body: JSON.stringify({
+                        chatId: contact.remote_jid,
+                        labelId: pagoLabelId,
+                      }),
+                    });
+                    
+                    if (applyLabelResponse.ok) {
+                      console.log(`[${runId}] ✅ 'Pago' label applied successfully to chat ${contact.remote_jid}`);
+                    } else {
+                      console.error(`[${runId}] Failed to apply label:`, await applyLabelResponse.text());
+                    }
+                  }
+                } catch (labelErr) {
+                  console.error(`[${runId}] Error applying WhatsApp label:`, labelErr);
+                }
+              }
+              
               // Clear attempt counter
               delete variables[paymentAttemptKey];
               
