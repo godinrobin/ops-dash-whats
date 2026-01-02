@@ -236,25 +236,32 @@ serve(async (req) => {
     };
 
     // If user provided input, store it and move to next node IMMEDIATELY (checkpoint)
+    // EXCEPTION: For paymentIdentifier nodes, we DON'T skip to next node - we need to process the media first
     if (userInput !== undefined && userInput !== null) {
       const currentNode = nodes.find(n => n.id === currentNodeId);
-      if (currentNode?.type === 'waitInput' && currentNode.data.variableName) {
-        const key = normalizeVarKey(currentNode.data.variableName as string);
-        variables[key] = typeof userInput === 'string' ? userInput.trim() : userInput;
-      }
+      
+      // Only do checkpoint skip for waitInput and menu nodes, NOT paymentIdentifier
+      if (currentNode?.type !== 'paymentIdentifier') {
+        if (currentNode?.type === 'waitInput' && currentNode.data.variableName) {
+          const key = normalizeVarKey(currentNode.data.variableName as string);
+          variables[key] = typeof userInput === 'string' ? userInput.trim() : userInput;
+        }
 
-      // Find next node
-      const nextEdge = edges.find(e => e.source === currentNodeId);
-      if (nextEdge) {
-        currentNodeId = nextEdge.target;
+        // Find next node
+        const nextEdge = edges.find(e => e.source === currentNodeId);
+        if (nextEdge) {
+          currentNodeId = nextEdge.target;
+        }
+        
+        // IMPORTANT: Save checkpoint immediately with lock to prevent duplicate processing
+        lockUpdate.current_node_id = currentNodeId;
+        lockUpdate.variables = variables;
+        lockUpdate.last_interaction = new Date().toISOString();
+        
+        console.log(`[${runId}] Checkpoint saved: moved from ${session.current_node_id} to ${currentNodeId} after receiving input`);
+      } else {
+        console.log(`[${runId}] paymentIdentifier node - will process media inline, no checkpoint skip`);
       }
-      
-      // IMPORTANT: Save checkpoint immediately with lock to prevent duplicate processing
-      lockUpdate.current_node_id = currentNodeId;
-      lockUpdate.variables = variables;
-      lockUpdate.last_interaction = new Date().toISOString();
-      
-      console.log(`[${runId}] Checkpoint saved: moved from ${session.current_node_id} to ${currentNodeId} after receiving input`);
     }
 
     // Acquire lock (with checkpoint if userInput was provided)
