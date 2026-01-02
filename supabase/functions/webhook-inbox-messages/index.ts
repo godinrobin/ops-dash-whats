@@ -1448,7 +1448,10 @@ serve(async (req) => {
                     console.error('[UAZAPI-WEBHOOK] Error creating keyword session:', newSessionError);
                   }
 
-                  return;
+                  return new Response(
+                    JSON.stringify({ success: true, messageId: insertedMessage.id, keywordTriggered: true }),
+                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                  );
                 }
 
                 // 2) "All messages" flows: trigger only ONCE per contact (until contact is deleted)

@@ -26,6 +26,7 @@ import { AdminAdsMetrics } from "@/components/admin/AdminAdsMetrics";
 import { AdminInstances } from "@/components/admin/AdminInstances";
 import { AdminWhatsAppApiConfig } from "@/components/admin/AdminWhatsAppApiConfig";
 import { AdminTagWhatsLabels } from "@/components/admin/AdminTagWhatsLabels";
+import { AdminUsers } from "@/components/admin/AdminUsers";
 
 // Product image imports for admin
 import bmVerificadaImg from "@/assets/bm-verificada.png";
@@ -83,6 +84,7 @@ const SIDEBAR_MENU = [
     category: "Usuários",
     icon: Users,
     items: [
+      { id: "users", label: "Todos os Usuários", icon: Users },
       { id: "metrics", label: "Métricas", icon: BarChart3 },
       { id: "numbers", label: "Números", icon: Phone },
       { id: "offers", label: "Ofertas", icon: FileText },
@@ -1111,6 +1113,14 @@ const AdminPanelNew = () => {
 
   const renderContent = () => {
     switch (activeSection) {
+      case "users":
+        return (
+          <AdminUsers
+            users={users.map(u => ({ id: u.id, email: u.email, username: u.username }))}
+            onRefresh={loadAllData}
+          />
+        );
+
       case "metrics":
         return (
           <div className="space-y-4">

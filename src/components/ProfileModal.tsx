@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "next-themes";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/useSplashedToast";
+import { Sun, Moon } from "lucide-react";
 
 interface ProfileModalProps {
   open: boolean;
@@ -21,6 +23,7 @@ interface ProfileModalProps {
 export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { theme, setTheme } = useTheme();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -99,6 +102,29 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
               <div>
                 <Label className="text-muted-foreground text-sm">Email</Label>
                 <p className="font-medium">{user?.email}</p>
+              </div>
+            </div>
+
+            {/* Theme Toggle */}
+            <div className="space-y-3">
+              <Label className="font-semibold text-sm">Tema do Site</Label>
+              <div className="flex gap-2">
+                <Button
+                  variant={theme === "dark" ? "default" : "outline"}
+                  className={`flex-1 ${theme === "dark" ? "bg-accent hover:bg-accent/90" : ""}`}
+                  onClick={() => setTheme("dark")}
+                >
+                  <Moon className="h-4 w-4 mr-2" />
+                  Escuro
+                </Button>
+                <Button
+                  variant={theme === "light" ? "default" : "outline"}
+                  className={`flex-1 ${theme === "light" ? "bg-accent hover:bg-accent/90" : ""}`}
+                  onClick={() => setTheme("light")}
+                >
+                  <Sun className="h-4 w-4 mr-2" />
+                  Claro
+                </Button>
               </div>
             </div>
 
