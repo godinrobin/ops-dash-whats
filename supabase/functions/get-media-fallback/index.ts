@@ -31,63 +31,89 @@ const RETRY_DELAYS = [1000, 2000, 4000]; // exponential backoff in ms
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Normalize message IDs from different providers (e.g., "owner:MESSAGE_ID")
+const normalizeRemoteMessageId = (id: string | null | undefined) => {
+  if (!id) return null;
+  const trimmed = String(id).trim();
+  if (!trimmed) return null;
+
+  // UazAPI often prefixes outbound ids with "owner:". Status updates usually come without the prefix.
+  if (trimmed.includes(':')) {
+    const parts = trimmed.split(':').filter(Boolean);
+    const last = parts[parts.length - 1];
+    if (last && last.length >= 8) return last;
+  }
+
+  return trimmed;
+};
+
 // Download media via UazAPI /message/download endpoint with retry
 const downloadMediaViaUazAPI = async (
   uazapiToken: string,
-  remoteMessageId: string
+  remoteMessageIdRaw: string
 ): Promise<{ base64: string; mimetype: string } | null> => {
-  const baseUrl = 'https://api.uazapi.com';
-  
-  console.log(`[MEDIA-FALLBACK] Using UazAPI: ${baseUrl}`);
+  const remoteMessageId = normalizeRemoteMessageId(remoteMessageIdRaw);
+  if (!remoteMessageId) return null;
 
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    try {
-      console.log(`[MEDIA-FALLBACK] UazAPI Attempt ${attempt + 1}/${MAX_RETRIES}: messageId=${remoteMessageId}`);
-      
-      const response = await fetch(`${baseUrl}/message/download`, {
-        method: 'POST',
-        headers: {
-          'token': uazapiToken,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          id: remoteMessageId,
-          return_base64: true,
-          return_link: false,
-        }),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.log(`[MEDIA-FALLBACK] UazAPI error: status=${response.status}, body=${errorText.substring(0, 200)}`);
-        
-        // Retry on server errors (5xx) or rate limits (429)
-        if ((response.status >= 500 || response.status === 429) && attempt < MAX_RETRIES - 1) {
+  // Prefer the same base url used by the webhook events
+  const baseUrls = ['https://zapdata.uazapi.com', 'https://api.uazapi.com'];
+
+  for (const baseUrl of baseUrls) {
+    console.log(`[MEDIA-FALLBACK] Using UazAPI: ${baseUrl}`);
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        console.log(`[MEDIA-FALLBACK] UazAPI Attempt ${attempt + 1}/${MAX_RETRIES}: messageId=${remoteMessageId}`);
+
+        const response = await fetch(`${baseUrl}/message/download`, {
+          method: 'POST',
+          headers: {
+            token: uazapiToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            id: remoteMessageId,
+            return_base64: true,
+            return_link: false,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.log(`[MEDIA-FALLBACK] UazAPI error: status=${response.status}, body=${errorText.substring(0, 200)}`);
+
+          // Retry on server errors (5xx) or rate limits (429)
+          if ((response.status >= 500 || response.status === 429) && attempt < MAX_RETRIES - 1) {
+            console.log(`[MEDIA-FALLBACK] Retrying in ${RETRY_DELAYS[attempt]}ms...`);
+            await sleep(RETRY_DELAYS[attempt]);
+            continue;
+          }
+
+          // If we got a 404 on this baseUrl, try the next baseUrl.
+          if (response.status === 404) break;
+
+          return null;
+        }
+
+        const result = await response.json();
+
+        if (result.base64Data && result.mimetype) {
+          console.log(`[MEDIA-FALLBACK] UazAPI Success! mimetype=${result.mimetype}, size=${result.base64Data.length} chars`);
+          return { base64: result.base64Data, mimetype: result.mimetype };
+        }
+
+        console.log(`[MEDIA-FALLBACK] No base64Data in response:`, JSON.stringify(result).substring(0, 200));
+        return null;
+      } catch (err) {
+        console.error(`[MEDIA-FALLBACK] UazAPI Attempt ${attempt + 1} error:`, err);
+        if (attempt < MAX_RETRIES - 1) {
           console.log(`[MEDIA-FALLBACK] Retrying in ${RETRY_DELAYS[attempt]}ms...`);
           await sleep(RETRY_DELAYS[attempt]);
-          continue;
         }
-        return null;
-      }
-      
-      const result = await response.json();
-      
-      if (result.base64Data && result.mimetype) {
-        console.log(`[MEDIA-FALLBACK] UazAPI Success! mimetype=${result.mimetype}, size=${result.base64Data.length} chars`);
-        return { base64: result.base64Data, mimetype: result.mimetype };
-      }
-      
-      console.log(`[MEDIA-FALLBACK] No base64Data in response:`, JSON.stringify(result).substring(0, 200));
-      return null;
-    } catch (err) {
-      console.error(`[MEDIA-FALLBACK] UazAPI Attempt ${attempt + 1} error:`, err);
-      if (attempt < MAX_RETRIES - 1) {
-        console.log(`[MEDIA-FALLBACK] Retrying in ${RETRY_DELAYS[attempt]}ms...`);
-        await sleep(RETRY_DELAYS[attempt]);
       }
     }
   }
-  
+
   return null;
 };
 
@@ -272,7 +298,7 @@ serve(async (req) => {
 
     // Need remote_jid and remote_message_id to fetch from API
     const remoteJid = contact.remote_jid || `${contact.phone}@s.whatsapp.net`;
-    const remoteMessageId = message.remote_message_id;
+    const remoteMessageId = normalizeRemoteMessageId(message.remote_message_id);
 
     if (!remoteMessageId) {
       console.log(`[MEDIA-FALLBACK] No remote_message_id for message: ${messageId}`);
