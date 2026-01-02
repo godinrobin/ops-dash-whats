@@ -742,14 +742,58 @@ serve(async (req) => {
 
     // Handle messages.upsert event (new incoming message)
     // UazAPI uses event: "messages" with payload directly containing message fields (chatid, sender, text, etc.)
+    // Some UazAPI setups also send chat list updates to /chats (addUrlEvents=true). We normalize /chats to the same message pipeline.
     // Evolution API uses event: "messages.upsert" with data.key structure
-    if (event === 'messages.upsert' || event === 'message' || event === 'MESSAGES_UPSERT' || event === 'messages') {
-      
+    if (
+      event === 'messages.upsert' ||
+      event === 'message' ||
+      event === 'MESSAGES_UPSERT' ||
+      event === 'messages' ||
+      event === 'chats'
+    ) {
+
       // DETECT UAZAPI FORMAT
       // UazAPI can send the message either:
       // 1) directly in the payload: { chatid, sender, text, ... }
       // 2) nested under payload.message: { message: { chatid, sender, text, ... }, chat: {...}, instanceName, ... }
+      // 3) chat list update event (/chats): payload.chat.wa_* fields (last message preview)
+
+      const chatsCandidate = (() => {
+        if (event !== 'chats') return null;
+        const chat = payload?.chat;
+        const chatid = chat?.wa_chatid || chat?.wa_chatId;
+        if (!chatid) return null;
+
+        const text = String(chat?.wa_lastMessageTextVote ?? chat?.wa_lastMessageText ?? '').trim();
+        if (!text) return null;
+
+        const ownerRaw = String(payload?.owner ?? chat?.owner ?? '');
+        const ownerPhone = ownerRaw.replace(/\D/g, '');
+
+        const senderRaw = String(chat?.wa_lastMessageSender ?? '');
+        const senderPhone = senderRaw.split('@')[0].split(':')[0].replace(/\D/g, '');
+
+        const fromMe = !!ownerPhone && !!senderPhone && senderPhone === ownerPhone;
+        const ts = Number(chat?.wa_lastMsgTimestamp ?? Date.now());
+        const fastId = String(chat?.wa_fastid ?? chatid);
+
+        return {
+          chatid: String(chatid),
+          sender: senderRaw,
+          senderName: String(chat?.wa_contactName || chat?.wa_name || chat?.name || ''),
+          text,
+          messageType: String(chat?.wa_lastMessageType || 'conversation'),
+          fromMe,
+          messageid: `chat:${fastId}:${ts}`,
+          messageTimestamp: ts,
+          isGroup: String(chatid).includes('@g.us') || chat?.wa_isGroup === true,
+          wasSentByApi: false,
+          fileURL: '',
+        };
+      })();
+
       const uazCandidate =
+        chatsCandidate ||
         (payload && payload.chatid ? payload : null) ||
         (payload && payload.message && payload.message.chatid ? payload.message : null) ||
         (data && data.chatid ? data : null) ||

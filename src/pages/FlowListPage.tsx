@@ -38,6 +38,11 @@ const FlowListPage = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [flowToDelete, setFlowToDelete] = useState<string | null>(null);
 
+  const getEffectiveAssignedInstanceIds = (assigned: string[] | null | undefined) => {
+    if (assigned && assigned.length > 0) return assigned;
+    return instances.map((i) => i.id);
+  };
+
   useEffect(() => {
     if (user) {
       fetchInstances();
@@ -155,7 +160,7 @@ const FlowListPage = () => {
   const openInstancesDialog = (flowId: string) => {
     const flow = flows.find(f => f.id === flowId);
     setSelectedFlowId(flowId);
-    setSelectedInstances(flow?.assigned_instances || []);
+    setSelectedInstances(getEffectiveAssignedInstanceIds(flow?.assigned_instances || []));
     setShowInstancesDialog(true);
   };
 
@@ -378,18 +383,37 @@ const FlowListPage = () => {
                   )}
 
                   {/* Show assigned instances */}
-                  <div className="flex flex-wrap items-center gap-1 mb-4">
-                    {flow.assigned_instances && flow.assigned_instances.length > 0 ? (
-                      <>
+                  {(() => {
+                    const effectiveIds = getEffectiveAssignedInstanceIds(flow.assigned_instances || []);
+
+                    if (!effectiveIds.length) {
+                      return (
+                        <div className="flex flex-wrap items-center gap-1 mb-4">
+                          <span className="text-xs text-muted-foreground">Nenhum número conectado</span>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="flex flex-wrap items-center gap-1 mb-4">
                         <Smartphone className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">
-                          {flow.assigned_instances.length} número(s)
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Todos os números</span>
-                    )}
-                  </div>
+                        {effectiveIds.slice(0, 3).map((id) => {
+                          const inst = instances.find((i) => i.id === id);
+                          if (!inst) return null;
+                          return (
+                            <Badge key={id} variant="secondary" className="text-xs">
+                              {inst.label || inst.instance_name}
+                            </Badge>
+                          );
+                        })}
+                        {effectiveIds.length > 3 && (
+                          <Badge variant="secondary" className="text-xs">
+                            +{effectiveIds.length - 3}
+                          </Badge>
+                        )}
+                      </div>
+                    );
+                  })()}
                   
                   <div className="flex items-center gap-2">
                     <Button 
