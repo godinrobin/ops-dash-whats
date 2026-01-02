@@ -9,6 +9,41 @@ export const useInboxMessages = (contactId: string | null) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const [realtimeSubscribed, setRealtimeSubscribed] = useState(false);
+
+  const normalizeRemoteMessageId = (id: any): string | null => {
+    if (!id) return null;
+    const trimmed = String(id).trim();
+    if (!trimmed) return null;
+    if (trimmed.includes(':')) {
+      const parts = trimmed.split(':').filter(Boolean);
+      const last = parts[parts.length - 1];
+      if (last && last.length >= 8) return last;
+    }
+    return trimmed;
+  };
+
+  const statusRank = (status: any): number => {
+    switch (String(status || '').toLowerCase()) {
+      case 'read':
+        return 6;
+      case 'delivered':
+        return 5;
+      case 'sent':
+        return 4;
+      case 'received':
+        return 3;
+      case 'pending':
+        return 2;
+      case 'failed':
+        return 1;
+      default:
+        return 0;
+    }
+  };
+
+  const sortByCreatedAtAsc = (arr: InboxMessage[]) =>
+    [...arr].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
   const fetchMessages = useCallback(async () => {
     if (!user || !contactId) {
@@ -26,29 +61,39 @@ export const useInboxMessages = (contactId: string | null) => {
         .order('created_at', { ascending: true });
 
       if (fetchError) throw fetchError;
-      
-      // Deduplicate by id and remote_message_id before setting state
-      const uniqueMessages = new Map<string, any>();
-      const seenRemoteIds = new Set<string>();
-      
+
+      // Deduplicate visually by normalized remote_message_id (and keep the best status)
+      const byKey = new Map<string, any>();
+
       for (const msg of data || []) {
-        // Skip if we already have this remote_message_id
-        if (msg.remote_message_id) {
-          if (seenRemoteIds.has(msg.remote_message_id)) continue;
-          seenRemoteIds.add(msg.remote_message_id);
+        const normalizedRemoteId = normalizeRemoteMessageId((msg as any).remote_message_id);
+        const key = normalizedRemoteId || (msg as any).id;
+        const existing = byKey.get(key);
+
+        if (!existing) {
+          byKey.set(key, msg);
+          continue;
         }
-        // Use id as the unique key
-        if (!uniqueMessages.has(msg.id)) {
-          uniqueMessages.set(msg.id, msg);
+
+        const existingRank = statusRank((existing as any).status);
+        const nextRank = statusRank((msg as any).status);
+        const existingCreated = new Date((existing as any).created_at).getTime();
+        const nextCreated = new Date((msg as any).created_at).getTime();
+
+        // Keep the higher status; if tie, keep the newest created_at
+        if (nextRank > existingRank || (nextRank === existingRank && nextCreated > existingCreated)) {
+          byKey.set(key, msg);
         }
       }
-      
-      setMessages(Array.from(uniqueMessages.values()).map(msg => ({
+
+      const next = Array.from(byKey.values()).map((msg: any) => ({
         ...msg,
         direction: msg.direction as 'inbound' | 'outbound',
         message_type: msg.message_type as InboxMessage['message_type'],
-        status: msg.status as InboxMessage['status']
-      })));
+        status: msg.status as InboxMessage['status'],
+      }));
+
+      setMessages(sortByCreatedAtAsc(next));
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -69,11 +114,13 @@ export const useInboxMessages = (contactId: string | null) => {
       channelRef.current = null;
     }
 
+    setRealtimeSubscribed(false);
+
     if (!user || !contactId) return;
 
     const channelName = `inbox-messages-${contactId}-${Date.now()}`;
     console.log(`Subscribing to realtime channel: ${channelName}`);
-    
+
     const channel = supabase
       .channel(channelName)
       .on(
@@ -87,32 +134,49 @@ export const useInboxMessages = (contactId: string | null) => {
         (payload) => {
           console.log('Realtime INSERT received:', payload);
           const newMessage = payload.new as any;
-          
-          // Check if message already exists to avoid duplicates (by id OR by remote_message_id)
-          setMessages(prev => {
-            const existsById = prev.some(m => m.id === newMessage.id);
-            if (existsById) {
-              console.log('Message already exists (by id), skipping duplicate');
-              return prev;
-            }
-            
-            // Also check by remote_message_id if present
-            if (newMessage.remote_message_id) {
-              const existsByRemoteId = prev.some(
-                m => m.remote_message_id && m.remote_message_id === newMessage.remote_message_id
+          const newRemoteNorm = normalizeRemoteMessageId(newMessage.remote_message_id);
+
+          setMessages((prev) => {
+            // Skip if same row id
+            if (prev.some((m) => m.id === newMessage.id)) return prev;
+
+            // If it matches an existing message by normalized remote id, merge visually (keep best status)
+            if (newRemoteNorm) {
+              const idx = prev.findIndex(
+                (m) => normalizeRemoteMessageId((m as any).remote_message_id) === newRemoteNorm
               );
-              if (existsByRemoteId) {
-                console.log('Message already exists (by remote_message_id), skipping duplicate');
-                return prev;
+
+              if (idx !== -1) {
+                const existing: any = prev[idx];
+                const existingRank = statusRank(existing.status);
+                const nextRank = statusRank(newMessage.status);
+
+                const nextItem =
+                  nextRank > existingRank
+                    ? { ...existing, ...newMessage }
+                    : { ...newMessage, ...existing };
+
+                const merged = {
+                  ...nextItem,
+                  direction: nextItem.direction as 'inbound' | 'outbound',
+                  message_type: nextItem.message_type as InboxMessage['message_type'],
+                  status: nextItem.status as InboxMessage['status'],
+                } as InboxMessage;
+
+                const next = [...prev];
+                next[idx] = merged;
+                return sortByCreatedAtAsc(next);
               }
             }
-            
-            return [...prev, {
+
+            const appended = {
               ...newMessage,
               direction: newMessage.direction as 'inbound' | 'outbound',
               message_type: newMessage.message_type as InboxMessage['message_type'],
-              status: newMessage.status as InboxMessage['status']
-            }];
+              status: newMessage.status as InboxMessage['status'],
+            } as InboxMessage;
+
+            return sortByCreatedAtAsc([...prev, appended]);
           });
         }
       )
@@ -127,24 +191,32 @@ export const useInboxMessages = (contactId: string | null) => {
         (payload) => {
           console.log('Realtime UPDATE received:', payload);
           const updated = payload.new as any;
-          setMessages(prev => 
-            prev.map(m => m.id === updated.id ? {
-              ...updated,
-              direction: updated.direction as 'inbound' | 'outbound',
-              message_type: updated.message_type as InboxMessage['message_type'],
-              status: updated.status as InboxMessage['status']
-            } : m)
+          setMessages((prev) =>
+            sortByCreatedAtAsc(
+              prev.map((m) =>
+                m.id === updated.id
+                  ? ({
+                      ...updated,
+                      direction: updated.direction as 'inbound' | 'outbound',
+                      message_type: updated.message_type as InboxMessage['message_type'],
+                      status: updated.status as InboxMessage['status'],
+                    } as InboxMessage)
+                  : m
+              )
+            )
           );
         }
       )
       .subscribe((status) => {
         console.log(`Realtime subscription status for ${channelName}:`, status);
+        setRealtimeSubscribed(status === 'SUBSCRIBED');
       });
 
     channelRef.current = channel;
 
     return () => {
       console.log(`Cleaning up realtime channel: ${channelName}`);
+      setRealtimeSubscribed(false);
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
@@ -152,10 +224,11 @@ export const useInboxMessages = (contactId: string | null) => {
     };
   }, [user, contactId]);
 
-  // Fallback polling: pulls latest inbound messages from Evolution when webhook can't be configured
+  // Fallback polling: pulls latest inbound messages from phone when realtime/webhook can't be configured
   // Otimizado: poll a cada 15s, desativa quando tab não visível
   useEffect(() => {
-    if (!user || !contactId) return;
+    // If realtime is active, don't poll (polling can cause visual duplicates/race conditions)
+    if (!user || !contactId || realtimeSubscribed) return;
 
     let cancelled = false;
     let inFlight = false;
@@ -171,7 +244,7 @@ export const useInboxMessages = (contactId: string | null) => {
     const handleVisibilityChange = () => {
       isTabVisible = document.visibilityState === 'visible';
     };
-    
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     const tick = async () => {
@@ -215,10 +288,10 @@ export const useInboxMessages = (contactId: string | null) => {
       }
     };
 
-    // Trigger initial sync after 1s delay
-    const initialTimeout = setTimeout(tick, 1000);
-    
-    // Poll every 15 seconds (otimizado de 5s para 15s)
+    // Give realtime a chance to subscribe before starting polling
+    const initialTimeout = setTimeout(tick, 4000);
+
+    // Poll every 15 seconds
     intervalId = setInterval(tick, 15000);
 
     return () => {
@@ -226,7 +299,7 @@ export const useInboxMessages = (contactId: string | null) => {
       stopPolling();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [user, contactId, fetchMessages]);
+  }, [user, contactId, fetchMessages, realtimeSubscribed]);
 
 
   const sendMessage = useCallback(async (content: string, messageType: string = 'text', mediaUrl?: string) => {

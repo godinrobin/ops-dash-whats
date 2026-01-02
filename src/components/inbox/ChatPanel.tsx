@@ -63,6 +63,66 @@ interface ChatPanelProps {
   onContactDeleted?: () => void;
 }
 
+const normalizeRemoteMessageId = (id: any): string | null => {
+  if (!id) return null;
+  const trimmed = String(id).trim();
+  if (!trimmed) return null;
+  if (trimmed.includes(':')) {
+    const parts = trimmed.split(':').filter(Boolean);
+    const last = parts[parts.length - 1];
+    if (last && last.length >= 8) return last;
+  }
+  return trimmed;
+};
+
+const statusRank = (status: any): number => {
+  switch (String(status || '').toLowerCase()) {
+    case 'read':
+      return 6;
+    case 'delivered':
+      return 5;
+    case 'sent':
+      return 4;
+    case 'received':
+      return 3;
+    case 'pending':
+      return 2;
+    case 'failed':
+      return 1;
+    default:
+      return 0;
+  }
+};
+
+const dedupeMessagesForUI = (messages: InboxMessage[]) => {
+  const byKey = new Map<string, InboxMessage>();
+
+  for (const m of messages) {
+    const norm = normalizeRemoteMessageId((m as any).remote_message_id);
+    const key = norm || m.id;
+    const existing = byKey.get(key);
+
+    if (!existing) {
+      byKey.set(key, m);
+      continue;
+    }
+
+    const existingRank = statusRank((existing as any).status);
+    const nextRank = statusRank((m as any).status);
+    const existingCreated = new Date(existing.created_at).getTime();
+    const nextCreated = new Date(m.created_at).getTime();
+
+    if (nextRank > existingRank || (nextRank === existingRank && nextCreated > existingCreated)) {
+      byKey.set(key, m);
+    }
+  }
+
+  return Array.from(byKey.values()).sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  );
+};
+
+
 interface Instance {
   id: string;
   instance_name: string;
@@ -428,6 +488,8 @@ export const ChatPanel = ({
     ? instanceColorMap.get(contact.instance_id) || 'bg-muted'
     : 'bg-muted';
 
+  const visibleMessages = useMemo(() => dedupeMessagesForUI(messages), [messages]);
+
   return (
     <div className="flex-1 flex flex-col bg-background">
       {/* Header */}
@@ -639,7 +701,7 @@ export const ChatPanel = ({
 
       {/* Messages Area */}
       <ScrollArea className="flex-1 p-4" ref={scrollRef}>
-        {loading && messages.length === 0 ? (
+        {loading && visibleMessages.length === 0 ? (
           <div className="space-y-4">
             {[1, 2, 3, 4].map((i) => (
               <div key={i} className={`flex ${i % 2 === 0 ? 'justify-end' : 'justify-start'}`}>
@@ -647,7 +709,7 @@ export const ChatPanel = ({
               </div>
             ))}
           </div>
-        ) : messages.length === 0 ? (
+        ) : visibleMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
             <MessageSquare className="h-12 w-12 mb-4" />
             <p>Nenhuma mensagem ainda</p>
@@ -655,7 +717,7 @@ export const ChatPanel = ({
           </div>
         ) : (
           <div className="space-y-2">
-            {messages.map((message) => (
+            {visibleMessages.map((message) => (
               <ChatMessage key={message.id} message={message} />
             ))}
           </div>
