@@ -759,13 +759,57 @@ serve(async (req) => {
       // 3) chat list update event (/chats): payload.chat.wa_* fields (last message preview)
 
       const chatsCandidate = (() => {
-        // SKIP chats event entirely - it sends a synthetic messageid that causes duplicates
-        // The real message will arrive via the 'messages' event with the correct ID
-        if (event === 'chats') {
-          console.log('[UAZAPI-WEBHOOK] Skipping chats event to prevent duplicate messages');
-          return null;
-        }
-        return null;
+        // UazAPI chats event contains the LAST message preview (chat.wa_* fields)
+        // In some setups, this is the only place where we reliably receive the text + wa_chatid.
+        // We convert it into a synthetic "message" object so the inbox + keyword triggers work.
+
+        const hasDirectChatId =
+          !!((payload as any)?.chatid ||
+            (payload as any)?.message?.chatid ||
+            (data as any)?.chatid ||
+            (data as any)?.message?.chatid);
+
+        // Prefer the real message payload when available (avoid duplicates)
+        if (event !== 'chats' && hasDirectChatId) return null;
+
+        const chat = (payload as any)?.chat || (data as any)?.chat;
+        if (!chat || typeof chat !== 'object') return null;
+
+        const waChatId = String((chat as any).wa_chatid || '');
+        const lastText = String((chat as any).wa_lastMessageTextVote || '').trim();
+        const lastTsRaw = (chat as any).wa_lastMsgTimestamp;
+        const msgTs = typeof lastTsRaw === 'number' ? lastTsRaw : Number(lastTsRaw);
+
+        if (!waChatId.includes('@') || !lastText || !msgTs) return null;
+
+        // Skip group chats
+        if (waChatId.includes('@g.us') || (chat as any).wa_isGroup === true) return null;
+
+        const ownerDigits = String((payload as any)?.owner || (chat as any)?.owner || '').replace(/\D/g, '');
+        const lastSender = String((chat as any).wa_lastMessageSender || '');
+        const lastSenderDigits = lastSender.split('@')[0].replace(/\D/g, '');
+        const fromMe = ownerDigits ? lastSenderDigits === ownerDigits : false;
+
+        const msgId = `chat-${String((chat as any).wa_fastid || waChatId)}-${msgTs}-${fromMe ? 'out' : 'in'}`;
+
+        console.log('[UAZAPI-WEBHOOK] Using chats snapshot as message candidate', {
+          waChatId,
+          lastSender,
+          fromMe,
+          msgTs,
+        });
+
+        return {
+          chatid: waChatId,
+          sender: lastSender || waChatId,
+          senderName: String((chat as any).wa_contactName || (chat as any).wa_name || (chat as any).name || ''),
+          text: lastText,
+          messageType: String((chat as any).wa_lastMessageType || 'conversation'),
+          fromMe,
+          wasSentByApi: false,
+          messageTimestamp: msgTs,
+          messageid: msgId,
+        };
       })();
 
       const uazCandidate =
