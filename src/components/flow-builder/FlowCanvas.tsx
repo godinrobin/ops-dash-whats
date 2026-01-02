@@ -32,6 +32,9 @@ import { SetVariableNode } from './nodes/SetVariableNode';
 import { TagNode } from './nodes/TagNode';
 import { EndNode } from './nodes/EndNode';
 import { RandomizerNode } from './nodes/RandomizerNode';
+import { PaymentIdentifierNode } from './nodes/PaymentIdentifierNode';
+import { SendPixKeyNode } from './nodes/SendPixKeyNode';
+import { SendChargeNode } from './nodes/SendChargeNode';
 import { NodeSidebar } from './NodeSidebar';
 import { PropertiesPanel } from './PropertiesPanel';
 import { useFlowValidation } from './hooks/useFlowValidation';
@@ -56,6 +59,9 @@ const nodeTypes = {
   tag: TagNode,
   end: EndNode,
   randomizer: RandomizerNode,
+  paymentIdentifier: PaymentIdentifierNode,
+  sendPixKey: SendPixKeyNode,
+  sendCharge: SendChargeNode,
 };
 
 interface FlowCanvasProps {
@@ -219,6 +225,9 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
       tag: 'Adicionar Tag',
       end: 'Fim',
       randomizer: 'Randomizador',
+      paymentIdentifier: 'Identificar Pagamento',
+      sendPixKey: 'Enviar Chave PIX',
+      sendCharge: 'Enviar Cobrança',
     };
     return labels[type] || type;
   };
