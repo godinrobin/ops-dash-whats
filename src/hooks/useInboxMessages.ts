@@ -27,8 +27,23 @@ export const useInboxMessages = (contactId: string | null) => {
 
       if (fetchError) throw fetchError;
       
-      // Show ALL messages - don't filter empty ones (they may be placeholders for unsupported formats)
-      setMessages((data || []).map(msg => ({
+      // Deduplicate by id and remote_message_id before setting state
+      const uniqueMessages = new Map<string, any>();
+      const seenRemoteIds = new Set<string>();
+      
+      for (const msg of data || []) {
+        // Skip if we already have this remote_message_id
+        if (msg.remote_message_id) {
+          if (seenRemoteIds.has(msg.remote_message_id)) continue;
+          seenRemoteIds.add(msg.remote_message_id);
+        }
+        // Use id as the unique key
+        if (!uniqueMessages.has(msg.id)) {
+          uniqueMessages.set(msg.id, msg);
+        }
+      }
+      
+      setMessages(Array.from(uniqueMessages.values()).map(msg => ({
         ...msg,
         direction: msg.direction as 'inbound' | 'outbound',
         message_type: msg.message_type as InboxMessage['message_type'],
