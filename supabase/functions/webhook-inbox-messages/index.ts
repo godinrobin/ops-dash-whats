@@ -1231,8 +1231,13 @@ serve(async (req) => {
           console.log(`[TAG-WHATS-TRIGGER] Skipped: direction=${direction}, messageType=${messageType}`);
         }
         
-        // For inbound messages, check if we need to trigger a flow
-        if (direction === 'inbound' && !uazFromMe) {
+        // For inbound messages (or manual outbound), check if we need to trigger a flow
+        const shouldEvaluateFlowTriggers =
+          ((direction === 'inbound' && !uazFromMe) ||
+            (direction === 'outbound' && uazFromMe && !uazWasSentByApi)) &&
+          insertedMessage?.is_from_flow !== true;
+
+        if (shouldEvaluateFlowTriggers) {
           // Check if flow is paused for this contact
           if (contact.flow_paused === true) {
             console.log(`[UAZAPI-WEBHOOK] Flow is paused for contact ${contact.id}, skipping flow processing`);
@@ -1264,7 +1269,16 @@ serve(async (req) => {
                   const keywords = (flow.trigger_keywords as string[]) || [];
                   for (const kw of keywords) {
                     const kwStr = String(kw || '').trim();
-                    if (kwStr && lowerContent.includes(kwStr.toLowerCase())) {
+                    const kwLower = kwStr.toLowerCase();
+
+                    // Inbound: allow "contains" (more forgiving)
+                    // Manual outbound: require exact match (prevents loops)
+                    const matchesKeyword =
+                      direction === 'outbound'
+                        ? lowerContent === kwLower
+                        : lowerContent.includes(kwLower);
+
+                    if (kwLower && matchesKeyword) {
                       matchedFlow = flow;
                       matchedKeyword = kwStr;
                       break;
@@ -1379,11 +1393,24 @@ serve(async (req) => {
 
                   if (newSession && !newSessionError) {
                     try {
-                      const { error: invokeError } = await supabaseClient.functions.invoke('process-inbox-flow', {
-                        body: { sessionId: newSession.id },
+                      const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+                      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+
+                      const processResponse = await fetch(processUrl, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${serviceKey}`,
+                          'apikey': serviceKey,
+                        },
+                        body: JSON.stringify({ sessionId: newSession.id }),
                       });
-                      if (invokeError) {
-                        console.error('[UAZAPI-WEBHOOK] Error invoking keyword flow (pre-check):', invokeError);
+
+                      const respText = await processResponse.text();
+                      console.log(`[UAZAPI-WEBHOOK] process-inbox-flow(keyword) status=${processResponse.status} body=${respText.substring(0, 200)}`);
+
+                      if (!processResponse.ok) {
+                        console.error('[UAZAPI-WEBHOOK] Error invoking keyword flow (pre-check): non-2xx response');
                       } else {
                         console.log(`[UAZAPI-WEBHOOK] Keyword flow triggered for session ${newSession.id}`);
                       }
