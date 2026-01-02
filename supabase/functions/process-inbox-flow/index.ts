@@ -530,14 +530,24 @@ serve(async (req) => {
             // Send text message
             const message = replaceVariables(currentNode.data.message as string || '', variables);
             if (instanceName && phone && message) {
-              // Check if presence (typing) should be shown before sending (Evolution only)
-              if (currentNode.data.showPresence && apiProvider !== 'uazapi') {
+              // Calculate delay for presence/typing indicator
+              let textDelayMs = 0;
+              if (currentNode.data.showPresence) {
                 const presenceDelaySeconds = (currentNode.data.presenceDelay as number) || 3;
-                await sendPresence(effectiveBaseUrl, effectiveApiKey, instanceName, phone, 'composing', presenceDelaySeconds * 1000);
-                processedActions.push(`Showed typing for ${presenceDelaySeconds}s`);
+                textDelayMs = presenceDelaySeconds * 1000;
+                
+                // For Evolution API, send presence separately then wait
+                if (apiProvider !== 'uazapi') {
+                  await sendPresence(effectiveBaseUrl, effectiveApiKey, instanceName, phone, 'composing', textDelayMs);
+                  processedActions.push(`Showed typing for ${presenceDelaySeconds}s`);
+                } else {
+                  processedActions.push(`UazAPI typing delay: ${presenceDelaySeconds}s`);
+                }
               }
               
-              const sendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, message, 'text', undefined, undefined, apiProvider, instanceUazapiToken);
+              // For UazAPI, pass delay parameter; for Evolution, delay was already handled
+              const uazapiDelay = apiProvider === 'uazapi' ? textDelayMs : 0;
+              const sendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, message, 'text', undefined, undefined, apiProvider, instanceUazapiToken, uazapiDelay);
               
               // Save message with correct status based on send result
               const messageStatus = sendResult.ok ? 'sent' : 'failed';
@@ -592,19 +602,29 @@ serve(async (req) => {
             console.log(`[${runId}] phone: ${phone}`);
             
             if (instanceName && phone && mediaUrl) {
-              // Check if presence should be shown before sending (audio = recording, others = composing) - Evolution only
-              if (currentNode.data.showPresence && apiProvider !== 'uazapi') {
+              // Calculate delay for presence indicator
+              let mediaDelayMs = 0;
+              if (currentNode.data.showPresence) {
                 const presenceDelaySeconds = (currentNode.data.presenceDelay as number) || 3;
+                mediaDelayMs = presenceDelaySeconds * 1000;
                 const presenceType = currentNode.type === 'audio' ? 'recording' : 'composing';
-                await sendPresence(effectiveBaseUrl, effectiveApiKey, instanceName, phone, presenceType, presenceDelaySeconds * 1000);
-                processedActions.push(`Showed ${presenceType} for ${presenceDelaySeconds}s`);
+                
+                // For Evolution API, send presence separately then wait
+                if (apiProvider !== 'uazapi') {
+                  await sendPresence(effectiveBaseUrl, effectiveApiKey, instanceName, phone, presenceType, mediaDelayMs);
+                  processedActions.push(`Showed ${presenceType} for ${presenceDelaySeconds}s`);
+                } else {
+                  processedActions.push(`UazAPI ${currentNode.type === 'audio' ? 'recording' : 'typing'} delay: ${presenceDelaySeconds}s`);
+                }
               }
               
               console.log(`[${runId}] Sending ${currentNode.type} message via ${apiProvider}...`);
               // For images/videos, send caption. For documents, send fileName.
               // DO NOT send fileName as caption for image/video - that causes the filename to appear to the user
               const contentToSend = currentNode.type === 'document' ? fileName : caption;
-              const mediaSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, contentToSend, currentNode.type, mediaUrl, fileName, apiProvider, instanceUazapiToken);
+              // For UazAPI, pass delay parameter; for Evolution, delay was already handled
+              const uazapiMediaDelay = apiProvider === 'uazapi' ? mediaDelayMs : 0;
+              const mediaSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, contentToSend, currentNode.type, mediaUrl, fileName, apiProvider, instanceUazapiToken, uazapiMediaDelay);
               
               // Save message with correct status based on send result
               const mediaStatus = mediaSendResult.ok ? 'sent' : 'failed';
@@ -1411,7 +1431,8 @@ async function sendMessage(
   mediaUrl?: string,
   fileName?: string,
   apiProvider: string = 'evolution',
-  instanceToken?: string
+  instanceToken?: string,
+  delayMs: number = 0
 ): Promise<SendMessageResult> {
   const formattedPhone = phone.replace(/\D/g, '');
   
@@ -1422,31 +1443,35 @@ async function sendMessage(
   if (apiProvider === 'uazapi') {
     // UazAPI v2 (OpenAPI):
     // - Auth header: token (instance token)
-    // - Send text: POST /send/text with { number, text }
-    // - Send media: POST /send/media with { number, type, file, text?, docName? }
+    // - Send text: POST /send/text with { number, text, delay? }
+    // - Send media: POST /send/media with { number, type, file, text?, docName?, delay? }
+    // - delay is in milliseconds and shows "typing..." or "recording audio..." before sending
     authHeader = { 'token': instanceToken || apiKey };
+
+    // Base delay parameter - if delay > 0, include it to show presence status
+    const delayParam = delayMs > 0 ? { delay: delayMs } : {};
 
     switch (messageType) {
       case 'text':
         endpoint = `/send/text`;
-        body = { number: formattedPhone, text: content };
+        body = { number: formattedPhone, text: content, ...delayParam };
         break;
       case 'image':
         endpoint = `/send/media`;
-        body = { number: formattedPhone, type: 'image', file: mediaUrl, ...(content ? { text: content } : {}) };
+        body = { number: formattedPhone, type: 'image', file: mediaUrl, ...(content ? { text: content } : {}), ...delayParam };
         break;
       case 'audio':
-        // UazAPI uses 'ptt' (push-to-talk) for voice messages
+        // UazAPI uses 'ptt' (push-to-talk) for voice messages - shows "recording audio..."
         endpoint = `/send/media`;
-        body = { number: formattedPhone, type: 'ptt', file: mediaUrl };
+        body = { number: formattedPhone, type: 'ptt', file: mediaUrl, ...delayParam };
         break;
       case 'video':
         endpoint = `/send/media`;
-        body = { number: formattedPhone, type: 'video', file: mediaUrl, ...(content ? { text: content } : {}) };
+        body = { number: formattedPhone, type: 'video', file: mediaUrl, ...(content ? { text: content } : {}), ...delayParam };
         break;
       case 'document':
         endpoint = `/send/media`;
-        body = { number: formattedPhone, type: 'document', file: mediaUrl, docName: fileName || 'document', ...(content ? { text: content } : {}) };
+        body = { number: formattedPhone, type: 'document', file: mediaUrl, docName: fileName || 'document', ...(content ? { text: content } : {}), ...delayParam };
         break;
       default:
         console.log(`Unknown message type: ${messageType}`);
