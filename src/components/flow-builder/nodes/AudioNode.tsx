@@ -18,7 +18,7 @@ export const AudioNode = ({ id, data }: NodeProps) => {
           <div className="p-1.5 rounded bg-orange-500">
             <Mic className="h-3.5 w-3.5 text-white" />
           </div>
-          <span className="font-medium text-sm">Áudio</span>
+          <span className="font-medium text-sm text-card-foreground">Áudio</span>
           {nodeData.showPresence && (
             <div className="flex items-center gap-1 ml-auto" title={`Gravando por ${nodeData.presenceDelay || 3}s`}>
               <Radio className="h-3 w-3 text-orange-500" />

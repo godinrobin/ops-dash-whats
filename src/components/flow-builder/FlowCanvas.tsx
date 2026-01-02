@@ -334,15 +334,15 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
           onInit={onInit}
           nodeTypes={nodeTypes}
           fitView
-          className="bg-background"
+          colorMode="dark"
           proOptions={{ hideAttribution: true }}
           deleteKeyCode={['Backspace', 'Delete']}
           onEdgeClick={(_, edge) => {
             setEdges((eds) => eds.filter((e) => e.id !== edge.id));
           }}
         >
-          <Background variant={BackgroundVariant.Dots} gap={20} size={1} className="!bg-background" />
-          <Controls className="!bg-card !border-border !shadow-md" />
+          <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
+          <Controls />
         </ReactFlow>
       </div>
 

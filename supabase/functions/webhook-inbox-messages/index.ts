@@ -759,37 +759,13 @@ serve(async (req) => {
       // 3) chat list update event (/chats): payload.chat.wa_* fields (last message preview)
 
       const chatsCandidate = (() => {
-        if (event !== 'chats') return null;
-        const chat = payload?.chat;
-        const chatid = chat?.wa_chatid || chat?.wa_chatId;
-        if (!chatid) return null;
-
-        const text = String(chat?.wa_lastMessageTextVote ?? chat?.wa_lastMessageText ?? '').trim();
-        if (!text) return null;
-
-        const ownerRaw = String(payload?.owner ?? chat?.owner ?? '');
-        const ownerPhone = ownerRaw.replace(/\D/g, '');
-
-        const senderRaw = String(chat?.wa_lastMessageSender ?? '');
-        const senderPhone = senderRaw.split('@')[0].split(':')[0].replace(/\D/g, '');
-
-        const fromMe = !!ownerPhone && !!senderPhone && senderPhone === ownerPhone;
-        const ts = Number(chat?.wa_lastMsgTimestamp ?? Date.now());
-        const fastId = String(chat?.wa_fastid ?? chatid);
-
-        return {
-          chatid: String(chatid),
-          sender: senderRaw,
-          senderName: String(chat?.wa_contactName || chat?.wa_name || chat?.name || ''),
-          text,
-          messageType: String(chat?.wa_lastMessageType || 'conversation'),
-          fromMe,
-          messageid: `chat:${fastId}:${ts}`,
-          messageTimestamp: ts,
-          isGroup: String(chatid).includes('@g.us') || chat?.wa_isGroup === true,
-          wasSentByApi: false,
-          fileURL: '',
-        };
+        // SKIP chats event entirely - it sends a synthetic messageid that causes duplicates
+        // The real message will arrive via the 'messages' event with the correct ID
+        if (event === 'chats') {
+          console.log('[UAZAPI-WEBHOOK] Skipping chats event to prevent duplicate messages');
+          return null;
+        }
+        return null;
       })();
 
       const uazCandidate =
@@ -1044,26 +1020,77 @@ serve(async (req) => {
           }
         }
         
-        // Insert message (always use normalized ID)
+        // Insert message using upsert to handle duplicates gracefully
+        // The unique constraint on (contact_id, remote_message_id) will prevent true duplicates
         const direction = uazFromMe ? 'outbound' : 'inbound';
-        const { data: insertedMessage, error: msgError } = await supabaseClient
-          .from('inbox_messages')
-          .insert({
-            contact_id: contact.id,
-            instance_id: instanceId,
-            user_id: userId,
-            direction,
-            message_type: messageType,
-            content: uazText || null,
-            media_url: mediaUrl,
-            status: 'received',
-            remote_message_id: uazMessageIdNormalized || null,
-            is_from_flow: false,
-          })
-          .select()
-          .single();
+        
+        // If we have a remote_message_id, use upsert to avoid duplicates
+        let insertedMessage: any = null;
+        let msgError: any = null;
+        
+        if (uazMessageIdNormalized) {
+          // Use upsert with conflict handling on remote_message_id
+          const result = await supabaseClient
+            .from('inbox_messages')
+            .upsert({
+              contact_id: contact.id,
+              instance_id: instanceId,
+              user_id: userId,
+              direction,
+              message_type: messageType,
+              content: uazText || null,
+              media_url: mediaUrl,
+              status: 'received',
+              remote_message_id: uazMessageIdNormalized,
+              is_from_flow: false,
+            }, {
+              onConflict: 'contact_id,remote_message_id',
+              ignoreDuplicates: true,
+            })
+            .select()
+            .maybeSingle();
+          
+          insertedMessage = result.data;
+          msgError = result.error;
+          
+          // If no data returned due to ignoreDuplicates, this is a duplicate - skip
+          if (!insertedMessage && !msgError) {
+            console.log(`[UAZAPI-WEBHOOK] Duplicate message skipped (upsert): ${uazMessageIdNormalized}`);
+            return new Response(JSON.stringify({ success: true, skipped: true, reason: 'duplicate_upsert' }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        } else {
+          // No remote_message_id, just insert normally
+          const result = await supabaseClient
+            .from('inbox_messages')
+            .insert({
+              contact_id: contact.id,
+              instance_id: instanceId,
+              user_id: userId,
+              direction,
+              message_type: messageType,
+              content: uazText || null,
+              media_url: mediaUrl,
+              status: 'received',
+              remote_message_id: null,
+              is_from_flow: false,
+            })
+            .select()
+            .single();
+          
+          insertedMessage = result.data;
+          msgError = result.error;
+        }
         
         if (msgError) {
+          // Check if it's a duplicate key error - if so, skip gracefully
+          if (msgError.code === '23505' || msgError.message?.includes('duplicate') || msgError.message?.includes('unique')) {
+            console.log(`[UAZAPI-WEBHOOK] Duplicate message skipped: ${uazMessageIdNormalized}`);
+            return new Response(JSON.stringify({ success: true, skipped: true, reason: 'duplicate' }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
           console.error('[UAZAPI-WEBHOOK] Error inserting message:', msgError);
           return new Response(JSON.stringify({ success: false, error: 'Failed to insert message' }), {
             status: 500,

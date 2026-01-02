@@ -19,7 +19,7 @@ export const DocumentNode = ({ id, data }: NodeProps) => {
           <div className="p-1.5 rounded bg-red-500">
             <FileText className="h-3.5 w-3.5 text-white" />
           </div>
-          <span className="font-medium text-sm">Documento</span>
+          <span className="font-medium text-sm text-card-foreground">Documento</span>
         </div>
         {hasMedia ? (
           <div className="flex items-center gap-2 p-2 bg-muted/50 rounded">

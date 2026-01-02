@@ -17,7 +17,7 @@ export const TextNode = ({ id, data }: NodeProps) => {
           <div className="p-1.5 rounded bg-blue-500">
             <MessageSquare className="h-3.5 w-3.5 text-white" />
           </div>
-          <span className="font-medium text-sm">Texto</span>
+          <span className="font-medium text-sm text-card-foreground">Texto</span>
           {nodeData.showPresence && (
             <div className="flex items-center gap-1 ml-auto" title={`Digitando por ${nodeData.presenceDelay || 3}s`}>
               <Keyboard className="h-3 w-3 text-blue-500" />
