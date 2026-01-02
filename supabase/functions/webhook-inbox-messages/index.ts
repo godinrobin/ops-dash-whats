@@ -1128,7 +1128,109 @@ serve(async (req) => {
               // Get the current node to check if it's waiting for input
               const flowNodes = (activeSession.flow?.nodes || []) as Array<{ id: string; type: string; data: Record<string, unknown> }>;
               const currentNode = flowNodes.find((n: { id: string }) => n.id === activeSession.current_node_id);
-              
+
+              // Keyword trigger override: always restart from the beginning when a keyword is detected
+              const inboundText = (uazText || '').trim();
+              if (inboundText) {
+                const { data: flowsForKeyword } = await supabaseClient
+                  .from('inbox_flows')
+                  .select('*')
+                  .eq('user_id', userId)
+                  .eq('is_active', true)
+                  .eq('trigger_type', 'keyword')
+                  .order('priority', { ascending: false });
+
+                const lowerContent = inboundText.toLowerCase();
+                let keywordFlowToTrigger: any | null = null;
+
+                for (const flow of flowsForKeyword || []) {
+                  const assignedInstances = (flow.assigned_instances as string[]) || [];
+                  if (assignedInstances.length > 0 && !assignedInstances.includes(instanceId)) continue;
+
+                  const keywords = (flow.trigger_keywords as string[]) || [];
+                  for (const kw of keywords) {
+                    const kwStr = String(kw || '').trim();
+                    if (kwStr && lowerContent.includes(kwStr.toLowerCase())) {
+                      keywordFlowToTrigger = flow;
+                      console.log(`[UAZAPI-WEBHOOK] Keyword match -> restarting flow "${flow.name}" by "${kwStr}"`);
+                      break;
+                    }
+                  }
+                  if (keywordFlowToTrigger) break;
+                }
+
+                if (keywordFlowToTrigger) {
+                  // Cancel all active sessions for this contact and start fresh
+                  const { data: sessionsToCancel } = await supabaseClient
+                    .from('inbox_flow_sessions')
+                    .select('id')
+                    .eq('contact_id', contact.id)
+                    .eq('status', 'active');
+
+                  if (sessionsToCancel?.length) {
+                    await supabaseClient
+                      .from('inbox_flow_delay_jobs')
+                      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+                      .in('session_id', sessionsToCancel.map((s: any) => s.id))
+                      .in('status', ['pending', 'scheduled']);
+
+                    await supabaseClient
+                      .from('inbox_flow_sessions')
+                      .update({ status: 'completed', updated_at: new Date().toISOString() })
+                      .in('id', sessionsToCancel.map((s: any) => s.id));
+
+                    console.log(`[UAZAPI-WEBHOOK] Canceled ${sessionsToCancel.length} active session(s) for keyword restart`);
+                  }
+
+                  const { data: newSession, error: newSessionError } = await supabaseClient
+                    .from('inbox_flow_sessions')
+                    .insert({
+                      flow_id: keywordFlowToTrigger.id,
+                      contact_id: contact.id,
+                      instance_id: instanceId,
+                      user_id: userId,
+                      current_node_id: 'start-1',
+                      variables: {
+                        nome: contact.name || '',
+                        telefone: phone,
+                        resposta: inboundText,
+                        lastMessage: inboundText,
+                        ultima_mensagem: inboundText,
+                        contactName: contact.name || phone,
+                      },
+                      status: 'active',
+                      processing: false,
+                      processing_started_at: null,
+                    })
+                    .select()
+                    .single();
+
+                  if (newSession && !newSessionError) {
+                    try {
+                      const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+                      await fetch(processUrl, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                        },
+                        body: JSON.stringify({ sessionId: newSession.id }),
+                      });
+                      console.log(`[UAZAPI-WEBHOOK] Keyword flow triggered for session ${newSession.id}`);
+                    } catch (e) {
+                      console.error('[UAZAPI-WEBHOOK] Error invoking keyword flow:', e);
+                    }
+                  } else if (newSessionError) {
+                    console.error('[UAZAPI-WEBHOOK] Error creating keyword session:', newSessionError);
+                  }
+
+                  return new Response(
+                    JSON.stringify({ success: true, messageId: insertedMessage.id, keywordTriggered: true }),
+                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                  );
+                }
+              }
+
               // Check if session is locked
               if (activeSession.processing) {
                 const lockAge = activeSession.processing_started_at 
@@ -1237,91 +1339,184 @@ serve(async (req) => {
                 console.log(`[UAZAPI-WEBHOOK] Active session exists but not waiting for input (node: ${currentNode?.type || 'unknown'})`);
               }
             } else {
-              // Check for flows to trigger based on keywords
-              console.log(`[UAZAPI-WEBHOOK] No active session, checking for flow triggers`);
-              
-              const { data: flows } = await supabaseClient
+              // Check triggers (keyword has priority)
+              console.log(`[UAZAPI-WEBHOOK] Checking for flow triggers`);
+
+              const inboundText = (uazText || '').trim();
+              const hasInboundText = inboundText.length > 0;
+
+              const { data: flows, error: flowsError } = await supabaseClient
                 .from('inbox_flows')
                 .select('*')
                 .eq('user_id', userId)
                 .eq('is_active', true)
                 .order('priority', { ascending: false });
-              
-              if (flows && flows.length > 0) {
+
+              if (flowsError) {
+                console.error('[UAZAPI-WEBHOOK] Error fetching flows:', flowsError);
+              }
+
+              if (flows && flows.length > 0 && hasInboundText) {
+                const lowerContent = inboundText.toLowerCase();
+
+                // 1) Keyword flows: ALWAYS restart from beginning when keyword is detected
+                let keywordFlowToTrigger: any | null = null;
+                let matchedKeyword: string | null = null;
+
                 for (const flow of flows) {
-                  const assignedInstances = flow.assigned_instances as string[] || [];
-                  if (assignedInstances.length > 0 && !assignedInstances.includes(instanceId)) {
+                  if (flow.trigger_type !== 'keyword') continue;
+
+                  const assignedInstances = (flow.assigned_instances as string[]) || [];
+                  if (assignedInstances.length > 0 && !assignedInstances.includes(instanceId)) continue;
+
+                  const keywords = (flow.trigger_keywords as string[]) || [];
+                  for (const kw of keywords) {
+                    const kwStr = String(kw || '').trim();
+                    if (kwStr && lowerContent.includes(kwStr.toLowerCase())) {
+                      keywordFlowToTrigger = flow;
+                      matchedKeyword = kwStr;
+                      break;
+                    }
+                  }
+                  if (keywordFlowToTrigger) break;
+                }
+
+                if (keywordFlowToTrigger) {
+                  console.log(`[UAZAPI-WEBHOOK] Keyword trigger matched: flow="${keywordFlowToTrigger.name}", keyword="${matchedKeyword}"`);
+
+                  // Cancel ANY active sessions for this contact (keyword triggers always restart)
+                  const { data: sessionsToCancel } = await supabaseClient
+                    .from('inbox_flow_sessions')
+                    .select('id')
+                    .eq('contact_id', contact.id)
+                    .eq('status', 'active');
+
+                  if (sessionsToCancel?.length) {
+                    await supabaseClient
+                      .from('inbox_flow_delay_jobs')
+                      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+                      .in('session_id', sessionsToCancel.map((s: any) => s.id))
+                      .in('status', ['pending', 'scheduled']);
+
+                    await supabaseClient
+                      .from('inbox_flow_sessions')
+                      .update({ status: 'completed', updated_at: new Date().toISOString() })
+                      .in('id', sessionsToCancel.map((s: any) => s.id));
+
+                    console.log(`[UAZAPI-WEBHOOK] Canceled ${sessionsToCancel.length} active session(s) for keyword restart`);
+                  }
+
+                  const { data: newSession, error: newSessionError } = await supabaseClient
+                    .from('inbox_flow_sessions')
+                    .insert({
+                      flow_id: keywordFlowToTrigger.id,
+                      contact_id: contact.id,
+                      instance_id: instanceId,
+                      user_id: userId,
+                      current_node_id: 'start-1',
+                      variables: {
+                        nome: contact.name || '',
+                        telefone: phone,
+                        resposta: inboundText,
+                        lastMessage: inboundText,
+                        ultima_mensagem: inboundText,
+                        contactName: contact.name || phone,
+                      },
+                      status: 'active',
+                      processing: false,
+                      processing_started_at: null,
+                    })
+                    .select()
+                    .single();
+
+                  if (newSession && !newSessionError) {
+                    try {
+                      const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+                      await fetch(processUrl, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                        },
+                        body: JSON.stringify({ sessionId: newSession.id }),
+                      });
+                      console.log(`[UAZAPI-WEBHOOK] Keyword flow triggered for session ${newSession.id}`);
+                    } catch (e) {
+                      console.error('[UAZAPI-WEBHOOK] Error invoking keyword flow:', e);
+                    }
+                  } else if (newSessionError) {
+                    console.error('[UAZAPI-WEBHOOK] Error creating keyword session:', newSessionError);
+                  }
+
+                  return;
+                }
+
+                // 2) "All messages" flows: trigger only ONCE per contact (until contact is deleted)
+                for (const flow of flows) {
+                  if (flow.trigger_type !== 'all') continue;
+
+                  const assignedInstances = (flow.assigned_instances as string[]) || [];
+                  if (assignedInstances.length > 0 && !assignedInstances.includes(instanceId)) continue;
+
+                  // Only trigger if this contact has NEVER started this flow before
+                  const { data: existingSession } = await supabaseClient
+                    .from('inbox_flow_sessions')
+                    .select('id')
+                    .eq('contact_id', contact.id)
+                    .eq('flow_id', flow.id)
+                    .limit(1)
+                    .maybeSingle();
+
+                  if (existingSession) {
+                    console.log(`[UAZAPI-WEBHOOK] All-messages flow already triggered once (flow="${flow.name}") -> skipping`);
                     continue;
                   }
-                  
-                  let shouldTrigger = false;
-                  
-                  if (flow.trigger_type === 'all') {
-                    // Count messages to check if first
-                    const { count } = await supabaseClient
-                      .from('inbox_messages')
-                      .select('*', { count: 'exact', head: true })
-                      .eq('contact_id', contact.id)
-                      .eq('direction', 'inbound');
-                    
-                    if ((count || 0) <= 1) {
-                      shouldTrigger = true;
-                    }
-                  } else if (flow.trigger_type === 'keyword') {
-                    const keywords = flow.trigger_keywords as string[] || [];
-                    const lowerContent = (uazText || '').toLowerCase();
-                    for (const kw of keywords) {
-                      if (lowerContent.includes(kw.toLowerCase())) {
-                        shouldTrigger = true;
-                        break;
-                      }
-                    }
-                  }
-                  
-                  if (shouldTrigger) {
-                    console.log(`[UAZAPI-WEBHOOK] Triggering flow ${flow.name}`);
-                    
-                    // Create session
-                    const { data: newSession } = await supabaseClient
-                      .from('inbox_flow_sessions')
-                      .insert({
-                        flow_id: flow.id,
-                        contact_id: contact.id,
-                        instance_id: instanceId,
-                        user_id: userId,
-                        current_node_id: 'start-1',
-                        variables: { 
-                          nome: contact.name || '',
-                          telefone: phone,
-                          resposta: '',
-                          lastMessage: uazText || '',
-                          contactName: contact.name || phone,
+
+                  console.log(`[UAZAPI-WEBHOOK] Triggering all-messages flow "${flow.name}" (first time for this contact)`);
+
+                  const { data: newSession, error: newSessionError } = await supabaseClient
+                    .from('inbox_flow_sessions')
+                    .insert({
+                      flow_id: flow.id,
+                      contact_id: contact.id,
+                      instance_id: instanceId,
+                      user_id: userId,
+                      current_node_id: 'start-1',
+                      variables: {
+                        nome: contact.name || '',
+                        telefone: phone,
+                        resposta: inboundText,
+                        lastMessage: inboundText,
+                        ultima_mensagem: inboundText,
+                        contactName: contact.name || phone,
+                      },
+                      status: 'active',
+                      processing: false,
+                      processing_started_at: null,
+                    })
+                    .select()
+                    .single();
+
+                  if (newSession && !newSessionError) {
+                    try {
+                      const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+                      await fetch(processUrl, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
                         },
-                        status: 'active',
-                      })
-                      .select()
-                      .single();
-                    
-                    if (newSession) {
-                      // Use HTTP call with service role for reliability
-                      try {
-                        const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
-                        await fetch(processUrl, {
-                          method: 'POST',
-                          headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-                          },
-                          body: JSON.stringify({ sessionId: newSession.id }),
-                        });
-                        console.log(`[UAZAPI-WEBHOOK] Flow triggered for session ${newSession.id}`);
-                      } catch (e) {
-                        console.error('[UAZAPI-WEBHOOK] Error invoking flow:', e);
-                      }
+                        body: JSON.stringify({ sessionId: newSession.id }),
+                      });
+                      console.log(`[UAZAPI-WEBHOOK] All-messages flow triggered for session ${newSession.id}`);
+                    } catch (e) {
+                      console.error('[UAZAPI-WEBHOOK] Error invoking all-messages flow:', e);
                     }
-                    
-                    break;
+                  } else if (newSessionError) {
+                    console.error('[UAZAPI-WEBHOOK] Error creating all-messages session:', newSessionError);
                   }
+
+                  break;
                 }
               }
             }
