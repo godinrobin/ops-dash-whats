@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+// @ts-ignore - pdf-lib for PDF text extraction
+import { PDFDocument } from "https://esm.sh/pdf-lib@1.17.1";
 
 // Declare EdgeRuntime for Supabase Edge Functions
 declare const EdgeRuntime: { waitUntil: (promise: Promise<unknown>) => void } | undefined;
@@ -1229,31 +1231,31 @@ serve(async (req) => {
             break;
 
           case 'randomizer':
-            // Randomizer node - pick a random path
-            const paths = (currentNode.data.paths as Array<{ id: string; percentage: number }>) || [];
-            if (paths.length > 0) {
+            // Randomizer node - pick a random path based on splits configuration
+            const splits = (currentNode.data.splits as Array<{ id: string; name: string; percentage: number }>) || [];
+            if (splits.length > 0) {
               // Calculate total percentage
-              const totalPercentage = paths.reduce((sum, p) => sum + (p.percentage || 0), 0);
+              const totalPercentage = splits.reduce((sum, s) => sum + (s.percentage || 0), 0);
               const randomValue = Math.random() * totalPercentage;
               
               let cumulative = 0;
-              let selectedPathId = paths[0]?.id;
+              let selectedSplitId = splits[0]?.id;
               
-              for (const path of paths) {
-                cumulative += path.percentage || 0;
+              for (const split of splits) {
+                cumulative += split.percentage || 0;
                 if (randomValue <= cumulative) {
-                  selectedPathId = path.id;
+                  selectedSplitId = split.id;
                   break;
                 }
               }
               
-              console.log(`[${runId}] Randomizer: selected path ${selectedPathId} (random: ${randomValue.toFixed(2)}/${totalPercentage})`);
-              processedActions.push(`Randomizer: path ${selectedPathId}`);
+              console.log(`[${runId}] Randomizer: selected split ${selectedSplitId} (random: ${randomValue.toFixed(2)}/${totalPercentage})`);
+              processedActions.push(`Randomizer: split ${selectedSplitId}`);
               
               // Find edge with matching sourceHandle
               const randomEdge = edges.find(e => 
                 e.source === currentNodeId && 
-                e.sourceHandle === selectedPathId
+                e.sourceHandle === selectedSplitId
               );
               
               if (randomEdge) {
@@ -1274,6 +1276,346 @@ serve(async (req) => {
               } else {
                 continueProcessing = false;
               }
+            }
+            break;
+
+          case 'paymentIdentifier':
+            // Payment Identifier node - analyze if message contains a PIX payment receipt
+            const checkImage = (currentNode.data.checkImage as boolean) ?? true;
+            const checkPdf = (currentNode.data.checkPdf as boolean) ?? true;
+            const markAsPaid = (currentNode.data.markAsPaid as boolean) || false;
+            const maxAttempts = (currentNode.data.maxAttempts as number) || 3;
+            const errorMessage = currentNode.data.errorMessage as string || '';
+            
+            // Initialize attempt counter
+            const paymentAttemptKey = `_payment_attempts_${currentNodeId}`;
+            const currentAttempts = (variables[paymentAttemptKey] as number) || 0;
+            
+            console.log(`[${runId}] PaymentIdentifier: attempt ${currentAttempts + 1}/${maxAttempts}, checkImage=${checkImage}, checkPdf=${checkPdf}`);
+            
+            // Get the last message from the contact
+            const { data: lastMessages } = await supabaseClient
+              .from('inbox_messages')
+              .select('*')
+              .eq('contact_id', contact.id)
+              .eq('direction', 'inbound')
+              .order('created_at', { ascending: false })
+              .limit(1);
+            
+            const lastMessage = lastMessages?.[0];
+            let isPaymentReceipt = false;
+            let paymentAnalysisResult = '';
+            
+            if (lastMessage) {
+              const messageType = lastMessage.message_type;
+              const mediaUrl = lastMessage.media_url;
+              
+              console.log(`[${runId}] Analyzing message: type=${messageType}, hasMedia=${!!mediaUrl}`);
+              
+              // Check if we should analyze this message type
+              const shouldAnalyze = (messageType === 'image' && checkImage) || 
+                                   (messageType === 'document' && checkPdf);
+              
+              if (shouldAnalyze && mediaUrl) {
+                const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+                
+                if (LOVABLE_API_KEY) {
+                  try {
+                    // Fetch the media
+                    const mediaResponse = await fetch(mediaUrl);
+                    const mediaBuffer = await mediaResponse.arrayBuffer();
+                    const mediaBase64 = btoa(String.fromCharCode(...new Uint8Array(mediaBuffer)));
+                    const mediaMimetype = mediaResponse.headers.get('content-type') || 'image/jpeg';
+                    
+                    const isPdfMedia = mediaMimetype.includes('pdf') || messageType === 'document';
+                    
+                    console.log(`[${runId}] Media fetched: ${mediaMimetype}, isPdf=${isPdfMedia}, size=${mediaBuffer.byteLength}`);
+                    
+                    const systemPrompt = `Você é um analisador de comprovantes de pagamento PIX. 
+Analise a imagem/documento e determine se é um comprovante de pagamento PIX válido.
+
+Responda APENAS com um JSON no formato:
+{
+  "is_pix_payment": true/false,
+  "confidence": 0-100,
+  "reason": "breve explicação"
+}
+
+Critérios para identificar um comprovante PIX:
+- Presença de informações como "Pix", "Transferência", "Comprovante"
+- Dados de origem e destino (nome, CPF/CNPJ parcial, banco)
+- Valor da transação
+- Data e hora
+- Código de autenticação ou ID da transação
+
+Se não for possível determinar ou a imagem não for clara, retorne is_pix_payment: false.`;
+
+                    let aiMessages: any[];
+                    
+                    if (isPdfMedia) {
+                      // For PDFs - Gemini supports PDFs natively
+                      aiMessages = [
+                        { role: 'system', content: systemPrompt },
+                        {
+                          role: 'user',
+                          content: [
+                            { type: 'text', text: 'Analise este documento e determine se é um comprovante de pagamento PIX.' },
+                            { type: 'image_url', image_url: { url: `data:application/pdf;base64,${mediaBase64}` } }
+                          ]
+                        }
+                      ];
+                    } else {
+                      // For images
+                      aiMessages = [
+                        { role: 'system', content: systemPrompt },
+                        {
+                          role: 'user',
+                          content: [
+                            { type: 'text', text: 'Analise esta imagem e determine se é um comprovante de pagamento PIX.' },
+                            { type: 'image_url', image_url: { url: `data:${mediaMimetype};base64,${mediaBase64}` } }
+                          ]
+                        }
+                      ];
+                    }
+                    
+                    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+                      method: 'POST',
+                      headers: {
+                        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({
+                        model: 'google/gemini-2.5-flash',
+                        messages: aiMessages,
+                      }),
+                    });
+                    
+                    if (aiResponse.ok) {
+                      const aiData = await aiResponse.json();
+                      paymentAnalysisResult = aiData.choices?.[0]?.message?.content || '';
+                      console.log(`[${runId}] AI analysis result: ${paymentAnalysisResult}`);
+                      
+                      // Parse JSON result
+                      try {
+                        const jsonMatch = paymentAnalysisResult.match(/\{[\s\S]*\}/);
+                        if (jsonMatch) {
+                          const parsed = JSON.parse(jsonMatch[0]);
+                          isPaymentReceipt = parsed.is_pix_payment === true && (parsed.confidence || 0) >= 60;
+                          console.log(`[${runId}] Parsed result: isPayment=${isPaymentReceipt}, confidence=${parsed.confidence}`);
+                        }
+                      } catch (parseErr) {
+                        console.error(`[${runId}] Error parsing AI response:`, parseErr);
+                      }
+                    } else {
+                      console.error(`[${runId}] AI API error:`, await aiResponse.text());
+                    }
+                  } catch (analysisErr) {
+                    console.error(`[${runId}] Error analyzing payment:`, analysisErr);
+                  }
+                } else {
+                  console.error(`[${runId}] LOVABLE_API_KEY not configured for payment analysis`);
+                }
+              }
+            }
+            
+            // Determine outcome
+            if (isPaymentReceipt) {
+              console.log(`[${runId}] ✅ Payment receipt confirmed!`);
+              
+              // Mark contact as paid if configured
+              if (markAsPaid) {
+                const currentTags = (contact.tags as string[]) || [];
+                if (!currentTags.includes('pago')) {
+                  await supabaseClient
+                    .from('inbox_contacts')
+                    .update({ tags: [...currentTags, 'pago'] })
+                    .eq('id', contact.id);
+                  console.log(`[${runId}] Contact marked as paid`);
+                }
+              }
+              
+              // Clear attempt counter
+              delete variables[paymentAttemptKey];
+              
+              // Go to "paid" output
+              const paidEdge = edges.find(e => e.source === currentNodeId && e.sourceHandle === 'paid');
+              if (paidEdge) {
+                currentNodeId = paidEdge.target;
+              } else {
+                continueProcessing = false;
+              }
+              processedActions.push('Payment identified: PAID');
+              
+            } else {
+              // Not a payment receipt - increment attempts
+              const newAttempts = currentAttempts + 1;
+              variables[paymentAttemptKey] = newAttempts;
+              
+              if (newAttempts >= maxAttempts) {
+                console.log(`[${runId}] ❌ Max attempts reached (${newAttempts}/${maxAttempts})`);
+                
+                // Clear attempt counter
+                delete variables[paymentAttemptKey];
+                
+                // Go to "notPaid" output
+                const notPaidEdge = edges.find(e => e.source === currentNodeId && e.sourceHandle === 'notPaid');
+                if (notPaidEdge) {
+                  currentNodeId = notPaidEdge.target;
+                } else {
+                  continueProcessing = false;
+                }
+                processedActions.push(`Payment not identified after ${newAttempts} attempts: NOT PAID`);
+                
+              } else {
+                console.log(`[${runId}] Attempt ${newAttempts}/${maxAttempts} failed, waiting for next message`);
+                
+                // Send error message if configured
+                if (errorMessage && instanceName && phone) {
+                  const errorMsgReplaced = replaceVariables(errorMessage, variables);
+                  await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, errorMsgReplaced, 'text', undefined, undefined, apiProvider, instanceUazapiToken);
+                  await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, errorMsgReplaced, 'text', flow.id);
+                }
+                
+                // Save state and wait for next input
+                await supabaseClient
+                  .from('inbox_flow_sessions')
+                  .update({
+                    current_node_id: currentNodeId,
+                    variables,
+                    last_interaction: new Date().toISOString(),
+                    processing: false,
+                    processing_started_at: null,
+                  })
+                  .eq('id', sessionId);
+                
+                processedActions.push(`Payment check attempt ${newAttempts}/${maxAttempts}, waiting for next message`);
+                continueProcessing = false;
+                
+                return new Response(JSON.stringify({ 
+                  success: true, 
+                  currentNode: currentNodeId,
+                  actions: processedActions,
+                  waitingForPayment: true,
+                  attempt: newAttempts,
+                  maxAttempts
+                }), {
+                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                });
+              }
+            }
+            break;
+
+          case 'sendPixKey':
+            // Send PIX Key node - sends a native WhatsApp PIX button
+            const pixKey = replaceVariables(currentNode.data.pixKey as string || '', variables);
+            const pixType = (currentNode.data.pixType as string) || 'EVP';
+            const pixName = replaceVariables(currentNode.data.pixName as string || '', variables);
+            
+            if (apiProvider === 'uazapi' && instanceUazapiToken && pixKey) {
+              console.log(`[${runId}] Sending PIX button: type=${pixType}, key=${pixKey.substring(0, 10)}...`);
+              
+              try {
+                const pixResponse = await fetch(`${uazapiBaseUrl}/send/pix-button`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'token': instanceUazapiToken,
+                  },
+                  body: JSON.stringify({
+                    number: phone.replace(/\D/g, ''),
+                    pixType,
+                    pixKey,
+                    pixName: pixName || 'PIX',
+                  }),
+                });
+                
+                const pixResult = await pixResponse.json();
+                console.log(`[${runId}] PIX button response:`, JSON.stringify(pixResult));
+                
+                if (pixResponse.ok) {
+                  processedActions.push(`Sent PIX key (${pixType})`);
+                  await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, `[Chave PIX: ${pixType}]`, 'text', flow.id);
+                } else {
+                  console.error(`[${runId}] PIX button error:`, pixResult);
+                  processedActions.push(`PIX button error: ${JSON.stringify(pixResult)}`);
+                }
+              } catch (pixErr) {
+                console.error(`[${runId}] PIX button exception:`, pixErr);
+                processedActions.push('PIX button error');
+              }
+            } else if (apiProvider !== 'uazapi') {
+              console.log(`[${runId}] PIX button only supported on UazAPI`);
+              processedActions.push('PIX button not supported (requires UazAPI)');
+            } else {
+              console.log(`[${runId}] Missing PIX key configuration`);
+              processedActions.push('PIX button skipped (missing config)');
+            }
+            
+            const pixEdge = edges.find(e => e.source === currentNodeId);
+            if (pixEdge) {
+              currentNodeId = pixEdge.target;
+            } else {
+              continueProcessing = false;
+            }
+            break;
+
+          case 'sendCharge':
+            // Send Charge node - sends a native WhatsApp payment request
+            const chargeAmount = (currentNode.data.amount as number) || 0;
+            const chargeItemName = replaceVariables(currentNode.data.itemName as string || '', variables);
+            const chargeDescription = replaceVariables(currentNode.data.description as string || '', variables);
+            const chargePixKey = replaceVariables(currentNode.data.pixKey as string || '', variables);
+            const chargePixType = (currentNode.data.pixType as string) || 'EVP';
+            const chargePixName = replaceVariables(currentNode.data.pixName as string || '', variables);
+            
+            if (apiProvider === 'uazapi' && instanceUazapiToken && chargeAmount > 0 && chargePixKey) {
+              console.log(`[${runId}] Sending charge: amount=${chargeAmount}, item=${chargeItemName}`);
+              
+              try {
+                const chargeResponse = await fetch(`${uazapiBaseUrl}/send/payment-request`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'token': instanceUazapiToken,
+                  },
+                  body: JSON.stringify({
+                    number: phone.replace(/\D/g, ''),
+                    amount: chargeAmount,
+                    text: chargeDescription,
+                    itemName: chargeItemName,
+                    pixKey: chargePixKey,
+                    pixType: chargePixType,
+                    pixName: chargePixName || 'PIX',
+                  }),
+                });
+                
+                const chargeResult = await chargeResponse.json();
+                console.log(`[${runId}] Charge response:`, JSON.stringify(chargeResult));
+                
+                if (chargeResponse.ok) {
+                  processedActions.push(`Sent charge: R$ ${chargeAmount.toFixed(2)} - ${chargeItemName}`);
+                  await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, `[Cobrança: R$ ${chargeAmount.toFixed(2)} - ${chargeItemName}]`, 'text', flow.id);
+                } else {
+                  console.error(`[${runId}] Charge error:`, chargeResult);
+                  processedActions.push(`Charge error: ${JSON.stringify(chargeResult)}`);
+                }
+              } catch (chargeErr) {
+                console.error(`[${runId}] Charge exception:`, chargeErr);
+                processedActions.push('Charge error');
+              }
+            } else if (apiProvider !== 'uazapi') {
+              console.log(`[${runId}] Charge only supported on UazAPI`);
+              processedActions.push('Charge not supported (requires UazAPI)');
+            } else {
+              console.log(`[${runId}] Missing charge configuration`);
+              processedActions.push('Charge skipped (missing config)');
+            }
+            
+            const chargeEdge = edges.find(e => e.source === currentNodeId);
+            if (chargeEdge) {
+              currentNodeId = chargeEdge.target;
+            } else {
+              continueProcessing = false;
             }
             break;
 
