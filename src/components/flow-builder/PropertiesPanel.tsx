@@ -1231,7 +1231,7 @@ export const PropertiesPanel = ({
         return (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Envia uma cobrança nativa do WhatsApp com botão "Revisar e pagar".
+              Envia uma mensagem de cobrança via WhatsApp.
             </p>
             
             <div className="space-y-2">
@@ -1239,8 +1239,8 @@ export const PropertiesPanel = ({
               <Input
                 type="number"
                 step="0.01"
-                min="0"
-                placeholder="0,00"
+                min="0.01"
+                placeholder="25,00"
                 value={(nodeData.amount as number) || ''}
                 onChange={(e) => onUpdateNode(selectedNode.id, { amount: parseFloat(e.target.value) || 0 })}
               />
@@ -1249,7 +1249,7 @@ export const PropertiesPanel = ({
             <div className="space-y-2">
               <Label>Nome do Item/Produto</Label>
               <Input
-                placeholder="Ex: Produto XYZ"
+                placeholder="Ex: Sapatinho de Croche"
                 value={(nodeData.itemName as string) || ''}
                 onChange={(e) => onUpdateNode(selectedNode.id, { itemName: e.target.value })}
               />
@@ -1265,46 +1265,9 @@ export const PropertiesPanel = ({
               />
             </div>
 
-            <div className="border-t pt-4 mt-4">
-              <Label className="text-xs text-muted-foreground uppercase mb-3 block">Dados PIX para Recebimento</Label>
-              
-              <div className="space-y-2">
-                <Label>Tipo da Chave PIX</Label>
-                <Select
-                  value={(nodeData.pixType as string) || 'EVP'}
-                  onValueChange={(value) => onUpdateNode(selectedNode.id, { pixType: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="CPF">CPF</SelectItem>
-                    <SelectItem value="CNPJ">CNPJ</SelectItem>
-                    <SelectItem value="PHONE">Telefone</SelectItem>
-                    <SelectItem value="EMAIL">E-mail</SelectItem>
-                    <SelectItem value="EVP">Chave Aleatória (EVP)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2 mt-2">
-                <Label>Chave PIX</Label>
-                <Input
-                  placeholder="Sua chave PIX..."
-                  value={(nodeData.pixKey as string) || ''}
-                  onChange={(e) => onUpdateNode(selectedNode.id, { pixKey: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2 mt-2">
-                <Label>Nome do Recebedor</Label>
-                <Input
-                  placeholder="Nome exibido para o cliente"
-                  value={(nodeData.pixName as string) || ''}
-                  onChange={(e) => onUpdateNode(selectedNode.id, { pixName: e.target.value })}
-                />
-              </div>
-            </div>
+            <p className="text-xs text-muted-foreground/70 mt-3">
+              A chave PIX para recebimento deve estar configurada na sua instância UazAPI.
+            </p>
           </div>
         );
 
