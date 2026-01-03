@@ -598,6 +598,127 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
       }
     }
 
+    // Facebook Conversion Tracking
+    let conversionSent = false;
+    let conversionEventId: string | null = null;
+    let conversionError: string | null = null;
+    let ctwaClid: string | null = null;
+    let extractedValue: number | null = null;
+
+    if (isPixPayment && labelApplied && config.enable_conversion_tracking && config.ad_account_id) {
+      console.log("[TAG-WHATS] Sending conversion to Facebook...");
+      
+      try {
+        // Get the ad account with Facebook credentials
+        const { data: adAccount, error: adAccountError } = await supabase
+          .from("ads_ad_accounts")
+          .select("*, ads_facebook_accounts(*)")
+          .eq("id", config.ad_account_id)
+          .single();
+
+        if (adAccountError || !adAccount) {
+          console.error("[TAG-WHATS] Ad account not found:", adAccountError);
+          conversionError = "Ad account not found";
+        } else {
+          const accessToken = adAccount.ads_facebook_accounts?.access_token;
+          
+          if (!accessToken) {
+            console.error("[TAG-WHATS] No access token found");
+            conversionError = "No access token";
+          } else {
+            // Try to get ctwa_clid from ads_whatsapp_leads if available
+            const { data: lead } = await supabase
+              .from("ads_whatsapp_leads")
+              .select("ctwa_clid, fbclid")
+              .eq("phone", phone)
+              .eq("user_id", instance.user_id)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .single();
+
+            ctwaClid = lead?.ctwa_clid || null;
+            const fbclid = lead?.fbclid || null;
+
+            // Try to extract value from AI response
+            if (aiResponse && typeof aiResponse === 'object') {
+              const valueMatch = JSON.stringify(aiResponse).match(/R\$?\s*([\d.,]+)/);
+              if (valueMatch) {
+                extractedValue = parseFloat(valueMatch[1].replace(/\./g, '').replace(',', '.'));
+              }
+            }
+
+            // Get pixel ID from ad account
+            const pixelUrl = `https://graph.facebook.com/v18.0/act_${adAccount.ad_account_id}/adspixels?fields=id,name&access_token=${accessToken}`;
+            const pixelResponse = await fetch(pixelUrl);
+            const pixelData = await pixelResponse.json();
+
+            if (pixelData.error || !pixelData.data || pixelData.data.length === 0) {
+              console.error("[TAG-WHATS] No pixel found:", pixelData.error);
+              conversionError = "No pixel found for this ad account";
+            } else {
+              const pixelId = pixelData.data[0].id;
+              console.log("[TAG-WHATS] Using pixel:", pixelId);
+
+              // Hash the phone number for privacy
+              const encoder = new TextEncoder();
+              const phoneBuffer = encoder.encode(phone.toLowerCase().trim());
+              const hashBuffer = await crypto.subtle.digest("SHA-256", phoneBuffer);
+              const hashArray = Array.from(new Uint8Array(hashBuffer));
+              const hashedPhone = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+
+              // Prepare event data
+              const eventData: any = {
+                event_name: "Purchase",
+                event_time: Math.floor(Date.now() / 1000),
+                action_source: "website",
+                user_data: {
+                  ph: [hashedPhone],
+                },
+                custom_data: {
+                  currency: "BRL",
+                  value: extractedValue || 0,
+                  content_name: "PIX Payment via Tag Whats",
+                },
+              };
+
+              // Add click IDs for better attribution
+              if (fbclid) {
+                eventData.user_data.fbc = `fb.1.${Date.now()}.${fbclid}`;
+              }
+              if (ctwaClid) {
+                eventData.user_data.fbp = ctwaClid;
+              }
+
+              // Send event to Facebook Conversions API
+              const eventsUrl = `https://graph.facebook.com/v18.0/${pixelId}/events`;
+              const eventsResponse = await fetch(eventsUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  data: [eventData],
+                  access_token: accessToken,
+                }),
+              });
+
+              const eventsResult = await eventsResponse.json();
+
+              if (eventsResult.error) {
+                console.error("[TAG-WHATS] Conversions API error:", eventsResult.error);
+                conversionError = eventsResult.error.message || "Conversion API error";
+              } else {
+                console.log("[TAG-WHATS] Conversion event sent successfully:", eventsResult);
+                conversionSent = true;
+                conversionEventId = eventsResult.fbtrace_id || null;
+              }
+            }
+          }
+        }
+      } catch (convError) {
+        console.error("[TAG-WHATS] Error sending conversion:", convError);
+        conversionError = convError instanceof Error ? convError.message : String(convError);
+      }
+    }
+
     // Log the result
     await supabase.from("tag_whats_logs").insert({
       user_id: instance.user_id,
@@ -608,6 +729,11 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
       is_pix_payment: isPixPayment,
       label_applied: labelApplied,
       ai_response: aiResponse,
+      conversion_sent: conversionSent,
+      conversion_event_id: conversionEventId,
+      conversion_error: conversionError,
+      ctwa_clid: ctwaClid,
+      extracted_value: extractedValue,
     });
 
     return new Response(
@@ -615,6 +741,8 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
         success: true,
         is_pix_payment: isPixPayment,
         label_applied: labelApplied,
+        conversion_sent: conversionSent,
+        conversion_event_id: conversionEventId,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

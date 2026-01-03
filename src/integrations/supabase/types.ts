@@ -2485,35 +2485,44 @@ export type Database = {
       }
       tag_whats_configs: {
         Row: {
+          ad_account_id: string | null
           created_at: string
+          enable_conversion_tracking: boolean | null
           filter_images: boolean
           filter_pdfs: boolean
           id: string
           instance_id: string
           is_active: boolean
           pago_label_id: string | null
+          pixel_id: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          ad_account_id?: string | null
           created_at?: string
+          enable_conversion_tracking?: boolean | null
           filter_images?: boolean
           filter_pdfs?: boolean
           id?: string
           instance_id: string
           is_active?: boolean
           pago_label_id?: string | null
+          pixel_id?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          ad_account_id?: string | null
           created_at?: string
+          enable_conversion_tracking?: boolean | null
           filter_images?: boolean
           filter_pdfs?: boolean
           id?: string
           instance_id?: string
           is_active?: boolean
           pago_label_id?: string | null
+          pixel_id?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -2532,8 +2541,13 @@ export type Database = {
           ai_response: Json | null
           config_id: string
           contact_phone: string
+          conversion_error: string | null
+          conversion_event_id: string | null
+          conversion_sent: boolean | null
           created_at: string
+          ctwa_clid: string | null
           error_message: string | null
+          extracted_value: number | null
           id: string
           instance_id: string
           is_pix_payment: boolean
@@ -2545,8 +2559,13 @@ export type Database = {
           ai_response?: Json | null
           config_id: string
           contact_phone: string
+          conversion_error?: string | null
+          conversion_event_id?: string | null
+          conversion_sent?: boolean | null
           created_at?: string
+          ctwa_clid?: string | null
           error_message?: string | null
+          extracted_value?: number | null
           id?: string
           instance_id: string
           is_pix_payment?: boolean
@@ -2558,8 +2577,13 @@ export type Database = {
           ai_response?: Json | null
           config_id?: string
           contact_phone?: string
+          conversion_error?: string | null
+          conversion_event_id?: string | null
+          conversion_sent?: boolean | null
           created_at?: string
+          ctwa_clid?: string | null
           error_message?: string | null
+          extracted_value?: number | null
           id?: string
           instance_id?: string
           is_pix_payment?: boolean
