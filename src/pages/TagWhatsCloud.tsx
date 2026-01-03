@@ -6,10 +6,11 @@ import { Switch } from "@/components/ui/switch";
 import { ColoredSwitch } from "@/components/ui/colored-switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Cloud, Plus, RefreshCw, QrCode, Settings, Image, FileText, CheckCircle2, XCircle, Loader2, Trash2, TrendingUp, ShoppingBag, Facebook, ChevronDown, ChevronUp, Building2, Target } from "lucide-react";
+import { ArrowLeft, Cloud, Plus, RefreshCw, QrCode, Settings, Image, FileText, CheckCircle2, XCircle, Loader2, Trash2, TrendingUp, ShoppingBag, Facebook, ChevronDown, ChevronUp, Building2, Target, ExternalLink } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdminStatus } from "@/hooks/useAdminStatus";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
@@ -78,6 +79,7 @@ const TagWhatsCloud = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const { isAdmin } = useAdminStatus();
 
   const [instances, setInstances] = useState<Instance[]>([]);
   const [configs, setConfigs] = useState<TagWhatsConfig[]>([]);
@@ -245,6 +247,22 @@ const TagWhatsCloud = () => {
         newSet.delete(facebookAccountId);
         return newSet;
       });
+    }
+  };
+
+  const handleToggleAdAccountSelected = async (adAccountId: string, isSelected: boolean) => {
+    try {
+      const { error } = await supabase
+        .from("ads_ad_accounts")
+        .update({ is_selected: isSelected })
+        .eq("id", adAccountId);
+
+      if (error) throw error;
+      toast.success(isSelected ? "Conta ativada!" : "Conta desativada!");
+      fetchAdsData();
+    } catch (error) {
+      console.error("Error toggling ad account:", error);
+      toast.error("Erro ao alterar status da conta");
     }
   };
 
@@ -457,8 +475,12 @@ const TagWhatsCloud = () => {
                 <p className="text-sm text-muted-foreground">Números Conectados</p>
               </CardContent>
             </Card>
-            <Card className="border-amber-500/20">
-              <CardContent className="p-4 text-center flex flex-col items-center justify-center">
+            <Card 
+              className="border-amber-500/20 cursor-pointer hover:border-amber-500/40 transition-colors group"
+              onClick={() => navigate("/tag-whats/cloud/sales")}
+            >
+              <CardContent className="p-4 text-center relative">
+                <ExternalLink className="h-4 w-4 absolute top-3 right-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                 <p className="text-2xl font-bold text-amber-500">{totalLabelsApplied}</p>
                 <p className="text-sm text-muted-foreground">Vendas Totais</p>
               </CardContent>
@@ -584,7 +606,8 @@ const TagWhatsCloud = () => {
             </CardContent>
           </Card>
 
-          {/* Marcar no Gerenciador - Facebook Conversion Tracking */}
+          {/* Marcar no Gerenciador - Facebook Conversion Tracking - ADMIN ONLY */}
+          {isAdmin && (
           <Card className="mb-6 border-2 border-blue-500/30 bg-blue-500/5">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -706,12 +729,19 @@ const TagWhatsCloud = () => {
                                         <span className="font-medium">{adAccount.name || adAccount.ad_account_id}</span>
                                         <span className="text-xs text-muted-foreground ml-2">{adAccount.currency}</span>
                                       </div>
-                                      <Badge 
-                                        variant={adAccount.is_selected ? "default" : "outline"}
-                                        className={adAccount.is_selected ? "bg-green-500/20 text-green-400" : ""}
-                                      >
-                                        {adAccount.is_selected ? "Ativa" : "Inativa"}
-                                      </Badge>
+                                      <div className="flex items-center gap-2">
+                                        <ColoredSwitch
+                                          checked={adAccount.is_selected}
+                                          onCheckedChange={(checked) => handleToggleAdAccountSelected(adAccount.id, checked)}
+                                          className="scale-75"
+                                        />
+                                        <Badge 
+                                          variant={adAccount.is_selected ? "default" : "outline"}
+                                          className={adAccount.is_selected ? "bg-green-500/20 text-green-400" : ""}
+                                        >
+                                          {adAccount.is_selected ? "Ativa" : "Inativa"}
+                                        </Badge>
+                                      </div>
                                     </div>
                                   ))}
                               </div>
@@ -787,7 +817,7 @@ const TagWhatsCloud = () => {
               </CollapsibleContent>
             </Collapsible>
           </Card>
-
+          )}
 
           {instances.length === 0 && !loading && (
             <Card className="mb-6 border-yellow-500/30 bg-yellow-500/5">

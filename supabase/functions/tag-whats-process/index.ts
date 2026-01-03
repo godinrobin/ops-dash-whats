@@ -606,7 +606,12 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
     let extractedValue: number | null = null;
 
     if (isPixPayment && labelApplied && config.enable_conversion_tracking && config.ad_account_id) {
-      console.log("[TAG-WHATS] Sending conversion to Facebook...");
+      console.log("[TAG-WHATS] ====== STARTING FACEBOOK CONVERSION TRACKING ======");
+      console.log("[TAG-WHATS] Config:", { 
+        enable_conversion_tracking: config.enable_conversion_tracking,
+        ad_account_id: config.ad_account_id,
+        phone: phone
+      });
       
       try {
         // Get the ad account with Facebook credentials
@@ -621,13 +626,18 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
           conversionError = "Ad account not found";
         } else {
           const accessToken = adAccount.ads_facebook_accounts?.access_token;
+          console.log("[TAG-WHATS] Ad account found:", {
+            ad_account_id: adAccount.ad_account_id,
+            name: adAccount.name,
+            hasAccessToken: !!accessToken
+          });
           
           if (!accessToken) {
-            console.error("[TAG-WHATS] No access token found");
+            console.error("[TAG-WHATS] No access token found for Facebook account");
             conversionError = "No access token";
           } else {
             // Try to get ctwa_clid from ads_whatsapp_leads if available
-            const { data: lead } = await supabase
+            const { data: lead, error: leadError } = await supabase
               .from("ads_whatsapp_leads")
               .select("ctwa_clid, fbclid")
               .eq("phone", phone)
@@ -636,40 +646,59 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
               .limit(1)
               .single();
 
+            console.log("[TAG-WHATS] Lead lookup:", { 
+              found: !!lead, 
+              ctwa_clid: lead?.ctwa_clid, 
+              fbclid: lead?.fbclid,
+              error: leadError?.message 
+            });
+
             ctwaClid = lead?.ctwa_clid || null;
             const fbclid = lead?.fbclid || null;
 
             // Try to extract value from AI response
             if (aiResponse && typeof aiResponse === 'object') {
-              const valueMatch = JSON.stringify(aiResponse).match(/R\$?\s*([\d.,]+)/);
+              const aiStr = JSON.stringify(aiResponse);
+              // Match patterns like "R$ 100,00", "R$100", "100,00", "valor: 50"
+              const valueMatch = aiStr.match(/R\$?\s*([\d.,]+)|valor[:\s]+([\d.,]+)/i);
               if (valueMatch) {
-                extractedValue = parseFloat(valueMatch[1].replace(/\./g, '').replace(',', '.'));
+                const valueStr = (valueMatch[1] || valueMatch[2]).replace(/\./g, '').replace(',', '.');
+                extractedValue = parseFloat(valueStr);
+                if (isNaN(extractedValue)) extractedValue = null;
               }
             }
+            console.log("[TAG-WHATS] Extracted value:", extractedValue);
 
             // Get pixel ID from ad account
-            const pixelUrl = `https://graph.facebook.com/v18.0/act_${adAccount.ad_account_id}/adspixels?fields=id,name&access_token=${accessToken}`;
+            const pixelUrl = `https://graph.facebook.com/v21.0/act_${adAccount.ad_account_id}/adspixels?fields=id,name&access_token=${accessToken}`;
+            console.log("[TAG-WHATS] Fetching pixel from:", pixelUrl.replace(accessToken, '[REDACTED]'));
+            
             const pixelResponse = await fetch(pixelUrl);
             const pixelData = await pixelResponse.json();
 
             if (pixelData.error || !pixelData.data || pixelData.data.length === 0) {
-              console.error("[TAG-WHATS] No pixel found:", pixelData.error);
-              conversionError = "No pixel found for this ad account";
+              console.error("[TAG-WHATS] Pixel fetch error:", pixelData.error || "No pixels found");
+              conversionError = pixelData.error?.message || "No pixel found for this ad account";
             } else {
               const pixelId = pixelData.data[0].id;
-              console.log("[TAG-WHATS] Using pixel:", pixelId);
+              console.log("[TAG-WHATS] Using pixel:", { pixelId, name: pixelData.data[0].name });
 
-              // Hash the phone number for privacy
+              // Hash the phone number for privacy (SHA-256)
               const encoder = new TextEncoder();
               const phoneBuffer = encoder.encode(phone.toLowerCase().trim());
               const hashBuffer = await crypto.subtle.digest("SHA-256", phoneBuffer);
               const hashArray = Array.from(new Uint8Array(hashBuffer));
               const hashedPhone = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+              console.log("[TAG-WHATS] Phone hashed for privacy");
 
-              // Prepare event data
+              // Prepare event data according to Meta Conversions API spec
+              const eventTime = Math.floor(Date.now() / 1000);
+              const eventId = `tagwhats_${Date.now()}_${phone.slice(-4)}`;
+              
               const eventData: any = {
                 event_name: "Purchase",
-                event_time: Math.floor(Date.now() / 1000),
+                event_time: eventTime,
+                event_id: eventId,
                 action_source: "website",
                 user_data: {
                   ph: [hashedPhone],
@@ -681,16 +710,26 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
                 },
               };
 
-              // Add click IDs for better attribution
+              // Add click IDs for better attribution per Meta documentation
+              // fbc format: fb.1.{timestamp}.{fbclid}
               if (fbclid) {
                 eventData.user_data.fbc = `fb.1.${Date.now()}.${fbclid}`;
+                console.log("[TAG-WHATS] Added fbc parameter");
               }
+              
+              // For Click-to-WhatsApp attribution, use ctwa_clid
               if (ctwaClid) {
-                eventData.user_data.fbp = ctwaClid;
+                // ctwa_clid goes in the custom_data for attribution tracking
+                eventData.custom_data.ctwa_clid = ctwaClid;
+                console.log("[TAG-WHATS] Added ctwa_clid for CTWA attribution");
               }
 
+              console.log("[TAG-WHATS] Event data prepared:", JSON.stringify(eventData, null, 2));
+
               // Send event to Facebook Conversions API
-              const eventsUrl = `https://graph.facebook.com/v18.0/${pixelId}/events`;
+              const eventsUrl = `https://graph.facebook.com/v21.0/${pixelId}/events`;
+              console.log("[TAG-WHATS] Sending to Conversions API:", eventsUrl);
+              
               const eventsResponse = await fetch(eventsUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -701,22 +740,30 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
               });
 
               const eventsResult = await eventsResponse.json();
+              console.log("[TAG-WHATS] Conversions API response:", JSON.stringify(eventsResult));
 
               if (eventsResult.error) {
                 console.error("[TAG-WHATS] Conversions API error:", eventsResult.error);
                 conversionError = eventsResult.error.message || "Conversion API error";
               } else {
-                console.log("[TAG-WHATS] Conversion event sent successfully:", eventsResult);
+                console.log("[TAG-WHATS] ✅ Conversion event sent successfully!");
+                console.log("[TAG-WHATS] Events received:", eventsResult.events_received);
                 conversionSent = true;
-                conversionEventId = eventsResult.fbtrace_id || null;
+                conversionEventId = eventId;
               }
             }
           }
         }
       } catch (convError) {
-        console.error("[TAG-WHATS] Error sending conversion:", convError);
+        console.error("[TAG-WHATS] Error in conversion tracking:", convError);
         conversionError = convError instanceof Error ? convError.message : String(convError);
       }
+      
+      console.log("[TAG-WHATS] ====== CONVERSION TRACKING COMPLETE ======", {
+        conversionSent,
+        conversionEventId,
+        conversionError
+      });
     }
 
     // Log the result
