@@ -623,7 +623,7 @@ Regras:
       }
 
       case 'create-instance': {
-        const { instanceName, evolutionConfig } = params;
+        const { instanceName, evolutionConfig, proxy } = params;
         if (!instanceName) {
           return new Response(JSON.stringify({ error: 'Nome do número é obrigatório' }), {
             status: 400,
@@ -869,6 +869,48 @@ Regras:
           }
         } catch (webhookError) {
           console.error(`[CREATE-INSTANCE] Error configuring webhook:`, webhookError);
+        }
+
+        // Configure proxy if provided (UazAPI only - POST /instance/proxy)
+        if (proxy && proxy.host && proxy.port && apiProvider === 'uazapi') {
+          try {
+            const instanceToken = result.token || result.instanceToken || result.instance?.token;
+            if (instanceToken) {
+              // Build proxy URL in format: protocol://user:pass@host:port
+              let proxyUrl = `${proxy.protocol || 'http'}://`;
+              if (proxy.username && proxy.password) {
+                proxyUrl += `${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password)}@`;
+              }
+              proxyUrl += `${proxy.host}:${proxy.port}`;
+
+              console.log(`[CREATE-INSTANCE] Configuring proxy for ${instanceName}: ${proxyUrl.replace(/:[^:@]+@/, ':***@')}`);
+              
+              const proxyPayload = {
+                enable: true,
+                proxy_url: proxyUrl
+              };
+
+              const proxyRes = await fetch(`${createBaseUrl}/instance/proxy`, {
+                method: 'POST',
+                headers: {
+                  'token': instanceToken,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(proxyPayload),
+              });
+
+              const proxyResText = await proxyRes.text();
+              if (proxyRes.ok) {
+                console.log(`[CREATE-INSTANCE] Proxy configured successfully for ${instanceName}`);
+              } else {
+                console.error(`[CREATE-INSTANCE] Proxy config failed: ${proxyRes.status} - ${proxyResText}`);
+              }
+            } else {
+              console.log(`[CREATE-INSTANCE] No instance token available for proxy config`);
+            }
+          } catch (proxyError) {
+            console.error(`[CREATE-INSTANCE] Error configuring proxy:`, proxyError);
+          }
         }
 
         // Return result with QR code
