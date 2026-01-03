@@ -31,6 +31,7 @@ import TagWhatsSelect from "./pages/TagWhatsSelect";
 import TagWhatsLocal from "./pages/TagWhatsLocal";
 import TagWhatsCloud from "./pages/TagWhatsCloud";
 import TagWhatsAddNumber from "./pages/TagWhatsAddNumber";
+import TagWhatsSales from "./pages/TagWhatsSales";
 import ExtensaoAdsWhatsApp from "./pages/ExtensaoAdsWhatsApp";
 import VideoDownloader from "./pages/VideoDownloader";
 import SMSBot from "./pages/SMSBot";
@@ -94,6 +95,7 @@ const AppRoutes = () => {
         <Route path="/tag-whats/local" element={<MemberRoute featureName="Tag Whats"><TagWhatsLocal /></MemberRoute>} />
         <Route path="/tag-whats/cloud" element={<MemberRoute featureName="Tag Whats"><TagWhatsCloud /></MemberRoute>} />
         <Route path="/tag-whats/cloud/add-number" element={<MemberRoute featureName="Tag Whats"><TagWhatsAddNumber /></MemberRoute>} />
+        <Route path="/tag-whats/cloud/sales" element={<MemberRoute featureName="Tag Whats"><TagWhatsSales /></MemberRoute>} />
         <Route path="/extensao-ads" element={<ProtectedRoute><ExtensaoAdsWhatsApp /></ProtectedRoute>} />
         <Route path="/video-downloader" element={<ProtectedRoute><VideoDownloader /></ProtectedRoute>} />
         <Route path="/maturador" element={<MemberRoute featureName="Maturador de WhatsApp"><MaturadorDashboard /></MemberRoute>} />
