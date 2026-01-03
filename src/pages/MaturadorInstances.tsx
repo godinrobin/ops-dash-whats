@@ -620,14 +620,70 @@ export default function MaturadorInstances() {
                 <p className="text-xs text-muted-foreground">Apenas letras minúsculas, números e underscores</p>
               </div>
 
-              <div className="relative">
-                <Button variant="outline" size="sm" className="w-full justify-between opacity-60 cursor-not-allowed" disabled>
-                  <span>Configurar Proxy (opcional)</span>
-                  <Badge variant="outline" className="ml-2 text-[10px] bg-yellow-500/20 text-yellow-500 border-yellow-500/30">
-                    Em breve
-                  </Badge>
-                </Button>
-              </div>
+              <Collapsible open={proxyEnabled} onOpenChange={setProxyEnabled}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="outline" size="sm" className="w-full justify-between">
+                    <span>Configurar Proxy (opcional)</span>
+                    {proxyEnabled ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-3 pt-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="proxyHost">Host</Label>
+                      <Input
+                        id="proxyHost"
+                        placeholder="proxy.example.com"
+                        value={proxyHost}
+                        onChange={(e) => setProxyHost(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="proxyPort">Porta</Label>
+                      <Input
+                        id="proxyPort"
+                        placeholder="8080"
+                        value={proxyPort}
+                        onChange={(e) => setProxyPort(e.target.value.replace(/\D/g, ''))}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="proxyProtocol">Protocolo</Label>
+                    <select
+                      id="proxyProtocol"
+                      value={proxyProtocol}
+                      onChange={(e) => setProxyProtocol(e.target.value)}
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                    >
+                      <option value="http">HTTP</option>
+                      <option value="https">HTTPS</option>
+                      <option value="socks5">SOCKS5</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="proxyUsername">Usuário (opcional)</Label>
+                      <Input
+                        id="proxyUsername"
+                        placeholder="username"
+                        value={proxyUsername}
+                        onChange={(e) => setProxyUsername(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="proxyPassword">Senha (opcional)</Label>
+                      <Input
+                        id="proxyPassword"
+                        type="password"
+                        placeholder="password"
+                        value={proxyPassword}
+                        onChange={(e) => setProxyPassword(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setCreateModalOpen(false)}>
