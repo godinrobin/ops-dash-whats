@@ -12,6 +12,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/useSplashedToast";
+import { useTheme } from "@/hooks/useTheme";
+import { Moon, Sun } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface ProfileModalProps {
   open: boolean;
@@ -21,6 +24,7 @@ interface ProfileModalProps {
 export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { theme, setTheme } = useTheme();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -102,6 +106,36 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
               </div>
             </div>
 
+            {/* Theme Toggle */}
+            <div className="space-y-3">
+              <h3 className="font-semibold text-sm">Tema</h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setTheme("dark")}
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-all",
+                    theme === "dark"
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border-border bg-secondary/30 text-muted-foreground hover:border-accent/50"
+                  )}
+                >
+                  <Moon className="h-5 w-5" />
+                  <span className="text-sm font-medium">Dark</span>
+                </button>
+                <button
+                  onClick={() => setTheme("light")}
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-all",
+                    theme === "light"
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border-border bg-secondary/30 text-muted-foreground hover:border-accent/50"
+                  )}
+                >
+                  <Sun className="h-5 w-5" />
+                  <span className="text-sm font-medium">Light</span>
+                </button>
+              </div>
+            </div>
 
             {/* Change Password Form */}
             <form id="password-section" onSubmit={handleChangePassword} className="space-y-4">

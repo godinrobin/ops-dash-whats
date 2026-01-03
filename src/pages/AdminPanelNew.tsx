@@ -26,6 +26,8 @@ import { AdminAdsMetrics } from "@/components/admin/AdminAdsMetrics";
 import { AdminInstances } from "@/components/admin/AdminInstances";
 import { AdminWhatsAppApiConfig } from "@/components/admin/AdminWhatsAppApiConfig";
 import { AdminTagWhatsLabels } from "@/components/admin/AdminTagWhatsLabels";
+import { AdminUsers } from "@/components/admin/AdminUsers";
+import { useImpersonation } from "@/contexts/ImpersonationContext";
 
 // Product image imports for admin
 import bmVerificadaImg from "@/assets/bm-verificada.png";
@@ -83,6 +85,7 @@ const SIDEBAR_MENU = [
     category: "Usuários",
     icon: Users,
     items: [
+      { id: "users-management", label: "Gerenciar Usuários", icon: Users },
       { id: "metrics", label: "Métricas", icon: BarChart3 },
       { id: "numbers", label: "Números", icon: Phone },
       { id: "offers", label: "Ofertas", icon: FileText },
@@ -276,6 +279,7 @@ interface InstanceData {
 
 const AdminPanelNew = () => {
   const { user } = useAuth();
+  const { startImpersonation } = useImpersonation();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<UserData[]>([]);
   const [numbers, setNumbers] = useState<NumberData[]>([]);
@@ -293,7 +297,7 @@ const AdminPanelNew = () => {
   const [showProductModal, setShowProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<MarketplaceProductData | null>(null);
   // Sidebar state
-  const [activeSection, setActiveSection] = useState("metrics");
+  const [activeSection, setActiveSection] = useState("users-management");
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // UI State for hierarchical navigation
@@ -1111,6 +1115,11 @@ const AdminPanelNew = () => {
 
   const renderContent = () => {
     switch (activeSection) {
+      case "users-management":
+        return (
+          <AdminUsers onImpersonate={startImpersonation} />
+        );
+
       case "metrics":
         return (
           <div className="space-y-4">
