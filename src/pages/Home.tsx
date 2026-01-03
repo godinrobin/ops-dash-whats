@@ -148,6 +148,7 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
     glowColor: 'blue' | 'purple' | 'green' | 'red' | 'orange';
     isBeta?: boolean;
     comingSoon?: boolean;
+    allowedEmails?: string[];
   }> = [
     { 
       path: "/metricas", 
@@ -304,7 +305,8 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
       gradient: "from-green-400 to-teal-500",
       restricted: true,
       glowColor: 'green',
-      comingSoon: true
+      comingSoon: false,
+      allowedEmails: ['patrickrjo@gmail.com', 'ewerton@metricas.local']
     },
     { 
       path: "/disparador", 
@@ -322,6 +324,17 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
     // Check if system is coming soon - admins can bypass, others do nothing
     if (system.comingSoon && !isAdmin) {
       return;
+    }
+    
+    // Check if system has allowed emails restriction
+    if (system.allowedEmails && system.allowedEmails.length > 0) {
+      const userEmail = user?.email?.toLowerCase() || '';
+      const isAllowed = system.allowedEmails.some(email => email.toLowerCase() === userEmail) || isAdmin;
+      if (!isAllowed) {
+        setSelectedFeatureName(system.title);
+        setRestrictedModalOpen(true);
+        return;
+      }
     }
     
     if (isFullMember || !system.restricted || isAdmin) {
