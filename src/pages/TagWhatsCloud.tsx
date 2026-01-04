@@ -25,6 +25,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 // List of emails allowed to access new Tag Whats Cloud (in addition to admins)
 const ALLOWED_TAGWHATS_EMAILS = [
   'ewerton@metricas.local',
+  'patrickrjo@gmail.com',
 ];
 
 interface Instance {

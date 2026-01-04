@@ -116,11 +116,16 @@ serve(async (req) => {
         const currentNode = flowNodes.find(n => n.id === session.current_node_id);
         const isWaitingForInput = currentNode?.type === 'waitInput' || currentNode?.type === 'menu';
         const isDelayNode = currentNode?.type === 'delay';
+        const isPaymentIdentifier = currentNode?.type === 'paymentIdentifier';
         
         // More robust detection: check if we have a pending delay in variables
         const hasValidPendingDelay = pendingDelay && pendingDelay.resumeAt <= Date.now();
         
-        console.log(`[process-delay-queue] Session ${job.session_id}: isTimeoutJob=${isTimeoutJob}, isWaitingForInput=${isWaitingForInput}, isDelayNode=${isDelayNode}, hasValidPendingDelay=${hasValidPendingDelay}, nodeType=${currentNode?.type}`);
+        // Check for paymentIdentifier noResponse delay
+        const paymentNoResponseDelayKey = `_payment_no_response_delay_${session.current_node_id}`;
+        const hasPaymentNoResponseDelay = sessionVars[paymentNoResponseDelayKey] !== undefined;
+        
+        console.log(`[process-delay-queue] Session ${job.session_id}: isTimeoutJob=${isTimeoutJob}, isWaitingForInput=${isWaitingForInput}, isDelayNode=${isDelayNode}, isPaymentIdentifier=${isPaymentIdentifier}, hasValidPendingDelay=${hasValidPendingDelay}, hasPaymentNoResponseDelay=${hasPaymentNoResponseDelay}, nodeType=${currentNode?.type}`);
         
         // If this is a timeout job and session is still waiting for input, trigger timeout
         if (isTimeoutJob && isWaitingForInput) {
@@ -149,6 +154,33 @@ serve(async (req) => {
           }
           
           console.log(`[process-delay-queue] Timeout job result for ${job.session_id}:`, invokeResult);
+        } else if (isTimeoutJob && isPaymentIdentifier && hasPaymentNoResponseDelay) {
+          // PaymentIdentifier "no response" timeout
+          console.log(`[process-delay-queue] PaymentIdentifier no-response timeout for session ${job.session_id}`);
+          
+          const { data: invokeResult, error: invokeError } = await supabase.functions.invoke("process-inbox-flow", {
+            body: {
+              sessionId: job.session_id,
+              resumeFromTimeout: true,
+            },
+          });
+          
+          if (invokeError) {
+            console.error(`[process-delay-queue] Error invoking process-inbox-flow for paymentIdentifier timeout ${job.session_id}:`, invokeError);
+            const newStatus = job.attempts >= 2 ? "failed" : "scheduled";
+            await supabase
+              .from("inbox_flow_delay_jobs")
+              .update({ 
+                status: newStatus,
+                last_error: invokeError.message || "Unknown error",
+                updated_at: new Date().toISOString()
+              })
+              .eq("session_id", job.session_id);
+            failed++;
+            continue;
+          }
+          
+          console.log(`[process-delay-queue] PaymentIdentifier timeout job result for ${job.session_id}:`, invokeResult);
         } else if (hasValidPendingDelay || isDelayNode) {
           // This is a delay job (either has pending delay or current node is delay)
           console.log(`[process-delay-queue] Delay completed for session ${job.session_id}, resuming flow`);

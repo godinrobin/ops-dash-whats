@@ -1303,13 +1303,56 @@ serve(async (req) => {
             const markAsPaid = (currentNode.data.markAsPaid as boolean) || false;
             const maxAttempts = (currentNode.data.maxAttempts as number) || 3;
             const errorMessage = (currentNode.data.errorMessage as string) || '';
+            
+            // No response delay configuration
+            const noResponseDelayValue = (currentNode.data.noResponseDelayValue as number) || 5;
+            const noResponseDelayUnit = (currentNode.data.noResponseDelayUnit as string) || 'minutes';
+            const noResponseDelayMs = noResponseDelayUnit === 'seconds' 
+              ? noResponseDelayValue * 1000 
+              : noResponseDelayValue * 60 * 1000;
+            // Cap at 60 minutes
+            const cappedDelayMs = Math.min(noResponseDelayMs, 60 * 60 * 1000);
 
             const paymentAttemptKey = `_payment_attempts_${currentNodeId}`;
             const paymentSinceKey = `_payment_since_${currentNodeId}`;
             const paymentLastMsgKey = `_payment_last_media_msg_${currentNodeId}`;
             const paymentLastAnalysisKey = `_payment_last_media_analysis_${currentNodeId}`;
+            const paymentNoResponseDelayKey = `_payment_no_response_delay_${currentNodeId}`;
 
             let attempts = Number(variables[paymentAttemptKey] ?? 0);
+
+            // Check if this is a "no response" timeout callback
+            if (resumeFromTimeout && currentNode.type === 'paymentIdentifier') {
+              // Check if we have the noResponse delay set and no messages were received
+              const noResponseDelay = variables[paymentNoResponseDelayKey] as { scheduledAt: number; runAt: number } | undefined;
+              
+              if (noResponseDelay && attempts === 0) {
+                // No messages received during the delay period - route to noResponse
+                console.log(`[${runId}] ⏰ PaymentIdentifier: No response timeout - no messages received, routing to noResponse`);
+                
+                // Clear all payment state
+                delete variables[paymentAttemptKey];
+                delete variables[paymentSinceKey];
+                delete variables[paymentLastMsgKey];
+                delete variables[paymentLastAnalysisKey];
+                delete variables[paymentNoResponseDelayKey];
+                
+                // Clear the delay job
+                await supabaseClient
+                  .from('inbox_flow_delay_jobs')
+                  .delete()
+                  .eq('session_id', sessionId);
+                
+                const noResponseEdge = edges.find((e) => e.source === currentNodeId && e.sourceHandle === 'noResponse');
+                if (noResponseEdge) {
+                  currentNodeId = noResponseEdge.target;
+                } else {
+                  continueProcessing = false;
+                }
+                processedActions.push('No response received within timeout: NO RESPONSE');
+                break;
+              }
+            }
 
             // Anchor: only consider messages after we reached this node.
             if (!variables[paymentSinceKey]) {
@@ -1338,6 +1381,13 @@ serve(async (req) => {
               delete variables[paymentSinceKey];
               delete variables[paymentLastMsgKey];
               delete variables[paymentLastAnalysisKey];
+              delete variables[paymentNoResponseDelayKey];
+              
+              // Clear any pending delay job
+              await supabaseClient
+                .from('inbox_flow_delay_jobs')
+                .delete()
+                .eq('session_id', sessionId);
 
               const notPaidEdge = edges.find((e) => e.source === currentNodeId && e.sourceHandle === 'notPaid');
               if (notPaidEdge) {
@@ -1379,6 +1429,45 @@ serve(async (req) => {
 
             if (!allNewMessages || allNewMessages.length === 0) {
               console.log(`[${runId}] PaymentIdentifier: waiting for NEW messages since ${sinceIso}`);
+              
+              // Schedule "no response" delay job if not already scheduled
+              if (!variables[paymentNoResponseDelayKey]) {
+                const runAt = new Date(Date.now() + cappedDelayMs);
+                
+                // First, delete any existing delay job for this session
+                await supabaseClient
+                  .from('inbox_flow_delay_jobs')
+                  .delete()
+                  .eq('session_id', sessionId);
+                
+                // Create new delay job for "no response" timeout
+                const { error: delayJobError } = await supabaseClient
+                  .from('inbox_flow_delay_jobs')
+                  .insert({
+                    session_id: sessionId,
+                    run_at: runAt.toISOString(),
+                    status: 'scheduled',
+                    user_id: session.user_id,
+                  });
+                
+                if (delayJobError) {
+                  console.error(`[${runId}] PaymentIdentifier: failed to create noResponse delay job:`, delayJobError);
+                } else {
+                  console.log(`[${runId}] PaymentIdentifier: scheduled noResponse delay for ${runAt.toISOString()} (${cappedDelayMs}ms)`);
+                  variables[paymentNoResponseDelayKey] = {
+                    scheduledAt: Date.now(),
+                    runAt: Date.now() + cappedDelayMs,
+                  };
+                }
+                
+                // Also set timeout_at on session for the queue processor
+                await supabaseClient
+                  .from('inbox_flow_sessions')
+                  .update({
+                    timeout_at: runAt.toISOString(),
+                  })
+                  .eq('id', sessionId);
+              }
 
               await supabaseClient
                 .from('inbox_flow_sessions')
@@ -1405,6 +1494,26 @@ serve(async (req) => {
                 }),
                 { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
               );
+            }
+            
+            // User sent a message - cancel the "no response" delay
+            if (variables[paymentNoResponseDelayKey]) {
+              console.log(`[${runId}] PaymentIdentifier: user sent message, cancelling noResponse delay`);
+              delete variables[paymentNoResponseDelayKey];
+              
+              // Delete the delay job
+              await supabaseClient
+                .from('inbox_flow_delay_jobs')
+                .delete()
+                .eq('session_id', sessionId);
+              
+              // Clear timeout_at
+              await supabaseClient
+                .from('inbox_flow_sessions')
+                .update({
+                  timeout_at: null,
+                })
+                .eq('id', sessionId);
             }
             
             // Count non-payment messages (text, audio, video) as attempts first
@@ -1690,6 +1799,13 @@ serve(async (req) => {
               delete variables[paymentSinceKey];
               delete variables[paymentLastMsgKey];
               delete variables[paymentLastAnalysisKey];
+              delete variables[paymentNoResponseDelayKey];
+              
+              // Clear any pending delay job
+              await supabaseClient
+                .from('inbox_flow_delay_jobs')
+                .delete()
+                .eq('session_id', sessionId);
 
               const paidEdge = edges.find((e) => e.source === currentNodeId && e.sourceHandle === 'paid');
               if (paidEdge) {
@@ -1708,6 +1824,13 @@ serve(async (req) => {
               delete variables[paymentSinceKey];
               delete variables[paymentLastMsgKey];
               delete variables[paymentLastAnalysisKey];
+              delete variables[paymentNoResponseDelayKey];
+              
+              // Clear any pending delay job
+              await supabaseClient
+                .from('inbox_flow_delay_jobs')
+                .delete()
+                .eq('session_id', sessionId);
 
               const notPaidEdge = edges.find((e) => e.source === currentNodeId && e.sourceHandle === 'notPaid');
               if (notPaidEdge) {
