@@ -2,7 +2,6 @@ import { useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import {
   ReactFlow,
   Background,
-  Controls,
   addEdge,
   useNodesState,
   useEdgesState,
@@ -342,7 +341,6 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
           }}
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} className="!bg-background" />
-          <Controls className="!bg-card !border-border !shadow-md" />
         </ReactFlow>
         
         {/* Fit View button in bottom left */}
