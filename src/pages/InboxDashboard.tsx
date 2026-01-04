@@ -563,6 +563,21 @@ export default function InboxDashboard() {
     });
   }, [messages]);
 
+  // Count unique conversations (contacts) today across all instances
+  const todayConversationsCount = useMemo(() => {
+    const todaySp = formatSaoPauloYmd(new Date());
+    const uniqueContacts = new Set<string>();
+    
+    messages.forEach((m) => {
+      const msgDaySp = formatSaoPauloYmd(new Date(m.created_at));
+      if (msgDaySp === todaySp && m.contact_id) {
+        uniqueContacts.add(m.contact_id);
+      }
+    });
+    
+    return uniqueContacts.size;
+  }, [messages]);
+
   const CHART_COLORS = ['#f97316', '#3b82f6', '#22c55e', '#a855f7', '#ec4899', '#06b6d4', '#eab308', '#ef4444'];
 
   // Calculate conversations (contacts) by day for each instance (last 7 days) - São Paulo timezone
@@ -768,13 +783,13 @@ export default function InboxDashboard() {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardDescription>Mensagens Hoje</CardDescription>
-              <CardTitle className="text-3xl">{todayMessages.length}</CardTitle>
+              <CardDescription>Conversas Hoje</CardDescription>
+              <CardTitle className="text-3xl">{todayConversationsCount}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <MessageSquare className="h-4 w-4" />
-                <span>Recebidas e enviadas</span>
+                <Users className="h-4 w-4" />
+                <span>Total de todos os números</span>
               </div>
             </CardContent>
           </Card>
