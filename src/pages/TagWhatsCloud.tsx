@@ -213,14 +213,7 @@ const TagWhatsCloud = () => {
   const { isAdmin } = useAdminStatus();
   const { effectiveUserId, effectiveEmail } = useEffectiveUser();
 
-  // Check if user has access to new Tag Whats Cloud
-  const hasNewVersionAccess = useMemo(() => {
-    if (isAdmin) return true;
-    const email = (effectiveEmail || user?.email || '').toLowerCase();
-    return ALLOWED_TAGWHATS_EMAILS.some(e => e.toLowerCase() === email);
-  }, [isAdmin, effectiveEmail, user?.email]);
-  
-  // Check if user can see "Marcar no Gerenciador" (admin or ewerton@metricas.local)
+  // Check if user can see "Marcar no Gerenciador" and sales page link (admin or ewerton@metricas.local)
   const canSeeConversionTracking = useMemo(() => {
     if (isAdmin) return true;
     const email = (effectiveEmail || user?.email || '').toLowerCase();
@@ -584,10 +577,6 @@ const TagWhatsCloud = () => {
     return result;
   }, [logs, chartPeriod, instancesWithLogs]);
 
-  // If user doesn't have access to new version, show old version
-  if (!hasNewVersionAccess) {
-    return <TagWhatsCloudOldVersion />;
-  }
 
   return (
     <>
@@ -629,11 +618,13 @@ const TagWhatsCloud = () => {
               </CardContent>
             </Card>
             <Card 
-              className="border-amber-500/20 cursor-pointer hover:border-amber-500/40 transition-colors group"
-              onClick={() => navigate("/tag-whats/cloud/sales")}
+              className={`border-amber-500/20 ${canSeeConversionTracking ? 'cursor-pointer hover:border-amber-500/40 transition-colors group' : ''}`}
+              onClick={canSeeConversionTracking ? () => navigate("/tag-whats/cloud/sales") : undefined}
             >
               <CardContent className="p-4 text-center relative">
-                <ExternalLink className="h-4 w-4 absolute top-3 right-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                {canSeeConversionTracking && (
+                  <ExternalLink className="h-4 w-4 absolute top-3 right-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                )}
                 <p className="text-2xl font-bold text-amber-500">{totalLabelsApplied}</p>
                 <p className="text-sm text-muted-foreground">Vendas Totais</p>
               </CardContent>
