@@ -6,10 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ArrowLeft, MessageSquare, Smartphone, GitBranch, Tag, Plus, RefreshCw, Loader2, QrCode, Trash2, PowerOff, RotateCcw, ChevronDown, ChevronRight, Phone, Zap, Users, TrendingUp } from "lucide-react";
+import { ArrowLeft, MessageSquare, Smartphone, GitBranch, Tag, Plus, RefreshCw, Loader2, QrCode, Trash2, PowerOff, RotateCcw, ChevronDown, ChevronRight, Phone, Zap, Users, TrendingUp, Filter, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
@@ -61,6 +63,7 @@ export default function InboxDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [expandedInstances, setExpandedInstances] = useState<Set<string>>(new Set());
   const [tagsMenuOpen, setTagsMenuOpen] = useState(false);
+  const [chartFilterInstances, setChartFilterInstances] = useState<Set<string>>(new Set()); // Empty = show all
 
   // Create instance modal
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -638,10 +641,44 @@ export default function InboxDashboard() {
     });
   }, [messages, instances]);
 
-  // Get unique instance names for chart lines
-  const instanceNames = useMemo(() => {
-    return instances.map(i => i.label || i.instance_name || i.phone_number || 'Desconhecido');
+  // Get unique instance names for chart lines (with id mapping)
+  const instanceNamesWithIds = useMemo(() => {
+    return instances.map(i => ({
+      id: i.id,
+      name: i.label || i.instance_name || i.phone_number || 'Desconhecido'
+    }));
   }, [instances]);
+
+  // Filter instance names for chart based on selection
+  const filteredInstanceNames = useMemo(() => {
+    if (chartFilterInstances.size === 0) {
+      // No filter = show all
+      return instanceNamesWithIds.map(i => i.name);
+    }
+    return instanceNamesWithIds
+      .filter(i => chartFilterInstances.has(i.id))
+      .map(i => i.name);
+  }, [instanceNamesWithIds, chartFilterInstances]);
+
+  // Toggle instance filter
+  const toggleChartFilter = (instanceId: string) => {
+    const newFilter = new Set(chartFilterInstances);
+    if (newFilter.has(instanceId)) {
+      newFilter.delete(instanceId);
+    } else {
+      newFilter.add(instanceId);
+    }
+    setChartFilterInstances(newFilter);
+  };
+
+  // Select all / clear all for chart filter
+  const selectAllChartFilter = () => {
+    setChartFilterInstances(new Set(instances.map(i => i.id)));
+  };
+
+  const clearChartFilter = () => {
+    setChartFilterInstances(new Set());
+  };
 
   if (loading) {
     return (
@@ -826,10 +863,76 @@ export default function InboxDashboard() {
         {instances.length > 0 && (
           <Card className="mb-8">
             <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <TrendingUp className="h-5 w-5" />
-                Conversas por Número (Últimos 7 dias)
-              </CardTitle>
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  Conversas por Número (Últimos 7 dias)
+                </CardTitle>
+                
+                {/* Instance Filter */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-2">
+                      <Filter className="h-4 w-4" />
+                      Filtrar Instâncias
+                      {chartFilterInstances.size > 0 && (
+                        <Badge variant="secondary" className="ml-1">
+                          {chartFilterInstances.size}
+                        </Badge>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80" align="end">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-sm">Filtrar por Instância</h4>
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-7 text-xs"
+                            onClick={selectAllChartFilter}
+                          >
+                            Todos
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-7 text-xs"
+                            onClick={clearChartFilter}
+                          >
+                            Limpar
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="max-h-60 overflow-y-auto space-y-2">
+                        {instanceNamesWithIds.map((inst, idx) => (
+                          <div 
+                            key={inst.id} 
+                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 cursor-pointer"
+                            onClick={() => toggleChartFilter(inst.id)}
+                          >
+                            <Checkbox
+                              checked={chartFilterInstances.size === 0 || chartFilterInstances.has(inst.id)}
+                              onCheckedChange={() => toggleChartFilter(inst.id)}
+                            />
+                            <div 
+                              className="w-3 h-3 rounded-full" 
+                              style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length] }}
+                            />
+                            <span className="text-sm truncate flex-1">{inst.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {chartFilterInstances.size > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          {chartFilterInstances.size} de {instances.length} selecionado(s)
+                        </p>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
@@ -854,18 +957,23 @@ export default function InboxDashboard() {
                     labelFormatter={(label) => `Data: ${label}`}
                   />
                   <Legend />
-                  {instanceNames.map((name, idx) => (
-                    <Line 
-                      key={name}
-                      type="monotone"
-                      dataKey={name}
-                      stroke={CHART_COLORS[idx % CHART_COLORS.length]}
-                      strokeWidth={2}
-                      dot={{ r: 4, fill: CHART_COLORS[idx % CHART_COLORS.length] }}
-                      activeDot={{ r: 6 }}
-                      connectNulls={false}
-                    />
-                  ))}
+                  {filteredInstanceNames.map((name, idx) => {
+                    // Get original color index based on all instances
+                    const originalIdx = instanceNamesWithIds.findIndex(i => i.name === name);
+                    const colorIdx = originalIdx >= 0 ? originalIdx : idx;
+                    return (
+                      <Line 
+                        key={name}
+                        type="monotone"
+                        dataKey={name}
+                        stroke={CHART_COLORS[colorIdx % CHART_COLORS.length]}
+                        strokeWidth={2}
+                        dot={{ r: 4, fill: CHART_COLORS[colorIdx % CHART_COLORS.length] }}
+                        activeDot={{ r: 6 }}
+                        connectNulls={false}
+                      />
+                    );
+                  })}
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>
