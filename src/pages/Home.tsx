@@ -326,13 +326,12 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
       return;
     }
     
-    // Check if system has allowed emails restriction
+    // Check if system has allowed emails restriction - show as "coming soon" for non-allowed users
     if (system.allowedEmails && system.allowedEmails.length > 0) {
       const userEmail = user?.email?.toLowerCase() || '';
       const isAllowed = system.allowedEmails.some(email => email.toLowerCase() === userEmail) || isAdmin;
       if (!isAllowed) {
-        setSelectedFeatureName(system.title);
-        setRestrictedModalOpen(true);
+        // Do nothing - system shows as "coming soon" for these users
         return;
       }
     }
@@ -403,8 +402,12 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
           >
             {systems.map((system, index) => {
               const isLocked = !accessLoading && isFullMember === false && system.restricted && !isAdmin;
-              // Hide coming soon badge for admins
-              const showComingSoon = system.comingSoon && !isAdmin;
+              // Check if user has access to allowed emails restricted systems
+              const userEmail = user?.email?.toLowerCase() || '';
+              const isAllowedByEmail = system.allowedEmails?.some(email => email.toLowerCase() === userEmail) || isAdmin;
+              // Show coming soon for: explicitly marked coming soon OR has allowedEmails but user not allowed
+              const showComingSoon = (system.comingSoon && !isAdmin) || 
+                (system.allowedEmails && system.allowedEmails.length > 0 && !isAllowedByEmail);
               
               return (
                 <motion.div 

@@ -2,9 +2,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { InboxMessage } from '@/types/inbox';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 
 export const useInboxMessages = (contactId: string | null) => {
   const { user } = useAuth();
+  const { effectiveUserId } = useEffectiveUser();
+  const userId = effectiveUserId || user?.id;
+  
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +50,7 @@ export const useInboxMessages = (contactId: string | null) => {
     [...arr].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
   const fetchMessages = useCallback(async () => {
-    if (!user || !contactId) {
+    if (!userId || !contactId) {
       setMessages([]);
       setLoading(false);
       return;
@@ -99,7 +103,7 @@ export const useInboxMessages = (contactId: string | null) => {
     } finally {
       setLoading(false);
     }
-  }, [user, contactId]);
+  }, [userId, contactId]);
 
   // Fetch messages when contactId changes
   useEffect(() => {
@@ -116,7 +120,7 @@ export const useInboxMessages = (contactId: string | null) => {
 
     setRealtimeSubscribed(false);
 
-    if (!user || !contactId) return;
+    if (!userId || !contactId) return;
 
     const channelName = `inbox-messages-${contactId}-${Date.now()}`;
     console.log(`Subscribing to realtime channel: ${channelName}`);
@@ -222,13 +226,13 @@ export const useInboxMessages = (contactId: string | null) => {
         channelRef.current = null;
       }
     };
-  }, [user, contactId]);
+  }, [userId, contactId]);
 
   // Fallback polling: pulls latest inbound messages from phone when realtime/webhook can't be configured
   // Otimizado: poll a cada 15s, desativa quando tab não visível
   useEffect(() => {
     // If realtime is active, don't poll (polling can cause visual duplicates/race conditions)
-    if (!user || !contactId || realtimeSubscribed) return;
+    if (!userId || !contactId || realtimeSubscribed) return;
 
     let cancelled = false;
     let inFlight = false;
@@ -299,11 +303,11 @@ export const useInboxMessages = (contactId: string | null) => {
       stopPolling();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [user, contactId, fetchMessages, realtimeSubscribed]);
+  }, [userId, contactId, fetchMessages, realtimeSubscribed]);
 
 
   const sendMessage = useCallback(async (content: string, messageType: string = 'text', mediaUrl?: string) => {
-    if (!user || !contactId) return { error: 'Not authenticated or no contact selected' };
+    if (!userId || !contactId) return { error: 'Not authenticated or no contact selected' };
 
     try {
       // Get contact info for instance_id, phone, and remote_jid
@@ -335,7 +339,7 @@ export const useInboxMessages = (contactId: string | null) => {
         .insert({
           contact_id: contactId,
           instance_id: contact.instance_id,
-          user_id: user.id,
+          user_id: userId,
           direction: 'outbound',
           message_type: messageType,
           content,
@@ -401,7 +405,7 @@ export const useInboxMessages = (contactId: string | null) => {
       console.error('sendMessage error:', err);
       return { error: err.message, errorCode: 'UNKNOWN_ERROR' };
     }
-  }, [user, contactId]);
+  }, [userId, contactId]);
 
   return { messages, loading, error, refetch: fetchMessages, sendMessage };
 };
