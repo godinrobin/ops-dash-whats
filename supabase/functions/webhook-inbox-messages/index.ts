@@ -1152,36 +1152,31 @@ serve(async (req) => {
               if (isWaitingForInput) {
                 console.log(`[UAZAPI-WEBHOOK] Found active session ${activeSession.id} waiting for input at node ${currentNode.id} (type: ${currentNode.type})`);
                 
-                // For paymentIdentifier, we only care about media messages (images/PDFs)
+                // For paymentIdentifier, ALL message types count as attempts
+                // The process-inbox-flow will determine if it's valid payment proof (image/PDF) or just an attempt
                 if (currentNode.type === 'paymentIdentifier') {
-                  const isMediaMessage = ['image', 'document'].includes(messageType);
+                  console.log(`[UAZAPI-WEBHOOK] Message for paymentIdentifier: ${messageType}`);
                   
-                  if (isMediaMessage) {
-                    console.log(`[UAZAPI-WEBHOOK] Media received for paymentIdentifier: ${messageType}`);
+                  // Process the message - all types count as attempts in the flow processor
+                  try {
+                    const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+                    const processResponse = await fetch(processUrl, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                      },
+                      body: JSON.stringify({ sessionId: activeSession.id, userInput: uazText || '' }),
+                    });
                     
-                    // Process the media and continue the flow
-                    try {
-                      const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
-                      const processResponse = await fetch(processUrl, {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-                        },
-                        body: JSON.stringify({ sessionId: activeSession.id, userInput: uazText || '' }),
-                      });
-                      
-                      if (!processResponse.ok) {
-                        const errorText = await processResponse.text();
-                        console.error('[UAZAPI-WEBHOOK] Error processing payment media:', errorText);
-                      } else {
-                        console.log('[UAZAPI-WEBHOOK] Payment media processed, flow continued');
-                      }
-                    } catch (flowError) {
-                      console.error('[UAZAPI-WEBHOOK] Error calling process-inbox-flow for payment:', flowError);
+                    if (!processResponse.ok) {
+                      const errorText = await processResponse.text();
+                      console.error('[UAZAPI-WEBHOOK] Error processing payment message:', errorText);
+                    } else {
+                      console.log('[UAZAPI-WEBHOOK] Payment message processed, flow continued');
                     }
-                  } else {
-                    console.log(`[UAZAPI-WEBHOOK] Non-media message (${messageType}) while waiting for payment - ignoring`);
+                  } catch (flowError) {
+                    console.error('[UAZAPI-WEBHOOK] Error calling process-inbox-flow for payment:', flowError);
                   }
                 } else {
                   // For waitInput and menu nodes
