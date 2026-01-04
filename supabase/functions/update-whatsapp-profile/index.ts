@@ -5,7 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const UAZAPI_BASE_URL = 'https://api.uazapi.com';
+const UAZAPI_BASE_URL = 'https://zapdata.uazapi.com';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {

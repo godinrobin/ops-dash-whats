@@ -357,7 +357,11 @@ export default function WhatsAppEditor() {
                     >
                       Limpar
                     </Button>
-                    <Button size="sm" onClick={() => openEditModal()}>
+                    <Button 
+                      size="sm" 
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                      onClick={() => openEditModal()}
+                    >
                       <Pencil className="h-4 w-4 mr-2" />
                       Editar em Massa
                     </Button>
@@ -429,9 +433,11 @@ export default function WhatsAppEditor() {
                             </p>
                             {getStatusBadge(instance.status)}
                           </div>
-                          <p className="text-sm text-muted-foreground">
-                            {instance.phone_number ? formatPhoneDisplay(instance.phone_number) : 'Sem número'}
-                          </p>
+                          {instance.phone_number && instance.phone_number !== instance.instance_name && (
+                            <p className="text-sm text-muted-foreground">
+                              {formatPhoneDisplay(instance.phone_number)}
+                            </p>
+                          )}
                           {instance.profile_name && (
                             <p className="text-xs text-muted-foreground">
                               Nome: {instance.profile_name}
@@ -441,8 +447,8 @@ export default function WhatsAppEditor() {
 
                         {/* Actions */}
                         <Button
-                          variant="outline"
                           size="sm"
+                          className="bg-green-600 hover:bg-green-700 text-white"
                           onClick={() => openEditModal(instance)}
                           disabled={instance.status !== 'connected'}
                         >
@@ -466,7 +472,7 @@ export default function WhatsAppEditor() {
             <DialogTitle>
               {isBulkEdit 
                 ? `Editar ${selectedInstances.size} números` 
-                : `Editar ${editingInstance?.label || editingInstance?.phone_number}`
+                : `Editar ${editingInstance?.label || editingInstance?.phone_number || editingInstance?.instance_name}`
               }
             </DialogTitle>
             <DialogDescription>
@@ -563,10 +569,18 @@ export default function WhatsAppEditor() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditModalOpen(false)}>
+            <Button 
+              variant="outline" 
+              className="border-red-500/50 text-red-500 hover:bg-red-500/10"
+              onClick={() => setEditModalOpen(false)}
+            >
               Cancelar
             </Button>
-            <Button onClick={handleSaveProfile} disabled={saving}>
+            <Button 
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={handleSaveProfile} 
+              disabled={saving}
+            >
               {saving ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
