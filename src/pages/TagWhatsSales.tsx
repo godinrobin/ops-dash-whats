@@ -4,7 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ArrowLeft, ShoppingBag, Phone, Calendar, Loader2, Tag, Download, CheckCircle2, XCircle } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ArrowLeft, ShoppingBag, Phone, Calendar, Loader2, Tag, Download, CheckCircle2, XCircle, Send } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,6 +16,7 @@ import { format, subDays, startOfDay, endOfDay, parseISO } from "date-fns";
 import { toZonedTime, formatInTimeZone } from "date-fns-tz";
 import { ptBR } from "date-fns/locale";
 import { AnimatedTable, Column } from "@/components/ui/animated-table";
+import { toast } from "sonner";
 
 interface SaleLog {
   id: string;
@@ -42,6 +46,12 @@ const TagWhatsSales = () => {
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState<string>("today");
   const [instanceFilter, setInstanceFilter] = useState<string>("all");
+
+  // Manual send states
+  const [sendingConversion, setSendingConversion] = useState<Record<string, boolean>>({});
+  const [manualSendDialogOpen, setManualSendDialogOpen] = useState(false);
+  const [selectedSale, setSelectedSale] = useState<SaleLog | null>(null);
+  const [manualValue, setManualValue] = useState<string>("");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -116,6 +126,56 @@ const TagWhatsSales = () => {
     return filtered;
   }, [salesLogs, dateFilter, instanceFilter]);
 
+  const handleOpenManualSend = (sale: SaleLog) => {
+    setSelectedSale(sale);
+    setManualValue(sale.extracted_value?.toString() || "");
+    setManualSendDialogOpen(true);
+  };
+
+  const handleManualSend = async () => {
+    if (!selectedSale) return;
+
+    const saleId = selectedSale.id;
+    setSendingConversion((prev) => ({ ...prev, [saleId]: true }));
+    setManualSendDialogOpen(false);
+
+    try {
+      const value = manualValue ? parseFloat(manualValue.replace(",", ".")) : undefined;
+
+      const { data, error } = await supabase.functions.invoke("tag-whats-manual-conversion", {
+        body: { saleLogId: saleId, value },
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        toast.success("Conversão enviada com sucesso!", {
+          description: `Pixel: ${data.pixel_id} | Valor: R$ ${data.value?.toFixed(2) || "0.00"}`,
+        });
+
+        // Update the local state
+        setSalesLogs((prev) =>
+          prev.map((sale) =>
+            sale.id === saleId
+              ? { ...sale, conversion_sent: true, conversion_error: null, extracted_value: value ?? sale.extracted_value }
+              : sale
+          )
+        );
+      } else {
+        throw new Error(data.error || "Erro desconhecido");
+      }
+    } catch (error: any) {
+      console.error("Error sending manual conversion:", error);
+      toast.error("Erro ao enviar conversão", {
+        description: error.message || "Tente novamente mais tarde",
+      });
+    } finally {
+      setSendingConversion((prev) => ({ ...prev, [saleId]: false }));
+      setSelectedSale(null);
+      setManualValue("");
+    }
+  };
+
   const columns: Column<SaleLog>[] = [
     {
       key: "contact_phone",
@@ -179,6 +239,38 @@ const TagWhatsSales = () => {
           </TooltipProvider>
         )
       ),
+    },
+    {
+      key: "manual_send",
+      header: "Envio Manual",
+      render: (item) => {
+        if (item.conversion_sent) {
+          return (
+            <span className="text-muted-foreground text-sm">—</span>
+          );
+        }
+
+        const isSending = sendingConversion[item.id];
+
+        return (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => handleOpenManualSend(item)}
+            disabled={isSending}
+            className="h-8 px-3"
+          >
+            {isSending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <>
+                <Send className="h-3.5 w-3.5 mr-1.5" />
+                Enviar
+              </>
+            )}
+          </Button>
+        );
+      },
     },
   ];
 
@@ -297,6 +389,51 @@ const TagWhatsSales = () => {
           </footer>
         </div>
       </div>
+
+      {/* Manual Send Dialog */}
+      <Dialog open={manualSendDialogOpen} onOpenChange={setManualSendDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Enviar Conversão Manualmente</DialogTitle>
+            <DialogDescription>
+              Envie o evento de compra para o pixel do Facebook. O valor é opcional.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="contact">Contato</Label>
+              <Input
+                id="contact"
+                value={selectedSale?.contact_phone || ""}
+                disabled
+                className="font-mono"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="value">Valor da Compra (R$)</Label>
+              <Input
+                id="value"
+                type="text"
+                placeholder="Ex: 97,00"
+                value={manualValue}
+                onChange={(e) => setManualValue(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Deixe em branco para enviar sem valor
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setManualSendDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleManualSend}>
+              <Send className="h-4 w-4 mr-2" />
+              Enviar Conversão
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };
