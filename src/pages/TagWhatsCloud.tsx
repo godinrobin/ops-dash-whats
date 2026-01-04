@@ -48,6 +48,15 @@ interface TagWhatsConfig {
   enable_conversion_tracking?: boolean;
   ad_account_id?: string | null;
   pixel_id?: string | null;
+  selected_ad_account_ids?: string[];
+}
+
+interface Pixel {
+  id: string;
+  ad_account_id: string;
+  pixel_id: string;
+  name: string | null;
+  is_selected: boolean;
 }
 
 interface TagWhatsLog {
@@ -237,6 +246,7 @@ const TagWhatsCloud = () => {
   // Facebook/Ads related state
   const [facebookAccounts, setFacebookAccounts] = useState<FacebookAccount[]>([]);
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
+  const [pixels, setPixels] = useState<Pixel[]>([]);
   const [loadingAds, setLoadingAds] = useState(false);
   const [adsExpanded, setAdsExpanded] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -287,7 +297,7 @@ const TagWhatsCloud = () => {
     }
   }, [user, effectiveUserId]);
 
-  // Fetch Facebook accounts and ad accounts
+  // Fetch Facebook accounts, ad accounts and pixels
   const fetchAdsData = useCallback(async () => {
     const userId = effectiveUserId || user?.id;
     if (!userId) return;
@@ -304,6 +314,13 @@ const TagWhatsCloud = () => {
         .select("*")
         .eq("user_id", userId);
       setAdAccounts(adAccountsData || []);
+
+      // Fetch pixels
+      const { data: pixelsData } = await supabase
+        .from("ads_pixels")
+        .select("*")
+        .eq("user_id", userId) as any;
+      setPixels(pixelsData || []);
     } catch (error) {
       console.error("Error fetching ads data:", error);
     } finally {
@@ -373,12 +390,32 @@ const TagWhatsCloud = () => {
   const handleSyncAdAccounts = async (facebookAccountId: string) => {
     setSyncingAccounts(prev => new Set(prev).add(facebookAccountId));
     try {
+      // Sync ad accounts
       const { error } = await supabase.functions.invoke("facebook-oauth", {
         body: { action: "get_ad_accounts", facebook_account_id: facebookAccountId }
       });
 
       if (error) throw error;
-      toast.success("Contas de anúncio sincronizadas!");
+
+      // Also sync pixels for all ad accounts of this Facebook account
+      const { data: accountsToSync } = await supabase
+        .from("ads_ad_accounts")
+        .select("id")
+        .eq("facebook_account_id", facebookAccountId);
+
+      if (accountsToSync && accountsToSync.length > 0) {
+        for (const acc of accountsToSync) {
+          try {
+            await supabase.functions.invoke("facebook-oauth", {
+              body: { action: "sync_pixels", ad_account_id: acc.id }
+            });
+          } catch (pixelError) {
+            console.error("Error syncing pixels for account:", acc.id, pixelError);
+          }
+        }
+      }
+
+      toast.success("Contas e pixels sincronizados!");
       await fetchAdsData();
     } catch (error) {
       console.error("Error syncing ad accounts:", error);
@@ -408,15 +445,17 @@ const TagWhatsCloud = () => {
     }
   };
 
-  const handleToggleConversionTracking = async (configId: string, enabled: boolean, adAccountId?: string) => {
+  const handleToggleConversionTracking = async (configId: string, enabled: boolean, selectedIds?: string[]) => {
     try {
       const updateData: any = { 
         enable_conversion_tracking: enabled,
         updated_at: new Date().toISOString()
       };
       
-      if (adAccountId) {
-        updateData.ad_account_id = adAccountId;
+      if (selectedIds) {
+        updateData.selected_ad_account_ids = selectedIds;
+        // Keep backwards compatibility - set first one as ad_account_id
+        updateData.ad_account_id = selectedIds.length > 0 ? selectedIds[0] : null;
       }
 
       const { error } = await (supabase
@@ -430,6 +469,30 @@ const TagWhatsCloud = () => {
     } catch (error) {
       console.error('Error toggling conversion tracking:', error);
       toast.error('Erro ao alterar configuração');
+    }
+  };
+
+  const handleTogglePixelSelected = async (pixelId: string, adAccountDbId: string, isSelected: boolean) => {
+    try {
+      // First, deselect all pixels for this ad account
+      await (supabase
+        .from('ads_pixels' as any)
+        .update({ is_selected: false })
+        .eq('ad_account_id', adAccountDbId) as any);
+
+      // Then select the chosen pixel
+      if (isSelected) {
+        await (supabase
+          .from('ads_pixels' as any)
+          .update({ is_selected: true })
+          .eq('id', pixelId) as any);
+      }
+
+      toast.success(isSelected ? 'Pixel selecionado!' : 'Pixel desmarcado!');
+      fetchAdsData();
+    } catch (error) {
+      console.error('Error toggling pixel:', error);
+      toast.error('Erro ao alterar pixel');
     }
   };
 
@@ -906,6 +969,7 @@ const TagWhatsCloud = () => {
                         if (!instance) return null;
 
                         const activeAdAccounts = adAccounts.filter(a => a.is_selected);
+                        const selectedIds = config.selected_ad_account_ids || (config.ad_account_id ? [config.ad_account_id] : []);
 
                         return (
                           <div key={config.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
@@ -915,30 +979,35 @@ const TagWhatsCloud = () => {
                               </div>
                               <div>
                                 <p className="font-medium text-sm">{instance.phone_number || instance.instance_name}</p>
-                                {config.ad_account_id && (
+                                {selectedIds.length > 0 && (
                                   <p className="text-xs text-muted-foreground">
-                                    Conta: {adAccounts.find(a => a.id === config.ad_account_id)?.name || config.ad_account_id}
+                                    {selectedIds.length} conta(s) selecionada(s)
                                   </p>
                                 )}
                               </div>
                             </div>
                             <div className="flex items-center gap-3">
-                              {activeAdAccounts.length > 1 && (
-                                <Select
-                                  value={config.ad_account_id || ''}
-                                  onValueChange={(value) => handleToggleConversionTracking(config.id, true, value)}
-                                >
-                                  <SelectTrigger className="w-[180px] h-8 text-xs">
-                                    <SelectValue placeholder="Selecionar conta" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {activeAdAccounts.map(acc => (
-                                      <SelectItem key={acc.id} value={acc.id}>
+                              {activeAdAccounts.length > 0 && config.enable_conversion_tracking && (
+                                <div className="flex flex-wrap gap-1 max-w-[300px]">
+                                  {activeAdAccounts.map(acc => {
+                                    const isChecked = selectedIds.includes(acc.id);
+                                    return (
+                                      <Badge
+                                        key={acc.id}
+                                        variant={isChecked ? "default" : "outline"}
+                                        className={`cursor-pointer text-xs ${isChecked ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30' : 'hover:bg-muted'}`}
+                                        onClick={() => {
+                                          const newIds = isChecked
+                                            ? selectedIds.filter(id => id !== acc.id)
+                                            : [...selectedIds, acc.id];
+                                          handleToggleConversionTracking(config.id, true, newIds);
+                                        }}
+                                      >
                                         {acc.name || acc.ad_account_id}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                      </Badge>
+                                    );
+                                  })}
+                                </div>
                               )}
                               <ColoredSwitch
                                 checked={config.enable_conversion_tracking || false}
@@ -947,11 +1016,60 @@ const TagWhatsCloud = () => {
                                   handleToggleConversionTracking(
                                     config.id, 
                                     checked, 
-                                    checked && firstActiveAccount ? firstActiveAccount.id : undefined
+                                    checked && firstActiveAccount ? [firstActiveAccount.id] : []
                                   );
                                 }}
                                 disabled={activeAdAccounts.length === 0}
                               />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Pixel Selection per Ad Account */}
+                  {adAccounts.filter(a => a.is_selected).length > 0 && (
+                    <div className="space-y-3 pt-2 border-t border-border">
+                      <h4 className="font-medium text-sm">Selecionar Pixel por Conta de Anúncio:</h4>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Selecione o pixel que será usado para enviar os eventos de conversão de cada conta.
+                      </p>
+                      {adAccounts.filter(a => a.is_selected).map(adAccount => {
+                        const accountPixels = pixels.filter(p => p.ad_account_id === adAccount.id);
+                        const selectedPixel = accountPixels.find(p => p.is_selected);
+
+                        return (
+                          <div key={adAccount.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full flex items-center justify-center bg-purple-500/20">
+                                <Target className="h-4 w-4 text-purple-500" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-sm">{adAccount.name || adAccount.ad_account_id}</p>
+                                <p className="text-xs text-muted-foreground">{adAccount.currency}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {accountPixels.length === 0 ? (
+                                <span className="text-xs text-muted-foreground">Sincronize para carregar pixels</span>
+                              ) : (
+                                <Select
+                                  value={selectedPixel?.id || ''}
+                                  onValueChange={(value) => handleTogglePixelSelected(value, adAccount.id, true)}
+                                >
+                                  <SelectTrigger className="w-[200px] h-8 text-xs">
+                                    <SelectValue placeholder="Selecionar pixel" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {accountPixels.map(pixel => (
+                                      <SelectItem key={pixel.id} value={pixel.id}>
+                                        {pixel.name || pixel.pixel_id}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              )}
                             </div>
                           </div>
                         );
