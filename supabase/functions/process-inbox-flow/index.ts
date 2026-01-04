@@ -1296,7 +1296,8 @@ serve(async (req) => {
 
           case 'paymentIdentifier': {
             // Payment Identifier node - analyze PIX payment receipts in inbound media
-            // IMPORTANT: attempts are counted per *media analyzed* (not per invocation).
+            // ATTEMPTS are counted for ALL message types (text, audio, image, document)
+            // but only image/PDF are analyzed for payment confirmation
             const checkImage = (currentNode.data.checkImage as boolean) ?? true;
             const checkPdf = (currentNode.data.checkPdf as boolean) ?? true;
             const markAsPaid = (currentNode.data.markAsPaid as boolean) || false;
@@ -1310,16 +1311,20 @@ serve(async (req) => {
 
             let attempts = Number(variables[paymentAttemptKey] ?? 0);
 
-            // Anchor: only consider media after we reached this node.
+            // Anchor: only consider messages after we reached this node.
             if (!variables[paymentSinceKey]) {
               variables[paymentSinceKey] = session.last_interaction || session.started_at;
             }
 
             const sinceIso = String(variables[paymentSinceKey] || session.last_interaction || session.started_at);
 
-            const mediaTypeFilters: string[] = [];
-            if (checkImage) mediaTypeFilters.push('image');
-            if (checkPdf) mediaTypeFilters.push('document');
+            // Media types that can be analyzed for payment (image/PDF)
+            const paymentMediaFilters: string[] = [];
+            if (checkImage) paymentMediaFilters.push('image');
+            if (checkPdf) paymentMediaFilters.push('document');
+            
+            // All message types that count as attempts (text, audio, image, document, video)
+            const attemptMessageTypes = ['text', 'audio', 'image', 'document', 'video'];
 
             const remainingAttempts = Math.max(0, maxAttempts - attempts);
 
@@ -1344,26 +1349,36 @@ serve(async (req) => {
               break;
             }
 
-            // Fetch NEW media since cursor, in chronological order.
-            // This guarantees that if the user sends multiple medias before the flow runs,
-            // we still analyze each one and count attempts correctly.
-            const { data: newMediaMessages, error: mediaFetchError } = await supabaseClient
+            // Fetch ALL new messages since cursor (to count attempts)
+            const { data: allNewMessages, error: allMsgFetchError } = await supabaseClient
               .from('inbox_messages')
               .select('*')
               .eq('contact_id', contact.id)
               .eq('instance_id', session.instance_id)
               .eq('direction', 'inbound')
-              .in('message_type', mediaTypeFilters)
+              .in('message_type', attemptMessageTypes)
               .gt('created_at', sinceIso)
               .order('created_at', { ascending: true })
-              .limit(Math.min(remainingAttempts, 10));
+              .limit(Math.min(remainingAttempts, 20));
 
-            if (mediaFetchError) {
-              console.error(`[${runId}] PaymentIdentifier: failed to fetch media messages:`, mediaFetchError);
+            if (allMsgFetchError) {
+              console.error(`[${runId}] PaymentIdentifier: failed to fetch messages:`, allMsgFetchError);
             }
 
-            if (!newMediaMessages || newMediaMessages.length === 0) {
-              console.log(`[${runId}] PaymentIdentifier: waiting for NEW payment media since ${sinceIso}`);
+            // Filter only payment-analyzable media (image/PDF)
+            const newMediaMessages = (allNewMessages || []).filter(msg => 
+              paymentMediaFilters.includes(msg.message_type)
+            );
+            
+            // Non-payment messages (text, audio, video) - these just count as attempts
+            const nonPaymentMessages = (allNewMessages || []).filter(msg => 
+              !paymentMediaFilters.includes(msg.message_type)
+            );
+
+            console.log(`[${runId}] PaymentIdentifier: found ${allNewMessages?.length || 0} total messages, ${newMediaMessages.length} payment media, ${nonPaymentMessages.length} non-payment`);
+
+            if (!allNewMessages || allNewMessages.length === 0) {
+              console.log(`[${runId}] PaymentIdentifier: waiting for NEW messages since ${sinceIso}`);
 
               await supabaseClient
                 .from('inbox_flow_sessions')
@@ -1376,7 +1391,7 @@ serve(async (req) => {
                 })
                 .eq('id', sessionId);
 
-              processedActions.push(`Waiting for payment media (attempts used: ${attempts}/${maxAttempts})`);
+              processedActions.push(`Waiting for payment proof (attempts used: ${attempts}/${maxAttempts})`);
               continueProcessing = false;
 
               return new Response(
@@ -1390,6 +1405,39 @@ serve(async (req) => {
                 }),
                 { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
               );
+            }
+            
+            // Count non-payment messages (text, audio, video) as attempts first
+            for (const nonPaymentMsg of nonPaymentMessages) {
+              if (attempts >= maxAttempts) break;
+              
+              console.log(`[${runId}] PaymentIdentifier: counting ${nonPaymentMsg.message_type} message as attempt (id=${nonPaymentMsg.id})`);
+              attempts += 1;
+              variables[paymentAttemptKey] = attempts;
+              
+              // Advance cursor so we never reprocess the same message
+              if (nonPaymentMsg.created_at) {
+                variables[paymentSinceKey] = nonPaymentMsg.created_at;
+              }
+            }
+            
+            // Check if we've exhausted attempts after counting non-payment messages
+            if (attempts >= maxAttempts && newMediaMessages.length === 0) {
+              console.log(`[${runId}] ❌ PaymentIdentifier: max attempts reached after non-payment messages (${attempts}/${maxAttempts})`);
+              
+              delete variables[paymentAttemptKey];
+              delete variables[paymentSinceKey];
+              delete variables[paymentLastMsgKey];
+              delete variables[paymentLastAnalysisKey];
+
+              const notPaidEdge = edges.find((e) => e.source === currentNodeId && e.sourceHandle === 'notPaid');
+              if (notPaidEdge) {
+                currentNodeId = notPaidEdge.target;
+              } else {
+                continueProcessing = false;
+              }
+              processedActions.push(`Payment not identified after ${attempts} attempts (no valid proof sent): NOT PAID`);
+              break;
             }
 
             const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
@@ -1671,8 +1719,12 @@ serve(async (req) => {
               break;
             }
 
-            // Still waiting for more media
-            if (processedAnyThisRun && errorMessage && instanceName && phone) {
+            // Determine if we processed any messages this run (either non-payment or payment media)
+            const processedAnyMessagesThisRun = processedAnyThisRun || nonPaymentMessages.length > 0;
+
+            // Still waiting for valid payment proof
+            // Send error message if we processed messages but didn't confirm payment
+            if (processedAnyMessagesThisRun && errorMessage && instanceName && phone) {
               const errorMsgReplaced = replaceVariables(errorMessage, variables);
               await sendMessage(
                 effectiveBaseUrl,
@@ -1708,7 +1760,7 @@ serve(async (req) => {
               })
               .eq('id', sessionId);
 
-            processedActions.push(`Payment check attempts used: ${attempts}/${maxAttempts}, waiting for next media`);
+            processedActions.push(`Payment check attempts used: ${attempts}/${maxAttempts}, waiting for valid payment proof`);
             continueProcessing = false;
 
             return new Response(
