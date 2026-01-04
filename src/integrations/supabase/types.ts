@@ -669,6 +669,47 @@ export type Database = {
           },
         ]
       }
+      ads_pixels: {
+        Row: {
+          ad_account_id: string
+          created_at: string
+          id: string
+          is_selected: boolean | null
+          name: string | null
+          pixel_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ad_account_id: string
+          created_at?: string
+          id?: string
+          is_selected?: boolean | null
+          name?: string | null
+          pixel_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ad_account_id?: string
+          created_at?: string
+          id?: string
+          is_selected?: boolean | null
+          name?: string | null
+          pixel_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ads_pixels_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "ads_ad_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ads_whatsapp_leads: {
         Row: {
           ad_id: string | null
@@ -2495,6 +2536,7 @@ export type Database = {
           is_active: boolean
           pago_label_id: string | null
           pixel_id: string | null
+          selected_ad_account_ids: string[] | null
           updated_at: string
           user_id: string
         }
@@ -2509,6 +2551,7 @@ export type Database = {
           is_active?: boolean
           pago_label_id?: string | null
           pixel_id?: string | null
+          selected_ad_account_ids?: string[] | null
           updated_at?: string
           user_id: string
         }
@@ -2523,6 +2566,7 @@ export type Database = {
           is_active?: boolean
           pago_label_id?: string | null
           pixel_id?: string | null
+          selected_ad_account_ids?: string[] | null
           updated_at?: string
           user_id?: string
         }

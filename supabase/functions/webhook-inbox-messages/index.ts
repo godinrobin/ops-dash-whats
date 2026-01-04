@@ -2374,9 +2374,9 @@ serve(async (req) => {
           // Determine what to pass as userInput
           let userInputValue = content || '';
           if (isMediaMessage && !hasTextContent) {
-            // For media without text, use a placeholder indicating the type
-            userInputValue = `[${messageType}]`;
-            console.log(`[WAIT_INPUT] Media message (${messageType}) received - using placeholder: "${userInputValue}"`);
+            // For media without text, use "enviou mídia" as the value
+            userInputValue = 'enviou mídia';
+            console.log(`[WAIT_INPUT] Media message (${messageType}) received - using value: "${userInputValue}"`);
           }
           
           console.log(`[WAIT_INPUT] Valid input received: ${messageType} with content: "${userInputValue?.substring(0, 50)}"`);

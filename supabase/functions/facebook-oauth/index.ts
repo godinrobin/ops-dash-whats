@@ -244,6 +244,86 @@ serve(async (req) => {
       );
     }
 
+    // Sync pixels for a specific ad account
+    if (action === "sync_pixels") {
+      const { ad_account_id } = body;
+
+      // Get the ad account with Facebook account info
+      const { data: adAccount, error: adAccountError } = await supabaseClient
+        .from("ads_ad_accounts")
+        .select("*, ads_facebook_accounts(*)")
+        .eq("id", ad_account_id)
+        .eq("user_id", user.id)
+        .single();
+
+      if (adAccountError || !adAccount) {
+        console.error("Ad account not found:", adAccountError);
+        return new Response(JSON.stringify({ error: "Ad account not found" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const accessToken = adAccount.ads_facebook_accounts?.access_token;
+      if (!accessToken) {
+        console.error("No access token found for Facebook account");
+        return new Response(JSON.stringify({ error: "No access token" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Fetch pixels from Facebook
+      const pixelsUrl = `https://graph.facebook.com/v21.0/act_${adAccount.ad_account_id}/adspixels?fields=id,name&access_token=${accessToken}`;
+      console.log("Fetching pixels for ad account:", adAccount.ad_account_id);
+      const pixelsResponse = await fetch(pixelsUrl);
+      const pixelsData = await pixelsResponse.json();
+
+      if (pixelsData.error) {
+        console.error("Pixels error:", pixelsData.error);
+        return new Response(JSON.stringify({ error: pixelsData.error.message }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const pixelsList = pixelsData.data || [];
+      console.log("Found", pixelsList.length, "pixels for ad account", adAccount.ad_account_id);
+
+      // Sync pixels to database
+      for (const pixel of pixelsList) {
+        const { data: existing } = await supabaseClient
+          .from("ads_pixels")
+          .select("id")
+          .eq("ad_account_id", ad_account_id)
+          .eq("pixel_id", pixel.id)
+          .maybeSingle();
+
+        if (existing) {
+          await supabaseClient
+            .from("ads_pixels")
+            .update({
+              name: pixel.name,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", existing.id);
+        } else {
+          await supabaseClient.from("ads_pixels").insert({
+            user_id: user.id,
+            ad_account_id: ad_account_id,
+            pixel_id: pixel.id,
+            name: pixel.name,
+            is_selected: pixelsList.length === 1, // Auto-select if only one pixel
+          });
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, count: pixelsList.length }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     return new Response(JSON.stringify({ error: "Invalid action" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

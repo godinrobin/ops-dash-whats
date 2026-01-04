@@ -58,7 +58,7 @@ serve(async (req) => {
     }
 
     // Get the pixel ID from the ad account
-    // For now, we'll get the first selected ad account's pixel
+    // First try to get from ads_pixels table (selected pixel)
     const { data: adAccounts } = await supabaseClient
       .from("ads_ad_accounts")
       .select("*, ads_facebook_accounts(*)")
@@ -83,21 +83,36 @@ serve(async (req) => {
       });
     }
 
-    // Get pixel ID from ad account
-    const pixelUrl = `https://graph.facebook.com/v18.0/act_${adAccount.ad_account_id}/adspixels?fields=id,name&access_token=${accessToken}`;
-    const pixelResponse = await fetch(pixelUrl);
-    const pixelData = await pixelResponse.json();
+    // Try to get selected pixel from database first
+    const { data: selectedPixel } = await supabaseClient
+      .from("ads_pixels")
+      .select("pixel_id, name")
+      .eq("ad_account_id", adAccount.id)
+      .eq("is_selected", true)
+      .maybeSingle();
 
-    if (pixelData.error || !pixelData.data || pixelData.data.length === 0) {
-      console.error("No pixel found:", pixelData.error);
-      return new Response(JSON.stringify({ error: "No pixel found for this ad account" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    let pixelId: string;
+
+    if (selectedPixel) {
+      pixelId = selectedPixel.pixel_id;
+      console.log("Using selected pixel from DB:", pixelId);
+    } else {
+      // Fallback: Get pixel ID from Facebook API
+      const pixelUrl = `https://graph.facebook.com/v21.0/act_${adAccount.ad_account_id}/adspixels?fields=id,name&access_token=${accessToken}`;
+      const pixelResponse = await fetch(pixelUrl);
+      const pixelData = await pixelResponse.json();
+
+      if (pixelData.error || !pixelData.data || pixelData.data.length === 0) {
+        console.error("No pixel found:", pixelData.error);
+        return new Response(JSON.stringify({ error: "No pixel found for this ad account. Selecione um pixel na configuração." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      pixelId = pixelData.data[0].id;
+      console.log("Using first pixel from Facebook (fallback):", pixelId);
     }
-
-    const pixelId = pixelData.data[0].id;
-    console.log("Using pixel:", pixelId);
 
     // Hash the phone number for privacy
     const hashedPhone = await hashData(lead.phone);
@@ -120,7 +135,7 @@ serve(async (req) => {
     };
 
     // Send event to Facebook Conversions API
-    const eventsUrl = `https://graph.facebook.com/v18.0/${pixelId}/events`;
+    const eventsUrl = `https://graph.facebook.com/v21.0/${pixelId}/events`;
     const eventsResponse = await fetch(eventsUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
