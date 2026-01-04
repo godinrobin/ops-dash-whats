@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { AnimatedSearchBar } from '@/components/ui/animated-search-bar';
 
@@ -26,6 +27,7 @@ const FlowListPage = () => {
   useActivityTracker("page_visit", systemName);
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { effectiveUserId } = useEffectiveUser();
   const { flows, loading, createFlow, deleteFlow, toggleFlowActive, updateFlow } = useInboxFlows();
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -45,10 +47,11 @@ const FlowListPage = () => {
   }, [user]);
 
   const fetchInstances = async () => {
+    const userId = effectiveUserId || user?.id;
     const { data } = await supabase
       .from('maturador_instances')
       .select('id, instance_name, phone_number, label')
-      .eq('user_id', user?.id)
+      .eq('user_id', userId)
       .in('status', ['connected', 'open']);
     
     if (data) {

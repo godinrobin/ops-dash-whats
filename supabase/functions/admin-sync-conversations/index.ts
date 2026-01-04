@@ -6,8 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const EVOLUTION_BASE_URL = 'https://api.chatwp.xyz';
-const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || '';
+const UAZAPI_BASE_URL = 'https://api.uazapi.com';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -65,19 +64,19 @@ Deno.serve(async (req) => {
 
     const results: Array<{ id: string; count: number; error?: string }> = []
 
-    // Get instances to sync
-    let instances: Array<{ id: string; instance_name: string; user_id: string }> = []
+    // Get instances to sync - now including uazapi_token
+    let instances: Array<{ id: string; instance_name: string; user_id: string; uazapi_token: string | null }> = []
     
     if (syncAll) {
       const { data } = await supabaseClient
         .from('maturador_instances')
-        .select('id, instance_name, user_id')
+        .select('id, instance_name, user_id, uazapi_token')
         .eq('status', 'connected')
       instances = data || []
     } else if (instanceId) {
       const { data } = await supabaseClient
         .from('maturador_instances')
-        .select('id, instance_name, user_id')
+        .select('id, instance_name, user_id, uazapi_token')
         .eq('id', instanceId)
         .single()
       if (data) instances = [data]
@@ -87,34 +86,37 @@ Deno.serve(async (req) => {
 
     for (const instance of instances) {
       try {
-        // Get user's Evolution config
-        const { data: config } = await supabaseClient
-          .from('maturador_config')
-          .select('evolution_base_url, evolution_api_key')
-          .eq('user_id', instance.user_id)
-          .single()
+        // Skip if no uazapi_token
+        if (!instance.uazapi_token) {
+          console.log(`Instance ${instance.instance_name}: No uazapi_token, skipping`)
+          results.push({ id: instance.id, count: 0, error: 'No API token' })
+          continue
+        }
 
-        const baseUrl = config?.evolution_base_url || EVOLUTION_BASE_URL
-        const apiKey = config?.evolution_api_key || EVOLUTION_API_KEY
-
-        // Fetch chats from Evolution API
-        const response = await fetch(`${baseUrl}/chat/findChats/${instance.instance_name}`, {
+        // Use Uazapi API to get chat count
+        // First, try to get the chat list with pagination info
+        const response = await fetch(`${UAZAPI_BASE_URL}/chat/list`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'apikey': apiKey,
+            'token': instance.uazapi_token,
           },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ page: 1, pageSize: 1 }), // Just get pagination info
         })
 
         if (!response.ok) {
-          console.error(`Error fetching chats for ${instance.instance_name}:`, await response.text())
+          const errorText = await response.text()
+          console.error(`Error fetching chats for ${instance.instance_name}:`, errorText)
           results.push({ id: instance.id, count: 0, error: 'API error' })
           continue
         }
 
-        const chats = await response.json()
-        const conversationCount = Array.isArray(chats) ? chats.length : 0
+        const chatsResponse = await response.json()
+        
+        // Uazapi returns { chats: [...], pagination: { totalRecords, ... } }
+        const conversationCount = chatsResponse.pagination?.totalRecords || 
+                                   (Array.isArray(chatsResponse.chats) ? chatsResponse.chats.length : 0) ||
+                                   (Array.isArray(chatsResponse) ? chatsResponse.length : 0)
 
         console.log(`Instance ${instance.instance_name}: ${conversationCount} conversations`)
 

@@ -306,7 +306,16 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
       restricted: true,
       glowColor: 'green',
       comingSoon: false,
-      allowedEmails: ['patrickrjo@gmail.com', 'ewerton@metricas.local']
+    },
+    { 
+      path: "/whatsapp-editor", 
+      emoji: "✏️", 
+      title: "Edição de WhatsApp",
+      shortTitle: "Edição Whats",
+      description: "Edite nome e foto de perfil sem acessar o celular",
+      gradient: "from-blue-400 to-purple-500",
+      restricted: true,
+      glowColor: 'purple'
     },
     { 
       path: "/disparador", 

@@ -22,7 +22,7 @@ export function AdminTagWhatsLabels() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch tag_whats_logs grouped by user_id with count
+      // Fetch ALL tag_whats_logs where label was applied (no user filter - admin sees all)
       const { data: logsData, error: logsError } = await (supabase
         .from('tag_whats_logs' as any)
         .select('user_id')
@@ -46,20 +46,26 @@ export function AdminTagWhatsLabels() {
         return;
       }
 
+      // Use edge function to get all users' profiles (bypasses RLS)
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, username')
-        .in('id', userIds);
+        .select('id, username');
 
       if (profilesError) throw profilesError;
 
-      // Build stats
-      const result: UserTagStats[] = (profilesData || []).map((profile: any) => ({
-        user_id: profile.id,
-        email: profile.username || profile.id.substring(0, 8),
-        username: profile.username || 'N/A',
-        total_labels: userCounts[profile.id] || 0
-      }));
+      // Create a map of all profiles
+      const profileMap = new Map((profilesData || []).map((p: any) => [p.id, p]));
+
+      // Build stats for all users with labels
+      const result: UserTagStats[] = userIds.map((userId) => {
+        const profile = profileMap.get(userId);
+        return {
+          user_id: userId,
+          email: profile?.username || userId.substring(0, 8),
+          username: profile?.username || 'N/A',
+          total_labels: userCounts[userId] || 0
+        };
+      });
 
       // Sort by total_labels
       result.sort((a, b) => 

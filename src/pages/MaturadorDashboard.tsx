@@ -16,6 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
+import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { splashedToast as toast } from "@/hooks/useSplashedToast";
 import { formatPhoneDisplay } from "@/utils/phoneFormatter";
@@ -59,6 +60,7 @@ export default function MaturadorDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isAdmin } = useAdminStatus();
+  const { effectiveUserId } = useEffectiveUser();
   const [instances, setInstances] = useState<Instance[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [verifiedContacts, setVerifiedContacts] = useState<VerifiedContact[]>([]);
@@ -92,14 +94,15 @@ export default function MaturadorDashboard() {
   const [deletingContact, setDeletingContact] = useState(false);
 
   const fetchData = async () => {
-    if (!user) return;
+    const userId = effectiveUserId || user?.id;
+    if (!userId) return;
 
     try {
       // Fetch instances
       const { data: instancesData, error: instancesError } = await supabase
         .from('maturador_instances')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
       if (instancesError) throw instancesError;
@@ -109,7 +112,7 @@ export default function MaturadorDashboard() {
       const { data: conversationsData, error: conversationsError } = await supabase
         .from('maturador_conversations')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
       if (conversationsError) throw conversationsError;
@@ -137,13 +140,13 @@ export default function MaturadorDashboard() {
       const { count: todayCount } = await supabase
         .from('maturador_messages')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .gte('created_at', today.toISOString());
 
       const { count: weekCount } = await supabase
         .from('maturador_messages')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .gte('created_at', weekAgo.toISOString());
 
       setStats({
