@@ -634,11 +634,20 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
           found: !!lead, 
           ctwa_clid: lead?.ctwa_clid, 
           fbclid: lead?.fbclid,
+          ad_account_id: lead?.ad_account_id,
           error: leadError?.message 
         });
 
         ctwaClid = lead?.ctwa_clid || null;
         const fbclid = lead?.fbclid || null;
+        
+        // If lead has ad_account_id, prioritize it for conversion tracking
+        const leadAdAccountId = lead?.ad_account_id;
+        const finalAdAccountIds = leadAdAccountId 
+          ? [leadAdAccountId] 
+          : adAccountIds;
+        
+        console.log("[TAG-WHATS] Final ad account IDs for conversion:", finalAdAccountIds);
 
         // Try to extract value from AI response
         if (aiResponse && typeof aiResponse === 'object') {
@@ -661,8 +670,8 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
         const hashedPhone = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
         console.log("[TAG-WHATS] Phone hashed for privacy");
 
-        // Send conversion to all configured ad accounts
-        for (const adAccountDbId of adAccountIds) {
+        // Send conversion to all configured ad accounts (prioritize lead's ad_account_id if available)
+        for (const adAccountDbId of finalAdAccountIds) {
           console.log("[TAG-WHATS] Processing ad account:", adAccountDbId);
           
           // Get the ad account with Facebook credentials
