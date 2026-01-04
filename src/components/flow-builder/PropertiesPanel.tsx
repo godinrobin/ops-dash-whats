@@ -1168,11 +1168,44 @@ export const PropertiesPanel = ({
               </p>
             </div>
 
+            <div className="border-t pt-4 mt-4">
+              <Label className="text-xs text-muted-foreground uppercase mb-3 block">Delay de Sem Resposta</Label>
+              <p className="text-xs text-muted-foreground mb-3">
+                Se o usuário não enviar nenhuma mensagem dentro deste tempo, o fluxo seguirá pela saída "Sem Resposta".
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  min={1}
+                  max={nodeData.noResponseDelayUnit === 'seconds' ? 3600 : 60}
+                  value={(nodeData.noResponseDelayValue as number) || 5}
+                  onChange={(e) => onUpdateNode(selectedNode.id, { noResponseDelayValue: parseInt(e.target.value) || 5 })}
+                  className="flex-1"
+                />
+                <Select
+                  value={(nodeData.noResponseDelayUnit as string) || 'minutes'}
+                  onValueChange={(value) => onUpdateNode(selectedNode.id, { noResponseDelayUnit: value })}
+                >
+                  <SelectTrigger className="w-28">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="seconds">Segundos</SelectItem>
+                    <SelectItem value="minutes">Minutos</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Máximo: 60 minutos (3600 segundos)
+              </p>
+            </div>
+
             <div className="p-2 rounded bg-muted/50 text-xs">
               <strong>Saídas:</strong>
-              <div className="flex gap-4 mt-1">
-                <span className="text-emerald-500">✓ Pagou</span>
-                <span className="text-red-500">✗ Não Pagou</span>
+              <div className="flex flex-col gap-1 mt-1">
+                <span className="text-emerald-500">✓ Pagou - Comprovante identificado</span>
+                <span className="text-amber-500">⏱ Sem Resposta - Nenhuma mensagem no tempo configurado</span>
+                <span className="text-red-500">✗ Não Pagou - Tentativas esgotadas sem comprovante</span>
               </div>
             </div>
           </div>
