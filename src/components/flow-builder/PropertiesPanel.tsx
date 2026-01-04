@@ -1155,18 +1155,6 @@ export const PropertiesPanel = ({
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label>Mensagem de erro (opcional)</Label>
-              <Textarea
-                placeholder="Por favor, envie o comprovante de pagamento..."
-                value={(nodeData.errorMessage as string) || ''}
-                onChange={(e) => onUpdateNode(selectedNode.id, { errorMessage: e.target.value })}
-                rows={2}
-              />
-              <p className="text-xs text-muted-foreground">
-                Enviada após cada tentativa inválida
-              </p>
-            </div>
 
             <div className="border-t pt-4 mt-4">
               <Label className="text-xs text-muted-foreground uppercase mb-3 block">Delay de Sem Resposta</Label>

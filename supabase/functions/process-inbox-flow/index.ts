@@ -1302,7 +1302,6 @@ serve(async (req) => {
             const checkPdf = (currentNode.data.checkPdf as boolean) ?? true;
             const markAsPaid = (currentNode.data.markAsPaid as boolean) || false;
             const maxAttempts = (currentNode.data.maxAttempts as number) || 3;
-            const errorMessage = (currentNode.data.errorMessage as string) || '';
             
             // No response delay configuration
             const noResponseDelayValue = (currentNode.data.noResponseDelayValue as number) || 5;
@@ -1844,33 +1843,8 @@ serve(async (req) => {
 
             // Determine if we processed any messages this run (either non-payment or payment media)
             const processedAnyMessagesThisRun = processedAnyThisRun || nonPaymentMessages.length > 0;
-
-            // Still waiting for valid payment proof
-            // Send error message if we processed messages but didn't confirm payment
-            if (processedAnyMessagesThisRun && errorMessage && instanceName && phone) {
-              const errorMsgReplaced = replaceVariables(errorMessage, variables);
-              await sendMessage(
-                effectiveBaseUrl,
-                effectiveApiKey,
-                instanceName,
-                phone,
-                errorMsgReplaced,
-                'text',
-                undefined,
-                undefined,
-                apiProvider,
-                instanceUazapiToken,
-              );
-              await saveOutboundMessage(
-                supabaseClient,
-                contact.id,
-                session.instance_id,
-                session.user_id,
-                errorMsgReplaced,
-                'text',
-                flow.id,
-              );
-            }
+            
+            console.log(`[${runId}] PaymentIdentifier: still waiting for valid proof, processedAnyMessagesThisRun=${processedAnyMessagesThisRun}`);
 
             await supabaseClient
               .from('inbox_flow_sessions')
