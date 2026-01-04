@@ -2284,6 +2284,29 @@ serve(async (req) => {
               .maybeSingle();
 
             if (!existingLead) {
+              // Try to identify the ad account from tag_whats_configs
+              let adAccountId: string | null = null;
+              try {
+                const { data: tagConfig } = await supabaseClient
+                  .from('tag_whats_configs')
+                  .select('ad_account_id, selected_ad_account_ids')
+                  .eq('instance_id', instanceId)
+                  .eq('user_id', monitoredNumber.user_id)
+                  .maybeSingle();
+                
+                if (tagConfig) {
+                  // Use selected_ad_account_ids if available, fallback to ad_account_id
+                  if (tagConfig.selected_ad_account_ids && tagConfig.selected_ad_account_ids.length > 0) {
+                    adAccountId = tagConfig.selected_ad_account_ids[0];
+                  } else if (tagConfig.ad_account_id) {
+                    adAccountId = tagConfig.ad_account_id;
+                  }
+                  console.log(`[ADS LEAD] Found ad_account_id from config: ${adAccountId}`);
+                }
+              } catch (configError) {
+                console.log('[ADS LEAD] Could not fetch tag_whats_configs:', configError);
+              }
+              
               // Create new lead
               const { error: leadError } = await supabaseClient
                 .from('ads_whatsapp_leads')
@@ -2297,12 +2320,13 @@ serve(async (req) => {
                   fbclid: fbclid,
                   first_message: content?.substring(0, 500),
                   first_contact_at: new Date().toISOString(),
+                  ad_account_id: adAccountId,
                 });
 
               if (leadError) {
                 console.error('[ADS LEAD] Error creating lead:', leadError);
               } else {
-                console.log(`[ADS LEAD] New lead created for phone ${phone}`);
+                console.log(`[ADS LEAD] New lead created for phone ${phone} with ad_account_id ${adAccountId}`);
               }
             } else {
               console.log(`[ADS LEAD] Lead already exists for phone ${phone}`);

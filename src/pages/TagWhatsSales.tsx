@@ -52,6 +52,7 @@ const TagWhatsSales = () => {
   const [manualSendDialogOpen, setManualSendDialogOpen] = useState(false);
   const [selectedSale, setSelectedSale] = useState<SaleLog | null>(null);
   const [manualValue, setManualValue] = useState<string>("");
+  const [sendingAllPending, setSendingAllPending] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -126,6 +127,10 @@ const TagWhatsSales = () => {
     return filtered;
   }, [salesLogs, dateFilter, instanceFilter]);
 
+  const pendingSales = useMemo(() => {
+    return filteredSales.filter((sale) => !sale.conversion_sent);
+  }, [filteredSales]);
+
   const handleOpenManualSend = (sale: SaleLog) => {
     setSelectedSale(sale);
     setManualValue(sale.extracted_value?.toString() || "");
@@ -173,6 +178,49 @@ const TagWhatsSales = () => {
       setSendingConversion((prev) => ({ ...prev, [saleId]: false }));
       setSelectedSale(null);
       setManualValue("");
+    }
+  };
+
+  const handleSendAllPending = async () => {
+    if (pendingSales.length === 0) return;
+
+    setSendingAllPending(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const sale of pendingSales) {
+      try {
+        const { data, error } = await supabase.functions.invoke("tag-whats-manual-conversion", {
+          body: { saleLogId: sale.id, value: sale.extracted_value },
+        });
+
+        if (error) throw error;
+
+        if (data.success) {
+          successCount++;
+          setSalesLogs((prev) =>
+            prev.map((s) =>
+              s.id === sale.id
+                ? { ...s, conversion_sent: true, conversion_error: null }
+                : s
+            )
+          );
+        } else {
+          errorCount++;
+        }
+      } catch (error) {
+        console.error("Error sending conversion for sale:", sale.id, error);
+        errorCount++;
+      }
+    }
+
+    setSendingAllPending(false);
+
+    if (successCount > 0) {
+      toast.success(`${successCount} conversão(ões) enviada(s) com sucesso!`);
+    }
+    if (errorCount > 0) {
+      toast.error(`${errorCount} conversão(ões) falharam`);
     }
   };
 
@@ -354,6 +402,28 @@ const TagWhatsSales = () => {
                 </div>
 
                 <div className="flex-1" />
+
+                {pendingSales.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSendAllPending}
+                    disabled={sendingAllPending}
+                    className="border-amber-500/50 text-amber-500 hover:bg-amber-500/10"
+                  >
+                    {sendingAllPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Enviando...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4 mr-2" />
+                        Enviar Todas Pendentes ({pendingSales.length})
+                      </>
+                    )}
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>

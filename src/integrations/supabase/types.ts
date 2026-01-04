@@ -712,6 +712,7 @@ export type Database = {
       }
       ads_whatsapp_leads: {
         Row: {
+          ad_account_id: string | null
           ad_id: string | null
           adset_id: string | null
           campaign_id: string | null
@@ -732,6 +733,7 @@ export type Database = {
           whatsapp_number_id: string | null
         }
         Insert: {
+          ad_account_id?: string | null
           ad_id?: string | null
           adset_id?: string | null
           campaign_id?: string | null
@@ -752,6 +754,7 @@ export type Database = {
           whatsapp_number_id?: string | null
         }
         Update: {
+          ad_account_id?: string | null
           ad_id?: string | null
           adset_id?: string | null
           campaign_id?: string | null
@@ -772,6 +775,13 @@ export type Database = {
           whatsapp_number_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "ads_whatsapp_leads_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "ads_ad_accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "ads_whatsapp_leads_instance_id_fkey"
             columns: ["instance_id"]

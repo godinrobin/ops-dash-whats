@@ -1118,6 +1118,31 @@ const TagWhatsCloud = () => {
                       })}
                     </div>
                   )}
+
+                  {/* Alert when conversion is enabled but no pixel selected */}
+                  {configs.some(config => {
+                    if (!config.enable_conversion_tracking) return false;
+                    const selectedIds = config.selected_ad_account_ids || (config.ad_account_id ? [config.ad_account_id] : []);
+                    // Check if any selected ad account is missing a pixel
+                    return selectedIds.some(adAccountId => {
+                      const accountPixels = pixels.filter(p => p.ad_account_id === adAccountId);
+                      const hasSelectedPixel = accountPixels.some(p => p.is_selected);
+                      return !hasSelectedPixel;
+                    });
+                  }) && (
+                    <div className="mt-4 p-3 rounded-lg border border-amber-500/50 bg-amber-500/10 flex items-start gap-3">
+                      <div className="p-1.5 rounded-full bg-amber-500/20 mt-0.5">
+                        <Target className="h-4 w-4 text-amber-500" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm text-amber-500">Pixel não configurado</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Você tem conversões ativadas mas algumas contas de anúncio não possuem um pixel selecionado. 
+                          Selecione um pixel acima para que os eventos de compra sejam enviados corretamente.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </CollapsibleContent>
             </Collapsible>
