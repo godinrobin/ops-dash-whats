@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, ShoppingBag, Phone, Calendar, Loader2, Tag, Download } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ArrowLeft, ShoppingBag, Phone, Calendar, Loader2, Tag, Download, CheckCircle2, XCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,6 +21,7 @@ interface SaleLog {
   created_at: string;
   extracted_value: number | null;
   conversion_sent: boolean;
+  conversion_error: string | null;
   ctwa_clid: string | null;
 }
 
@@ -57,7 +59,7 @@ const TagWhatsSales = () => {
         // Fetch sales logs (label_applied = true means it was a sale)
         const { data: logsData } = await (supabase
           .from("tag_whats_logs" as any)
-          .select("id, contact_phone, instance_id, created_at, extracted_value, conversion_sent, ctwa_clid")
+          .select("id, contact_phone, instance_id, created_at, extracted_value, conversion_sent, conversion_error, ctwa_clid")
           .eq("user_id", user.id)
           .eq("label_applied", true)
           .order("created_at", { ascending: false }) as any);
@@ -151,28 +153,30 @@ const TagWhatsSales = () => {
       ),
     },
     {
-      key: "extracted_value",
-      header: "Valor",
-      sortable: true,
-      render: (item) => (
-        <span className="font-medium text-emerald-500">
-          {item.extracted_value
-            ? new Intl.NumberFormat("pt-BR", {
-                style: "currency",
-                currency: "BRL",
-              }).format(item.extracted_value)
-            : "-"}
-        </span>
-      ),
-    },
-    {
       key: "conversion_sent",
       header: "Meta",
       render: (item) => (
         item.conversion_sent ? (
-          <Badge className="bg-blue-500/20 text-blue-400">Enviado</Badge>
+          <div className="flex items-center gap-1.5">
+            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+            <span className="text-emerald-500 font-medium text-sm">Enviado</span>
+          </div>
         ) : (
-          <Badge variant="outline" className="text-muted-foreground">-</Badge>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1.5 cursor-help">
+                  <XCircle className="h-4 w-4 text-red-500" />
+                  <span className="text-red-500 font-medium text-sm">Não enviado</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                <p className="text-sm">
+                  {item.conversion_error || "Conversão não configurada ou desabilitada"}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )
       ),
     },
@@ -258,10 +262,6 @@ const TagWhatsSales = () => {
                 </div>
 
                 <div className="flex-1" />
-
-                <span className="text-sm text-muted-foreground">
-                  Fuso: São Paulo (GMT-3)
-                </span>
               </div>
             </CardContent>
           </Card>

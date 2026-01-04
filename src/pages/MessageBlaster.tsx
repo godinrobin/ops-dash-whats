@@ -36,6 +36,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
+import { isDisconnectionError, checkAndNotifyDisconnection } from '@/hooks/useInstanceStatusSync';
 import { toast } from 'sonner';
 
 interface Campaign {
@@ -307,12 +308,40 @@ const MessageBlaster = () => {
 
   const startCampaign = async (campaignId: string) => {
     try {
+      // Get campaign to check assigned instances
+      const campaign = campaigns.find(c => c.id === campaignId);
+      
       const response = await supabase.functions.invoke('blaster-send', {
         body: { campaignId, action: 'start' },
       });
 
       if (response.error) {
-        throw new Error(response.error.message);
+        const errorMessage = response.error.message || String(response.error);
+        
+        // Check if error indicates disconnection
+        if (isDisconnectionError(errorMessage) && campaign?.assigned_instances?.length) {
+          // Check each assigned instance
+          for (const instanceId of campaign.assigned_instances) {
+            const wasDisconnected = await checkAndNotifyDisconnection(instanceId, 'disparazap');
+            if (wasDisconnected) return;
+          }
+        }
+        
+        throw new Error(errorMessage);
+      }
+
+      if (response.data?.error) {
+        const errorMessage = response.data.error;
+        
+        // Check if error indicates disconnection
+        if (isDisconnectionError(errorMessage) && campaign?.assigned_instances?.length) {
+          for (const instanceId of campaign.assigned_instances) {
+            const wasDisconnected = await checkAndNotifyDisconnection(instanceId, 'disparazap');
+            if (wasDisconnected) return;
+          }
+        }
+        
+        throw new Error(errorMessage);
       }
 
       toast.success('Campanha iniciada!');
