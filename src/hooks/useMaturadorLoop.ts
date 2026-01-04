@@ -1,6 +1,7 @@
 import { useCallback, useRef, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { isDisconnectionError, syncInstanceStatus } from '@/hooks/useInstanceStatusSync';
 
 interface Conversation {
   id: string;
@@ -22,7 +23,6 @@ const globalActiveLoops = new Set<string>();
 const globalLoopTimeouts = new Map<string, NodeJS.Timeout>();
 const globalSessionCounts = new Map<string, number>();
 const globalConversationCache = new Map<string, Conversation>();
-
 // Helper to fetch fresh conversation data
 const fetchConversation = async (conversationId: string): Promise<Conversation | null> => {
   const { data, error } = await supabase
@@ -76,6 +76,34 @@ const runLoopIteration = async (conversationId: string) => {
         stopLoop(conversationId);
         return;
       }
+      
+      // Check if it's a disconnection error
+      if (isDisconnectionError(data.error)) {
+        // Check chip_a
+        if (conversation.chip_a_id) {
+          const chipAResult = await syncInstanceStatus(conversation.chip_a_id);
+          if (chipAResult.disconnected) {
+            toast.error(`Número ${chipAResult.phoneNumber || chipAResult.instanceName || 'desconhecido'} foi desconectado. Reconecte na aba Maturador.`, {
+              duration: 8000,
+            });
+            stopLoop(conversationId);
+            return;
+          }
+        }
+        
+        // Check chip_b
+        if (conversation.chip_b_id) {
+          const chipBResult = await syncInstanceStatus(conversation.chip_b_id);
+          if (chipBResult.disconnected) {
+            toast.error(`Número ${chipBResult.phoneNumber || chipBResult.instanceName || 'desconhecido'} foi desconectado. Reconecte na aba Maturador.`, {
+              duration: 8000,
+            });
+            stopLoop(conversationId);
+            return;
+          }
+        }
+      }
+      
       throw new Error(data.error);
     }
 
@@ -107,6 +135,21 @@ const runLoopIteration = async (conversationId: string) => {
   } catch (error: unknown) {
     console.error('Loop error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Erro ao enviar mensagem';
+    
+    // Check for disconnection on general errors too
+    if (isDisconnectionError(errorMessage)) {
+      if (conversation.chip_a_id) {
+        const result = await syncInstanceStatus(conversation.chip_a_id);
+        if (result.disconnected) {
+          toast.error(`Número ${result.phoneNumber || result.instanceName || 'desconhecido'} foi desconectado. Reconecte na aba Maturador.`, {
+            duration: 8000,
+          });
+          stopLoop(conversationId);
+          return;
+        }
+      }
+    }
+    
     toast.error(`${conversation.name}: ${errorMessage}`);
     stopLoop(conversationId);
   }
