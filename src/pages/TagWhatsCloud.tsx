@@ -251,6 +251,7 @@ const TagWhatsCloud = () => {
   const [adsExpanded, setAdsExpanded] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [syncingAccounts, setSyncingAccounts] = useState<Set<string>>(new Set());
+  const [syncingPixels, setSyncingPixels] = useState<Set<string>>(new Set());
   const [enableConversionTracking, setEnableConversionTracking] = useState(false);
   const [selectedAdAccountId, setSelectedAdAccountId] = useState<string | null>(null);
 
@@ -493,6 +494,26 @@ const TagWhatsCloud = () => {
     } catch (error) {
       console.error('Error toggling pixel:', error);
       toast.error('Erro ao alterar pixel');
+    }
+  };
+
+  const handleSyncPixelsOnly = async (adAccountDbId: string) => {
+    setSyncingPixels(prev => new Set(prev).add(adAccountDbId));
+    try {
+      await supabase.functions.invoke("facebook-oauth", {
+        body: { action: "sync_pixels", ad_account_id: adAccountDbId }
+      });
+      toast.success("Pixels sincronizados!");
+      await fetchAdsData();
+    } catch (error) {
+      console.error("Error syncing pixels:", error);
+      toast.error("Erro ao sincronizar pixels");
+    } finally {
+      setSyncingPixels(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(adAccountDbId);
+        return newSet;
+      });
     }
   };
 
@@ -1052,23 +1073,44 @@ const TagWhatsCloud = () => {
                             </div>
                             <div className="flex items-center gap-2">
                               {accountPixels.length === 0 ? (
-                                <span className="text-xs text-muted-foreground">Sincronize para carregar pixels</span>
-                              ) : (
-                                <Select
-                                  value={selectedPixel?.id || ''}
-                                  onValueChange={(value) => handleTogglePixelSelected(value, adAccount.id, true)}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleSyncPixelsOnly(adAccount.id)}
+                                  disabled={syncingPixels.has(adAccount.id)}
+                                  className="text-xs h-7"
                                 >
-                                  <SelectTrigger className="w-[200px] h-8 text-xs">
-                                    <SelectValue placeholder="Selecionar pixel" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {accountPixels.map(pixel => (
-                                      <SelectItem key={pixel.id} value={pixel.id}>
-                                        {pixel.name || pixel.pixel_id}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                  <RefreshCw className={`h-3 w-3 mr-1 ${syncingPixels.has(adAccount.id) ? 'animate-spin' : ''}`} />
+                                  {syncingPixels.has(adAccount.id) ? "Carregando..." : "Carregar Pixels"}
+                                </Button>
+                              ) : (
+                                <>
+                                  <Select
+                                    value={selectedPixel?.id || ''}
+                                    onValueChange={(value) => handleTogglePixelSelected(value, adAccount.id, true)}
+                                  >
+                                    <SelectTrigger className="w-[180px] h-8 text-xs">
+                                      <SelectValue placeholder="Selecionar pixel" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {accountPixels.map(pixel => (
+                                        <SelectItem key={pixel.id} value={pixel.id}>
+                                          {pixel.name || pixel.pixel_id}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleSyncPixelsOnly(adAccount.id)}
+                                    disabled={syncingPixels.has(adAccount.id)}
+                                    className="h-8 w-8"
+                                    title="Sincronizar pixels"
+                                  >
+                                    <RefreshCw className={`h-3.5 w-3.5 ${syncingPixels.has(adAccount.id) ? 'animate-spin' : ''}`} />
+                                  </Button>
+                                </>
                               )}
                             </div>
                           </div>
