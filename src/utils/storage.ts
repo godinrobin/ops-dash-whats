@@ -2,20 +2,21 @@ import { Product, Metric } from "@/types/product";
 import { supabase } from "@/integrations/supabase/client";
 
 export const getProducts = async (userId?: string): Promise<Product[]> => {
-  let query = supabase
+  // Always require a userId to prevent showing all products
+  if (!userId) {
+    console.warn('getProducts called without userId');
+    return [];
+  }
+
+  const { data, error } = await supabase
     .from("products")
     .select("*, metrics!metrics_product_id_fkey(*)")
+    .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .order("created_at", { referencedTable: "metrics", ascending: false });
 
-  // If a specific userId is provided, filter by it
-  if (userId) {
-    query = query.eq("user_id", userId);
-  }
-
-  const { data, error } = await query;
-
   if (error) {
+    console.error('Error fetching products:', error);
     return [];
   }
 
