@@ -6,8 +6,8 @@ import { Switch } from "@/components/ui/switch";
 import { ColoredSwitch } from "@/components/ui/colored-switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Cloud, Plus, RefreshCw, QrCode, Settings, Image, FileText, CheckCircle2, XCircle, Loader2, Trash2, TrendingUp, ShoppingBag, Facebook, ChevronDown, ChevronUp, Building2, Target, ExternalLink, Clock, Monitor, Apple, Download } from "lucide-react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { ArrowLeft, Cloud, Plus, RefreshCw, QrCode, Settings, Image, FileText, CheckCircle2, XCircle, Loader2, Trash2, TrendingUp, ShoppingBag, Clock, Monitor, Apple, Download } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
@@ -20,7 +20,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 // List of emails allowed to access new Tag Whats Cloud (in addition to admins)
 const ALLOWED_TAGWHATS_EMAILS = [
@@ -45,18 +44,6 @@ interface TagWhatsConfig {
   filter_pdfs: boolean;
   pago_label_id: string | null;
   created_at: string;
-  enable_conversion_tracking?: boolean;
-  ad_account_id?: string | null;
-  pixel_id?: string | null;
-  selected_ad_account_ids?: string[];
-}
-
-interface Pixel {
-  id: string;
-  ad_account_id: string;
-  pixel_id: string;
-  name: string | null;
-  is_selected: boolean;
 }
 
 interface TagWhatsLog {
@@ -64,24 +51,6 @@ interface TagWhatsLog {
   instance_id: string;
   created_at: string;
   label_applied: boolean;
-}
-
-interface FacebookAccount {
-  id: string;
-  facebook_user_id: string;
-  name?: string;
-  email?: string;
-  profile_pic_url?: string;
-  access_token: string;
-}
-
-interface AdAccount {
-  id: string;
-  ad_account_id: string;
-  name?: string;
-  currency: string;
-  is_selected: boolean;
-  facebook_account_id: string;
 }
 
 // Generate colors for chart lines
@@ -218,17 +187,9 @@ const TagWhatsCloudOldVersion = () => {
 const TagWhatsCloud = () => {
   useActivityTracker("page_visit", "Tag Whats Cloud");
   const navigate = useNavigate();
-  const location = useLocation();
   const { user } = useAuth();
   const { isAdmin } = useAdminStatus();
   const { effectiveUserId, effectiveEmail } = useEffectiveUser();
-
-  // Check if user can see "Marcar no Gerenciador" and sales page link (admin or specific users)
-  const canSeeConversionTracking = useMemo(() => {
-    if (isAdmin) return true;
-    const email = (effectiveEmail || user?.email || '').toLowerCase();
-    return email === 'ewerton@metricas.local' || email === 'patrickrjo@gmail.com';
-  }, [isAdmin, effectiveEmail, user?.email]);
 
   const [instances, setInstances] = useState<Instance[]>([]);
   const [configs, setConfigs] = useState<TagWhatsConfig[]>([]);
@@ -242,18 +203,6 @@ const TagWhatsCloud = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [configToDelete, setConfigToDelete] = useState<string | null>(null);
   const [chartPeriod, setChartPeriod] = useState<'7' | '30'>('7');
-
-  // Facebook/Ads related state
-  const [facebookAccounts, setFacebookAccounts] = useState<FacebookAccount[]>([]);
-  const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
-  const [pixels, setPixels] = useState<Pixel[]>([]);
-  const [loadingAds, setLoadingAds] = useState(false);
-  const [adsExpanded, setAdsExpanded] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-  const [syncingAccounts, setSyncingAccounts] = useState<Set<string>>(new Set());
-  const [syncingPixels, setSyncingPixels] = useState<Set<string>>(new Set());
-  const [enableConversionTracking, setEnableConversionTracking] = useState(false);
-  const [selectedAdAccountId, setSelectedAdAccountId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     const userId = effectiveUserId || user?.id;
@@ -298,224 +247,9 @@ const TagWhatsCloud = () => {
     }
   }, [user, effectiveUserId]);
 
-  // Fetch Facebook accounts, ad accounts and pixels
-  const fetchAdsData = useCallback(async () => {
-    const userId = effectiveUserId || user?.id;
-    if (!userId) return;
-    setLoadingAds(true);
-    try {
-      const { data: fbAccounts } = await supabase
-        .from("ads_facebook_accounts")
-        .select("*")
-        .eq("user_id", userId);
-      setFacebookAccounts(fbAccounts || []);
-
-      const { data: adAccountsData } = await supabase
-        .from("ads_ad_accounts")
-        .select("*")
-        .eq("user_id", userId);
-      setAdAccounts(adAccountsData || []);
-
-      // Fetch pixels
-      const { data: pixelsData } = await supabase
-        .from("ads_pixels")
-        .select("*")
-        .eq("user_id", userId) as any;
-      setPixels(pixelsData || []);
-    } catch (error) {
-      console.error("Error fetching ads data:", error);
-    } finally {
-      setLoadingAds(false);
-    }
-  }, [user, effectiveUserId]);
-
   useEffect(() => {
     fetchData();
-    fetchAdsData();
-  }, [fetchData, fetchAdsData]);
-
-  // Handle OAuth callback for Facebook
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
-    
-    if (code) {
-      handleOAuthCallback(code);
-      // Clean URL
-      window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
-    }
-  }, []);
-
-  const FACEBOOK_REDIRECT_URI = "https://zapdata.co/";
-
-  const handleConnectFacebook = async () => {
-    setConnecting(true);
-    try {
-      const redirectUri = FACEBOOK_REDIRECT_URI;
-      const { data, error } = await supabase.functions.invoke("facebook-oauth", {
-        body: { action: "get_login_url", redirect_uri: redirectUri }
-      });
-
-      if (error) throw error;
-      if (data?.login_url) {
-        // Store return path in localStorage so we know where to go back
-        localStorage.setItem('tag_whats_oauth_return', 'true');
-        window.location.href = data.login_url;
-      }
-    } catch (error) {
-      console.error("Error initiating Facebook login:", error);
-      toast.error("Erro ao conectar com Facebook");
-      setConnecting(false);
-    }
-  };
-
-  const handleOAuthCallback = async (code: string) => {
-    setConnecting(true);
-    try {
-      const redirectUri = FACEBOOK_REDIRECT_URI;
-      const { data, error } = await supabase.functions.invoke("facebook-oauth", {
-        body: { action: "exchange_code", code, redirect_uri: redirectUri }
-      });
-
-      if (error) throw error;
-      toast.success("Conta do Facebook conectada!");
-      await fetchAdsData();
-    } catch (error) {
-      console.error("Error exchanging code:", error);
-      toast.error("Erro ao conectar conta");
-    } finally {
-      setConnecting(false);
-    }
-  };
-
-  const handleSyncAdAccounts = async (facebookAccountId: string) => {
-    setSyncingAccounts(prev => new Set(prev).add(facebookAccountId));
-    try {
-      // Sync ad accounts
-      const { error } = await supabase.functions.invoke("facebook-oauth", {
-        body: { action: "get_ad_accounts", facebook_account_id: facebookAccountId }
-      });
-
-      if (error) throw error;
-
-      // Also sync pixels for all ad accounts of this Facebook account
-      const { data: accountsToSync } = await supabase
-        .from("ads_ad_accounts")
-        .select("id")
-        .eq("facebook_account_id", facebookAccountId);
-
-      if (accountsToSync && accountsToSync.length > 0) {
-        for (const acc of accountsToSync) {
-          try {
-            await supabase.functions.invoke("facebook-oauth", {
-              body: { action: "sync_pixels", ad_account_id: acc.id }
-            });
-          } catch (pixelError) {
-            console.error("Error syncing pixels for account:", acc.id, pixelError);
-          }
-        }
-      }
-
-      toast.success("Contas e pixels sincronizados!");
-      await fetchAdsData();
-    } catch (error) {
-      console.error("Error syncing ad accounts:", error);
-      toast.error("Erro ao sincronizar");
-    } finally {
-      setSyncingAccounts(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(facebookAccountId);
-        return newSet;
-      });
-    }
-  };
-
-  const handleToggleAdAccountSelected = async (adAccountId: string, isSelected: boolean) => {
-    try {
-      const { error } = await supabase
-        .from("ads_ad_accounts")
-        .update({ is_selected: isSelected })
-        .eq("id", adAccountId);
-
-      if (error) throw error;
-      toast.success(isSelected ? "Conta ativada!" : "Conta desativada!");
-      fetchAdsData();
-    } catch (error) {
-      console.error("Error toggling ad account:", error);
-      toast.error("Erro ao alterar status da conta");
-    }
-  };
-
-  const handleToggleConversionTracking = async (configId: string, enabled: boolean, selectedIds?: string[]) => {
-    try {
-      const updateData: any = { 
-        enable_conversion_tracking: enabled,
-        updated_at: new Date().toISOString()
-      };
-      
-      if (selectedIds) {
-        updateData.selected_ad_account_ids = selectedIds;
-        // Keep backwards compatibility - set first one as ad_account_id
-        updateData.ad_account_id = selectedIds.length > 0 ? selectedIds[0] : null;
-      }
-
-      const { error } = await (supabase
-        .from('tag_whats_configs' as any)
-        .update(updateData)
-        .eq('id', configId) as any);
-
-      if (error) throw error;
-      toast.success(enabled ? 'Conversões ativadas!' : 'Conversões desativadas!');
-      fetchData();
-    } catch (error) {
-      console.error('Error toggling conversion tracking:', error);
-      toast.error('Erro ao alterar configuração');
-    }
-  };
-
-  const handleTogglePixelSelected = async (pixelId: string, adAccountDbId: string, isSelected: boolean) => {
-    try {
-      // First, deselect all pixels for this ad account
-      await (supabase
-        .from('ads_pixels' as any)
-        .update({ is_selected: false })
-        .eq('ad_account_id', adAccountDbId) as any);
-
-      // Then select the chosen pixel
-      if (isSelected) {
-        await (supabase
-          .from('ads_pixels' as any)
-          .update({ is_selected: true })
-          .eq('id', pixelId) as any);
-      }
-
-      toast.success(isSelected ? 'Pixel selecionado!' : 'Pixel desmarcado!');
-      fetchAdsData();
-    } catch (error) {
-      console.error('Error toggling pixel:', error);
-      toast.error('Erro ao alterar pixel');
-    }
-  };
-
-  const handleSyncPixelsOnly = async (adAccountDbId: string) => {
-    setSyncingPixels(prev => new Set(prev).add(adAccountDbId));
-    try {
-      await supabase.functions.invoke("facebook-oauth", {
-        body: { action: "sync_pixels", ad_account_id: adAccountDbId }
-      });
-      toast.success("Pixels sincronizados!");
-      await fetchAdsData();
-    } catch (error) {
-      console.error("Error syncing pixels:", error);
-      toast.error("Erro ao sincronizar pixels");
-    } finally {
-      setSyncingPixels(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(adAccountDbId);
-        return newSet;
-      });
-    }
-  };
+  }, [fetchData]);
 
   const getConfigForInstance = (instanceId: string) => {
     return configs.find(c => c.instance_id === instanceId);
@@ -702,14 +436,8 @@ const TagWhatsCloud = () => {
                 <p className="text-sm text-muted-foreground">Números Conectados</p>
               </CardContent>
             </Card>
-            <Card 
-              className={`border-amber-500/20 ${canSeeConversionTracking ? 'cursor-pointer hover:border-amber-500/40 transition-colors group' : ''}`}
-              onClick={canSeeConversionTracking ? () => navigate("/tag-whats/cloud/sales") : undefined}
-            >
-              <CardContent className="p-4 text-center relative">
-                {canSeeConversionTracking && (
-                  <ExternalLink className="h-4 w-4 absolute top-3 right-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                )}
+            <Card className="border-amber-500/20">
+              <CardContent className="p-4 text-center">
                 <p className="text-2xl font-bold text-amber-500">{totalLabelsApplied}</p>
                 <p className="text-sm text-muted-foreground">Vendas Totais</p>
               </CardContent>
@@ -835,319 +563,6 @@ const TagWhatsCloud = () => {
             </CardContent>
           </Card>
 
-          {/* Marcar no Gerenciador - Facebook Conversion Tracking - Admin + Allowed Users */}
-          {canSeeConversionTracking && (
-          <Card className="mb-6 border-2 border-blue-500/30 bg-blue-500/5">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-500/20 rounded-full">
-                    <Target className="h-5 w-5 text-blue-500" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      Marcar no Gerenciador
-                      <Badge className="bg-blue-500/20 text-blue-400 text-xs">BETA</Badge>
-                    </CardTitle>
-                    <CardDescription>
-                      Envie eventos de compra para o Facebook quando uma venda for marcada
-                    </CardDescription>
-                  </div>
-                </div>
-                <Collapsible open={adsExpanded} onOpenChange={setAdsExpanded}>
-                  <CollapsibleTrigger asChild>
-                    <Button variant="ghost" size="sm">
-                      {adsExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                    </Button>
-                  </CollapsibleTrigger>
-                </Collapsible>
-              </div>
-            </CardHeader>
-            <Collapsible open={adsExpanded} onOpenChange={setAdsExpanded}>
-              <CollapsibleContent>
-                <CardContent className="pt-0 space-y-4">
-                  {/* Info box */}
-                  <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
-                    <h4 className="font-medium text-blue-400 mb-2">Como funciona:</h4>
-                    <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
-                      <li>Conecte sua conta do Facebook Ads</li>
-                      <li>Ative o rastreamento de conversões nos números configurados</li>
-                      <li>Quando uma venda for detectada (etiqueta "Pago"), o evento é enviado ao Facebook</li>
-                      <li>O evento utiliza o ctwa_clid do lead para atribuição avançada</li>
-                    </ol>
-                  </div>
-
-                  {/* Facebook Accounts Section */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-medium flex items-center gap-2">
-                        <Facebook className="h-4 w-4 text-blue-500" />
-                        Contas do Facebook
-                      </h4>
-                      <Button 
-                        size="sm" 
-                        onClick={handleConnectFacebook}
-                        disabled={connecting}
-                        className="bg-blue-600 hover:bg-blue-700"
-                      >
-                        {connecting ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        ) : (
-                          <Plus className="h-4 w-4 mr-2" />
-                        )}
-                        Conectar Facebook
-                      </Button>
-                    </div>
-
-                    {loadingAds ? (
-                      <div className="flex justify-center py-4">
-                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                      </div>
-                    ) : facebookAccounts.length === 0 ? (
-                      <div className="text-center py-4 border border-dashed border-muted rounded-lg">
-                        <Facebook className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                        <p className="text-sm text-muted-foreground">Nenhuma conta conectada</p>
-                        <p className="text-xs text-muted-foreground mt-1">Conecte sua conta do Facebook para usar este recurso</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {facebookAccounts.map((account) => (
-                          <div key={account.id} className="p-3 rounded-lg border border-border bg-background/50">
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-3">
-                                {account.profile_pic_url ? (
-                                  <img src={account.profile_pic_url} alt="" className="w-10 h-10 rounded-full" />
-                                ) : (
-                                  <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center">
-                                    <Facebook className="h-5 w-5 text-white" />
-                                  </div>
-                                )}
-                                <div>
-                                  <h5 className="font-medium text-sm">{account.name || "Conta Facebook"}</h5>
-                                  {account.email && (
-                                    <p className="text-xs text-muted-foreground">{account.email}</p>
-                                  )}
-                                </div>
-                              </div>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleSyncAdAccounts(account.id)}
-                                disabled={syncingAccounts.has(account.id)}
-                              >
-                                <RefreshCw className={`h-3 w-3 mr-1 ${syncingAccounts.has(account.id) ? 'animate-spin' : ''}`} />
-                                {syncingAccounts.has(account.id) ? "Sincronizando..." : "Sincronizar"}
-                              </Button>
-                            </div>
-
-                            {/* Ad Accounts */}
-                            {adAccounts.filter(a => a.facebook_account_id === account.id).length > 0 && (
-                              <div className="mt-2 space-y-2">
-                                <h6 className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                                  <Building2 className="h-3 w-3" />
-                                  Contas de Anúncio
-                                </h6>
-                                {adAccounts
-                                  .filter(a => a.facebook_account_id === account.id)
-                                  .map(adAccount => (
-                                    <div 
-                                      key={adAccount.id}
-                                      className="flex items-center justify-between p-2 rounded bg-muted/50 text-sm"
-                                    >
-                                      <div>
-                                        <span className="font-medium">{adAccount.name || adAccount.ad_account_id}</span>
-                                        <span className="text-xs text-muted-foreground ml-2">{adAccount.currency}</span>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <ColoredSwitch
-                                          checked={adAccount.is_selected}
-                                          onCheckedChange={(checked) => handleToggleAdAccountSelected(adAccount.id, checked)}
-                                          className="scale-75"
-                                        />
-                                        <Badge 
-                                          variant={adAccount.is_selected ? "default" : "outline"}
-                                          className={adAccount.is_selected ? "bg-green-500/20 text-green-400" : ""}
-                                        >
-                                          {adAccount.is_selected ? "Ativa" : "Inativa"}
-                                        </Badge>
-                                      </div>
-                                    </div>
-                                  ))}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Enable conversion tracking per config */}
-                  {configs.length > 0 && facebookAccounts.length > 0 && (
-                    <div className="space-y-3 pt-2 border-t border-border">
-                      <h4 className="font-medium text-sm">Ativar Conversões por Número:</h4>
-                      {configs.map(config => {
-                        const instance = instances.find(i => i.id === config.instance_id);
-                        if (!instance) return null;
-
-                        const activeAdAccounts = adAccounts.filter(a => a.is_selected);
-                        const selectedIds = config.selected_ad_account_ids || (config.ad_account_id ? [config.ad_account_id] : []);
-
-                        return (
-                          <div key={config.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${config.enable_conversion_tracking ? 'bg-blue-500/20' : 'bg-muted'}`}>
-                                <Target className={`h-4 w-4 ${config.enable_conversion_tracking ? 'text-blue-500' : 'text-muted-foreground'}`} />
-                              </div>
-                              <div>
-                                <p className="font-medium text-sm">{instance.phone_number || instance.instance_name}</p>
-                                {selectedIds.length > 0 && (
-                                  <p className="text-xs text-muted-foreground">
-                                    {selectedIds.length} conta(s) selecionada(s)
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              {activeAdAccounts.length > 0 && config.enable_conversion_tracking && (
-                                <div className="flex flex-wrap gap-1 max-w-[300px]">
-                                  {activeAdAccounts.map(acc => {
-                                    const isChecked = selectedIds.includes(acc.id);
-                                    return (
-                                      <Badge
-                                        key={acc.id}
-                                        variant={isChecked ? "default" : "outline"}
-                                        className={`cursor-pointer text-xs ${isChecked ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30' : 'hover:bg-muted'}`}
-                                        onClick={() => {
-                                          const newIds = isChecked
-                                            ? selectedIds.filter(id => id !== acc.id)
-                                            : [...selectedIds, acc.id];
-                                          handleToggleConversionTracking(config.id, true, newIds);
-                                        }}
-                                      >
-                                        {acc.name || acc.ad_account_id}
-                                      </Badge>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                              <ColoredSwitch
-                                checked={config.enable_conversion_tracking || false}
-                                onCheckedChange={(checked) => {
-                                  const firstActiveAccount = activeAdAccounts[0];
-                                  handleToggleConversionTracking(
-                                    config.id, 
-                                    checked, 
-                                    checked && firstActiveAccount ? [firstActiveAccount.id] : []
-                                  );
-                                }}
-                                disabled={activeAdAccounts.length === 0}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Pixel Selection per Ad Account */}
-                  {adAccounts.filter(a => a.is_selected).length > 0 && (
-                    <div className="space-y-3 pt-2 border-t border-border">
-                      <h4 className="font-medium text-sm">Selecionar Pixel por Conta de Anúncio:</h4>
-                      <p className="text-xs text-muted-foreground mb-2">
-                        Selecione o pixel que será usado para enviar os eventos de conversão de cada conta.
-                      </p>
-                      {adAccounts.filter(a => a.is_selected).map(adAccount => {
-                        const accountPixels = pixels.filter(p => p.ad_account_id === adAccount.id);
-                        const selectedPixel = accountPixels.find(p => p.is_selected);
-
-                        return (
-                          <div key={adAccount.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full flex items-center justify-center bg-purple-500/20">
-                                <Target className="h-4 w-4 text-purple-500" />
-                              </div>
-                              <div>
-                                <p className="font-medium text-sm">{adAccount.name || adAccount.ad_account_id}</p>
-                                <p className="text-xs text-muted-foreground">{adAccount.currency}</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {accountPixels.length === 0 ? (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleSyncPixelsOnly(adAccount.id)}
-                                  disabled={syncingPixels.has(adAccount.id)}
-                                  className="text-xs h-7"
-                                >
-                                  <RefreshCw className={`h-3 w-3 mr-1 ${syncingPixels.has(adAccount.id) ? 'animate-spin' : ''}`} />
-                                  {syncingPixels.has(adAccount.id) ? "Carregando..." : "Carregar Pixels"}
-                                </Button>
-                              ) : (
-                                <>
-                                  <Select
-                                    value={selectedPixel?.id || ''}
-                                    onValueChange={(value) => handleTogglePixelSelected(value, adAccount.id, true)}
-                                  >
-                                    <SelectTrigger className="w-[180px] h-8 text-xs">
-                                      <SelectValue placeholder="Selecionar pixel" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {accountPixels.map(pixel => (
-                                        <SelectItem key={pixel.id} value={pixel.id}>
-                                          {pixel.name || pixel.pixel_id}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => handleSyncPixelsOnly(adAccount.id)}
-                                    disabled={syncingPixels.has(adAccount.id)}
-                                    className="h-8 w-8"
-                                    title="Sincronizar pixels"
-                                  >
-                                    <RefreshCw className={`h-3.5 w-3.5 ${syncingPixels.has(adAccount.id) ? 'animate-spin' : ''}`} />
-                                  </Button>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Alert when conversion is enabled but no pixel selected */}
-                  {configs.some(config => {
-                    if (!config.enable_conversion_tracking) return false;
-                    const selectedIds = config.selected_ad_account_ids || (config.ad_account_id ? [config.ad_account_id] : []);
-                    // Check if any selected ad account is missing a pixel
-                    return selectedIds.some(adAccountId => {
-                      const accountPixels = pixels.filter(p => p.ad_account_id === adAccountId);
-                      const hasSelectedPixel = accountPixels.some(p => p.is_selected);
-                      return !hasSelectedPixel;
-                    });
-                  }) && (
-                    <div className="mt-4 p-3 rounded-lg border border-amber-500/50 bg-amber-500/10 flex items-start gap-3">
-                      <div className="p-1.5 rounded-full bg-amber-500/20 mt-0.5">
-                        <Target className="h-4 w-4 text-amber-500" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-sm text-amber-500">Pixel não configurado</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Você tem conversões ativadas mas algumas contas de anúncio não possuem um pixel selecionado. 
-                          Selecione um pixel acima para que os eventos de compra sejam enviados corretamente.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </CollapsibleContent>
-            </Collapsible>
-          </Card>
-          )}
 
           {instances.length === 0 && !loading && (
             <Card className="mb-6 border-yellow-500/30 bg-yellow-500/5">
@@ -1216,12 +631,6 @@ const TagWhatsCloud = () => {
                               >
                                 {instance.status === 'connected' ? 'Conectado' : 'Desconectado'}
                               </Badge>
-                              {config.enable_conversion_tracking && (
-                                <Badge className="bg-blue-500/20 text-blue-400 text-xs">
-                                  <Target className="h-3 w-3 mr-1" />
-                                  Meta
-                                </Badge>
-                              )}
                             </div>
                             <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
                               <span className="flex items-center gap-1">
