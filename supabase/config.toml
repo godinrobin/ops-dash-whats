@@ -185,3 +185,6 @@ verify_jwt = false
 
 [functions.test-uazapi-label]
 verify_jwt = false
+
+[functions.tag-whats-manual-conversion]
+verify_jwt = true

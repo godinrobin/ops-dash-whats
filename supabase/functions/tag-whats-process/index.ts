@@ -606,7 +606,9 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
     let extractedValue: number | null = null;
 
     // Check if conversion tracking is enabled (support both old and new formats)
-    const adAccountIds = config.selected_ad_account_ids || (config.ad_account_id ? [config.ad_account_id] : []);
+    const adAccountIds = (config.selected_ad_account_ids && config.selected_ad_account_ids.length > 0) 
+      ? config.selected_ad_account_ids 
+      : (config.ad_account_id ? [config.ad_account_id] : []);
     const shouldTrackConversion = isPixPayment && labelApplied && config.enable_conversion_tracking && adAccountIds.length > 0;
 
     if (shouldTrackConversion) {
