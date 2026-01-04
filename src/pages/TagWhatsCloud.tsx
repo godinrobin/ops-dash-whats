@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { ColoredSwitch } from "@/components/ui/colored-switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Cloud, Plus, RefreshCw, QrCode, Settings, Image, FileText, CheckCircle2, XCircle, Loader2, Trash2, TrendingUp, ShoppingBag, Clock, Monitor, Apple, Download } from "lucide-react";
+import { ArrowLeft, Cloud, Plus, RefreshCw, QrCode, Settings, Image, FileText, CheckCircle2, XCircle, Loader2, Trash2, TrendingUp, ShoppingBag, Clock, Monitor, Apple, Download, ExternalLink } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useAuth } from "@/contexts/AuthContext";
@@ -21,11 +21,6 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 
-// List of emails allowed to access new Tag Whats Cloud (in addition to admins)
-const ALLOWED_TAGWHATS_EMAILS = [
-  'ewerton@metricas.local',
-  'patrickrjo@gmail.com',
-];
 
 interface Instance {
   id: string;
@@ -59,130 +54,6 @@ const CHART_COLORS = [
   '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'
 ];
 
-// Old version component for users without access
-const TagWhatsCloudOldVersion = () => {
-  const navigate = useNavigate();
-  
-  useEffect(() => {
-    // Load VTURB optimization script
-    const optimizationScript = document.createElement("script");
-    optimizationScript.innerHTML = `!function(i,n){i._plt=i._plt||(n&&n.timeOrigin?n.timeOrigin+n.now():Date.now())}(window,performance);`;
-    document.head.appendChild(optimizationScript);
-
-    const preloadPlayer = document.createElement("link");
-    preloadPlayer.rel = "preload";
-    preloadPlayer.href = "https://scripts.converteai.net/574be7f8-d9bf-450a-9bfb-e024758a6c13/players/693ddbc2b50e82e7e2e1a233/v4/player.js";
-    preloadPlayer.as = "script";
-    document.head.appendChild(preloadPlayer);
-
-    const playerScript = document.createElement("script");
-    playerScript.src = "https://scripts.converteai.net/574be7f8-d9bf-450a-9bfb-e024758a6c13/players/693ddbc2b50e82e7e2e1a233/v4/player.js";
-    playerScript.async = true;
-    document.head.appendChild(playerScript);
-
-    return () => {
-      try {
-        document.head.removeChild(optimizationScript);
-        document.head.removeChild(preloadPlayer);
-        document.head.removeChild(playerScript);
-      } catch {}
-    };
-  }, []);
-
-  return (
-    <>
-      <Header />
-      <div className="h-14 md:h-16" />
-      <div className="min-h-screen bg-background p-6 md:p-10">
-        <div className="container mx-auto max-w-4xl">
-          <Button
-            variant="ghost"
-            onClick={() => navigate("/tag-whats")}
-            className="mb-6"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Voltar
-          </Button>
-
-          <header className="text-center mb-8">
-            <div className="flex items-center justify-center gap-3 mb-2">
-              <Cloud className="h-8 w-8 text-emerald-500" />
-              <h1 className="text-3xl md:text-4xl font-bold">Tag Whats Cloud</h1>
-              <Badge variant="outline" className="text-yellow-500 border-yellow-500/50">
-                <Clock className="h-3 w-3 mr-1" />
-                Em breve
-              </Badge>
-            </div>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              A versão Cloud do Tag Whats estará disponível em breve. Por enquanto, utilize a versão Local.
-            </p>
-          </header>
-
-          {/* Video Container */}
-          <Card className="border-2 border-accent mb-8">
-            <CardContent className="p-4 md:p-6">
-              <div 
-                className="w-full"
-                dangerouslySetInnerHTML={{
-                  __html: '<vturb-smartplayer id="vid-693ddbc2b50e82e7e2e1a233" style="display: block; margin: 0 auto; width: 100%;"></vturb-smartplayer>'
-                }}
-              />
-            </CardContent>
-          </Card>
-
-          {/* Download Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card className="border-2 border-accent hover:border-accent/80 transition-colors">
-              <CardHeader className="text-center">
-                <div className="mx-auto w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mb-2">
-                  <Monitor className="h-8 w-8 text-accent" />
-                </div>
-                <CardTitle className="text-xl">Windows</CardTitle>
-              </CardHeader>
-              <CardContent className="text-center">
-                <p className="text-muted-foreground mb-4">
-                  Baixe a versão para Windows
-                </p>
-                <Button 
-                  onClick={() => window.open("https://joaolucassps.co/Tag%20Whats%20Setup%201.0.0.zip", "_blank")}
-                  className="w-full bg-accent hover:bg-accent/90"
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Baixar para Windows
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card className="border-2 border-accent hover:border-accent/80 transition-colors">
-              <CardHeader className="text-center">
-                <div className="mx-auto w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mb-2">
-                  <Apple className="h-8 w-8 text-accent" />
-                </div>
-                <CardTitle className="text-xl">macOS</CardTitle>
-              </CardHeader>
-              <CardContent className="text-center">
-                <p className="text-muted-foreground mb-4">
-                  Baixe a versão para macOS
-                </p>
-                <Button 
-                  onClick={() => window.open("https://joaolucassps.co/Tag-Whats-1.0.0-arm64.dmg.zip", "_blank")}
-                  className="w-full bg-accent hover:bg-accent/90"
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Baixar para macOS
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-
-          <footer className="mt-16 text-center text-xs text-muted-foreground/50">
-            Criado por <a href="https://instagram.com/joaolucassps" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground transition-colors">@joaolucassps</a>
-          </footer>
-        </div>
-      </div>
-    </>
-  );
-};
 
 const TagWhatsCloud = () => {
   useActivityTracker("page_visit", "Tag Whats Cloud");
@@ -436,8 +307,12 @@ const TagWhatsCloud = () => {
                 <p className="text-sm text-muted-foreground">Números Conectados</p>
               </CardContent>
             </Card>
-            <Card className="border-amber-500/20">
-              <CardContent className="p-4 text-center">
+            <Card 
+              className="border-amber-500/20 cursor-pointer hover:border-amber-500/40 transition-colors group"
+              onClick={() => navigate("/tag-whats/cloud/sales")}
+            >
+              <CardContent className="p-4 text-center relative">
+                <ExternalLink className="h-4 w-4 absolute top-3 right-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                 <p className="text-2xl font-bold text-amber-500">{totalLabelsApplied}</p>
                 <p className="text-sm text-muted-foreground">Vendas Totais</p>
               </CardContent>
