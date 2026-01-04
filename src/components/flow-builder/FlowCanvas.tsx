@@ -347,7 +347,7 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
         <Button
           variant="outline"
           size="icon"
-          className="absolute bottom-4 left-4 z-10 bg-card border-border shadow-md hover:bg-accent"
+          className="absolute bottom-12 left-4 z-10 bg-card border-border shadow-md hover:bg-accent"
           onClick={() => fitView({ padding: 0.2, duration: 300 })}
           title="Centralizar e ver todo o fluxo"
         >
