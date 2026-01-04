@@ -1,26 +1,29 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/ProductCard";
 import { CreateProductModal } from "@/components/CreateProductModal";
 import { Header } from "@/components/Header";
 import { getProducts } from "@/utils/storage";
 import { Product } from "@/types/product";
+import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 
 const Index = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const { effectiveUserId } = useEffectiveUser();
 
-  const loadProducts = async () => {
+  const loadProducts = useCallback(async () => {
     setLoading(true);
-    const data = await getProducts();
+    // Pass effectiveUserId to filter by impersonated user when applicable
+    const data = await getProducts(effectiveUserId || undefined);
     setProducts(data);
     setLoading(false);
-  };
+  }, [effectiveUserId]);
 
   useEffect(() => {
     loadProducts();
-  }, []);
+  }, [loadProducts]);
 
   const handleProductCreated = () => {
     loadProducts();

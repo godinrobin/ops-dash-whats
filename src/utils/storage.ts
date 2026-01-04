@@ -1,12 +1,19 @@
 import { Product, Metric } from "@/types/product";
 import { supabase } from "@/integrations/supabase/client";
 
-export const getProducts = async (): Promise<Product[]> => {
-  const { data, error } = await supabase
+export const getProducts = async (userId?: string): Promise<Product[]> => {
+  let query = supabase
     .from("products")
     .select("*, metrics!metrics_product_id_fkey(*)")
     .order("created_at", { ascending: false })
     .order("created_at", { referencedTable: "metrics", ascending: false });
+
+  // If a specific userId is provided, filter by it
+  if (userId) {
+    query = query.eq("user_id", userId);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     return [];
