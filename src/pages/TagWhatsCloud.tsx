@@ -214,11 +214,11 @@ const TagWhatsCloud = () => {
   const { isAdmin } = useAdminStatus();
   const { effectiveUserId, effectiveEmail } = useEffectiveUser();
 
-  // Check if user can see "Marcar no Gerenciador" and sales page link (admin or ewerton@metricas.local)
+  // Check if user can see "Marcar no Gerenciador" and sales page link (admin or specific users)
   const canSeeConversionTracking = useMemo(() => {
     if (isAdmin) return true;
     const email = (effectiveEmail || user?.email || '').toLowerCase();
-    return email === 'ewerton@metricas.local';
+    return email === 'ewerton@metricas.local' || email === 'patrickrjo@gmail.com';
   }, [isAdmin, effectiveEmail, user?.email]);
 
   const [instances, setInstances] = useState<Instance[]>([]);
