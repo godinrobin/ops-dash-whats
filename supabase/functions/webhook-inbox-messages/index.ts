@@ -1185,52 +1185,57 @@ serve(async (req) => {
                   }
                 } else {
                   // For waitInput and menu nodes
-                  // Check if message is media without text content - if so, IGNORE it
+                  // Accept ANY message type (text, audio, video, image, etc.)
+                  // For media without text, we use "enviou mídia" as the value
                   const isMediaMessage = ['image', 'audio', 'video', 'document', 'sticker'].includes(messageType);
                   const hasTextContent = uazText && uazText.trim().length > 0;
                   
+                  // Determine what to pass as userInput
+                  let userInputValue = uazText || '';
                   if (isMediaMessage && !hasTextContent) {
-                    console.log(`[UAZAPI-WEBHOOK] Ignoring media message (${messageType}) without caption - flow continues waiting for text input`);
-                  } else {
-                    console.log(`[UAZAPI-WEBHOOK] Valid input received: "${uazText?.substring(0, 50)}"`);
+                    // For media without text, use "enviou mídia" as the value
+                    userInputValue = 'enviou mídia';
+                    console.log(`[UAZAPI-WEBHOOK] Media message (${messageType}) received - using value: "${userInputValue}"`);
+                  }
+                  
+                  console.log(`[UAZAPI-WEBHOOK] Valid input received: "${userInputValue?.substring(0, 50)}"`);
+                  
+                  // Cancel any pending timeout job for this session
+                  await supabaseClient
+                    .from('inbox_flow_delay_jobs')
+                    .update({ 
+                      status: 'done',
+                      updated_at: new Date().toISOString()
+                    })
+                    .eq('session_id', activeSession.id)
+                    .eq('status', 'scheduled');
+                  
+                  // Clear timeout_at from session
+                  await supabaseClient
+                    .from('inbox_flow_sessions')
+                    .update({ timeout_at: null })
+                    .eq('id', activeSession.id);
+                  
+                  // Process the user's input and continue the flow using HTTP call with service role
+                  try {
+                    const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+                    const processResponse = await fetch(processUrl, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                      },
+                      body: JSON.stringify({ sessionId: activeSession.id, userInput: userInputValue }),
+                    });
                     
-                    // Cancel any pending timeout job for this session
-                    await supabaseClient
-                      .from('inbox_flow_delay_jobs')
-                      .update({ 
-                        status: 'done',
-                        updated_at: new Date().toISOString()
-                      })
-                      .eq('session_id', activeSession.id)
-                      .eq('status', 'scheduled');
-                    
-                    // Clear timeout_at from session
-                    await supabaseClient
-                      .from('inbox_flow_sessions')
-                      .update({ timeout_at: null })
-                      .eq('id', activeSession.id);
-                    
-                    // Process the user's input and continue the flow using HTTP call with service role
-                    try {
-                      const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
-                      const processResponse = await fetch(processUrl, {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-                        },
-                        body: JSON.stringify({ sessionId: activeSession.id, userInput: uazText }),
-                      });
-                      
-                      if (!processResponse.ok) {
-                        const errorText = await processResponse.text();
-                        console.error('[UAZAPI-WEBHOOK] Error processing user input:', errorText);
-                      } else {
-                        console.log('[UAZAPI-WEBHOOK] User input processed, flow continued');
-                      }
-                    } catch (flowError) {
-                      console.error('[UAZAPI-WEBHOOK] Error calling process-inbox-flow for input:', flowError);
+                    if (!processResponse.ok) {
+                      const errorText = await processResponse.text();
+                      console.error('[UAZAPI-WEBHOOK] Error processing user input:', errorText);
+                    } else {
+                      console.log('[UAZAPI-WEBHOOK] User input processed, flow continued');
                     }
+                  } catch (flowError) {
+                    console.error('[UAZAPI-WEBHOOK] Error calling process-inbox-flow for input:', flowError);
                   }
                 }
               } else {
