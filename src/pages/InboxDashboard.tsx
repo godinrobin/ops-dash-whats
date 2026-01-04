@@ -12,6 +12,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ArrowLeft, MessageSquare, Smartphone, GitBranch, Tag, Plus, RefreshCw, Loader2, QrCode, Trash2, PowerOff, RotateCcw, ChevronDown, ChevronRight, Phone, Zap, Users, TrendingUp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { toast } from "sonner";
 import automatizapIcon from "@/assets/automatizap-icon.png";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
@@ -47,6 +48,7 @@ interface InboxTag {
 export default function InboxDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { effectiveUserId } = useEffectiveUser();
   
   // Track activity for Automati-Zap main page
   useActivityTracker('page_visit', 'Automati-Zap');
@@ -91,13 +93,14 @@ export default function InboxDashboard() {
 
   // Fase 1: Carrega apenas dados essenciais (instâncias e fluxos)
   const fetchEssentialData = async () => {
-    if (!user) return;
+    const userId = effectiveUserId || user?.id;
+    if (!userId) return;
 
     try {
       const [instancesRes, flowsRes, tagsRes] = await Promise.all([
-        supabase.from('maturador_instances').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
-        supabase.from('inbox_flows').select('id, name, is_active, assigned_instances').eq('user_id', user.id),
-        supabase.from('inbox_tags').select('*').eq('user_id', user.id),
+        supabase.from('maturador_instances').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+        supabase.from('inbox_flows').select('id, name, is_active, assigned_instances').eq('user_id', userId),
+        supabase.from('inbox_tags').select('*').eq('user_id', userId),
       ]);
 
       if (instancesRes.data) setInstances(instancesRes.data);

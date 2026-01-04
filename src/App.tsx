@@ -52,6 +52,8 @@ import InboxDashboard from "./pages/InboxDashboard";
 import MessageBlaster from "./pages/MessageBlaster";
 import SiteCloner from "./pages/SiteCloner";
 import AdsLayout from "./pages/ads/AdsLayout";
+import WhatsAppEditor from "./pages/WhatsAppEditor";
+import WhatsAppEditorAddNumber from "./pages/WhatsAppEditorAddNumber";
 
 const queryClient = new QueryClient();
 
@@ -113,6 +115,8 @@ const AppRoutes = () => {
         <Route path="/disparazap/fluxos/novo" element={<MemberRoute featureName="DisparaZap"><FlowEditorPage /></MemberRoute>} />
         <Route path="/disparazap/fluxos/:id" element={<MemberRoute featureName="DisparaZap"><FlowEditorPage /></MemberRoute>} />
         <Route path="/clonador" element={<MemberRoute featureName="Clonador de Entregável"><SiteCloner /></MemberRoute>} />
+        <Route path="/whatsapp-editor" element={<MemberRoute featureName="Edição de WhatsApp"><WhatsAppEditor /></MemberRoute>} />
+        <Route path="/whatsapp-editor/add-number" element={<MemberRoute featureName="Edição de WhatsApp"><WhatsAppEditorAddNumber /></MemberRoute>} />
         
         {/* ADS MODULE */}
         <Route path="/ads/*" element={<MemberRoute featureName="ADS X1"><AdsLayout /></MemberRoute>} />

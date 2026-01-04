@@ -188,3 +188,6 @@ verify_jwt = false
 
 [functions.tag-whats-manual-conversion]
 verify_jwt = true
+
+[functions.update-whatsapp-profile]
+verify_jwt = true
