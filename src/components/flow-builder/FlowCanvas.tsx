@@ -3,7 +3,6 @@ import {
   ReactFlow,
   Background,
   Controls,
-  MiniMap,
   addEdge,
   useNodesState,
   useEdgesState,
@@ -14,6 +13,8 @@ import {
   ReactFlowProvider,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { Maximize2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 import { StartNode } from './nodes/StartNode';
 import { TextNode } from './nodes/TextNode';
@@ -79,7 +80,7 @@ interface FlowCanvasProps {
 
 const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, triggerKeywords, onUpdateFlowSettings, flowId }: FlowCanvasProps) => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
   
   // Flow analytics for node badges
   const { analytics, loading: analyticsLoading } = useFlowAnalytics(flowId || '', 'today');
@@ -343,6 +344,17 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} className="!bg-background" />
           <Controls className="!bg-card !border-border !shadow-md" />
         </ReactFlow>
+        
+        {/* Fit View button in bottom left */}
+        <Button
+          variant="outline"
+          size="icon"
+          className="absolute bottom-4 left-4 z-10 bg-card border-border shadow-md hover:bg-accent"
+          onClick={() => fitView({ padding: 0.2, duration: 300 })}
+          title="Centralizar e ver todo o fluxo"
+        >
+          <Maximize2 className="h-4 w-4" />
+        </Button>
       </div>
 
       <PropertiesPanel
