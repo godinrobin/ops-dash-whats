@@ -2365,24 +2365,21 @@ serve(async (req) => {
         if (currentNode && (currentNode.type === 'waitInput' || currentNode.type === 'menu')) {
           console.log(`Found active session ${activeSession.id} waiting for input at node ${currentNode.id}`);
           
-          // Check if message is media without text content - if so, IGNORE it and keep waiting
+          // For waitInput/menu nodes: Accept ANY message type (text, audio, video, image, etc.)
+          // The flow will continue regardless of message type
+          // For audio/video without text, we use a placeholder to indicate the type
           const isMediaMessage = ['image', 'audio', 'video', 'document', 'sticker'].includes(messageType);
           const hasTextContent = content && content.trim().length > 0;
           
+          // Determine what to pass as userInput
+          let userInputValue = content || '';
           if (isMediaMessage && !hasTextContent) {
-            console.log(`[WAIT_INPUT] Ignoring media message (${messageType}) without caption - flow continues waiting for text input`);
-            return new Response(JSON.stringify({ 
-              success: true, 
-              skipped: true, 
-              reason: 'ignored_media_while_waiting_input',
-              messageType,
-              sessionId: activeSession.id
-            }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
+            // For media without text, use a placeholder indicating the type
+            userInputValue = `[${messageType}]`;
+            console.log(`[WAIT_INPUT] Media message (${messageType}) received - using placeholder: "${userInputValue}"`);
           }
           
-          console.log(`[WAIT_INPUT] Valid input received: ${messageType} with content: "${content?.substring(0, 50)}"`);
+          console.log(`[WAIT_INPUT] Valid input received: ${messageType} with content: "${userInputValue?.substring(0, 50)}"`);
           
           // Cancel any pending timeout job for this session
           const { error: cancelError } = await supabaseClient
@@ -2415,7 +2412,7 @@ serve(async (req) => {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
               },
-              body: JSON.stringify({ sessionId: activeSession.id, userInput: content }),
+              body: JSON.stringify({ sessionId: activeSession.id, userInput: userInputValue }),
             });
             
             if (!processResponse.ok) {
@@ -2431,6 +2428,43 @@ serve(async (req) => {
           // Don't trigger new flows since we're continuing an existing one
           console.log('Message processed successfully (continuing flow)');
           return new Response(JSON.stringify({ success: true, flowContinued: true }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
+        // Check if the current node is a paymentIdentifier - these need to process ALL message types
+        if (currentNode && currentNode.type === 'paymentIdentifier') {
+          console.log(`Found active session ${activeSession.id} at paymentIdentifier node ${currentNode.id}`);
+          
+          // For paymentIdentifier nodes: Accept ANY message type (text, audio, image, document)
+          // The flow processor will determine what counts as an attempt vs valid payment proof
+          console.log(`[PAYMENT_IDENTIFIER] Message received: ${messageType}`);
+          
+          // Process the message through the flow
+          try {
+            const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+            const processResponse = await fetch(processUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+              },
+              body: JSON.stringify({ sessionId: activeSession.id }),
+            });
+            
+            if (!processResponse.ok) {
+              const errorText = await processResponse.text();
+              console.error('Error processing payment identifier input:', errorText);
+            } else {
+              console.log('Payment identifier input processed, flow continued');
+            }
+          } catch (flowError) {
+            console.error('Error calling process-inbox-flow for payment identifier:', flowError);
+          }
+          
+          // Don't trigger new flows since we're continuing an existing one
+          console.log('Message processed successfully (continuing paymentIdentifier flow)');
+          return new Response(JSON.stringify({ success: true, flowContinued: true, nodeType: 'paymentIdentifier' }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
