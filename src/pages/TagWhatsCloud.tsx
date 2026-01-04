@@ -6,11 +6,12 @@ import { Switch } from "@/components/ui/switch";
 import { ColoredSwitch } from "@/components/ui/colored-switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Cloud, Plus, RefreshCw, QrCode, Settings, Image, FileText, CheckCircle2, XCircle, Loader2, Trash2, TrendingUp, ShoppingBag, Facebook, ChevronDown, ChevronUp, Building2, Target, ExternalLink } from "lucide-react";
+import { ArrowLeft, Cloud, Plus, RefreshCw, QrCode, Settings, Image, FileText, CheckCircle2, XCircle, Loader2, Trash2, TrendingUp, ShoppingBag, Facebook, ChevronDown, ChevronUp, Building2, Target, ExternalLink, Clock, Monitor, Apple, Download } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
+import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
@@ -20,6 +21,11 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+
+// List of emails allowed to access new Tag Whats Cloud (in addition to admins)
+const ALLOWED_TAGWHATS_EMAILS = [
+  'ewerton@metricas.local',
+];
 
 interface Instance {
   id: string;
@@ -74,12 +80,152 @@ const CHART_COLORS = [
   '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'
 ];
 
+// Old version component for users without access
+const TagWhatsCloudOldVersion = () => {
+  const navigate = useNavigate();
+  
+  useEffect(() => {
+    // Load VTURB optimization script
+    const optimizationScript = document.createElement("script");
+    optimizationScript.innerHTML = `!function(i,n){i._plt=i._plt||(n&&n.timeOrigin?n.timeOrigin+n.now():Date.now())}(window,performance);`;
+    document.head.appendChild(optimizationScript);
+
+    const preloadPlayer = document.createElement("link");
+    preloadPlayer.rel = "preload";
+    preloadPlayer.href = "https://scripts.converteai.net/574be7f8-d9bf-450a-9bfb-e024758a6c13/players/693ddbc2b50e82e7e2e1a233/v4/player.js";
+    preloadPlayer.as = "script";
+    document.head.appendChild(preloadPlayer);
+
+    const playerScript = document.createElement("script");
+    playerScript.src = "https://scripts.converteai.net/574be7f8-d9bf-450a-9bfb-e024758a6c13/players/693ddbc2b50e82e7e2e1a233/v4/player.js";
+    playerScript.async = true;
+    document.head.appendChild(playerScript);
+
+    return () => {
+      try {
+        document.head.removeChild(optimizationScript);
+        document.head.removeChild(preloadPlayer);
+        document.head.removeChild(playerScript);
+      } catch {}
+    };
+  }, []);
+
+  return (
+    <>
+      <Header />
+      <div className="h-14 md:h-16" />
+      <div className="min-h-screen bg-background p-6 md:p-10">
+        <div className="container mx-auto max-w-4xl">
+          <Button
+            variant="ghost"
+            onClick={() => navigate("/tag-whats")}
+            className="mb-6"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Voltar
+          </Button>
+
+          <header className="text-center mb-8">
+            <div className="flex items-center justify-center gap-3 mb-2">
+              <Cloud className="h-8 w-8 text-emerald-500" />
+              <h1 className="text-3xl md:text-4xl font-bold">Tag Whats Cloud</h1>
+              <Badge variant="outline" className="text-yellow-500 border-yellow-500/50">
+                <Clock className="h-3 w-3 mr-1" />
+                Em breve
+              </Badge>
+            </div>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              A versão Cloud do Tag Whats estará disponível em breve. Por enquanto, utilize a versão Local.
+            </p>
+          </header>
+
+          {/* Video Container */}
+          <Card className="border-2 border-accent mb-8">
+            <CardContent className="p-4 md:p-6">
+              <div 
+                className="w-full"
+                dangerouslySetInnerHTML={{
+                  __html: '<vturb-smartplayer id="vid-693ddbc2b50e82e7e2e1a233" style="display: block; margin: 0 auto; width: 100%;"></vturb-smartplayer>'
+                }}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Download Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card className="border-2 border-accent hover:border-accent/80 transition-colors">
+              <CardHeader className="text-center">
+                <div className="mx-auto w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mb-2">
+                  <Monitor className="h-8 w-8 text-accent" />
+                </div>
+                <CardTitle className="text-xl">Windows</CardTitle>
+              </CardHeader>
+              <CardContent className="text-center">
+                <p className="text-muted-foreground mb-4">
+                  Baixe a versão para Windows
+                </p>
+                <Button 
+                  onClick={() => window.open("https://joaolucassps.co/Tag%20Whats%20Setup%201.0.0.zip", "_blank")}
+                  className="w-full bg-accent hover:bg-accent/90"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Baixar para Windows
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="border-2 border-accent hover:border-accent/80 transition-colors">
+              <CardHeader className="text-center">
+                <div className="mx-auto w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mb-2">
+                  <Apple className="h-8 w-8 text-accent" />
+                </div>
+                <CardTitle className="text-xl">macOS</CardTitle>
+              </CardHeader>
+              <CardContent className="text-center">
+                <p className="text-muted-foreground mb-4">
+                  Baixe a versão para macOS
+                </p>
+                <Button 
+                  onClick={() => window.open("https://joaolucassps.co/Tag-Whats-1.0.0-arm64.dmg.zip", "_blank")}
+                  className="w-full bg-accent hover:bg-accent/90"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Baixar para macOS
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          <footer className="mt-16 text-center text-xs text-muted-foreground/50">
+            Criado por <a href="https://instagram.com/joaolucassps" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground transition-colors">@joaolucassps</a>
+          </footer>
+        </div>
+      </div>
+    </>
+  );
+};
+
 const TagWhatsCloud = () => {
   useActivityTracker("page_visit", "Tag Whats Cloud");
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
   const { isAdmin } = useAdminStatus();
+  const { effectiveUserId, effectiveEmail } = useEffectiveUser();
+
+  // Check if user has access to new Tag Whats Cloud
+  const hasNewVersionAccess = useMemo(() => {
+    if (isAdmin) return true;
+    const email = (effectiveEmail || user?.email || '').toLowerCase();
+    return ALLOWED_TAGWHATS_EMAILS.some(e => e.toLowerCase() === email);
+  }, [isAdmin, effectiveEmail, user?.email]);
+  
+  // Check if user can see "Marcar no Gerenciador" (admin or ewerton@metricas.local)
+  const canSeeConversionTracking = useMemo(() => {
+    if (isAdmin) return true;
+    const email = (effectiveEmail || user?.email || '').toLowerCase();
+    return email === 'ewerton@metricas.local';
+  }, [isAdmin, effectiveEmail, user?.email]);
 
   const [instances, setInstances] = useState<Instance[]>([]);
   const [configs, setConfigs] = useState<TagWhatsConfig[]>([]);
@@ -105,14 +251,15 @@ const TagWhatsCloud = () => {
   const [selectedAdAccountId, setSelectedAdAccountId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!user) return;
+    const userId = effectiveUserId || user?.id;
+    if (!userId) return;
     setLoading(true);
     try {
       // Fetch UazAPI instances
       const { data: instancesData, error: instancesError } = await supabase
         .from('maturador_instances')
         .select('id, instance_name, phone_number, status, uazapi_token, label')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .not('uazapi_token', 'is', null) as any;
 
       if (instancesError) throw instancesError;
@@ -122,7 +269,7 @@ const TagWhatsCloud = () => {
       const { data: configsData, error: configsError } = await (supabase
         .from('tag_whats_configs' as any)
         .select('*')
-        .eq('user_id', user.id) as any);
+        .eq('user_id', userId) as any);
 
       if (configsError) throw configsError;
       setConfigs(configsData || []);
@@ -132,7 +279,7 @@ const TagWhatsCloud = () => {
       const { data: logsData, error: logsError } = await (supabase
         .from('tag_whats_logs' as any)
         .select('id, instance_id, created_at, label_applied')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .eq('label_applied', true)
         .gte('created_at', thirtyDaysAgo) as any);
 
@@ -144,30 +291,31 @@ const TagWhatsCloud = () => {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, effectiveUserId]);
 
   // Fetch Facebook accounts and ad accounts
   const fetchAdsData = useCallback(async () => {
-    if (!user) return;
+    const userId = effectiveUserId || user?.id;
+    if (!userId) return;
     setLoadingAds(true);
     try {
       const { data: fbAccounts } = await supabase
         .from("ads_facebook_accounts")
         .select("*")
-        .eq("user_id", user.id);
+        .eq("user_id", userId);
       setFacebookAccounts(fbAccounts || []);
 
       const { data: adAccountsData } = await supabase
         .from("ads_ad_accounts")
         .select("*")
-        .eq("user_id", user.id);
+        .eq("user_id", userId);
       setAdAccounts(adAccountsData || []);
     } catch (error) {
       console.error("Error fetching ads data:", error);
     } finally {
       setLoadingAds(false);
     }
-  }, [user]);
+  }, [user, effectiveUserId]);
 
   useEffect(() => {
     fetchData();
@@ -436,6 +584,11 @@ const TagWhatsCloud = () => {
     return result;
   }, [logs, chartPeriod, instancesWithLogs]);
 
+  // If user doesn't have access to new version, show old version
+  if (!hasNewVersionAccess) {
+    return <TagWhatsCloudOldVersion />;
+  }
+
   return (
     <>
       <Header />
@@ -606,8 +759,8 @@ const TagWhatsCloud = () => {
             </CardContent>
           </Card>
 
-          {/* Marcar no Gerenciador - Facebook Conversion Tracking - ADMIN ONLY */}
-          {isAdmin && (
+          {/* Marcar no Gerenciador - Facebook Conversion Tracking - Admin + Allowed Users */}
+          {canSeeConversionTracking && (
           <Card className="mb-6 border-2 border-blue-500/30 bg-blue-500/5">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">

@@ -2,9 +2,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { InboxContact } from '@/types/inbox';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 
 export const useInboxConversations = (instanceId?: string) => {
   const { user } = useAuth();
+  const { effectiveUserId } = useEffectiveUser();
+  const userId = effectiveUserId || user?.id;
+  
   const [contacts, setContacts] = useState<InboxContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -14,14 +18,14 @@ export const useInboxConversations = (instanceId?: string) => {
 
   // Fetch connected instances
   const fetchConnectedInstances = useCallback(async () => {
-    if (!user) return;
+    if (!userId) return;
 
     try {
       // Some deployments use status="connected" instead of "open"
       const { data } = await supabase
         .from('maturador_instances')
         .select('id')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .in('status', ['open', 'connected']);
 
       if (data) {
@@ -30,7 +34,7 @@ export const useInboxConversations = (instanceId?: string) => {
     } catch (err) {
       console.error('Error fetching connected instances:', err);
     }
-  }, [user]);
+  }, [userId]);
 
   useEffect(() => {
     fetchConnectedInstances();
@@ -38,7 +42,7 @@ export const useInboxConversations = (instanceId?: string) => {
 
   // Subscribe to instance status changes
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
 
     const channel = supabase
       .channel('instance-status-changes')
@@ -48,7 +52,7 @@ export const useInboxConversations = (instanceId?: string) => {
           event: '*',
           schema: 'public',
           table: 'maturador_instances',
-          filter: `user_id=eq.${user.id}`,
+          filter: `user_id=eq.${userId}`,
         },
         () => {
           fetchConnectedInstances();
@@ -59,16 +63,16 @@ export const useInboxConversations = (instanceId?: string) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, fetchConnectedInstances]);
+  }, [userId, fetchConnectedInstances]);
 
   const fetchContacts = useCallback(async () => {
-    if (!user) return;
+    if (!userId) return;
 
     try {
       let query = supabase
         .from('inbox_contacts')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('last_message_at', { ascending: false, nullsFirst: false });
 
       if (instanceId) {
@@ -95,7 +99,7 @@ export const useInboxConversations = (instanceId?: string) => {
     } finally {
       setLoading(false);
     }
-  }, [user, instanceId]);
+  }, [userId, instanceId]);
 
   useEffect(() => {
     fetchContacts();
@@ -113,9 +117,9 @@ export const useInboxConversations = (instanceId?: string) => {
       messagesChannelRef.current = null;
     }
 
-    if (!user) return;
+    if (!userId) return;
 
-    const channelName = `inbox-contacts-changes-${user.id}-${Date.now()}`;
+    const channelName = `inbox-contacts-changes-${userId}-${Date.now()}`;
     console.log(`[useInboxConversations] Subscribing to contacts channel: ${channelName}`);
     
     const contactsChannel = supabase
@@ -126,7 +130,7 @@ export const useInboxConversations = (instanceId?: string) => {
           event: 'INSERT',
           schema: 'public',
           table: 'inbox_contacts',
-          filter: `user_id=eq.${user.id}`,
+          filter: `user_id=eq.${userId}`,
         },
         (payload) => {
           console.log('[useInboxConversations] Realtime INSERT received:', payload);
@@ -162,7 +166,7 @@ export const useInboxConversations = (instanceId?: string) => {
           event: 'UPDATE',
           schema: 'public',
           table: 'inbox_contacts',
-          filter: `user_id=eq.${user.id}`,
+          filter: `user_id=eq.${userId}`,
         },
         (payload) => {
           const updated = payload.new as any;
@@ -196,7 +200,7 @@ export const useInboxConversations = (instanceId?: string) => {
           event: 'DELETE',
           schema: 'public',
           table: 'inbox_contacts',
-          filter: `user_id=eq.${user.id}`,
+          filter: `user_id=eq.${userId}`,
         },
         (payload) => {
           setContacts(prev => prev.filter(c => c.id !== payload.old.id));
@@ -209,7 +213,7 @@ export const useInboxConversations = (instanceId?: string) => {
     channelRef.current = contactsChannel;
 
     // Subscribe to new messages to update contact's last_message_at and move to top
-    const messagesChannelName = `inbox-messages-for-contacts-${user.id}-${Date.now()}`;
+    const messagesChannelName = `inbox-messages-for-contacts-${userId}-${Date.now()}`;
     const messagesChannel = supabase
       .channel(messagesChannelName)
       .on(
@@ -218,7 +222,7 @@ export const useInboxConversations = (instanceId?: string) => {
           event: 'INSERT',
           schema: 'public',
           table: 'inbox_messages',
-          filter: `user_id=eq.${user.id}`,
+          filter: `user_id=eq.${userId}`,
         },
         async (payload) => {
           const newMessage = payload.new as any;
@@ -268,11 +272,11 @@ export const useInboxConversations = (instanceId?: string) => {
         messagesChannelRef.current = null;
       }
     };
-  }, [user, instanceId, fetchContacts]);
+  }, [userId, instanceId, fetchContacts]);
 
   // Fallback polling: refresh contacts periodically to catch any missed realtime events
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
     
     let isTabVisible = true;
     
@@ -298,7 +302,7 @@ export const useInboxConversations = (instanceId?: string) => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       clearInterval(intervalId);
     };
-  }, [user, fetchContacts]);
+  }, [userId, fetchContacts]);
 
   return { contacts, loading, error, refetch: fetchContacts };
 };
