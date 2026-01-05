@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Header } from '@/components/Header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Settings, Play, Smartphone } from 'lucide-react';
+import { ArrowLeft, Settings, Play, Smartphone, Moon } from 'lucide-react';
 import { FlowCanvas } from '@/components/flow-builder/FlowCanvas';
 import { FlowAnalyticsBar } from '@/components/flow-builder/FlowAnalyticsBar';
 import { supabase } from '@/integrations/supabase/client';
@@ -54,6 +54,9 @@ const FlowEditorPage = () => {
   const [triggerKeywords, setTriggerKeywords] = useState('');
   const [isActive, setIsActive] = useState(false);
   const [pauseOnMedia, setPauseOnMedia] = useState(false);
+  const [pauseScheduleEnabled, setPauseScheduleEnabled] = useState(false);
+  const [pauseScheduleStart, setPauseScheduleStart] = useState('00:00');
+  const [pauseScheduleEnd, setPauseScheduleEnd] = useState('06:00');
   const [instances, setInstances] = useState<Instance[]>([]);
   const [assignedInstances, setAssignedInstances] = useState<string[]>([]);
   const [analyticsDateFilter, setAnalyticsDateFilter] = useState<DateFilter>('today');
@@ -150,6 +153,9 @@ const FlowEditorPage = () => {
         setTriggerKeywords(data.trigger_keywords?.join(', ') || '');
         setIsActive(data.is_active);
         setPauseOnMedia(data.pause_on_media || false);
+        setPauseScheduleEnabled(data.pause_schedule_enabled || false);
+        setPauseScheduleStart(data.pause_schedule_start || '00:00');
+        setPauseScheduleEnd(data.pause_schedule_end || '06:00');
         setAssignedInstances(data.assigned_instances || []);
       } catch (error: unknown) {
         console.error('Error fetching flow:', error);
@@ -188,6 +194,9 @@ const FlowEditorPage = () => {
           assigned_instances: assignedInstances,
           is_active: isActive,
           pause_on_media: pauseOnMedia,
+          pause_schedule_enabled: pauseScheduleEnabled,
+          pause_schedule_start: pauseScheduleEnabled ? pauseScheduleStart : null,
+          pause_schedule_end: pauseScheduleEnabled ? pauseScheduleEnd : null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)
@@ -389,6 +398,55 @@ const FlowEditorPage = () => {
                       : "data-[state=unchecked]:bg-red-500"
                     }
                   />
+                </div>
+
+                {/* Pausar Envio por Horário */}
+                <div className="space-y-4 border rounded-md p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Moon className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <Label>Pausar Envio por Horário</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Não enviar mensagens durante o horário definido
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={pauseScheduleEnabled}
+                      onCheckedChange={setPauseScheduleEnabled}
+                      className={pauseScheduleEnabled 
+                        ? "data-[state=checked]:bg-green-500" 
+                        : "data-[state=unchecked]:bg-red-500"
+                      }
+                    />
+                  </div>
+
+                  {pauseScheduleEnabled && (
+                    <div className="space-y-3 pt-2">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-xs">Início da Pausa</Label>
+                          <Input
+                            type="time"
+                            value={pauseScheduleStart}
+                            onChange={(e) => setPauseScheduleStart(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">Fim da Pausa</Label>
+                          <Input
+                            type="time"
+                            value={pauseScheduleEnd}
+                            onChange={(e) => setPauseScheduleEnd(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground bg-muted p-2 rounded">
+                        ⏰ Fuso horário: São Paulo (UTC-3). As mensagens que deixarem de ser enviadas durante a pausa serão disparadas após o término do horário definido.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between py-2">
