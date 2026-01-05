@@ -28,6 +28,9 @@ export const useInboxFlows = () => {
         trigger_type: flow.trigger_type as 'keyword' | 'all' | 'schedule',
         trigger_keywords: flow.trigger_keywords || [],
         assigned_instances: flow.assigned_instances || [],
+        pause_schedule_enabled: flow.pause_schedule_enabled || false,
+        pause_schedule_start: flow.pause_schedule_start || null,
+        pause_schedule_end: flow.pause_schedule_end || null,
       })));
     } catch (err: any) {
       setError(err.message);
@@ -96,6 +99,9 @@ export const useInboxFlows = () => {
         trigger_type: data.trigger_type as 'keyword' | 'all' | 'schedule',
         trigger_keywords: data.trigger_keywords || [],
         assigned_instances: data.assigned_instances || [],
+        pause_schedule_enabled: data.pause_schedule_enabled || false,
+        pause_schedule_start: data.pause_schedule_start || null,
+        pause_schedule_end: data.pause_schedule_end || null,
       } : f));
 
       return { data };

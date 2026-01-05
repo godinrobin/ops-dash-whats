@@ -1393,6 +1393,9 @@ export type Database = {
           name: string
           nodes: Json
           pause_on_media: boolean | null
+          pause_schedule_enabled: boolean | null
+          pause_schedule_end: string | null
+          pause_schedule_start: string | null
           priority: number
           trigger_keywords: string[] | null
           trigger_type: string
@@ -1409,6 +1412,9 @@ export type Database = {
           name: string
           nodes?: Json
           pause_on_media?: boolean | null
+          pause_schedule_enabled?: boolean | null
+          pause_schedule_end?: string | null
+          pause_schedule_start?: string | null
           priority?: number
           trigger_keywords?: string[] | null
           trigger_type?: string
@@ -1425,6 +1431,9 @@ export type Database = {
           name?: string
           nodes?: Json
           pause_on_media?: boolean | null
+          pause_schedule_enabled?: boolean | null
+          pause_schedule_end?: string | null
+          pause_schedule_start?: string | null
           priority?: number
           trigger_keywords?: string[] | null
           trigger_type?: string

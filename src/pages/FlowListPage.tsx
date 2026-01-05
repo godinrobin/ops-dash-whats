@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Zap, Edit2, Trash2, Copy, ArrowLeft, Smartphone, AlertTriangle } from 'lucide-react';
+import { Plus, Zap, Edit2, Trash2, Copy, ArrowLeft, Smartphone, AlertTriangle, Settings } from 'lucide-react';
 import { useInboxFlows } from '@/hooks/useInboxFlows';
 import { toast } from 'sonner';
 import { Label } from '@/components/ui/label';
@@ -19,6 +19,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { AnimatedSearchBar } from '@/components/ui/animated-search-bar';
+import { FlowSettingsDialog } from '@/components/flow-builder/FlowSettingsDialog';
+import { InboxFlow } from '@/types/inbox';
 
 const FlowListPage = () => {
   const location = useLocation();
@@ -28,7 +30,7 @@ const FlowListPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { effectiveUserId } = useEffectiveUser();
-  const { flows, loading, createFlow, deleteFlow, toggleFlowActive, updateFlow } = useInboxFlows();
+  const { flows, loading, createFlow, deleteFlow, toggleFlowActive, updateFlow, refetch } = useInboxFlows();
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newFlowName, setNewFlowName] = useState('');
@@ -39,6 +41,8 @@ const FlowListPage = () => {
   const [selectedInstances, setSelectedInstances] = useState<string[]>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [flowToDelete, setFlowToDelete] = useState<string | null>(null);
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const [settingsFlow, setSettingsFlow] = useState<InboxFlow | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -183,6 +187,18 @@ const FlowListPage = () => {
         ? prev.filter(id => id !== instanceId)
         : [...prev, instanceId]
     );
+  };
+  const openSettingsDialog = (flow: InboxFlow) => {
+    setSettingsFlow(flow);
+    setShowSettingsDialog(true);
+  };
+
+  const handleSaveSettings = async (flowId: string, updates: Partial<InboxFlow>) => {
+    const result = await updateFlow(flowId, updates);
+    if (!result.error) {
+      refetch();
+    }
+    return result;
   };
 
   return (
@@ -408,6 +424,15 @@ const FlowListPage = () => {
                       variant="ghost" 
                       size="icon" 
                       className="h-8 w-8"
+                      onClick={() => openSettingsDialog(flow)}
+                      title="Configurações do fluxo"
+                    >
+                      <Settings className="h-3 w-3" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8"
                       onClick={() => openInstancesDialog(flow.id)}
                       title="Selecionar números"
                     >
@@ -455,6 +480,15 @@ const FlowListPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Flow Settings Dialog */}
+      <FlowSettingsDialog
+        open={showSettingsDialog}
+        onOpenChange={setShowSettingsDialog}
+        flow={settingsFlow}
+        instances={instances}
+        onSave={handleSaveSettings}
+      />
     </div>
   );
 };

@@ -169,6 +169,72 @@ serve(async (req) => {
     }
     const sentNodeIds = variables._sent_node_ids as string[];
 
+    // === PAUSE SCHEDULE CHECK ===
+    // Helper function to check if current time is within pause schedule (São Paulo timezone)
+    const isWithinPauseSchedule = (): boolean => {
+      if (!flow.pause_schedule_enabled) return false;
+      
+      const pauseStart = flow.pause_schedule_start; // "HH:MM" format
+      const pauseEnd = flow.pause_schedule_end;     // "HH:MM" format
+      
+      if (!pauseStart || !pauseEnd) return false;
+      
+      // Get current time in São Paulo timezone (UTC-3)
+      const now = new Date();
+      const saoPauloOffset = -3 * 60; // -3 hours in minutes
+      const localOffset = now.getTimezoneOffset();
+      const saoPauloTime = new Date(now.getTime() + (localOffset + saoPauloOffset) * 60000);
+      
+      const currentHour = saoPauloTime.getHours();
+      const currentMinute = saoPauloTime.getMinutes();
+      const currentTimeMinutes = currentHour * 60 + currentMinute;
+      
+      const [startHour, startMin] = pauseStart.split(':').map(Number);
+      const [endHour, endMin] = pauseEnd.split(':').map(Number);
+      
+      const startMinutes = startHour * 60 + startMin;
+      const endMinutes = endHour * 60 + endMin;
+      
+      // Case: pause crosses midnight (e.g., 22:00 to 06:00)
+      if (startMinutes > endMinutes) {
+        return currentTimeMinutes >= startMinutes || currentTimeMinutes < endMinutes;
+      }
+      
+      // Normal case: pause within same day (e.g., 00:00 to 06:00)
+      return currentTimeMinutes >= startMinutes && currentTimeMinutes < endMinutes;
+    };
+
+    // Helper function to calculate when pause ends (returns timestamp)
+    const calculatePauseEndTime = (): number => {
+      const pauseEnd = flow.pause_schedule_end; // "HH:MM" format
+      if (!pauseEnd) return Date.now();
+      
+      const [endHour, endMin] = pauseEnd.split(':').map(Number);
+      
+      // Get current time in São Paulo timezone
+      const now = new Date();
+      const saoPauloOffset = -3 * 60;
+      const localOffset = now.getTimezoneOffset();
+      const saoPauloTime = new Date(now.getTime() + (localOffset + saoPauloOffset) * 60000);
+      
+      // Create a date for today at pause end time (in São Paulo timezone)
+      const pauseEndToday = new Date(saoPauloTime);
+      pauseEndToday.setHours(endHour, endMin, 0, 0);
+      
+      // Convert back to UTC
+      const pauseEndUTC = new Date(pauseEndToday.getTime() - (localOffset + saoPauloOffset) * 60000);
+      
+      // If pause end is before current time, it means pause ends tomorrow
+      if (pauseEndUTC.getTime() <= now.getTime()) {
+        pauseEndUTC.setDate(pauseEndUTC.getDate() + 1);
+      }
+      
+      return pauseEndUTC.getTime();
+    };
+
+    // Check if we're resuming from a pause schedule
+    const resumeFromPauseSchedule = variables._pause_scheduled === true;
+
     // === Generate dynamic system variables ===
     // Helper to generate personalized greeting based on São Paulo timezone (-03:00)
     const generateSaudacaoPersonalizada = (): string => {
@@ -462,6 +528,17 @@ serve(async (req) => {
         return null;
       };
 
+      // === CHECK PAUSE SCHEDULE BEFORE PROCESSING ===
+      // Only check pause if we're about to send messages (not just starting or receiving input)
+      const isSendingNode = (nodeType: string) => ['text', 'aiText', 'image', 'video', 'audio', 'document'].includes(nodeType);
+      
+      // Check if we're resuming from a scheduled pause
+      if (resumeFromPauseSchedule) {
+        console.log(`[${runId}] Resuming from scheduled pause`);
+        delete variables._pause_scheduled;
+        delete variables._pause_resume_at;
+      }
+
       while (continueProcessing && !sendFailed) {
         const currentNode = nodes.find(n => n.id === currentNodeId);
         
@@ -532,6 +609,51 @@ serve(async (req) => {
           }
 
           case 'text':
+            // === PAUSE SCHEDULE CHECK FOR SENDING NODES ===
+            if (isWithinPauseSchedule() && !resumeFromPauseSchedule) {
+              console.log(`[${runId}] ⏸️ Flow is within pause schedule, scheduling resume for later`);
+              
+              const pauseResumeAt = calculatePauseEndTime();
+              variables._pause_scheduled = true;
+              variables._pause_resume_at = pauseResumeAt;
+              variables._pause_node_id = currentNodeId;
+              
+              // Save session state
+              await supabaseClient
+                .from('inbox_flow_sessions')
+                .update({
+                  current_node_id: currentNodeId,
+                  variables,
+                  last_interaction: new Date().toISOString(),
+                  processing: false,
+                  processing_started_at: null,
+                })
+                .eq('id', sessionId);
+              
+              // Create delay job to resume after pause ends
+              await supabaseClient
+                .from('inbox_flow_delay_jobs')
+                .upsert({
+                  session_id: sessionId,
+                  user_id: session.user_id,
+                  run_at: new Date(pauseResumeAt).toISOString(),
+                  status: 'scheduled',
+                  attempts: 0,
+                  updated_at: new Date().toISOString(),
+                }, { onConflict: 'session_id' });
+              
+              console.log(`[${runId}] ⏸️ Pause scheduled until ${new Date(pauseResumeAt).toISOString()}`);
+              
+              return new Response(JSON.stringify({ 
+                success: true, 
+                paused: true,
+                pauseResumeAt: new Date(pauseResumeAt).toISOString(),
+                reason: 'pause_schedule_active'
+              }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              });
+            }
+
             // Check if already sent (idempotency)
             if (sentNodeIds.includes(currentNodeId)) {
               console.log(`[${runId}] Node ${currentNodeId} already sent, skipping`);
@@ -596,6 +718,47 @@ serve(async (req) => {
             break;
 
           case 'aiText':
+            // === PAUSE SCHEDULE CHECK FOR SENDING NODES ===
+            if (isWithinPauseSchedule() && !resumeFromPauseSchedule) {
+              console.log(`[${runId}] ⏸️ Flow is within pause schedule (aiText), scheduling resume for later`);
+              
+              const pauseResumeAtAi = calculatePauseEndTime();
+              variables._pause_scheduled = true;
+              variables._pause_resume_at = pauseResumeAtAi;
+              variables._pause_node_id = currentNodeId;
+              
+              await supabaseClient
+                .from('inbox_flow_sessions')
+                .update({
+                  current_node_id: currentNodeId,
+                  variables,
+                  last_interaction: new Date().toISOString(),
+                  processing: false,
+                  processing_started_at: null,
+                })
+                .eq('id', sessionId);
+              
+              await supabaseClient
+                .from('inbox_flow_delay_jobs')
+                .upsert({
+                  session_id: sessionId,
+                  user_id: session.user_id,
+                  run_at: new Date(pauseResumeAtAi).toISOString(),
+                  status: 'scheduled',
+                  attempts: 0,
+                  updated_at: new Date().toISOString(),
+                }, { onConflict: 'session_id' });
+              
+              return new Response(JSON.stringify({ 
+                success: true, 
+                paused: true,
+                pauseResumeAt: new Date(pauseResumeAtAi).toISOString(),
+                reason: 'pause_schedule_active'
+              }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              });
+            }
+
             // AI Text - generate variation using Lovable AI before sending
             // Check if already sent (idempotency)
             if (sentNodeIds.includes(currentNodeId)) {
@@ -733,6 +896,47 @@ Regras RIGOROSAS:
           case 'audio':
           case 'video':
           case 'document':
+            // === PAUSE SCHEDULE CHECK FOR MEDIA NODES ===
+            if (isWithinPauseSchedule() && !resumeFromPauseSchedule) {
+              console.log(`[${runId}] ⏸️ Flow is within pause schedule (${currentNode.type}), scheduling resume for later`);
+              
+              const pauseResumeAtMedia = calculatePauseEndTime();
+              variables._pause_scheduled = true;
+              variables._pause_resume_at = pauseResumeAtMedia;
+              variables._pause_node_id = currentNodeId;
+              
+              await supabaseClient
+                .from('inbox_flow_sessions')
+                .update({
+                  current_node_id: currentNodeId,
+                  variables,
+                  last_interaction: new Date().toISOString(),
+                  processing: false,
+                  processing_started_at: null,
+                })
+                .eq('id', sessionId);
+              
+              await supabaseClient
+                .from('inbox_flow_delay_jobs')
+                .upsert({
+                  session_id: sessionId,
+                  user_id: session.user_id,
+                  run_at: new Date(pauseResumeAtMedia).toISOString(),
+                  status: 'scheduled',
+                  attempts: 0,
+                  updated_at: new Date().toISOString(),
+                }, { onConflict: 'session_id' });
+              
+              return new Response(JSON.stringify({ 
+                success: true, 
+                paused: true,
+                pauseResumeAt: new Date(pauseResumeAtMedia).toISOString(),
+                reason: 'pause_schedule_active'
+              }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              });
+            }
+
             // Check if already sent (idempotency)
             if (sentNodeIds.includes(currentNodeId)) {
               console.log(`[${runId}] Node ${currentNodeId} already sent, skipping`);
