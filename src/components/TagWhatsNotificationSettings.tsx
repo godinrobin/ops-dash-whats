@@ -141,53 +141,99 @@ export function TagWhatsNotificationSettings({ userId, oneSignalAppId }: TagWhat
 
   const handleSubscribe = async () => {
     setSaving(true);
+    console.log("[Notifications] Starting subscription process...");
+    
     try {
-      const timeoutMs = 20000;
+      const timeoutMs = 25000;
 
-      const playerId = await Promise.race([
+      const result = await Promise.race([
         withOneSignal(async (OneSignal) => {
+          console.log("[Notifications] OneSignal SDK available");
+          
+          // Check if push is supported
           const supported = await OneSignal.Notifications?.isPushSupported?.();
+          console.log("[Notifications] Push supported:", supported);
+          
           if (supported === false) {
-            return null;
+            return { error: "Push notifications not supported on this browser" };
           }
 
-          // Trigger the same style of permission prompt described in OneSignal docs
-          // https://documentation.onesignal.com/docs/en/permission-requests
+          // Check current permission state
+          const currentPermission = await OneSignal.Notifications?.permissionNative;
+          console.log("[Notifications] Current permission:", currentPermission);
+
+          // If permission is denied, show specific message
+          if (currentPermission === "denied") {
+            return { error: "Permissão negada. Você precisa habilitar notificações nas configurações do navegador." };
+          }
+
+          // Request permission - this should trigger the browser prompt
+          console.log("[Notifications] Requesting permission...");
           try {
-            await OneSignal.Notifications?.requestPermission();
-          } catch {
-            // ignore
+            const permissionResult = await OneSignal.Notifications?.requestPermission();
+            console.log("[Notifications] Permission result:", permissionResult);
+          } catch (permError) {
+            console.log("[Notifications] Permission request error (may be normal):", permError);
           }
 
-          // If slidedown prompt is configured, this will show it
+          // Also try slidedown if configured
           try {
             await OneSignal.Slidedown?.promptPush?.();
           } catch {
-            // ignore
+            // slidedown may not be configured
           }
 
-          // Poll subscription id (it can take a few seconds)
-          for (let i = 0; i < 20; i++) {
+          // Poll for subscription id (OneSignal needs time to register)
+          console.log("[Notifications] Waiting for subscription...");
+          for (let i = 0; i < 30; i++) {
             const id = OneSignal.User?.PushSubscription?.id;
             const optedIn = !!OneSignal.User?.PushSubscription?.optedIn;
-            if (id && optedIn) return id;
-            await new Promise((r) => setTimeout(r, 500));
+            const token = OneSignal.User?.PushSubscription?.token;
+            
+            console.log(`[Notifications] Poll ${i + 1}/30 - id: ${id}, optedIn: ${optedIn}, token: ${!!token}`);
+            
+            if (id && (optedIn || token)) {
+              console.log("[Notifications] Successfully subscribed with id:", id);
+              return { playerId: id };
+            }
+            await new Promise((r) => setTimeout(r, 600));
           }
 
-          return null;
+          // Check final permission state
+          const finalPermission = await OneSignal.Notifications?.permissionNative;
+          console.log("[Notifications] Final permission state:", finalPermission);
+          
+          if (finalPermission === "denied") {
+            return { error: "Permissão negada. Habilite as notificações nas configurações do navegador." };
+          } else if (finalPermission === "default") {
+            return { error: "Você fechou o popup de permissão. Clique novamente para ativar." };
+          }
+
+          return { error: "Tempo esgotado. Tente novamente." };
         }),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+        new Promise<{ error: string }>((resolve) => 
+          setTimeout(() => resolve({ error: "Tempo limite excedido. Recarregue a página e tente novamente." }), timeoutMs)
+        ),
       ]);
 
-      if (!playerId) {
+      console.log("[Notifications] Result:", result);
+
+      if ("error" in result) {
+        toast.error(result.error);
+        return;
+      }
+
+      if (!result.playerId) {
         if (deviceType === "ios") {
           toast.error("No iPhone, as notificações só funcionam se você instalar o web app na tela inicial e abrir por lá.");
         } else {
-          toast.error("Não foi possível ativar notificações. Verifique se o navegador permitiu as notificações e se o site está em HTTPS.");
+          toast.error("Não foi possível ativar notificações. Verifique as permissões do navegador.");
         }
         return;
       }
 
+      const playerId = result.playerId;
+      
       const newPreference: Partial<NotificationPreference> = {
         user_id: userId,
         onesignal_player_id: playerId,
