@@ -323,7 +323,7 @@ export const FlowSettingsDialog = ({
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSave} disabled={isSaving}>
+            <Button onClick={handleSave} disabled={isSaving} className="bg-green-600 hover:bg-green-700 text-white">
               {isSaving ? 'Salvando...' : 'Salvar Configurações'}
             </Button>
           </div>
