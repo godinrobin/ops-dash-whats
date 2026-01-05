@@ -15,7 +15,7 @@ import {
   Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X, Key, Loader2, 
   UserPlus, Activity, Megaphone, Eye, MousePointer, Trash2, Image, Clock, Settings, Users, 
   BarChart3, Phone, FileText, Wallet, History, Percent, Menu, ShoppingBag, Package, Globe, RefreshCw,
-  Smartphone, Shield, TrendingUp, Wifi, Bell
+  Smartphone, Shield, TrendingUp, Wifi
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -26,7 +26,6 @@ import { AdminAdsMetrics } from "@/components/admin/AdminAdsMetrics";
 import { AdminInstances } from "@/components/admin/AdminInstances";
 import { AdminWhatsAppApiConfig } from "@/components/admin/AdminWhatsAppApiConfig";
 import { AdminTagWhatsLabels } from "@/components/admin/AdminTagWhatsLabels";
-import { AdminTagWhatsNotifications } from "@/components/admin/AdminTagWhatsNotifications";
 import { AdminUsers } from "@/components/admin/AdminUsers";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 
@@ -101,7 +100,6 @@ const SIDEBAR_MENU = [
       { id: "instances", label: "Números WhatsApp", icon: Smartphone },
       { id: "whatsapp-api", label: "Configurar API", icon: Wifi },
       { id: "tag-whats-labels", label: "Etiquetas Tag Whats", icon: Shield },
-      { id: "tag-whats-notifications", label: "Notificações Tag Whats", icon: Bell },
     ]
   },
   {
@@ -2449,9 +2447,6 @@ const AdminPanelNew = () => {
 
       case 'tag-whats-labels':
         return <AdminTagWhatsLabels />;
-
-      case 'tag-whats-notifications':
-        return <AdminTagWhatsNotifications />;
 
       default:
         return null;
