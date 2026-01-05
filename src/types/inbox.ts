@@ -44,6 +44,9 @@ export interface InboxFlow {
   is_active: boolean;
   priority: number;
   pause_on_media?: boolean;
+  pause_schedule_enabled?: boolean;
+  pause_schedule_start?: string;
+  pause_schedule_end?: string;
   created_at: string;
   updated_at: string;
 }
