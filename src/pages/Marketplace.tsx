@@ -27,6 +27,7 @@ import { RechargeModal } from "@/components/RechargeModal";
 import { InsufficientBalanceModal } from "@/components/InsufficientBalanceModal";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { AnimatedSearchBar } from "@/components/ui/animated-search-bar";
+import { WhatsAppFloatButton } from "@/components/WhatsAppFloatButton";
 
 // Import product images
 import bmVerificadaImg from "@/assets/bm-verificada.png";
@@ -1569,6 +1570,12 @@ const SMMPanelEmbed = () => {
           )}
         </TabsContent>
       </Tabs>
+      
+      {/* WhatsApp Float Button - Only visible on Marketplace */}
+      <WhatsAppFloatButton 
+        phoneNumber="+55 31 97329-3701" 
+        message="Opa tenho uma dúvida!" 
+      />
     </div>
   );
 };

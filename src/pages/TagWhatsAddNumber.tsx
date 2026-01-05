@@ -8,11 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ArrowLeft, Plus, RefreshCw, Loader2, Smartphone, QrCode, Trash2, PowerOff, RotateCcw, Phone, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowLeft, Plus, RefreshCw, Loader2, Smartphone, QrCode, Trash2, PowerOff, RotateCcw, Phone, ChevronDown, ChevronRight, Hash } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { splashedToast as toast } from "@/hooks/useSplashedToast";
 import { QRCodeModal, setQrCodeCache, clearQrCodeCache } from "@/components/QRCodeModal";
+import { PairCodeModal } from "@/components/PairCodeModal";
 import { Header } from "@/components/Header";
 
 interface Instance {
@@ -57,6 +58,10 @@ export default function TagWhatsAddNumber() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [instanceToDelete, setInstanceToDelete] = useState<Instance | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Pair code modal
+  const [pairCodeModalOpen, setPairCodeModalOpen] = useState(false);
+  const [currentPairCodeInstance, setCurrentPairCodeInstance] = useState<Instance | null>(null);
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -496,14 +501,27 @@ export default function TagWhatsAddNumber() {
                   <CardContent>
                     <div className="flex gap-2 flex-wrap">
                       {instance.status !== 'connected' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleGetQrCode(instance)}
-                        >
-                          <QrCode className="h-4 w-4 mr-1" />
-                          QR Code
-                        </Button>
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setCurrentPairCodeInstance(instance);
+                              setPairCodeModalOpen(true);
+                            }}
+                          >
+                            <Hash className="h-4 w-4 mr-1" />
+                            Código
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleGetQrCode(instance)}
+                          >
+                            <QrCode className="h-4 w-4 mr-1" />
+                            QR Code
+                          </Button>
+                        </>
                       )}
                       {instance.status === 'connected' && (
                         <Button
@@ -663,6 +681,14 @@ export default function TagWhatsAddNumber() {
             onRefreshQr={handleRefreshQrCode}
             onCheckStatus={handleCheckQrStatus}
             checkingStatus={checkingStatus}
+          />
+
+          {/* Pair Code Modal */}
+          <PairCodeModal
+            open={pairCodeModalOpen}
+            onOpenChange={setPairCodeModalOpen}
+            instanceName={currentPairCodeInstance?.instance_name || ''}
+            onSuccess={fetchInstances}
           />
 
           {/* Delete Dialog */}

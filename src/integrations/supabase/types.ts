@@ -2590,6 +2590,36 @@ export type Database = {
           },
         ]
       }
+      tag_whats_daily_sales: {
+        Row: {
+          created_at: string | null
+          id: string
+          last_milestone_notified: number | null
+          sales_count: number | null
+          sales_date: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          last_milestone_notified?: number | null
+          sales_count?: number | null
+          sales_date?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          last_milestone_notified?: number | null
+          sales_count?: number | null
+          sales_date?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       tag_whats_logs: {
         Row: {
           ai_response: Json | null
@@ -2661,6 +2691,99 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      tag_whats_notification_preferences: {
+        Row: {
+          created_at: string | null
+          custom_sound_url: string | null
+          device_type: string | null
+          dinheiro_conta: boolean | null
+          fun_notifications_enabled: boolean | null
+          id: string
+          is_enabled: boolean | null
+          nova_venda: boolean | null
+          onesignal_player_id: string | null
+          pingou: boolean | null
+          pix_bolso: boolean | null
+          pix_confirmado: boolean | null
+          pix_recebido: boolean | null
+          pix_x1: boolean | null
+          updated_at: string | null
+          user_id: string
+          venda_aprovada: boolean | null
+          venda_confirmada: boolean | null
+          venda_paga: boolean | null
+          venda_x1: boolean | null
+        }
+        Insert: {
+          created_at?: string | null
+          custom_sound_url?: string | null
+          device_type?: string | null
+          dinheiro_conta?: boolean | null
+          fun_notifications_enabled?: boolean | null
+          id?: string
+          is_enabled?: boolean | null
+          nova_venda?: boolean | null
+          onesignal_player_id?: string | null
+          pingou?: boolean | null
+          pix_bolso?: boolean | null
+          pix_confirmado?: boolean | null
+          pix_recebido?: boolean | null
+          pix_x1?: boolean | null
+          updated_at?: string | null
+          user_id: string
+          venda_aprovada?: boolean | null
+          venda_confirmada?: boolean | null
+          venda_paga?: boolean | null
+          venda_x1?: boolean | null
+        }
+        Update: {
+          created_at?: string | null
+          custom_sound_url?: string | null
+          device_type?: string | null
+          dinheiro_conta?: boolean | null
+          fun_notifications_enabled?: boolean | null
+          id?: string
+          is_enabled?: boolean | null
+          nova_venda?: boolean | null
+          onesignal_player_id?: string | null
+          pingou?: boolean | null
+          pix_bolso?: boolean | null
+          pix_confirmado?: boolean | null
+          pix_recebido?: boolean | null
+          pix_x1?: boolean | null
+          updated_at?: string | null
+          user_id?: string
+          venda_aprovada?: boolean | null
+          venda_confirmada?: boolean | null
+          venda_paga?: boolean | null
+          venda_x1?: boolean | null
+        }
+        Relationships: []
+      }
+      tag_whats_notification_rotation: {
+        Row: {
+          current_index: number | null
+          id: string
+          notification_type: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          current_index?: number | null
+          id?: string
+          notification_type: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          current_index?: number | null
+          id?: string
+          notification_type?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       tracked_offers: {
         Row: {
