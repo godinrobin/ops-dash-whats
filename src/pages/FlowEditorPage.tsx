@@ -163,7 +163,7 @@ const FlowEditorPage = () => {
     fetchOrCreateFlow();
   }, [id, user, navigate, location.pathname]);
 
-  const handleSave = async (nodes: FlowNode[], edges: FlowEdge[]) => {
+  const handleSave = async (nodes: FlowNode[], edges: FlowEdge[], silent: boolean = false) => {
     if (!id || !user) return;
 
     setSaving(true);
@@ -173,15 +173,8 @@ const FlowEditorPage = () => {
       const cleanedEdges = edges.filter(edge => {
         const sourceExists = nodeIds.has(edge.source);
         const targetExists = nodeIds.has(edge.target);
-        if (!sourceExists || !targetExists) {
-          console.log(`[FlowEditor] Removing orphan edge: ${edge.source} -> ${edge.target} (source exists: ${sourceExists}, target exists: ${targetExists})`);
-        }
         return sourceExists && targetExists;
       });
-
-      if (cleanedEdges.length !== edges.length) {
-        console.log(`[FlowEditor] Cleaned ${edges.length - cleanedEdges.length} orphaned edges`);
-      }
 
       const { error } = await supabase
         .from('inbox_flows')
@@ -202,9 +195,13 @@ const FlowEditorPage = () => {
 
       if (error) throw error;
 
-      toast.success('Fluxo salvo com sucesso');
+      // Only show toast if not silent (manual save)
+      if (!silent) {
+        toast.success('Fluxo salvo com sucesso');
+      }
     } catch (error: unknown) {
       console.error('Error saving flow:', error);
+      // Always show error toast
       toast.error('Erro ao salvar fluxo');
     } finally {
       setSaving(false);
