@@ -14,7 +14,8 @@ import {
   Shuffle,
   Receipt,
   QrCode,
-  Banknote
+  Banknote,
+  Sparkles
 } from 'lucide-react';
 
 const nodeCategories = [
@@ -28,6 +29,7 @@ const nodeCategories = [
     title: 'Mensagens',
     nodes: [
       { type: 'text', label: 'Texto', icon: MessageSquare, color: 'bg-blue-500' },
+      { type: 'aiText', label: 'Texto com IA', icon: Sparkles, color: 'bg-gradient-to-r from-violet-500 to-purple-500' },
       { type: 'image', label: 'Imagem', icon: Image, color: 'bg-purple-500' },
       { type: 'audio', label: 'Áudio', icon: Mic, color: 'bg-orange-500' },
       { type: 'video', label: 'Vídeo', icon: Video, color: 'bg-pink-500' },

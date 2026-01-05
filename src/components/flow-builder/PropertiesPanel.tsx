@@ -314,6 +314,93 @@ export const PropertiesPanel = ({
           </div>
         );
 
+      case 'aiText':
+        // Get all available variables for AI Text: system + custom from DB + custom from nodes
+        const getAvailableVariablesForAIText = () => {
+          const nodeVariables = extractCustomVariablesFromNodes(allNodes);
+          const allVariables = [...SYSTEM_VARIABLES, ...dbCustomVariables, ...nodeVariables];
+          return [...new Set(allVariables)].sort();
+        };
+        const aiTextVariables = getAvailableVariablesForAIText();
+        
+        const insertVariableAIText = (varName: string) => {
+          const currentMessage = (nodeData.message as string) || '';
+          onUpdateNode(selectedNode.id, { message: currentMessage + `{{${varName}}}` });
+        };
+        
+        return (
+          <div className="space-y-4">
+            <div className="bg-gradient-to-r from-violet-500/10 to-purple-500/10 border border-violet-500/20 rounded-lg p-3 mb-2">
+              <p className="text-xs text-violet-400 flex items-center gap-2">
+                <span className="text-sm">✨</span>
+                A IA irá gerar variações automáticas do texto base para cada usuário, mantendo o mesmo sentido mas com palavras diferentes.
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Texto Base</Label>
+              <Textarea
+                placeholder="Digite o texto base que a IA irá variar..."
+                value={(nodeData.message as string) || ''}
+                onChange={(e) => onUpdateNode(selectedNode.id, { message: e.target.value })}
+                rows={4}
+              />
+              <p className="text-xs text-muted-foreground">
+                A IA vai manter o sentido do texto, mas alterará palavras e, se houver emojis, também os variará.
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label className="text-xs">Variáveis disponíveis</Label>
+              <div className="flex flex-wrap gap-1">
+                {aiTextVariables.map((varName) => (
+                  <Badge 
+                    key={varName}
+                    variant="secondary" 
+                    className="cursor-pointer hover:bg-primary hover:text-primary-foreground text-xs"
+                    onClick={() => insertVariableAIText(varName)}
+                  >
+                    {`{{${varName}}}`}
+                  </Badge>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Clique para inserir no texto
+              </p>
+            </div>
+            
+            {/* Presence/Typing indicator option */}
+            <div className="space-y-3 pt-2 border-t border-border">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="showPresenceAI"
+                  checked={(nodeData.showPresence as boolean) || false}
+                  onCheckedChange={(checked) => onUpdateNode(selectedNode.id, { showPresence: checked })}
+                />
+                <Label htmlFor="showPresenceAI" className="text-sm cursor-pointer">
+                  Mostrar "digitando..." antes de enviar
+                </Label>
+              </div>
+              {(nodeData.showPresence as boolean) && (
+                <div className="space-y-2 pl-6">
+                  <Label className="text-xs">Duração (segundos)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={(nodeData.presenceDelay as number) || 3}
+                    onChange={(e) => onUpdateNode(selectedNode.id, { presenceDelay: Math.min(60, Math.max(1, parseInt(e.target.value) || 3)) })}
+                    className="w-24 h-8"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    1 a 60 segundos
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+
       case 'image':
       case 'audio':
       case 'video':

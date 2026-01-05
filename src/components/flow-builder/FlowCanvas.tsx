@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 
 import { StartNode } from './nodes/StartNode';
 import { TextNode } from './nodes/TextNode';
+import { AITextNode } from './nodes/AITextNode';
 import { ImageNode } from './nodes/ImageNode';
 import { AudioNode } from './nodes/AudioNode';
 import { VideoNode } from './nodes/VideoNode';
@@ -44,6 +45,7 @@ import { useFlowAnalytics } from '@/hooks/useFlowAnalytics';
 const nodeTypes = {
   start: StartNode,
   text: TextNode,
+  aiText: AITextNode,
   image: ImageNode,
   audio: AudioNode,
   video: VideoNode,
