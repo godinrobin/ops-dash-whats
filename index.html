@@ -29,6 +29,24 @@
     <meta name="twitter:title" content="Zapdata - Plataforma de Marketing Digital" />
     <meta name="twitter:description" content="Plataforma completa de marketing digital com ferramentas de métricas, criativos, funis de WhatsApp e muito mais." />
     <meta name="twitter:image" content="/og-image.png" />
+
+    <!-- OneSignal SDK -->
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <script>
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      OneSignalDeferred.push(async function(OneSignal) {
+        await OneSignal.init({
+          appId: window.__ONESIGNAL_APP_ID__ || "",
+          allowLocalhostAsSecureOrigin: true,
+          notifyButton: {
+            enable: false,
+          },
+          welcomeNotification: {
+            disable: true
+          }
+        });
+      });
+    </script>
   </head>
 
   <body>
