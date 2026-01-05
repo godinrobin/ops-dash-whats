@@ -20,6 +20,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
+import { TagWhatsNotificationSettings } from "@/components/TagWhatsNotificationSettings";
 
 
 interface Instance {
@@ -399,6 +400,16 @@ const TagWhatsCloud = () => {
               </div>
             </CardContent>
           </Card>
+
+          {/* Notification Settings */}
+          {user && (
+            <div className="mb-6">
+              <TagWhatsNotificationSettings 
+                userId={effectiveUserId || user.id} 
+                oneSignalAppId={import.meta.env.VITE_ONESIGNAL_APP_ID || ""} 
+              />
+            </div>
+          )}
 
           {/* Add Number */}
           <Card className="mb-6 border-dashed border-2 border-emerald-500/30 bg-emerald-500/5">

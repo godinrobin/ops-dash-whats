@@ -191,3 +191,15 @@ verify_jwt = true
 
 [functions.update-whatsapp-profile]
 verify_jwt = true
+
+[functions.send-tag-whats-notification]
+verify_jwt = false
+
+[functions.blaster-send]
+verify_jwt = true
+
+[functions.clone-site]
+verify_jwt = true
+
+[functions.trigger-inbox-flow]
+verify_jwt = true

@@ -829,6 +829,101 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
       extracted_value: extractedValue,
     });
 
+    // Send push notification if label was applied
+    if (labelApplied) {
+      console.log("[TAG-WHATS] ====== SENDING PUSH NOTIFICATION ======");
+      try {
+        // Get São Paulo timezone date
+        const spTimezone = 'America/Sao_Paulo';
+        const now = new Date();
+        const spDate = new Intl.DateTimeFormat('en-CA', { timeZone: spTimezone }).format(now);
+        
+        // Get or create daily sales record
+        const { data: dailySales, error: dailyError } = await supabase
+          .from("tag_whats_daily_sales")
+          .select("*")
+          .eq("user_id", instance.user_id)
+          .eq("sales_date", spDate)
+          .single();
+
+        let salesCount = 1;
+        let lastMilestoneNotified = 0;
+
+        if (dailyError && dailyError.code === "PGRST116") {
+          // No record for today, create one
+          await supabase
+            .from("tag_whats_daily_sales")
+            .insert({
+              user_id: instance.user_id,
+              sales_date: spDate,
+              sales_count: 1,
+              last_milestone_notified: 0,
+            });
+        } else if (dailySales) {
+          salesCount = (dailySales.sales_count || 0) + 1;
+          lastMilestoneNotified = dailySales.last_milestone_notified || 0;
+          
+          await supabase
+            .from("tag_whats_daily_sales")
+            .update({ sales_count: salesCount })
+            .eq("id", dailySales.id);
+        }
+
+        console.log("[TAG-WHATS] Daily sales count:", salesCount, "Last milestone:", lastMilestoneNotified);
+
+        // Send regular sale notification
+        const saleNotifResponse = await fetch(`${supabaseUrl}/functions/v1/send-tag-whats-notification`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${supabaseServiceKey}`,
+          },
+          body: JSON.stringify({
+            user_id: instance.user_id,
+            type: "sale",
+          }),
+        });
+        const saleNotifResult = await saleNotifResponse.json();
+        console.log("[TAG-WHATS] Sale notification result:", saleNotifResult);
+
+        // Check for milestone notifications
+        const milestones = [10, 20, 50, 100];
+        for (const milestone of milestones) {
+          if (salesCount >= milestone && lastMilestoneNotified < milestone) {
+            console.log("[TAG-WHATS] Sending fun notification for milestone:", milestone);
+            
+            const funNotifResponse = await fetch(`${supabaseUrl}/functions/v1/send-tag-whats-notification`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${supabaseServiceKey}`,
+              },
+              body: JSON.stringify({
+                user_id: instance.user_id,
+                type: "fun",
+                milestone: milestone,
+              }),
+            });
+            const funNotifResult = await funNotifResponse.json();
+            console.log("[TAG-WHATS] Fun notification result:", funNotifResult);
+
+            // Update last milestone notified
+            await supabase
+              .from("tag_whats_daily_sales")
+              .update({ last_milestone_notified: milestone })
+              .eq("user_id", instance.user_id)
+              .eq("sales_date", spDate);
+            
+            break; // Only send one milestone notification at a time
+          }
+        }
+      } catch (notifError) {
+        console.error("[TAG-WHATS] Error sending notification:", notifError);
+        // Don't fail the whole request if notification fails
+      }
+      console.log("[TAG-WHATS] ====== PUSH NOTIFICATION COMPLETE ======");
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
