@@ -66,6 +66,23 @@ export function TagWhatsNotificationSettings({ userId, oneSignalAppId }: TagWhat
     checkSubscription();
   }, [userId]);
 
+  const withOneSignal = <T,>(fn: (OneSignal: any) => Promise<T>): Promise<T> => {
+    return new Promise((resolve, reject) => {
+      const deferred = (window as any).OneSignalDeferred;
+      if (!deferred) {
+        reject(new Error("OneSignal SDK not loaded"));
+        return;
+      }
+      deferred.push(async (OneSignal: any) => {
+        try {
+          resolve(await fn(OneSignal));
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+  };
+
   const detectDeviceType = () => {
     const userAgent = navigator.userAgent.toLowerCase();
     if (/iphone|ipad|ipod/.test(userAgent)) {
@@ -79,14 +96,21 @@ export function TagWhatsNotificationSettings({ userId, oneSignalAppId }: TagWhat
 
   const checkSubscription = async () => {
     try {
-      // Check if OneSignal is available and user is subscribed
-      const OneSignal = (window as any).OneSignal;
-      if (OneSignal) {
-        const subscription = await OneSignal.User?.PushSubscription?.optedIn;
-        setIsSubscribed(!!subscription);
+      const state = await withOneSignal(async (OneSignal) => {
+        const supported = await OneSignal.Notifications?.isPushSupported?.();
+        const optedIn = !!OneSignal.User?.PushSubscription?.optedIn;
+        const id = OneSignal.User?.PushSubscription?.id;
+        return { supported: supported !== false, optedIn, id };
+      });
+
+      if (!state.supported) {
+        setIsSubscribed(false);
+        return;
       }
-    } catch (e) {
-      console.log("OneSignal not available");
+
+      setIsSubscribed(!!state.optedIn);
+    } catch {
+      // ignore
     }
   };
 
@@ -118,63 +142,52 @@ export function TagWhatsNotificationSettings({ userId, oneSignalAppId }: TagWhat
   const handleSubscribe = async () => {
     setSaving(true);
     try {
-      // Check if OneSignal is available
-      const OneSignalDeferred = (window as any).OneSignalDeferred;
-      
-      if (!OneSignalDeferred) {
-        toast.error("OneSignal não está disponível. Recarregue a página.");
-        setSaving(false);
-        return;
-      }
+      const timeoutMs = 20000;
 
-      // Use a promise with timeout to avoid infinite loading
-      const subscribeWithTimeout = new Promise<string | null>((resolve) => {
-        const timeout = setTimeout(() => {
-          console.log("[OneSignal] Timeout waiting for subscription");
-          resolve(null);
-        }, 15000); // 15 second timeout
-
-        OneSignalDeferred.push(async (OneSignal: any) => {
-          try {
-            console.log("[OneSignal] Requesting permission...");
-            
-            // Check if already subscribed
-            const isSubscribed = await OneSignal.Notifications?.permission;
-            console.log("[OneSignal] Current permission:", isSubscribed);
-            
-            if (!isSubscribed) {
-              // Request permission
-              await OneSignal.Notifications?.requestPermission();
-            }
-            
-            // Wait a bit for subscription to complete
-            await new Promise(r => setTimeout(r, 2000));
-            
-            // Get the subscription ID
-            const subscription = OneSignal.User?.PushSubscription;
-            const playerId = subscription?.id;
-            
-            console.log("[OneSignal] Player ID:", playerId);
-            
-            clearTimeout(timeout);
-            resolve(playerId || null);
-          } catch (error) {
-            console.error("[OneSignal] Error:", error);
-            clearTimeout(timeout);
-            resolve(null);
+      const playerId = await Promise.race([
+        withOneSignal(async (OneSignal) => {
+          const supported = await OneSignal.Notifications?.isPushSupported?.();
+          if (supported === false) {
+            return null;
           }
-        });
-      });
 
-      const playerId = await subscribeWithTimeout;
-      
+          // Trigger the same style of permission prompt described in OneSignal docs
+          // https://documentation.onesignal.com/docs/en/permission-requests
+          try {
+            await OneSignal.Notifications?.requestPermission();
+          } catch {
+            // ignore
+          }
+
+          // If slidedown prompt is configured, this will show it
+          try {
+            await OneSignal.Slidedown?.promptPush?.();
+          } catch {
+            // ignore
+          }
+
+          // Poll subscription id (it can take a few seconds)
+          for (let i = 0; i < 20; i++) {
+            const id = OneSignal.User?.PushSubscription?.id;
+            const optedIn = !!OneSignal.User?.PushSubscription?.optedIn;
+            if (id && optedIn) return id;
+            await new Promise((r) => setTimeout(r, 500));
+          }
+
+          return null;
+        }),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+      ]);
+
       if (!playerId) {
-        toast.error("Não foi possível ativar notificações. Verifique se as permissões estão habilitadas nas configurações do navegador.");
-        setSaving(false);
+        if (deviceType === "ios") {
+          toast.error("No iPhone, as notificações só funcionam se você instalar o web app na tela inicial e abrir por lá.");
+        } else {
+          toast.error("Não foi possível ativar notificações. Verifique se o navegador permitiu as notificações e se o site está em HTTPS.");
+        }
         return;
       }
 
-      // Save to database
       const newPreference: Partial<NotificationPreference> = {
         user_id: userId,
         onesignal_player_id: playerId,

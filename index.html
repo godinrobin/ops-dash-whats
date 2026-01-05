@@ -32,21 +32,6 @@
 
     <!-- OneSignal SDK -->
     <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
-    <script>
-      window.OneSignalDeferred = window.OneSignalDeferred || [];
-      OneSignalDeferred.push(async function(OneSignal) {
-        await OneSignal.init({
-          appId: window.__ONESIGNAL_APP_ID__ || "",
-          allowLocalhostAsSecureOrigin: true,
-          notifyButton: {
-            enable: false,
-          },
-          welcomeNotification: {
-            disable: true
-          }
-        });
-      });
-    </script>
   </head>
 
   <body>
