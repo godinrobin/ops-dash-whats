@@ -2238,21 +2238,9 @@ Regras:
           });
         }
 
-        // Check daily limit
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const { count: todayCount } = await supabaseClient
-          .from('maturador_messages')
-          .select('*', { count: 'exact', head: true })
-          .eq('conversation_id', conversationId)
-          .gte('created_at', today.toISOString());
-
-        if ((todayCount || 0) >= conversation.daily_limit) {
-          return new Response(JSON.stringify({ error: 'Limite diário atingido', dailyLimitReached: true }), {
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
+        // Daily limit check removed - now unlimited
+        // Note: The daily_limit field in the database is now ignored
+        // Conversations will run indefinitely without message limits
 
         // Helper to get phone from UazAPI /instance/status
         const getPhoneFromUazApiStatus = async (inst: any): Promise<string | null> => {

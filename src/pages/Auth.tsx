@@ -389,7 +389,7 @@ const Auth = () => {
                 {/* Inner lighting effect */}
                 <div className="absolute inset-0 bg-gradient-to-t from-transparent via-white/20 to-white/10 pointer-events-none" />
               </motion.div>
-              <h1 className="text-2xl font-bold text-foreground">Bem-vindo de volta</h1>
+              <h1 className="text-2xl font-bold text-foreground">{activeTab === "login" ? "Bem-vindo de volta" : "Bem-vindo"}</h1>
               <p className="text-muted-foreground text-sm mt-1">
                 {activeTab === "login" ? "Faça login para continuar" : "Crie sua conta"}
               </p>

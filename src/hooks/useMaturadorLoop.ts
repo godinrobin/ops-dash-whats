@@ -71,6 +71,7 @@ const runLoopIteration = async (conversationId: string) => {
     }
 
     if (data.error) {
+      // Note: daily limit check removed from backend, but keep this for backwards compatibility
       if (data.dailyLimitReached) {
         toast.warning(`${conversation.name}: Limite diário atingido. Loop parado.`);
         stopLoop(conversationId);

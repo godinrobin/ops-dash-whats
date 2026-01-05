@@ -148,11 +148,22 @@ export function PairCodeModal({
 
       if (error) throw error;
 
-      const isConnected =
-        data.instance?.state === 'open' ||
-        data.status?.connected === true ||
-        data.instance?.status === 'connected' ||
-        data.connected === true;
+      // Check for connected status based on UazAPI response format
+      // UazAPI /instance/status returns: { status: { connected: true, jid: "..." }, instance: {...} }
+      const statusConnected = data?.status?.connected === true;
+      const statusState = data?.status?.state;
+      const instanceState = data?.instance?.state;
+      const instanceStatus = data?.instance?.status;
+      
+      // Only consider connected if explicitly connected, NOT if connecting
+      const isConnecting = statusState === 'connecting' || instanceState === 'connecting' || instanceStatus === 'connecting';
+      const isConnected = !isConnecting && (
+        statusConnected ||
+        statusState === 'open' ||
+        instanceState === 'open' ||
+        instanceStatus === 'connected' ||
+        data?.connected === true
+      );
 
       if (isConnected) {
         setShowSuccess(true);
