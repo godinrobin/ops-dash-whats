@@ -209,12 +209,12 @@ export function PairCodeModal({
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+        <DialogHeader className="text-center">
+          <DialogTitle className="flex items-center justify-center gap-2">
             <Hash className="h-5 w-5 text-primary" />
             Conectar por Código
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-center">
             Conecte seu WhatsApp usando um código de 8 dígitos
           </DialogDescription>
         </DialogHeader>
@@ -223,16 +223,16 @@ export function PairCodeModal({
           {showSuccess ? (
             <div className="flex flex-col items-center gap-4 w-full">
               <CheckCircle2 className="h-16 w-16 text-green-500 animate-in zoom-in duration-300" />
-              <p className="text-lg font-medium text-green-600">WhatsApp conectado!</p>
+              <p className="text-lg font-medium text-green-600 text-center">WhatsApp conectado!</p>
             </div>
           ) : pairCode ? (
             <div className="flex flex-col items-center gap-4 w-full">
               <div className="text-center space-y-4">
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground text-center">
                   No seu celular, abra o WhatsApp e vá em:
                 </p>
-                <p className="text-sm">
-                  <strong>Configurações</strong> &gt; <strong>Dispositivos conectados</strong> &gt; <strong>Conectar um dispositivo</strong> &gt; <strong>Conectar com número de telefone</strong>
+                <p className="text-sm text-center leading-relaxed">
+                  <strong className="text-foreground">Configurações</strong> &gt; <strong className="text-foreground">Dispositivos conectados</strong> &gt; <strong className="text-foreground">Conectar um dispositivo</strong> &gt; <strong className="text-foreground">Conectar com número de telefone</strong>
                 </p>
                 <div className="flex items-center justify-center gap-2 py-4">
                   <div className="text-4xl font-mono font-bold tracking-widest bg-muted px-6 py-4 rounded-lg">
@@ -243,78 +243,81 @@ export function PairCodeModal({
                   </Button>
                 </div>
                 {timeToExpire !== null && timeToExpire > 0 && (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-muted-foreground text-center">
                     Expira em: <span className={timeToExpire <= 60 ? 'text-amber-600 font-medium' : ''}>{formatTime(timeToExpire)}</span>
                   </p>
                 )}
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground text-center">
                   O status é verificado automaticamente a cada 5 segundos
                 </p>
+              </div>
+
+              {/* Botões centralizados quando código está visível */}
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-4 w-full">
+                <Button variant="outline" onClick={handleClose}>
+                  Fechar
+                </Button>
+                <Button variant="ghost" onClick={() => setPairCode(null)}>
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  Novo Código
+                </Button>
+                <Button
+                  onClick={() => handleCheckStatus(false)}
+                  disabled={checkingStatus}
+                >
+                  {checkingStatus ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Verificando...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Verificar Conexão
+                    </>
+                  )}
+                </Button>
               </div>
             </div>
           ) : (
             <div className="w-full space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="phone">Número de Telefone</Label>
+                <Label htmlFor="phone" className="text-center block">Número de Telefone</Label>
                 <Input
                   id="phone"
                   placeholder="5511999999999"
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
                   disabled={loading}
+                  className="text-center"
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground text-center">
                   Formato internacional com código do país (ex: 5511999999999)
                 </p>
+              </div>
+
+              {/* Botões centralizados na tela de input */}
+              <div className="flex items-center justify-center gap-2 pt-2">
+                <Button variant="outline" onClick={handleClose}>
+                  Fechar
+                </Button>
+                <Button onClick={handleGeneratePairCode} disabled={loading}>
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Gerando...
+                    </>
+                  ) : (
+                    <>
+                      <Hash className="h-4 w-4 mr-2" />
+                      Gerar Código
+                    </>
+                  )}
+                </Button>
               </div>
             </div>
           )}
         </div>
-
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={handleClose}>
-            Fechar
-          </Button>
-          {!pairCode && !showSuccess && (
-            <Button onClick={handleGeneratePairCode} disabled={loading}>
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Gerando...
-                </>
-              ) : (
-                <>
-                  <Hash className="h-4 w-4 mr-2" />
-                  Gerar Código
-                </>
-              )}
-            </Button>
-          )}
-          {pairCode && !showSuccess && (
-            <>
-              <Button variant="ghost" size="sm" onClick={() => setPairCode(null)}>
-                <RefreshCw className="h-4 w-4 mr-1" />
-                Novo Código
-              </Button>
-              <Button
-                onClick={() => handleCheckStatus(false)}
-                disabled={checkingStatus}
-              >
-                {checkingStatus ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Verificando...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Verificar Conexão
-                  </>
-                )}
-              </Button>
-            </>
-          )}
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
