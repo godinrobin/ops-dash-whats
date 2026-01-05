@@ -118,23 +118,59 @@ export function TagWhatsNotificationSettings({ userId, oneSignalAppId }: TagWhat
   const handleSubscribe = async () => {
     setSaving(true);
     try {
-      const OneSignal = (window as any).OneSignal;
+      // Check if OneSignal is available
+      const OneSignalDeferred = (window as any).OneSignalDeferred;
       
-      if (!OneSignal) {
+      if (!OneSignalDeferred) {
         toast.error("OneSignal não está disponível. Recarregue a página.");
+        setSaving(false);
         return;
       }
 
-      // Request permission and get player ID
-      await OneSignal.Slidedown?.promptPush();
-      
-      // Wait a bit for subscription to complete
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      const playerId = await OneSignal.User?.PushSubscription?.id;
+      // Use a promise with timeout to avoid infinite loading
+      const subscribeWithTimeout = new Promise<string | null>((resolve) => {
+        const timeout = setTimeout(() => {
+          console.log("[OneSignal] Timeout waiting for subscription");
+          resolve(null);
+        }, 15000); // 15 second timeout
+
+        OneSignalDeferred.push(async (OneSignal: any) => {
+          try {
+            console.log("[OneSignal] Requesting permission...");
+            
+            // Check if already subscribed
+            const isSubscribed = await OneSignal.Notifications?.permission;
+            console.log("[OneSignal] Current permission:", isSubscribed);
+            
+            if (!isSubscribed) {
+              // Request permission
+              await OneSignal.Notifications?.requestPermission();
+            }
+            
+            // Wait a bit for subscription to complete
+            await new Promise(r => setTimeout(r, 2000));
+            
+            // Get the subscription ID
+            const subscription = OneSignal.User?.PushSubscription;
+            const playerId = subscription?.id;
+            
+            console.log("[OneSignal] Player ID:", playerId);
+            
+            clearTimeout(timeout);
+            resolve(playerId || null);
+          } catch (error) {
+            console.error("[OneSignal] Error:", error);
+            clearTimeout(timeout);
+            resolve(null);
+          }
+        });
+      });
+
+      const playerId = await subscribeWithTimeout;
       
       if (!playerId) {
-        toast.error("Não foi possível obter o ID de notificação. Verifique as permissões.");
+        toast.error("Não foi possível ativar notificações. Verifique se as permissões estão habilitadas nas configurações do navegador.");
+        setSaving(false);
         return;
       }
 
