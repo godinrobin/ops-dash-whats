@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ArrowLeft, MessageSquare, Smartphone, GitBranch, Tag, Plus, RefreshCw, Loader2, QrCode, Trash2, PowerOff, RotateCcw, ChevronDown, ChevronRight, Phone, Zap, Users, TrendingUp, Filter, Check } from "lucide-react";
+import { ArrowLeft, MessageSquare, Smartphone, GitBranch, Tag, Plus, RefreshCw, Loader2, QrCode, Trash2, PowerOff, RotateCcw, ChevronDown, ChevronRight, Phone, Zap, Users, TrendingUp, Filter, Check, Hash } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
@@ -22,6 +22,7 @@ import { InboxMenu } from '@/components/inbox/InboxMenu';
 import { cn } from '@/lib/utils';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { QRCodeModal, getQrCodeFromCache, setQrCodeCache } from "@/components/QRCodeModal";
+import { PairCodeModal } from "@/components/PairCodeModal";
 
 interface Instance {
   id: string;
@@ -90,6 +91,10 @@ export default function InboxDashboard() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [instanceToDelete, setInstanceToDelete] = useState<Instance | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Pair code modal
+  const [pairCodeModalOpen, setPairCodeModalOpen] = useState(false);
+  const [currentPairCodeInstance, setCurrentPairCodeInstance] = useState<Instance | null>(null);
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -1069,10 +1074,16 @@ export default function InboxDashboard() {
 
                       <div className="flex gap-2 flex-wrap">
                         {instance.status !== 'connected' && (
-                          <Button size="sm" variant="outline" onClick={() => handleGetQrCode(instance)} disabled={actionLoading === instance.id}>
-                            <QrCode className="h-3 w-3 mr-1" />
-                            QR Code
-                          </Button>
+                          <>
+                            <Button size="sm" variant="outline" onClick={() => { setCurrentPairCodeInstance(instance); setPairCodeModalOpen(true); }} disabled={actionLoading === instance.id}>
+                              <Hash className="h-3 w-3 mr-1" />
+                              Código
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => handleGetQrCode(instance)} disabled={actionLoading === instance.id}>
+                              <QrCode className="h-3 w-3 mr-1" />
+                              QR Code
+                            </Button>
+                          </>
                         )}
                         {instance.status === 'connected' && (
                           <Button size="sm" variant="outline" onClick={() => handleLogout(instance)} disabled={actionLoading === instance.id}>
@@ -1183,6 +1194,14 @@ export default function InboxDashboard() {
         onCheckStatus={handleCheckQrStatus}
         onRefreshQr={handleRefreshQrCode}
         checkingStatus={checkingStatus}
+      />
+
+      {/* Pair Code Modal */}
+      <PairCodeModal
+        open={pairCodeModalOpen}
+        onOpenChange={setPairCodeModalOpen}
+        instanceName={currentPairCodeInstance?.instance_name || ''}
+        onSuccess={fetchEssentialData}
       />
 
       {/* Delete Confirmation Dialog */}

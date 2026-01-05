@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { 
   ArrowLeft, Plus, RefreshCw, Loader2, QrCode, Trash2, PowerOff, 
-  RotateCcw, CheckCircle2, XCircle, Smartphone, Settings, Copy
+  RotateCcw, CheckCircle2, XCircle, Smartphone, Settings, Copy, Hash
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,6 +19,7 @@ import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { toast } from "sonner";
 import { formatPhoneDisplay } from "@/utils/phoneFormatter";
 import { cn } from "@/lib/utils";
+import { PairCodeModal } from "@/components/PairCodeModal";
 
 interface Instance {
   id: string;
@@ -56,6 +57,10 @@ export default function WhatsAppEditorAddNumber() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [instanceToDelete, setInstanceToDelete] = useState<Instance | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Pair code modal
+  const [pairCodeModalOpen, setPairCodeModalOpen] = useState(false);
+  const [currentPairCodeInstance, setCurrentPairCodeInstance] = useState<Instance | null>(null);
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
@@ -422,14 +427,27 @@ export default function WhatsAppEditorAddNumber() {
                             </Button>
                           </>
                         ) : (
-                          <Button
-                            variant="default"
-                            size="sm"
-                            onClick={() => handleGetQrCode(instance)}
-                          >
-                            <QrCode className="h-4 w-4 mr-2" />
-                            Conectar
-                          </Button>
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setCurrentPairCodeInstance(instance);
+                                setPairCodeModalOpen(true);
+                              }}
+                            >
+                              <Hash className="h-4 w-4 mr-1" />
+                              Código
+                            </Button>
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => handleGetQrCode(instance)}
+                            >
+                              <QrCode className="h-4 w-4 mr-2" />
+                              QR Code
+                            </Button>
+                          </>
                         )}
                         <Button
                           variant="destructive"
@@ -567,6 +585,14 @@ export default function WhatsAppEditorAddNumber() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Pair Code Modal */}
+      <PairCodeModal
+        open={pairCodeModalOpen}
+        onOpenChange={setPairCodeModalOpen}
+        instanceName={currentPairCodeInstance?.instance_name || ''}
+        onSuccess={fetchInstances}
+      />
     </>
   );
 }

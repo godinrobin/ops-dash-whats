@@ -1252,6 +1252,84 @@ Regras:
         break;
       }
 
+      case 'connect-paircode': {
+        // Connect using pair code instead of QR code (UazAPI feature)
+        const { instanceName, phone } = params;
+        if (!instanceName) {
+          return new Response(JSON.stringify({ error: 'Nome do número é obrigatório' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        if (!phone) {
+          return new Response(JSON.stringify({ error: 'Número de telefone é obrigatório' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Get instance config
+        const { data: inst } = await supabaseClient
+          .from('maturador_instances')
+          .select('id, api_provider, uazapi_token')
+          .eq('instance_name', instanceName)
+          .eq('user_id', user.id)
+          .single();
+
+        if (!inst) {
+          return new Response(JSON.stringify({ error: 'Instância não encontrada' }), {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (inst.api_provider !== 'uazapi') {
+          return new Response(JSON.stringify({ error: 'Conexão por código só está disponível para instâncias UAZAPI' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const config = await getInstanceApiConfig(supabaseClient, inst.id);
+
+        try {
+          // UazAPI: POST /instance/connect with phone parameter generates paircode
+          const connectResult = await callWhatsAppApi(
+            config,
+            '/instance/connect',
+            'POST',
+            { phone: phone.replace(/\D/g, '') },
+            false,
+            inst.uazapi_token || undefined
+          );
+          console.log('[UAZAPI] paircode connect response:', JSON.stringify(connectResult).substring(0, 800));
+
+          // Extract paircode from response
+          const paircode = connectResult?.paircode || connectResult?.pairCode || connectResult?.instance?.paircode || null;
+
+          if (paircode) {
+            // Update status in database
+            await supabaseClient
+              .from('maturador_instances')
+              .update({ status: 'connecting' })
+              .eq('instance_name', instanceName)
+              .eq('user_id', user.id);
+
+            result = { paircode, status: 'connecting' };
+          } else if (connectResult?.status === 'connected' || connectResult?.connected === true) {
+            result = { connected: true, status: 'connected' };
+          } else {
+            console.log('[UAZAPI] No paircode in response:', JSON.stringify(connectResult));
+            throw new Error('Código de pareamento não recebido da API');
+          }
+        } catch (e: any) {
+          console.error('[UAZAPI] Paircode error:', e);
+          throw new Error(e?.message || 'Erro ao gerar código de pareamento');
+        }
+
+        break;
+      }
+
       case 'check-status': {
         const { instanceName } = params;
         if (!instanceName) {
