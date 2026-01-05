@@ -852,6 +852,12 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
         onOpenChange={setRechargeOpen}
         onSuccess={(newBalance) => setBalance(newBalance)}
       />
+
+      {/* WhatsApp Float Button - Visible in ALL Marketplace tabs */}
+      <WhatsAppFloatButton 
+        phoneNumber="+55 31 97329-3701" 
+        message="Opa tenho uma dúvida!" 
+      />
     </>
   );
 };
@@ -1570,12 +1576,6 @@ const SMMPanelEmbed = () => {
           )}
         </TabsContent>
       </Tabs>
-      
-      {/* WhatsApp Float Button - Only visible on Marketplace */}
-      <WhatsAppFloatButton 
-        phoneNumber="+55 31 97329-3701" 
-        message="Opa tenho uma dúvida!" 
-      />
     </div>
   );
 };

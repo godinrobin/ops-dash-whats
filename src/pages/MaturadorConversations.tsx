@@ -456,7 +456,7 @@ export default function MaturadorConversations() {
                     <p>
                       Delay: {conversation.min_delay_seconds}s - {conversation.max_delay_seconds}s
                     </p>
-                    <p>Limite diário: {conversation.daily_limit}</p>
+                    <p>Limite diário: Ilimitado</p>
                     {conversation.topics.length > 0 && <p>Tópicos: {conversation.topics.length}</p>}
                   </div>
 
