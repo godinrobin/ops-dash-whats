@@ -238,7 +238,15 @@ export const FlowSettingsDialog = ({
                 Pausa o fluxo quando o contato envia uma mídia
               </p>
             </div>
-            <Switch checked={pauseOnMedia} onCheckedChange={setPauseOnMedia} />
+            <Switch 
+              checked={pauseOnMedia} 
+              onCheckedChange={setPauseOnMedia}
+              className={
+                pauseOnMedia
+                  ? 'data-[state=checked]:bg-green-500'
+                  : 'data-[state=unchecked]:bg-red-500'
+              }
+            />
           </div>
 
           {/* Fluxo Ativo */}
@@ -275,6 +283,11 @@ export const FlowSettingsDialog = ({
               <Switch
                 checked={pauseScheduleEnabled}
                 onCheckedChange={setPauseScheduleEnabled}
+                className={
+                  pauseScheduleEnabled
+                    ? 'data-[state=checked]:bg-green-500'
+                    : 'data-[state=unchecked]:bg-red-500'
+                }
               />
             </div>
 
