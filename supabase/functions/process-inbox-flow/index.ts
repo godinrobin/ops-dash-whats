@@ -595,6 +595,140 @@ serve(async (req) => {
             }
             break;
 
+          case 'aiText':
+            // AI Text - generate variation using Lovable AI before sending
+            // Check if already sent (idempotency)
+            if (sentNodeIds.includes(currentNodeId)) {
+              console.log(`[${runId}] AI Text node ${currentNodeId} already sent, skipping`);
+              const aiTextEdge = edges.find(e => e.source === currentNodeId);
+              if (aiTextEdge) {
+                currentNodeId = aiTextEdge.target;
+              } else {
+                continueProcessing = false;
+              }
+              break;
+            }
+
+            // Get base message and replace variables
+            const baseMessage = replaceVariables(currentNode.data.message as string || '', variables);
+            
+            if (!baseMessage.trim()) {
+              console.log(`[${runId}] AI Text node has no message, skipping`);
+              const emptyEdge = edges.find(e => e.source === currentNodeId);
+              if (emptyEdge) {
+                currentNodeId = emptyEdge.target;
+              } else {
+                continueProcessing = false;
+              }
+              break;
+            }
+
+            // Generate AI variation
+            let aiVariedMessage = baseMessage;
+            try {
+              const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+              if (LOVABLE_API_KEY) {
+                console.log(`[${runId}] 🤖 Generating AI text variation for: "${baseMessage.substring(0, 50)}..."`);
+                
+                const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    model: 'google/gemini-2.5-flash',
+                    messages: [
+                      {
+                        role: 'system',
+                        content: `Você é um assistente que cria variações sutis de mensagens de WhatsApp. 
+Regras RIGOROSAS:
+1. MANTENHA o sentido e a intenção EXATAMENTE iguais
+2. Troque APENAS algumas palavras por sinônimos naturais
+3. Se houver emojis, você pode trocar por emojis similares ou manter
+4. NÃO adicione informações novas
+5. NÃO mude o tom da mensagem
+6. MANTENHA a mesma quantidade aproximada de texto
+7. A variação deve ser SUTIL, quase imperceptível
+8. Responda APENAS com o texto variado, sem explicações`
+                      },
+                      {
+                        role: 'user',
+                        content: `Crie uma variação sutil desta mensagem, mantendo o mesmo sentido:\n\n${baseMessage}`
+                      }
+                    ],
+                    max_tokens: 1000,
+                    temperature: 0.7,
+                  }),
+                });
+
+                if (aiResponse.ok) {
+                  const aiData = await aiResponse.json();
+                  const generatedText = aiData.choices?.[0]?.message?.content?.trim();
+                  if (generatedText) {
+                    aiVariedMessage = generatedText;
+                    console.log(`[${runId}] ✅ AI generated variation: "${aiVariedMessage.substring(0, 50)}..."`);
+                  }
+                } else {
+                  console.error(`[${runId}] AI API error: ${aiResponse.status}`);
+                }
+              } else {
+                console.log(`[${runId}] LOVABLE_API_KEY not configured, using original message`);
+              }
+            } catch (aiError) {
+              console.error(`[${runId}] AI generation error:`, aiError);
+              // Continue with original message if AI fails
+            }
+
+            if (instanceName && phone && aiVariedMessage) {
+              // Calculate delay for presence/typing indicator
+              let aiTextDelayMs = 0;
+              if (currentNode.data.showPresence) {
+                const presenceDelaySeconds = (currentNode.data.presenceDelay as number) || 3;
+                aiTextDelayMs = presenceDelaySeconds * 1000;
+                console.log(`[${runId}] 📝 AI TEXT NODE - showPresence=true, presenceDelay=${presenceDelaySeconds}s, delayMs=${aiTextDelayMs}`);
+                
+                // For Evolution API, send presence separately then wait
+                if (apiProvider !== 'uazapi') {
+                  await sendPresence(effectiveBaseUrl, effectiveApiKey, instanceName, phone, 'composing', aiTextDelayMs);
+                  processedActions.push(`Showed typing for ${presenceDelaySeconds}s`);
+                } else {
+                  console.log(`[${runId}] 🚀 UazAPI: Will send delay=${aiTextDelayMs}ms in request body to show "Digitando..."`);
+                  processedActions.push(`UazAPI typing delay: ${presenceDelaySeconds}s`);
+                }
+              } else {
+                console.log(`[${runId}] 📝 AI TEXT NODE - showPresence=false, no delay`);
+              }
+              
+              // For UazAPI, pass delay parameter; for Evolution, delay was already handled
+              const uazapiAiDelay = apiProvider === 'uazapi' ? aiTextDelayMs : 0;
+              console.log(`[${runId}] Calling sendMessage with apiProvider=${apiProvider}, uazapiAiDelay=${uazapiAiDelay}ms`);
+              const aiSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, aiVariedMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken, uazapiAiDelay);
+              
+              // Save message with correct status based on send result
+              const aiMessageStatus = aiSendResult.ok ? 'sent' : 'failed';
+              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, aiVariedMessage, 'text', flow.id, undefined, aiSendResult.remoteMessageId, aiMessageStatus);
+              
+              if (!aiSendResult.ok) {
+                await handleSendFailure(currentNodeId, aiSendResult.errorDetails || 'Unknown error');
+                sendFailed = true;
+                processedActions.push(`FAILED to send AI text: ${aiVariedMessage.substring(0, 50)}`);
+                break;
+              }
+              
+              // Mark node as sent for idempotency
+              sentNodeIds.push(currentNodeId);
+              processedActions.push(`Sent AI text: ${aiVariedMessage.substring(0, 50)}`);
+            }
+            
+            const aiTextEdge = edges.find(e => e.source === currentNodeId);
+            if (aiTextEdge) {
+              currentNodeId = aiTextEdge.target;
+            } else {
+              continueProcessing = false;
+            }
+            break;
+
           case 'image':
           case 'audio':
           case 'video':
