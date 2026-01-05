@@ -10,6 +10,7 @@ import { Bell, Smartphone, Monitor, Apple, Loader2, CheckCircle2, AlertCircle, V
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ensureOneSignalInitialized, getIosPushRequirementMessage, getOneSignal } from "@/lib/onesignal";
 
 interface NotificationPreference {
   id?: string;
@@ -66,22 +67,6 @@ export function TagWhatsNotificationSettings({ userId, oneSignalAppId }: TagWhat
     checkSubscription();
   }, [userId]);
 
-  const withOneSignal = <T,>(fn: (OneSignal: any) => Promise<T>): Promise<T> => {
-    return new Promise((resolve, reject) => {
-      const deferred = (window as any).OneSignalDeferred;
-      if (!deferred) {
-        reject(new Error("OneSignal SDK not loaded"));
-        return;
-      }
-      deferred.push(async (OneSignal: any) => {
-        try {
-          resolve(await fn(OneSignal));
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
-  };
 
   const detectDeviceType = () => {
     const userAgent = navigator.userAgent.toLowerCase();
@@ -96,19 +81,18 @@ export function TagWhatsNotificationSettings({ userId, oneSignalAppId }: TagWhat
 
   const checkSubscription = async () => {
     try {
-      const state = await withOneSignal(async (OneSignal) => {
-        const supported = await OneSignal.Notifications?.isPushSupported?.();
-        const optedIn = !!OneSignal.User?.PushSubscription?.optedIn;
-        const id = OneSignal.User?.PushSubscription?.id;
-        return { supported: supported !== false, optedIn, id };
-      });
+      await ensureOneSignalInitialized();
+      const OneSignal = getOneSignal();
+      if (!OneSignal) return;
 
-      if (!state.supported) {
+      const supported = await OneSignal.Notifications?.isPushSupported?.();
+      if (supported === false) {
         setIsSubscribed(false);
         return;
       }
 
-      setIsSubscribed(!!state.optedIn);
+      const optedIn = !!OneSignal.User?.PushSubscription?.optedIn;
+      setIsSubscribed(optedIn);
     } catch {
       // ignore
     }
@@ -137,103 +121,80 @@ export function TagWhatsNotificationSettings({ userId, oneSignalAppId }: TagWhat
 
   const handleEnableNotifications = async () => {
     setShowTutorial(true);
+    // Warm up OneSignal so the permission prompt can be triggered by the next button click
+    ensureOneSignalInitialized().catch(() => {
+      toast.error("Não foi possível carregar o sistema de notificações. Recarregue a página.");
+    });
   };
 
   const handleSubscribe = async () => {
     setSaving(true);
-    console.log("[Notifications] Starting subscription process...");
-    
+
     try {
-      const timeoutMs = 25000;
-
-      const result = await Promise.race([
-        withOneSignal(async (OneSignal) => {
-          console.log("[Notifications] OneSignal SDK available");
-          
-          // Check if push is supported
-          const supported = await OneSignal.Notifications?.isPushSupported?.();
-          console.log("[Notifications] Push supported:", supported);
-          
-          if (supported === false) {
-            return { error: "Push notifications not supported on this browser" };
-          }
-
-          // Check current permission state
-          const currentPermission = await OneSignal.Notifications?.permissionNative;
-          console.log("[Notifications] Current permission:", currentPermission);
-
-          // If permission is denied, show specific message
-          if (currentPermission === "denied") {
-            return { error: "Permissão negada. Você precisa habilitar notificações nas configurações do navegador." };
-          }
-
-          // Request permission - this should trigger the browser prompt
-          console.log("[Notifications] Requesting permission...");
-          try {
-            const permissionResult = await OneSignal.Notifications?.requestPermission();
-            console.log("[Notifications] Permission result:", permissionResult);
-          } catch (permError) {
-            console.log("[Notifications] Permission request error (may be normal):", permError);
-          }
-
-          // Also try slidedown if configured
-          try {
-            await OneSignal.Slidedown?.promptPush?.();
-          } catch {
-            // slidedown may not be configured
-          }
-
-          // Poll for subscription id (OneSignal needs time to register)
-          console.log("[Notifications] Waiting for subscription...");
-          for (let i = 0; i < 30; i++) {
-            const id = OneSignal.User?.PushSubscription?.id;
-            const optedIn = !!OneSignal.User?.PushSubscription?.optedIn;
-            const token = OneSignal.User?.PushSubscription?.token;
-            
-            console.log(`[Notifications] Poll ${i + 1}/30 - id: ${id}, optedIn: ${optedIn}, token: ${!!token}`);
-            
-            if (id && (optedIn || token)) {
-              console.log("[Notifications] Successfully subscribed with id:", id);
-              return { playerId: id };
-            }
-            await new Promise((r) => setTimeout(r, 600));
-          }
-
-          // Check final permission state
-          const finalPermission = await OneSignal.Notifications?.permissionNative;
-          console.log("[Notifications] Final permission state:", finalPermission);
-          
-          if (finalPermission === "denied") {
-            return { error: "Permissão negada. Habilite as notificações nas configurações do navegador." };
-          } else if (finalPermission === "default") {
-            return { error: "Você fechou o popup de permissão. Clique novamente para ativar." };
-          }
-
-          return { error: "Tempo esgotado. Tente novamente." };
-        }),
-        new Promise<{ error: string }>((resolve) => 
-          setTimeout(() => resolve({ error: "Tempo limite excedido. Recarregue a página e tente novamente." }), timeoutMs)
-        ),
-      ]);
-
-      console.log("[Notifications] Result:", result);
-
-      if ("error" in result) {
-        toast.error(result.error);
+      const iosReqMsg = getIosPushRequirementMessage();
+      if (iosReqMsg) {
+        toast.error(iosReqMsg);
         return;
       }
 
-      if (!result.playerId) {
-        if (deviceType === "ios") {
-          toast.error("No iPhone, as notificações só funcionam se você instalar o web app na tela inicial e abrir por lá.");
+      const OneSignal = getOneSignal();
+      if (!OneSignal) {
+        toast.error("Carregando notificações... tente novamente em alguns segundos.");
+        return;
+      }
+
+      // IMPORTANT: Permission prompt must be triggered immediately from the user click.
+      // So we call requestPermission BEFORE awaiting anything else.
+      let permissionPromise: Promise<any> | null = null;
+      try {
+        permissionPromise = OneSignal.Notifications?.requestPermission?.() || null;
+      } catch {
+        permissionPromise = null;
+      }
+
+      const supported = await OneSignal.Notifications?.isPushSupported?.();
+      if (supported === false) {
+        toast.error("Este dispositivo/navegador não suporta notificações push.");
+        return;
+      }
+
+      // Wait for the permission flow to finish (if any)
+      if (permissionPromise) {
+        try {
+          await permissionPromise;
+        } catch {
+          // ignore
+        }
+      }
+
+      const permission = OneSignal.Notifications?.permissionNative;
+      if (permission === "denied") {
+        toast.error("Permissão negada. Habilite as notificações nas configurações do navegador e tente novamente.");
+        return;
+      }
+
+      // Wait for subscription to be registered
+      let playerId: string | null = null;
+      for (let i = 0; i < 30; i++) {
+        const id = OneSignal.User?.PushSubscription?.id;
+        const optedIn = !!OneSignal.User?.PushSubscription?.optedIn;
+        if (id && optedIn) {
+          playerId = id;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 500));
+      }
+
+      if (!playerId) {
+        const p = OneSignal.Notifications?.permissionNative;
+        if (p === "default") {
+          toast.error("Você fechou o popup de permissão. Clique novamente para ativar.");
         } else {
-          toast.error("Não foi possível ativar notificações. Verifique as permissões do navegador.");
+          toast.error("Não foi possível ativar notificações. Recarregue a página e tente novamente.");
         }
         return;
       }
 
-      const playerId = result.playerId;
-      
       const newPreference: Partial<NotificationPreference> = {
         user_id: userId,
         onesignal_player_id: playerId,
