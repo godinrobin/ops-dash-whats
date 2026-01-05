@@ -89,6 +89,7 @@ export default function MaturadorInstances() {
 
   // Verify and configure webhooks for connected instances in the background
   const verifyWebhooks = async () => {
+    if (!user) return; // Don't call when not authenticated
     try {
       console.log('[VERIFY-WEBHOOKS] Starting background webhook verification');
       const { data, error } = await supabase.functions.invoke('verify-webhooks', {});
@@ -106,12 +107,12 @@ export default function MaturadorInstances() {
     fetchInstances();
   }, [user]);
 
-  // Verify webhooks after instances are loaded
+  // Verify webhooks after instances are loaded (only when user is authenticated)
   useEffect(() => {
-    if (instances.length > 0 && !loading) {
+    if (user && instances.length > 0 && !loading) {
       verifyWebhooks();
     }
-  }, [instances, loading]);
+  }, [user, instances, loading]);
 
   const handleRefresh = async () => {
     setRefreshing(true);

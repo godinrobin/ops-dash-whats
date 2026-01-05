@@ -149,6 +149,7 @@ export default function InboxDashboard() {
 
   // Verify and configure webhooks for connected instances in the background
   const verifyWebhooks = async () => {
+    if (!user) return; // Don't call when not authenticated
     try {
       console.log('[VERIFY-WEBHOOKS] Starting background webhook verification');
       const { data, error } = await supabase.functions.invoke('verify-webhooks', {});
@@ -164,6 +165,7 @@ export default function InboxDashboard() {
 
   // Auto-heal webhooks silently - force reconfigure to ensure they are active
   const autoHealWebhooks = async () => {
+    if (!user) return; // Don't call when not authenticated
     try {
       console.log('[AUTO-HEAL] Starting silent webhook reconfiguration');
       const { data, error } = await supabase.functions.invoke('force-reconfigure-webhooks', {});
@@ -190,6 +192,7 @@ export default function InboxDashboard() {
 
   // Enable ignoreGroups on all connected instances (silently in background)
   const enableIgnoreGroupsOnAllInstances = async () => {
+    if (!user) return; // Don't call when not authenticated
     const connectedInstances = instances.filter(i => i.status === 'connected');
     if (connectedInstances.length === 0) return;
 
@@ -213,8 +216,9 @@ export default function InboxDashboard() {
   };
 
   // Verify webhooks after data is loaded (em background, não bloqueia UI)
+  // IMPORTANT: Only run when user is authenticated
   useEffect(() => {
-    if (instances.length > 0 && !loading) {
+    if (user && instances.length > 0 && !loading) {
       // Auto-heal webhooks first (force reconfigure)
       setTimeout(() => autoHealWebhooks(), 1000);
       // Then verify webhooks
@@ -222,7 +226,7 @@ export default function InboxDashboard() {
       // Enable ignoreGroups on all connected instances (após webhooks)
       setTimeout(() => enableIgnoreGroupsOnAllInstances(), 5000);
     }
-  }, [instances, loading]);
+  }, [user, instances, loading]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
