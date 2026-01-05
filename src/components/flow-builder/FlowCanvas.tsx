@@ -161,6 +161,55 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
     event.dataTransfer.dropEffect = 'move';
   }, []);
 
+  // Auto-save debounce ref
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isFirstRender = useRef(true);
+
+  // Auto-save function
+  const triggerAutoSave = useCallback(() => {
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+    autoSaveTimeoutRef.current = setTimeout(async () => {
+      setSaveStatus('saving');
+      const latestNodes = latestNodesRef.current;
+      const latestEdges = latestEdgesRef.current;
+
+      const nodesToSave = latestNodes.map((n) => {
+        const data = { ...(n.data as Record<string, unknown>) };
+        delete (data as any).undefinedVariables;
+        return { ...n, data };
+      });
+
+      try {
+        await onSave(nodesToSave as any, latestEdges as any);
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus('idle'), 2000);
+      } catch {
+        setSaveStatus('idle');
+      }
+    }, 1000); // 1 second debounce
+  }, [onSave]);
+
+  // Auto-save when nodes or edges change
+  useEffect(() => {
+    // Skip first render to avoid saving on initial load
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    triggerAutoSave();
+  }, [nodes, edges, triggerAutoSave]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();

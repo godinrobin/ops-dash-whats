@@ -1461,7 +1461,7 @@ export const PropertiesPanel = ({
       </div>
 
       {selectedNode.type !== 'start' && (
-        <div className="flex gap-2 mt-4">
+        <div className="flex gap-2 mt-4 mb-6 pb-4">
           <Button
             variant="outline"
             size="sm"
