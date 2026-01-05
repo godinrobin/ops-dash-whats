@@ -193,7 +193,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.onesignal-config]
-verify_jwt = true
+verify_jwt = false
 
 [functions.send-tag-whats-notification]
 verify_jwt = false
