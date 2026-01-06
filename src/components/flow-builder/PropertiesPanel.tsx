@@ -1452,8 +1452,6 @@ export const PropertiesPanel = ({
         
         const getInteractionTypeDescription = () => {
           switch (interactionType) {
-            case 'poll':
-              return 'Cria uma enquete com opções de votação.';
             case 'button':
               return 'Cria botões clicáveis para ações rápidas.';
             case 'imageButton':
@@ -1467,8 +1465,6 @@ export const PropertiesPanel = ({
         
         const getChoicePlaceholder = () => {
           switch (interactionType) {
-            case 'poll':
-              return 'Opção de votação';
             case 'button':
               return 'Texto do Botão';
             case 'imageButton':
@@ -1482,8 +1478,6 @@ export const PropertiesPanel = ({
         
         const getChoiceHint = () => {
           switch (interactionType) {
-            case 'poll':
-              return 'Uma opção por linha. Ex: "Manhã", "Tarde", "Noite"';
             case 'button':
               return '';
             case 'imageButton':
@@ -1500,8 +1494,7 @@ export const PropertiesPanel = ({
             <div className="bg-gradient-to-r from-fuchsia-500/10 to-pink-500/10 border border-fuchsia-500/20 rounded-lg p-3 mb-2">
               <p className="text-xs text-fuchsia-400">
                 Mensagem Interativa permite enviar mensagens com interações nativas do WhatsApp.
-                {interactionType !== 'poll' && ' Cada opção gera uma saída no fluxo.'}
-                {interactionType === 'poll' && ' O fluxo avança quando o usuário responder.'}
+                Cada opção gera uma saída no fluxo.
               </p>
             </div>
             
@@ -1515,7 +1508,6 @@ export const PropertiesPanel = ({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="poll">📊 Enquete</SelectItem>
                   <SelectItem value="button">🔘 Mensagem com Botões</SelectItem>
                   <SelectItem value="imageButton">🖼️ Imagem com Botões</SelectItem>
                   <SelectItem value="list">📋 Menu Lista</SelectItem>
@@ -1534,56 +1526,65 @@ export const PropertiesPanel = ({
               />
             </div>
             
-            {interactionType !== 'poll' && (
-              <div className="space-y-2">
-                <Label>Texto do Rodapé (opcional)</Label>
-                <Input
-                  placeholder="Rodapé da mensagem"
-                  value={(nodeData.footerText as string) || ''}
-                  onChange={(e) => onUpdateNode(selectedNode.id, { footerText: e.target.value })}
-                />
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label>Texto do Rodapé (opcional)</Label>
+              <Input
+                placeholder="Rodapé da mensagem"
+                value={(nodeData.footerText as string) || ''}
+                onChange={(e) => onUpdateNode(selectedNode.id, { footerText: e.target.value })}
+              />
+            </div>
             
             {interactionType === 'imageButton' && (
               <div className="space-y-2">
                 <Label>Imagem *</Label>
-                <Input
-                  type="file"
-                  accept="image/*"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    
-                    const fileName = sanitizeFileName(file.name);
-                    const filePath = `flow-media/${user?.id}/${Date.now()}-${fileName}`;
-                    
-                    const { error } = await supabase.storage
-                      .from('inbox-media')
-                      .upload(filePath, file, { upsert: true });
-                    
-                    if (error) {
-                      console.error('Upload error:', error);
-                      return;
-                    }
-                    
-                    const { data: publicUrlData } = supabase.storage
-                      .from('inbox-media')
-                      .getPublicUrl(filePath);
-                    
-                    onUpdateNode(selectedNode.id, { imageUrl: publicUrlData.publicUrl });
-                  }}
-                  className="cursor-pointer"
-                />
-                {(nodeData.imageUrl as string) && (
-                  <div className="mt-2">
-                    <img 
-                      src={nodeData.imageUrl as string} 
-                      alt="Preview" 
-                      className="max-h-32 rounded-lg border border-border"
-                    />
-                  </div>
-                )}
+                <div className="flex flex-col gap-2">
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      
+                      toast.info('Fazendo upload da imagem...');
+                      
+                      const fileName = sanitizeFileName(file.name);
+                      const filePath = `flow-media/${user?.id}/${Date.now()}-${fileName}`;
+                      
+                      const { error } = await supabase.storage
+                        .from('inbox-media')
+                        .upload(filePath, file, { upsert: true });
+                      
+                      if (error) {
+                        console.error('Upload error:', error);
+                        toast.error('Erro ao fazer upload da imagem');
+                        return;
+                      }
+                      
+                      const { data: publicUrlData } = supabase.storage
+                        .from('inbox-media')
+                        .getPublicUrl(filePath);
+                      
+                      onUpdateNode(selectedNode.id, { imageUrl: publicUrlData.publicUrl });
+                      toast.success('Imagem carregada com sucesso!');
+                    }}
+                    className="cursor-pointer"
+                  />
+                  {(nodeData.imageUrl as string) ? (
+                    <div className="relative">
+                      <img 
+                        src={nodeData.imageUrl as string} 
+                        alt="Preview" 
+                        className="max-h-32 rounded-lg border border-border"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1 truncate max-w-full">
+                        {(nodeData.imageUrl as string).split('/').pop()}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Nenhuma imagem selecionada</p>
+                  )}
+                </div>
               </div>
             )}
             
@@ -1601,20 +1602,6 @@ export const PropertiesPanel = ({
                     }
                   }}
                 />
-              </div>
-            )}
-            
-            {interactionType === 'poll' && (
-              <div className="space-y-2">
-                <Label>Seleções Permitidas</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={(nodeData.selectableCount as number) || 1}
-                  onChange={(e) => onUpdateNode(selectedNode.id, { selectableCount: parseInt(e.target.value) || 1 })}
-                />
-                <p className="text-xs text-muted-foreground">Quantas opções o usuário pode selecionar</p>
               </div>
             )}
             

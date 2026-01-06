@@ -4,17 +4,15 @@ import { NodeAnalyticsWrapper } from '../NodeAnalyticsWrapper';
 
 export const InteractiveBlockNode = ({ id, data }: NodeProps) => {
   const nodeData = data as { 
-    interactionType?: 'poll' | 'button' | 'imageButton' | 'list';
+    interactionType?: 'button' | 'imageButton' | 'list';
     text?: string;
     choices?: string[];
   };
   
   const interactionType = nodeData.interactionType || 'button';
-  const isPoll = interactionType === 'poll';
   
   const getInteractionLabel = () => {
     switch (interactionType) {
-      case 'poll': return 'Enquete';
       case 'button': return 'Botões';
       case 'imageButton': return 'Imagem + Botões';
       case 'list': return 'Menu Lista';
@@ -24,14 +22,11 @@ export const InteractiveBlockNode = ({ id, data }: NodeProps) => {
 
   // Extract choice labels for output handles
   const getChoiceLabel = (choice: string, index: number): string => {
-    // For list type, items can be "[Section]" or "text|id|description"
-    // For buttons, items can be "text|id" or "text|url" or just "text"
-    // For poll, items are just the option text
     const trimmed = choice.trim();
     
     // Skip section headers in list type (starts with [)
     if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-      return ''; // Section header, not an option
+      return '';
     }
     
     // Get the display text (before the first |)
@@ -68,17 +63,8 @@ export const InteractiveBlockNode = ({ id, data }: NodeProps) => {
             : 'Configure a mensagem...'}
         </div>
         
-        {/* For poll: single output handle (no multiple paths) */}
-        {isPoll && (
-          <Handle
-            type="source"
-            position={Position.Bottom}
-            className="!bg-fuchsia-500 !w-3 !h-3"
-          />
-        )}
-        
-        {/* For non-poll types: Dynamic output handles for each choice */}
-        {!isPoll && validChoices.length > 0 && (
+        {/* Dynamic output handles for each choice */}
+        {validChoices.length > 0 && (
           <div className="space-y-1 mt-2 pt-2 border-t border-border">
             {validChoices.map((item, idx) => (
               <div key={idx} className="flex items-center justify-end gap-1 relative pr-3">
@@ -97,8 +83,8 @@ export const InteractiveBlockNode = ({ id, data }: NodeProps) => {
           </div>
         )}
         
-        {/* Default output if no choices (for non-poll types only) */}
-        {!isPoll && validChoices.length === 0 && (
+        {/* Default output if no choices */}
+        {validChoices.length === 0 && (
           <Handle
             type="source"
             position={Position.Bottom}
