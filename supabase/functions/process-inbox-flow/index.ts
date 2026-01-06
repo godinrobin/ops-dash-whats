@@ -2386,6 +2386,104 @@ Regras RIGOROSAS:
             }
             break;
 
+          case 'interactiveBlock':
+            // Interactive Block node - sends polls, buttons, image+buttons, or list menus via UazAPI /send/menu
+            console.log(`[${runId}] Interactive Block node: processing`);
+            
+            const interactionType = (currentNode.data.interactionType as string) || 'button';
+            const interactiveText = replaceVariables(currentNode.data.text as string || '', variables);
+            const interactiveChoices = (currentNode.data.choices as string[]) || [];
+            const interactiveFooterText = replaceVariables(currentNode.data.footerText as string || '', variables);
+            const interactiveListButton = replaceVariables(currentNode.data.listButton as string || 'Ver opções', variables);
+            const interactiveImageUrl = (currentNode.data.imageUrl as string) || '';
+            const interactiveSelectableCount = (currentNode.data.selectableCount as number) || 1;
+            
+            if (apiProvider === 'uazapi' && instanceUazapiToken && uazapiBaseUrl && interactiveText && interactiveChoices.length > 0) {
+              console.log(`[${runId}] Sending interactive block: type=${interactionType}, choices=${interactiveChoices.length}`);
+              
+              try {
+                // Build the request body based on interaction type
+                // Maps to UAZAPI /send/menu endpoint with type: button | list | poll
+                const interactiveBody: Record<string, unknown> = {
+                  number: phone.replace(/\D/g, ''),
+                  text: interactiveText,
+                  choices: interactiveChoices,
+                };
+                
+                // Set the type and additional fields based on interaction type
+                switch (interactionType) {
+                  case 'poll':
+                    interactiveBody.type = 'poll';
+                    interactiveBody.selectableCount = interactiveSelectableCount;
+                    break;
+                  case 'button':
+                    interactiveBody.type = 'button';
+                    if (interactiveFooterText) {
+                      interactiveBody.footerText = interactiveFooterText;
+                    }
+                    break;
+                  case 'imageButton':
+                    interactiveBody.type = 'button';
+                    if (interactiveFooterText) {
+                      interactiveBody.footerText = interactiveFooterText;
+                    }
+                    if (interactiveImageUrl) {
+                      interactiveBody.imageButton = interactiveImageUrl;
+                    }
+                    break;
+                  case 'list':
+                    interactiveBody.type = 'list';
+                    interactiveBody.listButton = interactiveListButton;
+                    if (interactiveFooterText) {
+                      interactiveBody.footerText = interactiveFooterText;
+                    }
+                    break;
+                  default:
+                    interactiveBody.type = 'button';
+                }
+                
+                console.log(`[${runId}] Interactive block request body:`, JSON.stringify(interactiveBody));
+                
+                const interactiveResponse = await fetch(`${uazapiBaseUrl}/send/menu`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'token': instanceUazapiToken,
+                  },
+                  body: JSON.stringify(interactiveBody),
+                });
+                
+                const interactiveResult = await interactiveResponse.json();
+                console.log(`[${runId}] Interactive block response:`, JSON.stringify(interactiveResult));
+                
+                if (interactiveResponse.ok) {
+                  const interactiveTypeLabel = interactionType === 'poll' ? 'Enquete' : interactionType === 'list' ? 'Menu Lista' : 'Botões';
+                  processedActions.push(`Sent interactive block (${interactiveTypeLabel})`);
+                  await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, `[${interactiveTypeLabel}] ${interactiveText}`, 'text', flow.id);
+                } else {
+                  console.error(`[${runId}] Interactive block error:`, interactiveResult);
+                  processedActions.push(`Interactive block error: ${JSON.stringify(interactiveResult)}`);
+                }
+              } catch (interactiveErr) {
+                console.error(`[${runId}] Interactive block exception:`, interactiveErr);
+                processedActions.push('Interactive block error');
+              }
+            } else if (apiProvider !== 'uazapi') {
+              console.log(`[${runId}] Interactive block only supported on UazAPI`);
+              processedActions.push('Interactive block not supported (requires UazAPI)');
+            } else {
+              console.log(`[${runId}] Missing interactive block configuration`);
+              processedActions.push('Interactive block skipped (missing config)');
+            }
+            
+            const interactiveEdge = edges.find(e => e.source === currentNodeId);
+            if (interactiveEdge) {
+              currentNodeId = interactiveEdge.target;
+            } else {
+              continueProcessing = false;
+            }
+            break;
+
           default:
             console.log(`[${runId}] Unknown node type: ${currentNode.type}`);
             const defaultEdge = edges.find(e => e.source === currentNodeId);

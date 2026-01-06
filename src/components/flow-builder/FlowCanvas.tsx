@@ -36,6 +36,7 @@ import { RandomizerNode } from './nodes/RandomizerNode';
 import { PaymentIdentifierNode } from './nodes/PaymentIdentifierNode';
 import { SendPixKeyNode } from './nodes/SendPixKeyNode';
 import { SendChargeNode } from './nodes/SendChargeNode';
+import { InteractiveBlockNode } from './nodes/InteractiveBlockNode';
 import { NodeSidebar } from './NodeSidebar';
 import { PropertiesPanel } from './PropertiesPanel';
 import { useFlowValidation } from './hooks/useFlowValidation';
@@ -64,6 +65,7 @@ const nodeTypes = {
   paymentIdentifier: PaymentIdentifierNode,
   sendPixKey: SendPixKeyNode,
   sendCharge: SendChargeNode,
+  interactiveBlock: InteractiveBlockNode,
 };
 
 interface FlowCanvasProps {
