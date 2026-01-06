@@ -419,7 +419,7 @@ export const PropertiesPanel = ({
           switch (selectedNode.type) {
             case 'image': return 'image/*';
             case 'audio': return 'audio/*';
-            case 'video': return 'video/*';
+            case 'video': return 'video/mp4,.mp4';
             case 'document': return '.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.ppt,.pptx';
             default: return '*/*';
           }
@@ -427,7 +427,7 @@ export const PropertiesPanel = ({
         
         // Video upload validation constants
         const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-        const ALLOWED_VIDEO_FORMATS = ['mp4', 'mov', 'avi', 'webm', 'mkv', 'quicktime'];
+        const ALLOWED_VIDEO_FORMATS = ['mp4']; // UAZAPI only accepts MP4
         const ALLOWED_IMAGE_FORMATS = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
         const ALLOWED_AUDIO_FORMATS = ['mp3', 'wav', 'ogg', 'm4a', 'aac'];
         const ALLOWED_DOC_FORMATS = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'csv', 'ppt', 'pptx'];
@@ -529,8 +529,8 @@ export const PropertiesPanel = ({
                     Clique para selecionar um arquivo (máx 50MB)
                   </p>
                   {selectedNode.type === 'video' && (
-                    <p className="text-xs text-muted-foreground">
-                      Formatos: {ALLOWED_VIDEO_FORMATS.join(', ')}
+                    <p className="text-xs text-yellow-500 font-medium">
+                      ⚠️ Apenas arquivos MP4 são aceitos
                     </p>
                   )}
                 </div>
