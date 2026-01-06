@@ -1965,7 +1965,7 @@ Regras RIGOROSAS:
 
                 const isPdfMedia = mediaMimetype.includes('pdf') || messageType === 'document';
 
-                const systemPrompt = `Você é um analisador de comprovantes de pagamento.\n\nAnalise a imagem/documento e determine se é um comprovante de pagamento válido (PIX, boleto, TED, transferência ou qualquer outro tipo de pagamento).\n\nResponda APENAS com um JSON no formato:\n{\n  "is_pix_payment": true/false,\n  "confidence": 0-100,\n  "reason": "breve explicação"\n}\n\nCritérios para identificar um comprovante de pagamento:\n- Termos como "Pix", "Transferência", "Comprovante", "Boleto", "TED", "Pagamento"\n- Dados de origem e destino (nome, CPF/CNPJ parcial, banco)\n- Valor, data/hora e ID/autenticação quando presentes\n- Código de barras (para boletos)\n- Qualquer documento que comprove uma transação financeira realizada\n\nImportante: se o documento comprovar que um pagamento foi realizado (seja PIX, boleto, TED ou outro), marque como is_pix_payment:true com a confiança apropriada.`;
+                const systemPrompt = `Você é um analisador de comprovantes de pagamento PIX.\n\nAnalise a imagem/documento e determine se é um comprovante de pagamento PIX válido.\n\nResponda APENAS com um JSON no formato:\n{\n  "is_pix_payment": true/false,\n  "confidence": 0-100,\n  "reason": "breve explicação"\n}\n\nCritérios para identificar um comprovante PIX:\n- Termos como "Pix", "Transferência", "Comprovante"\n- Dados de origem e destino (nome, CPF/CNPJ parcial, banco)\n- Valor, data/hora e ID/autenticação quando presentes\n\nImportante: mesmo que o comprovante esteja parcialmente visível, se houver sinais claros de transação PIX (ex.: "Pix" + banco + dados de origem/destino), marque como is_pix_payment:true com a confiança apropriada.`;
 
                 const messagesToSend = isPdfMedia
                   ? [
@@ -1973,7 +1973,7 @@ Regras RIGOROSAS:
                       {
                         role: 'user',
                         content: [
-                          { type: 'text', text: 'Analise este PDF e determine se é um comprovante de pagamento.' },
+                          { type: 'text', text: 'Analise este PDF e determine se é um comprovante de pagamento PIX.' },
                           { type: 'image_url', image_url: { url: `data:application/pdf;base64,${mediaBase64}` } },
                         ],
                       },
@@ -1983,7 +1983,7 @@ Regras RIGOROSAS:
                       {
                         role: 'user',
                         content: [
-                          { type: 'text', text: 'Analise esta imagem e determine se é um comprovante de pagamento.' },
+                          { type: 'text', text: 'Analise esta imagem e determine se é um comprovante de pagamento PIX.' },
                           { type: 'image_url', image_url: { url: `data:${mediaMimetype};base64,${mediaBase64}` } },
                         ],
                       },
