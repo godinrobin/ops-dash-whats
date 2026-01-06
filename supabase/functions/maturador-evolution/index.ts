@@ -1073,29 +1073,32 @@ Regras:
         if (inst?.api_provider === 'uazapi') {
           const config = await getInstanceApiConfig(supabaseClient, inst.id);
 
-          // OPTIMIZED: Single call to /instance/connect - this both initiates connection AND returns QR
-          // No need to check status first, connect will return current QR if already connecting
+          // STEP 1: First check current status using /instance/status
+          // Per UAZAPI docs: Use /instance/status to check connection state
           try {
-            console.log('[UAZAPI-QR] Calling /instance/connect directly...');
-            const connectRes = await callWhatsAppApi(
+            console.log('[UAZAPI-QR] Step 1: Checking current status via /instance/status...');
+            const statusRes = await callWhatsAppApi(
               config,
-              '/instance/connect',
-              'POST',
-              undefined, // No body needed - UazAPI uses token header for identification
+              '/instance/status',
+              'GET',
+              undefined,
               false,
               inst.uazapi_token || undefined
             );
-            console.log('[UAZAPI-QR] connect response:', JSON.stringify(connectRes).substring(0, 800));
+            console.log('[UAZAPI-QR] status response:', JSON.stringify(statusRes).substring(0, 800));
             
-            // Check if already connected
-            const statusObj = connectRes?.status;
-            const isConnected = 
-              connectRes?.connected === true ||
-              (typeof statusObj === 'object' && statusObj?.connected === true) ||
-              connectRes?.instance?.status === 'connected';
+            // Check if ACTUALLY connected - be strict about this check
+            // Per docs: status.connected=true AND status.loggedIn=true means connected
+            const isReallyConnected = 
+              statusRes?.status?.connected === true && 
+              statusRes?.status?.loggedIn === true;
             
-            if (isConnected) {
-              console.log('[UAZAPI-QR] Already connected');
+            // Also check instance.status field
+            const instanceStatus = statusRes?.instance?.status;
+            const isConnectedByInstanceStatus = instanceStatus === 'connected';
+            
+            if (isReallyConnected || isConnectedByInstanceStatus) {
+              console.log('[UAZAPI-QR] Already connected - updating DB status');
               await supabaseClient
                 .from('maturador_instances')
                 .update({ status: 'connected', qrcode: null, last_seen: new Date().toISOString() })
@@ -1105,30 +1108,45 @@ Regras:
               break;
             }
             
-            // Extract QR from response
-            qrcode = 
-              connectRes?.instance?.qrcode ||
-              connectRes?.qrcode ||
-              connectRes?.base64 ||
-              connectRes?.qr?.base64 ||
-              null;
-            
-          } catch (e: any) {
-            console.log('[UAZAPI-QR] Connect error:', e?.status, e?.message);
-            // If connect fails, try status endpoint as fallback
+            // If status is "connecting", we may already have a QR code in the response
+            if (instanceStatus === 'connecting' || statusRes?.instance?.qrcode) {
+              qrcode = statusRes?.instance?.qrcode || null;
+              if (qrcode) {
+                console.log('[UAZAPI-QR] Found QR in status response, using it');
+              }
+            }
+          } catch (statusErr: any) {
+            console.log('[UAZAPI-QR] Status check failed:', statusErr?.message);
+            // Continue to connect step
+          }
+
+          // STEP 2: If no QR yet, call /instance/connect to initiate connection
+          // Per docs: POST /instance/connect - Initiates connection and generates QR code
+          if (!qrcode) {
             try {
-              const statusRes = await callWhatsAppApi(
+              console.log('[UAZAPI-QR] Step 2: Initiating connection via POST /instance/connect...');
+              const connectRes = await callWhatsAppApi(
                 config,
-                '/instance/status',
-                'GET',
-                undefined,
+                '/instance/connect',
+                'POST',
+                undefined, // No body = generate QR code (per docs: omit phone to get QR)
                 false,
                 inst.uazapi_token || undefined
               );
-              qrcode = statusRes?.instance?.qrcode || statusRes?.qrcode || null;
+              console.log('[UAZAPI-QR] connect response:', JSON.stringify(connectRes).substring(0, 800));
               
-              // Check connected status
-              if (statusRes?.status?.connected === true || statusRes?.instance?.status === 'connected') {
+              // Extract QR from connect response - per docs: instance object contains qrcode field
+              qrcode = 
+                connectRes?.instance?.qrcode ||
+                connectRes?.qrcode ||
+                connectRes?.base64 ||
+                connectRes?.qr?.base64 ||
+                null;
+                
+              // Double-check if it says connected (shouldn't happen if we checked status first)
+              const connectStatus = connectRes?.status;
+              if (connectStatus?.connected === true && connectStatus?.loggedIn === true) {
+                console.log('[UAZAPI-QR] Connect returned connected=true - already connected');
                 await supabaseClient
                   .from('maturador_instances')
                   .update({ status: 'connected', qrcode: null, last_seen: new Date().toISOString() })
@@ -1137,8 +1155,8 @@ Regras:
                 result = { base64: null, connected: true };
                 break;
               }
-            } catch {
-              // Ignore fallback errors
+            } catch (connectErr: any) {
+              console.log('[UAZAPI-QR] Connect error:', connectErr?.status, connectErr?.message);
             }
           }
         } else {
@@ -1147,13 +1165,16 @@ Regras:
           qrcode = result?.base64 || result?.qrcode || result?.qr?.base64 || null;
         }
 
-        // Update QR code in database
+        // Update QR code in database and set status to connecting
         if (qrcode) {
+          console.log('[UAZAPI-QR] QR code obtained, updating database with connecting status');
           await supabaseClient
             .from('maturador_instances')
             .update({ qrcode: qrcode, status: 'connecting' })
             .eq('instance_name', instanceName)
             .eq('user_id', user.id);
+        } else {
+          console.log('[UAZAPI-QR] No QR code obtained');
         }
 
         result = { base64: qrcode };
