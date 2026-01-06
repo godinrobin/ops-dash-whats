@@ -980,6 +980,7 @@ export type Database = {
           started_at: string | null
           status: string
           total_count: number
+          uazapi_folder_id: string | null
           updated_at: string
           user_id: string
         }
@@ -1003,6 +1004,7 @@ export type Database = {
           started_at?: string | null
           status?: string
           total_count?: number
+          uazapi_folder_id?: string | null
           updated_at?: string
           user_id: string
         }
@@ -1026,6 +1028,7 @@ export type Database = {
           started_at?: string | null
           status?: string
           total_count?: number
+          uazapi_folder_id?: string | null
           updated_at?: string
           user_id?: string
         }
