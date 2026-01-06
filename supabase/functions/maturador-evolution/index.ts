@@ -1245,11 +1245,19 @@ Regras:
               .eq('user_id', user.id);
 
             result = { paircode, status: 'connecting' };
-          } else if (connectResult?.status === 'connected' || connectResult?.connected === true) {
-            result = { connected: true, status: 'connected' };
           } else {
-            console.log('[UAZAPI] No paircode in response:', JSON.stringify(connectResult));
-            throw new Error('Código de pareamento não recebido da API');
+            const statusObj = typeof connectResult?.status === 'object' ? connectResult.status : null;
+            const isReallyConnected =
+              (statusObj?.connected === true && statusObj?.loggedIn === true) ||
+              connectResult?.instance?.status === 'connected' ||
+              (connectResult?.connected === true && connectResult?.loggedIn === true);
+
+            if (isReallyConnected) {
+              result = { connected: true, status: 'connected' };
+            } else {
+              console.log('[UAZAPI] No paircode in response:', JSON.stringify(connectResult));
+              throw new Error('Código de pareamento não recebido da API');
+            }
           }
         } catch (e: any) {
           console.error('[UAZAPI] Paircode error:', e);
@@ -1294,53 +1302,49 @@ Regras:
           }
 
           // UazAPI returns different formats for connection status
-          // IMPORTANT: Check connecting FIRST because status="connecting" should never be treated as "connected"
-          
-          // Check for explicit "connecting" state - this takes priority
+          // IMPORTANT: Be strict. Only consider "connected" when connected=true AND loggedIn=true (per docs).
+          // Also, never treat "connecting" as connected.
+
           const rawInstanceStatus = result?.instance?.status;
           const rawStatus = result?.status;
-          
+
+          const statusObj = typeof rawStatus === 'object' ? rawStatus : null;
+          const statusConnected = statusObj?.connected;
+          const statusLoggedIn = statusObj?.loggedIn;
+
+          const hasQrCode = Boolean(result?.instance?.qrcode);
+          const hasPairCode = Boolean(result?.instance?.paircode);
+
+          // Connecting signals (QR/paircode present, explicit status fields)
           const isConnecting = Boolean(
             rawInstanceStatus === 'connecting' ||
-            rawStatus === 'connecting' ||
-            result?.state === 'connecting' ||
-            result?.instance?.state === 'connecting' ||
-            result?.connection === 'connecting' ||
-            (typeof rawStatus === 'object' && rawStatus?.state === 'connecting')
+              rawStatus === 'connecting' ||
+              result?.state === 'connecting' ||
+              result?.instance?.state === 'connecting' ||
+              result?.connection === 'connecting' ||
+              statusObj?.state === 'connecting' ||
+              hasQrCode ||
+              hasPairCode
           );
-          
-          // Check for explicit "connected" state - BUT only if NOT connecting
+
+          // Connected must mean authenticated.
           const isConnected = !isConnecting && Boolean(
-            // Direct connected field
-            result?.connected === true ||
-            // Nested in status object (when status is an object)
-            (typeof rawStatus === 'object' && rawStatus?.connected === true) ||
-            // Nested in instance object
-            result?.instance?.connected === true ||
-            // Nested in data object
-            result?.data?.connected === true ||
-            // Check state field (some UazAPI versions use this)
-            result?.state === 'open' ||
-            (typeof rawStatus === 'object' && rawStatus?.state === 'open') ||
-            result?.instance?.state === 'open' ||
-            // Check connection field
-            result?.connection === 'open' ||
-            (typeof rawStatus === 'object' && rawStatus?.connection === 'open') ||
-            // Check explicit status string = "connected"
-            rawStatus === 'connected' ||
-            rawInstanceStatus === 'connected'
+            rawInstanceStatus === 'connected' ||
+              rawStatus === 'connected' ||
+              (statusConnected === true && statusLoggedIn === true) ||
+              (result?.connected === true && (result?.loggedIn === true || statusLoggedIn === true))
           );
-          
-          // Also check for explicit disconnected states
+
+          // Disconnected (only if not connecting and not connected)
           const isDisconnected = !isConnected && !isConnecting && Boolean(
-            result?.connected === false ||
-            (typeof rawStatus === 'object' && rawStatus?.connected === false) ||
-            result?.state === 'close' ||
-            result?.state === 'disconnected' ||
-            rawStatus === 'disconnected' ||
             rawInstanceStatus === 'disconnected' ||
-            result?.connection === 'close' ||
-            (typeof rawStatus === 'object' && rawStatus?.state === 'close')
+              rawStatus === 'disconnected' ||
+              result?.state === 'close' ||
+              result?.state === 'disconnected' ||
+              result?.connection === 'close' ||
+              statusObj?.state === 'close' ||
+              // Explicit connected/loggedIn false with no QR/paircode
+              (statusConnected === false && statusLoggedIn === false && !hasQrCode && !hasPairCode)
           );
 
           console.log(`[UAZAPI-STATUS] Instance ${instanceName}: rawInstanceStatus=${rawInstanceStatus}, rawStatus=${typeof rawStatus === 'object' ? JSON.stringify(rawStatus) : rawStatus}`);
