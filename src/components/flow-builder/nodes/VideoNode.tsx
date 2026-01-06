@@ -31,7 +31,7 @@ export const VideoNode = ({ id, data }: NodeProps) => {
           </div>
         ) : (
           <div className="text-xs text-muted-foreground truncate max-w-[160px]">
-            Clique para configurar...
+            Clique para configurar (MP4)
           </div>
         )}
         <Handle
