@@ -16,11 +16,11 @@ interface QRCodeModalProps {
 }
 
 // QR code expiration time (UazAPI has 2 minute timeout)
-const QR_EXPIRATION_MS = 90 * 1000; // 90 seconds to be safe (before 2min timeout)
+const QR_EXPIRATION_MS = 100 * 1000; // 100 seconds to be safe
 
-// Cache de QR Codes - now tracks expiration properly
+// Cache de QR Codes - short TTL to ensure fresh QRs
 const qrCodeCache: Map<string, { qrCode: string; timestamp: number }> = new Map();
-const CACHE_TTL = 20 * 1000; // 20 seconds cache - short to ensure fresh QRs
+const CACHE_TTL = 30 * 1000; // 30 seconds cache
 
 export const getQrCodeFromCache = (instanceName: string): string | null => {
   const cached = qrCodeCache.get(instanceName);
@@ -116,14 +116,14 @@ export function QRCodeModal({
     }
   }, [onRefreshQr, instanceName, autoRefreshing]);
 
-  // Auto-check status every 5 seconds while modal is open
+  // Auto-check status every 3 seconds while modal is open (faster feedback)
   useEffect(() => {
     if (open && qrCode && !loading && !qrExpired) {
       autoCheckRef.current = setInterval(() => {
         if (!localChecking && !checkingStatus && !autoRefreshing) {
           handleCheckStatus(true);
         }
-      }, 5000);
+      }, 3000); // Reduced from 5s to 3s for faster feedback
     }
 
     return () => {
@@ -241,7 +241,7 @@ export function QRCodeModal({
                   Abra o <strong>WhatsApp</strong> &gt; Menu &gt; <strong>Dispositivos conectados</strong>
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  O QR Code atualiza automaticamente • Status verificado a cada 5s
+                  Status verificado automaticamente
                 </p>
               </div>
             </div>

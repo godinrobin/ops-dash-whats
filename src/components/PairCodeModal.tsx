@@ -72,14 +72,14 @@ export function PairCodeModal({
     };
   }, [pairCode, open]);
 
-  // Auto-check status every 5 seconds while modal is open and pair code is active
+  // Auto-check status every 3 seconds while modal is open and pair code is active
   useEffect(() => {
     if (open && pairCode && !loading) {
       autoCheckRef.current = setInterval(() => {
         if (!checkingStatus) {
           handleCheckStatus(true);
         }
-      }, 5000);
+      }, 3000); // Reduced from 5s to 3s for faster feedback
     }
 
     return () => {
@@ -248,7 +248,7 @@ export function PairCodeModal({
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground text-center">
-                  O status é verificado automaticamente a cada 5 segundos
+                  Status verificado automaticamente
                 </p>
               </div>
 
