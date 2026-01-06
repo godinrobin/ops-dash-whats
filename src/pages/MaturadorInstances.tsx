@@ -87,32 +87,12 @@ export default function MaturadorInstances() {
     }
   };
 
-  // Verify and configure webhooks for connected instances in the background
-  const verifyWebhooks = async () => {
-    if (!user) return; // Don't call when not authenticated
-    try {
-      console.log('[VERIFY-WEBHOOKS] Starting background webhook verification');
-      const { data, error } = await supabase.functions.invoke('verify-webhooks', {});
-      if (error) {
-        console.error('[VERIFY-WEBHOOKS] Error:', error);
-      } else {
-        console.log('[VERIFY-WEBHOOKS] Result:', data);
-      }
-    } catch (error) {
-      console.error('[VERIFY-WEBHOOKS] Error:', error);
-    }
-  };
+  // Webhook verification removed - webhooks are configured automatically on instance creation
+  // This reduces unnecessary API calls and speeds up page load
 
   useEffect(() => {
     fetchInstances();
   }, [user]);
-
-  // Verify webhooks after instances are loaded (only when user is authenticated)
-  useEffect(() => {
-    if (user && instances.length > 0 && !loading) {
-      verifyWebhooks();
-    }
-  }, [user, instances, loading]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -266,72 +246,46 @@ export default function MaturadorInstances() {
   }, []);
 
   const handleRefreshQrCode = useCallback(async () => {
-    if (!currentQrInstance || loadingQr) return; // Prevent multiple calls
+    if (!currentQrInstance || loadingQr) return;
     setLoadingQr(true);
     setQrCode(null);
     
-    // Clear cache to force fresh QR
     clearQrCodeCache(currentQrInstance.instance_name);
     
-    const maxAttempts = 2;
-    let lastError: any = null;
-    
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        console.log(`[QR-REFRESH] Attempt ${attempt}/${maxAttempts} for ${currentQrInstance.instance_name}`);
-        
-        const { data, error } = await supabase.functions.invoke('maturador-evolution', {
-          body: { 
-            action: 'get-qrcode', 
-            instanceName: currentQrInstance.instance_name,
-            forceNew: true // Force new QR code generation
-          },
-        });
+    try {
+      console.log(`[QR-REFRESH] Requesting new QR for ${currentQrInstance.instance_name}`);
+      
+      const { data, error } = await supabase.functions.invoke('maturador-evolution', {
+        body: { 
+          action: 'get-qrcode', 
+          instanceName: currentQrInstance.instance_name,
+          forceNew: true
+        },
+      });
 
-        if (error) throw error;
-        if (data.error) throw new Error(data.error);
-        
-        // Check if instance is already connected
-        if (data.connected) {
-          toast.success('WhatsApp já está conectado!');
-          setQrModalOpen(false);
-          setLoadingQr(false);
-          await fetchInstances();
-          return;
-        }
-
-        // UazAPI returns QR as data URI inside base64 or as instance.qrcode
-        const qr = data.base64 || data.qrcode?.base64 || data.qrcode;
-        if (qr) {
-          console.log(`[QR-REFRESH] Got QR code, length: ${qr.length}`);
-          setQrCodeCache(currentQrInstance.instance_name, qr);
-          setQrCode(qr);
-          setLoadingQr(false);
-          return; // Success - exit retry loop
-        } else {
-          console.log('[QR-REFRESH] No QR in response:', JSON.stringify(data).substring(0, 200));
-          if (attempt < maxAttempts) {
-            await new Promise(r => setTimeout(r, 1000)); // Wait before retry
-            continue;
-          }
-          toast.error('QR Code não disponível');
-        }
-      } catch (error: any) {
-        console.error(`[QR-REFRESH] Error on attempt ${attempt}:`, error);
-        lastError = error;
-        if (attempt < maxAttempts) {
-          await new Promise(r => setTimeout(r, 1000)); // Wait before retry
-          continue;
-        }
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+      
+      if (data.connected) {
+        toast.success('WhatsApp já está conectado!');
+        setQrModalOpen(false);
+        await fetchInstances();
+        return;
       }
+
+      const qr = data.base64 || data.qrcode?.base64 || data.qrcode;
+      if (qr) {
+        setQrCodeCache(currentQrInstance.instance_name, qr);
+        setQrCode(qr);
+      } else {
+        toast.error('QR Code não disponível');
+      }
+    } catch (error: any) {
+      console.error('[QR-REFRESH] Error:', error);
+      toast.error(error.message || 'Erro ao atualizar QR Code');
+    } finally {
+      setLoadingQr(false);
     }
-    
-    // All attempts failed
-    if (lastError) {
-      toast.error(lastError.message || 'Erro ao atualizar QR Code');
-    }
-    
-    setLoadingQr(false);
   }, [currentQrInstance, loadingQr]);
 
   const handleCheckQrStatus = async () => {
