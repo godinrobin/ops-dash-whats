@@ -1551,15 +1551,17 @@ export const PropertiesPanel = ({
                       const fileName = sanitizeFileName(file.name);
                       const filePath = `flow-media/${user?.id}/${Date.now()}-${fileName}`;
                       
-                      const { error } = await supabase.storage
+                      const { data: uploadData, error } = await supabase.storage
                         .from('inbox-media')
                         .upload(filePath, file, { upsert: true });
                       
                       if (error) {
                         console.error('Upload error:', error);
-                        toast.error('Erro ao fazer upload da imagem');
+                        toast.error(`Erro ao fazer upload: ${error.message}`);
                         return;
                       }
+                      
+                      console.log('Upload success:', uploadData);
                       
                       const { data: publicUrlData } = supabase.storage
                         .from('inbox-media')
