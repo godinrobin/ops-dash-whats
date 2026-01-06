@@ -838,17 +838,29 @@ serve(async (req) => {
         const uazFileUrl = uazMsg.fileURL || '';
         const uazWasSentByApi = uazMsg.wasSentByApi === true;
 
-        // Fallback: some interactive replies (especially polls) arrive without message text/vote,
-        // but the updated chat payload contains the selected text in wa_lastMessageTextVote.
-        if ((!uazText || uazText.trim().length === 0) && (payload as any)?.chat?.wa_lastMessageTextVote && (payload as any)?.chat?.wa_chatid === uazChatid) {
+        // POLL-SPECIFIC: For poll responses, the vote text is ONLY available in chat.wa_lastMessageTextVote
+        // The message.vote and message.text fields are typically empty for poll responses
+        const chatWaLastMessageType = String((payload as any)?.chat?.wa_lastMessageType || '').toLowerCase();
+        const msgTypeForPoll = uazMessageType.toLowerCase();
+        const isPollResponse = chatWaLastMessageType.includes('poll') || msgTypeForPoll.includes('poll');
+        
+        if (isPollResponse && (!uazText || uazText.trim().length === 0)) {
+          const pollVoteText = String((payload as any)?.chat?.wa_lastMessageTextVote || '');
+          if (pollVoteText.trim().length > 0) {
+            uazText = pollVoteText;
+            console.log(`[UAZAPI-WEBHOOK] POLL: Using chat.wa_lastMessageTextVote as poll response: "${uazText.substring(0, 80)}"`);
+          }
+        }
+        
+        // Fallback for other interactive replies (buttons, lists) - NOT polls
+        if (!isPollResponse && (!uazText || uazText.trim().length === 0) && (payload as any)?.chat?.wa_lastMessageTextVote && (payload as any)?.chat?.wa_chatid === uazChatid) {
           const chatTs = Number((payload as any).chat.wa_lastMsgTimestamp || 0);
           const delta = chatTs ? Math.abs(chatTs - Number(uazTimestamp)) : null;
           const isClose = delta === null ? true : delta < 120000; // 2 minutes
-          const chatType = String((payload as any).chat.wa_lastMessageType || '');
-          const looksInteractive = chatType.toLowerCase().includes('poll') || !!uazVoteRaw || !!uazConvertOptions || !!uazButtonOrListId || !!uazSelectedName || !!uazSelectedId;
+          const looksInteractive = !!uazVoteRaw || !!uazConvertOptions || !!uazButtonOrListId || !!uazSelectedName || !!uazSelectedId;
           if (isClose && looksInteractive) {
             uazText = String((payload as any).chat.wa_lastMessageTextVote || '');
-            console.log(`[UAZAPI-WEBHOOK] Fallback to chat.wa_lastMessageTextVote: ${uazText.substring(0, 80)}`);
+            console.log(`[UAZAPI-WEBHOOK] Fallback to chat.wa_lastMessageTextVote for interactive: ${uazText.substring(0, 80)}`);
           }
         }
         
