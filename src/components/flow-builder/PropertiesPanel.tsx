@@ -1470,11 +1470,11 @@ export const PropertiesPanel = ({
             case 'poll':
               return 'Opção de votação';
             case 'button':
-              return 'Texto do Botão|id_botao';
+              return 'Texto do Botão';
             case 'imageButton':
-              return 'Texto do Botão|id_botao';
+              return 'Texto do Botão';
             case 'list':
-              return '[Seção] ou Item|id|descrição';
+              return 'Texto do Menu';
             default:
               return 'Opção';
           }
@@ -1485,11 +1485,11 @@ export const PropertiesPanel = ({
             case 'poll':
               return 'Uma opção por linha. Ex: "Manhã", "Tarde", "Noite"';
             case 'button':
-              return 'Formato: "texto|id" ou apenas "texto". Para URL: "Ver Site|https://url.com". Para copiar: "Copiar Código|copy:CODIGO123"';
+              return '';
             case 'imageButton':
-              return 'Mesmo formato dos botões. Adicione a URL da imagem acima.';
+              return '';
             case 'list':
-              return 'Use [Nome] para criar uma seção. Itens: "texto|id|descrição"';
+              return '';
             default:
               return '';
           }
@@ -1499,7 +1499,9 @@ export const PropertiesPanel = ({
           <div className="space-y-4">
             <div className="bg-gradient-to-r from-fuchsia-500/10 to-pink-500/10 border border-fuchsia-500/20 rounded-lg p-3 mb-2">
               <p className="text-xs text-fuchsia-400">
-                Mensagem Interativa permite enviar mensagens com interações nativas do WhatsApp. Cada opção gera uma saída no fluxo.
+                Mensagem Interativa permite enviar mensagens com interações nativas do WhatsApp.
+                {interactionType !== 'poll' && ' Cada opção gera uma saída no fluxo.'}
+                {interactionType === 'poll' && ' O fluxo avança quando o usuário responder.'}
               </p>
             </div>
             
@@ -1545,12 +1547,43 @@ export const PropertiesPanel = ({
             
             {interactionType === 'imageButton' && (
               <div className="space-y-2">
-                <Label>URL da Imagem *</Label>
+                <Label>Imagem *</Label>
                 <Input
-                  placeholder="https://exemplo.com/imagem.jpg"
-                  value={(nodeData.imageUrl as string) || ''}
-                  onChange={(e) => onUpdateNode(selectedNode.id, { imageUrl: e.target.value })}
+                  type="file"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    
+                    const fileName = sanitizeFileName(file.name);
+                    const filePath = `flow-media/${user?.id}/${Date.now()}-${fileName}`;
+                    
+                    const { error } = await supabase.storage
+                      .from('inbox-media')
+                      .upload(filePath, file, { upsert: true });
+                    
+                    if (error) {
+                      console.error('Upload error:', error);
+                      return;
+                    }
+                    
+                    const { data: publicUrlData } = supabase.storage
+                      .from('inbox-media')
+                      .getPublicUrl(filePath);
+                    
+                    onUpdateNode(selectedNode.id, { imageUrl: publicUrlData.publicUrl });
+                  }}
+                  className="cursor-pointer"
                 />
+                {(nodeData.imageUrl as string) && (
+                  <div className="mt-2">
+                    <img 
+                      src={nodeData.imageUrl as string} 
+                      alt="Preview" 
+                      className="max-h-32 rounded-lg border border-border"
+                    />
+                  </div>
+                )}
               </div>
             )}
             
@@ -1561,6 +1594,12 @@ export const PropertiesPanel = ({
                   placeholder="Ver opções"
                   value={(nodeData.listButton as string) || ''}
                   onChange={(e) => onUpdateNode(selectedNode.id, { listButton: e.target.value })}
+                  onBlur={() => {
+                    // Auto-fill with "Ver opções" if empty on blur
+                    if (!(nodeData.listButton as string)?.trim()) {
+                      onUpdateNode(selectedNode.id, { listButton: 'Ver opções' });
+                    }
+                  }}
                 />
               </div>
             )}
@@ -1614,7 +1653,9 @@ export const PropertiesPanel = ({
                 )}
               </div>
               
-              <p className="text-xs text-muted-foreground">{getChoiceHint()}</p>
+              {getChoiceHint() && (
+                <p className="text-xs text-muted-foreground">{getChoiceHint()}</p>
+              )}
             </div>
             
             <div className="p-2 rounded bg-amber-500/10 border border-amber-500/30 text-xs text-amber-400">
