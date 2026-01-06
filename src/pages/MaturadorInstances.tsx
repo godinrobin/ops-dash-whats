@@ -307,12 +307,13 @@ export default function MaturadorInstances() {
         (data?.status?.loggedIn === true && data?.status?.connected === false);
 
       // Check for connection status - support both Evolution and UazAPI formats
+      // UazAPI: only treat as connected when connected=true AND loggedIn=true (per docs)
       // BUT only if NOT connecting
       const isConnected = !isConnecting && (
         // Evolution API format
         data.instance?.state === 'open' ||
-        // UazAPI format - multiple possible response shapes
-        data.status?.connected === true ||
+        // UazAPI format
+        (data.status?.connected === true && data.status?.loggedIn === true) ||
         rawInstanceStatus === 'connected' ||
         data.connected === true
       );
