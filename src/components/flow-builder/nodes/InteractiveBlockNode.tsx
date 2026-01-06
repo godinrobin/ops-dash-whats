@@ -9,8 +9,11 @@ export const InteractiveBlockNode = ({ id, data }: NodeProps) => {
     choices?: string[];
   };
   
+  const interactionType = nodeData.interactionType || 'button';
+  const isPoll = interactionType === 'poll';
+  
   const getInteractionLabel = () => {
-    switch (nodeData.interactionType) {
+    switch (interactionType) {
       case 'poll': return 'Enquete';
       case 'button': return 'Botões';
       case 'imageButton': return 'Imagem + Botões';
@@ -65,8 +68,17 @@ export const InteractiveBlockNode = ({ id, data }: NodeProps) => {
             : 'Configure a mensagem...'}
         </div>
         
-        {/* Dynamic output handles for each choice */}
-        {validChoices.length > 0 && (
+        {/* For poll: single output handle (no multiple paths) */}
+        {isPoll && (
+          <Handle
+            type="source"
+            position={Position.Bottom}
+            className="!bg-fuchsia-500 !w-3 !h-3"
+          />
+        )}
+        
+        {/* For non-poll types: Dynamic output handles for each choice */}
+        {!isPoll && validChoices.length > 0 && (
           <div className="space-y-1 mt-2 pt-2 border-t border-border">
             {validChoices.map((item, idx) => (
               <div key={idx} className="flex items-center justify-end gap-1 relative pr-3">
@@ -85,8 +97,8 @@ export const InteractiveBlockNode = ({ id, data }: NodeProps) => {
           </div>
         )}
         
-        {/* Default output if no choices */}
-        {validChoices.length === 0 && (
+        {/* Default output if no choices (for non-poll types only) */}
+        {!isPoll && validChoices.length === 0 && (
           <Handle
             type="source"
             position={Position.Bottom}

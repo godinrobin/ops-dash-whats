@@ -21,12 +21,6 @@ import {
 
 const nodeCategories = [
   {
-    title: 'Início',
-    nodes: [
-      { type: 'start', label: 'Início', icon: Play, color: 'bg-green-500' },
-    ],
-  },
-  {
     title: 'Mensagens',
     nodes: [
       { type: 'text', label: 'Texto', icon: MessageSquare, color: 'bg-blue-500' },

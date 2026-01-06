@@ -192,6 +192,14 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
       const type = event.dataTransfer.getData('application/reactflow');
       if (!type || !reactFlowWrapper.current) return;
 
+      // Prevent adding more than one start node
+      if (type === 'start') {
+        const hasStartNode = latestNodesRef.current.some(n => n.type === 'start');
+        if (hasStartNode) {
+          return; // Don't allow adding another start node
+        }
+      }
+
       // Get the bounds of the ReactFlow wrapper
       const bounds = reactFlowWrapper.current.getBoundingClientRect();
       
