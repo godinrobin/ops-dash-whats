@@ -1085,19 +1085,32 @@ Regras:
               false,
               inst.uazapi_token || undefined
             );
-            console.log('[UAZAPI-QR] status response:', JSON.stringify(statusRes).substring(0, 800));
+            console.log('[UAZAPI-QR] status response FULL:', JSON.stringify(statusRes));
+            
+            // Extract status fields explicitly
+            const statusObj = typeof statusRes?.status === 'object' ? statusRes.status : null;
+            const instanceObj = statusRes?.instance;
+            
+            console.log('[UAZAPI-QR] Parsed: statusObj=', JSON.stringify(statusObj), 'instanceObj.status=', instanceObj?.status);
             
             // Check if ACTUALLY connected - be strict about this check
             // Per docs: status.connected=true AND status.loggedIn=true means connected
             const isReallyConnected = 
-              statusRes?.status?.connected === true && 
-              statusRes?.status?.loggedIn === true;
+              statusObj?.connected === true && 
+              statusObj?.loggedIn === true;
             
-            // Also check instance.status field
-            const instanceStatus = statusRes?.instance?.status;
+            // Also check instance.status field - but ONLY if it's "connected" string, not just truthy
+            const instanceStatus = instanceObj?.status;
             const isConnectedByInstanceStatus = instanceStatus === 'connected';
             
-            if (isReallyConnected || isConnectedByInstanceStatus) {
+            // CRITICAL: if instance has QR code or paircode, it's NOT connected, it's connecting
+            const hasQrCode = Boolean(instanceObj?.qrcode);
+            const hasPairCode = Boolean(instanceObj?.paircode);
+            const isActuallyConnecting = hasQrCode || hasPairCode || instanceStatus === 'connecting';
+            
+            console.log('[UAZAPI-QR] Connection check: isReallyConnected=', isReallyConnected, 'isConnectedByInstanceStatus=', isConnectedByInstanceStatus, 'isActuallyConnecting=', isActuallyConnecting);
+            
+            if ((isReallyConnected || isConnectedByInstanceStatus) && !isActuallyConnecting) {
               console.log('[UAZAPI-QR] Already connected - updating DB status');
               await supabaseClient
                 .from('maturador_instances')
@@ -1302,8 +1315,8 @@ Regras:
           }
 
           // UazAPI returns different formats for connection status
-          // IMPORTANT: Be strict. Only consider "connected" when connected=true AND loggedIn=true (per docs).
-          // Also, never treat "connecting" as connected.
+          // IMPORTANT: Trust instance.status field first, then check status object.
+          // Per docs, instance.status can be: "disconnected", "connecting", "connected"
 
           const rawInstanceStatus = result?.instance?.status;
           const rawStatus = result?.status;
@@ -1312,51 +1325,38 @@ Regras:
           const statusConnected = statusObj?.connected;
           const statusLoggedIn = statusObj?.loggedIn;
 
-          const hasQrCode = Boolean(result?.instance?.qrcode);
-          const hasPairCode = Boolean(result?.instance?.paircode);
+          console.log(`[UAZAPI-STATUS] Instance ${instanceName}: rawInstanceStatus="${rawInstanceStatus}", statusObj=`, JSON.stringify(statusObj));
 
-          // Connecting signals (QR/paircode present, explicit status fields)
-          const isConnecting = Boolean(
-            rawInstanceStatus === 'connecting' ||
-              rawStatus === 'connecting' ||
-              result?.state === 'connecting' ||
-              result?.instance?.state === 'connecting' ||
-              result?.connection === 'connecting' ||
-              statusObj?.state === 'connecting' ||
-              hasQrCode ||
-              hasPairCode
-          );
-
-          // Connected must mean authenticated.
-          const isConnected = !isConnecting && Boolean(
-            rawInstanceStatus === 'connected' ||
-              rawStatus === 'connected' ||
-              (statusConnected === true && statusLoggedIn === true) ||
-              (result?.connected === true && (result?.loggedIn === true || statusLoggedIn === true))
-          );
-
-          // Disconnected (only if not connecting and not connected)
-          const isDisconnected = !isConnected && !isConnecting && Boolean(
-            rawInstanceStatus === 'disconnected' ||
-              rawStatus === 'disconnected' ||
-              result?.state === 'close' ||
-              result?.state === 'disconnected' ||
-              result?.connection === 'close' ||
-              statusObj?.state === 'close' ||
-              // Explicit connected/loggedIn false with no QR/paircode
-              (statusConnected === false && statusLoggedIn === false && !hasQrCode && !hasPairCode)
-          );
-
-          console.log(`[UAZAPI-STATUS] Instance ${instanceName}: rawInstanceStatus=${rawInstanceStatus}, rawStatus=${typeof rawStatus === 'object' ? JSON.stringify(rawStatus) : rawStatus}`);
-          console.log(`[UAZAPI-STATUS] Result: connected=${isConnected}, connecting=${isConnecting}, disconnected=${isDisconnected}`);
-
-          // Determine the new status: priority order connecting > connected > disconnected
+          // PRIORITY 1: Trust instance.status field (most reliable per UAZAPI docs)
           let newStatus = 'disconnected';
-          if (isConnecting) {
+          
+          if (rawInstanceStatus === 'connected') {
+            // Instance says connected - verify with status object if available
+            if (statusObj && statusConnected === true && statusLoggedIn === true) {
+              newStatus = 'connected';
+            } else if (statusObj && (statusConnected === false || statusLoggedIn === false)) {
+              // Status object says not really connected
+              newStatus = 'connecting';
+            } else {
+              // Trust instance.status when no conflicting info
+              newStatus = 'connected';
+            }
+          } else if (rawInstanceStatus === 'connecting') {
             newStatus = 'connecting';
-          } else if (isConnected) {
-            newStatus = 'connected';
+          } else if (rawInstanceStatus === 'disconnected') {
+            newStatus = 'disconnected';
+          } else {
+            // Fallback to status object checks
+            if (statusConnected === true && statusLoggedIn === true) {
+              newStatus = 'connected';
+            } else if (statusConnected === true && statusLoggedIn === false) {
+              newStatus = 'connecting';
+            } else if (result?.instance?.qrcode || result?.instance?.paircode) {
+              newStatus = 'connecting';
+            }
           }
+
+          console.log(`[UAZAPI-STATUS] Final status for ${instanceName}: ${newStatus}`);
           
           await supabaseClient
             .from('maturador_instances')
