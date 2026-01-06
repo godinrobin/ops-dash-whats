@@ -766,7 +766,26 @@ serve(async (req) => {
         const uazChatid = uazMsg.chatid || '';
         const uazSender = uazMsg.sender || '';
         const uazSenderName = uazMsg.senderName || uazMsg.pushName || '';
-        const uazText = uazMsg.text || '';
+        // UazAPI special fields for interactive responses (polls, buttons, lists)
+        const uazVote = uazMsg.vote || ''; // Poll vote response
+        const uazConvertOptions = uazMsg.convertOptions || ''; // Converted options text from polls/lists/buttons
+        const uazButtonOrListId = uazMsg.buttonOrListid || ''; // Button or list item ID selected
+        
+        // Determine text content: prioritize vote/convertOptions/buttonOrListId for interactive responses
+        let uazText = uazMsg.text || '';
+        if (!uazText && uazVote) {
+          uazText = uazVote; // Use poll vote as text
+          console.log(`[UAZAPI-WEBHOOK] Using vote field as text: ${uazVote}`);
+        }
+        if (!uazText && uazConvertOptions) {
+          uazText = uazConvertOptions; // Use converted options as text
+          console.log(`[UAZAPI-WEBHOOK] Using convertOptions field as text: ${uazConvertOptions}`);
+        }
+        if (!uazText && uazButtonOrListId) {
+          uazText = uazButtonOrListId; // Use button/list ID as text
+          console.log(`[UAZAPI-WEBHOOK] Using buttonOrListid field as text: ${uazButtonOrListId}`);
+        }
+        
         const uazMessageType = uazMsg.messageType || 'conversation';
         const uazFromMe = uazMsg.fromMe === true || uazMsg.fromMe === 'true';
         const uazMessageId = uazMsg.messageid || uazMsg.id || '';
@@ -774,7 +793,7 @@ serve(async (req) => {
         const uazFileUrl = uazMsg.fileURL || '';
         const uazWasSentByApi = uazMsg.wasSentByApi === true;
         
-        console.log(`[UAZAPI-WEBHOOK] chatid=${uazChatid}, sender=${uazSender}, fromMe=${uazFromMe}, text=${uazText.substring(0, 50)}, wasSentByApi=${uazWasSentByApi}`);
+        console.log(`[UAZAPI-WEBHOOK] chatid=${uazChatid}, sender=${uazSender}, fromMe=${uazFromMe}, text=${uazText.substring(0, 50)}, vote=${uazVote}, convertOptions=${uazConvertOptions.substring(0, 50)}, buttonOrListId=${uazButtonOrListId}, wasSentByApi=${uazWasSentByApi}`);
         
         // Skip messages sent by API to prevent loops
         if (uazWasSentByApi) {
