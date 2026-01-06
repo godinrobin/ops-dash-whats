@@ -189,6 +189,14 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactIns
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Validate video format - UAZAPI only accepts MP4
+      if (attachDialog.type === 'video' && !file.type.includes('mp4') && !file.name.toLowerCase().endsWith('.mp4')) {
+        toast.error('Formato de vídeo inválido. Apenas arquivos MP4 são aceitos.');
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        return;
+      }
       setMediaFile(file);
     }
   };
@@ -196,7 +204,7 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactIns
   const getAttachTitle = () => {
     switch (attachDialog.type) {
       case 'image': return 'Enviar Imagem';
-      case 'video': return 'Enviar Vídeo';
+      case 'video': return 'Enviar Vídeo (apenas MP4)';
       case 'document': return 'Enviar Documento';
       case 'audio': return 'Enviar Áudio';
     }
@@ -205,7 +213,7 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactIns
   const getAcceptTypes = () => {
     switch (attachDialog.type) {
       case 'image': return 'image/*';
-      case 'video': return 'video/*';
+      case 'video': return 'video/mp4,.mp4';
       case 'document': return '.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv';
       case 'audio': return 'audio/*';
     }
