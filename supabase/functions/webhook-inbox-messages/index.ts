@@ -767,23 +767,54 @@ serve(async (req) => {
         const uazSender = uazMsg.sender || '';
         const uazSenderName = uazMsg.senderName || uazMsg.pushName || '';
         // UazAPI special fields for interactive responses (polls, buttons, lists)
-        const uazVote = uazMsg.vote || ''; // Poll vote response
+        const uazVoteRaw = uazMsg.vote || ''; // Poll vote response (can be JSON or string)
         const uazConvertOptions = uazMsg.convertOptions || ''; // Converted options text from polls/lists/buttons
         const uazButtonOrListId = uazMsg.buttonOrListid || ''; // Button or list item ID selected
+        const uazSelectedName = uazMsg.selectedName || ''; // Selected option name (buttons/lists)
+        const uazSelectedId = uazMsg.selectedId || ''; // Selected option ID
         
-        // Determine text content: prioritize vote/convertOptions/buttonOrListId for interactive responses
-        let uazText = uazMsg.text || '';
-        if (!uazText && uazVote) {
-          uazText = uazVote; // Use poll vote as text
+        // Parse vote if it's JSON (poll responses can come as JSON with selectedOptions)
+        let uazVote = '';
+        if (uazVoteRaw) {
+          if (typeof uazVoteRaw === 'object') {
+            // Handle object format: { selectedOptions: ['option1'], ... }
+            const selectedOptions = uazVoteRaw.selectedOptions || uazVoteRaw.options || [];
+            uazVote = Array.isArray(selectedOptions) ? selectedOptions[0] || '' : String(selectedOptions);
+            console.log(`[UAZAPI-WEBHOOK] Parsed vote from object: ${uazVote}`);
+          } else {
+            uazVote = String(uazVoteRaw);
+          }
+        }
+        
+        // Extract text from content if it's an object with text field
+        let contentText = '';
+        if (uazMsg.content) {
+          if (typeof uazMsg.content === 'object' && uazMsg.content.text) {
+            contentText = uazMsg.content.text;
+          } else if (typeof uazMsg.content === 'string') {
+            contentText = uazMsg.content;
+          }
+        }
+        
+        // Determine text content: prioritize interactive response fields, then content.text, then text
+        let uazText = uazMsg.text || contentText || '';
+        
+        // Override with interactive response data if available
+        if (uazVote) {
+          uazText = uazVote;
           console.log(`[UAZAPI-WEBHOOK] Using vote field as text: ${uazVote}`);
-        }
-        if (!uazText && uazConvertOptions) {
-          uazText = uazConvertOptions; // Use converted options as text
+        } else if (uazConvertOptions) {
+          uazText = uazConvertOptions;
           console.log(`[UAZAPI-WEBHOOK] Using convertOptions field as text: ${uazConvertOptions}`);
-        }
-        if (!uazText && uazButtonOrListId) {
-          uazText = uazButtonOrListId; // Use button/list ID as text
+        } else if (uazSelectedName) {
+          uazText = uazSelectedName;
+          console.log(`[UAZAPI-WEBHOOK] Using selectedName field as text: ${uazSelectedName}`);
+        } else if (uazButtonOrListId) {
+          uazText = uazButtonOrListId;
           console.log(`[UAZAPI-WEBHOOK] Using buttonOrListid field as text: ${uazButtonOrListId}`);
+        } else if (uazSelectedId) {
+          uazText = uazSelectedId;
+          console.log(`[UAZAPI-WEBHOOK] Using selectedId field as text: ${uazSelectedId}`);
         }
         
         const uazMessageType = uazMsg.messageType || 'conversation';
@@ -793,7 +824,7 @@ serve(async (req) => {
         const uazFileUrl = uazMsg.fileURL || '';
         const uazWasSentByApi = uazMsg.wasSentByApi === true;
         
-        console.log(`[UAZAPI-WEBHOOK] chatid=${uazChatid}, sender=${uazSender}, fromMe=${uazFromMe}, text=${uazText.substring(0, 50)}, vote=${uazVote}, convertOptions=${uazConvertOptions.substring(0, 50)}, buttonOrListId=${uazButtonOrListId}, wasSentByApi=${uazWasSentByApi}`);
+        console.log(`[UAZAPI-WEBHOOK] chatid=${uazChatid}, sender=${uazSender}, fromMe=${uazFromMe}, text=${uazText.substring(0, 50)}, vote=${uazVote}, convertOptions=${uazConvertOptions.substring(0, 50)}, selectedName=${uazSelectedName}, buttonOrListId=${uazButtonOrListId}, wasSentByApi=${uazWasSentByApi}`);
         
         // Skip messages sent by API to prevent loops
         if (uazWasSentByApi) {
