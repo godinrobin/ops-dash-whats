@@ -42,6 +42,141 @@ serve(async (req) => {
       );
     }
 
+    // Fetch assigned instances with their provider info
+    const assignedInstanceIds = campaign.assigned_instances || [];
+    if (assignedInstanceIds.length === 0) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'No instances assigned' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { data: instances } = await supabaseClient
+      .from('maturador_instances')
+      .select('*, api_provider, uazapi_token')
+      .in('id', assignedInstanceIds)
+      .in('status', ['connected', 'open']);
+
+    if (!instances || instances.length === 0) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'No connected instances found' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`Found ${instances.length} connected instances`);
+
+    // Determine if we should use UAZAPI native sender
+    const firstInstance = instances[0];
+    const useUazapiNative = firstInstance.api_provider === 'uazapi' && !campaign.flow_id;
+
+    // Check if campaign uses a flow - flows must use individual sending
+    const flowId = campaign.flow_id;
+    let flow: any = null;
+    
+    if (flowId) {
+      const { data: flowData, error: flowError } = await supabaseClient
+        .from('inbox_flows')
+        .select('*')
+        .eq('id', flowId)
+        .single();
+      
+      if (flowError || !flowData) {
+        console.error('Flow not found:', flowError);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Flow not found' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      flow = flowData;
+      console.log(`Using flow: ${flow.name} (${flowId})`);
+    }
+
+    // UAZAPI Native Sender for simple campaigns (no flow)
+    if (useUazapiNative) {
+      console.log('Using UAZAPI native sender endpoint');
+      
+      const phoneNumbers = campaign.phone_numbers as string[];
+      const messageVariations = campaign.message_variations as string[];
+      const mediaType = campaign.media_type || 'text';
+      const mediaUrl = campaign.media_url || '';
+
+      // Use the first instance for UAZAPI native sending
+      const instance = firstInstance;
+
+      try {
+        // Build messages for advanced endpoint (supports message variations)
+        const messages = phoneNumbers.map((phone, index) => {
+          const cleaned = phone.replace(/\D/g, '');
+          const message = messageVariations.length > 0 
+            ? messageVariations[index % messageVariations.length]
+            : '';
+
+          const msg: any = {
+            number: cleaned,
+            type: mediaType === 'text' ? 'text' : mediaType,
+          };
+
+          if (mediaType === 'text') {
+            msg.text = message;
+          } else {
+            msg.file = mediaUrl;
+            msg.text = message; // caption
+            if (mediaType === 'document') {
+              msg.docName = 'document';
+            }
+          }
+
+          return msg;
+        });
+
+        // Call UAZAPI sender edge function
+        const senderResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/blaster-uazapi-sender`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+          },
+          body: JSON.stringify({
+            action: 'create-advanced',
+            campaignId,
+            instanceId: instance.id,
+            messages,
+            delayMin: campaign.delay_min || 5,
+            delayMax: campaign.delay_max || 15,
+            scheduledFor: 1, // Start immediately
+            campaignName: campaign.name,
+          }),
+        });
+
+        const senderResult = await senderResponse.json();
+        console.log('UAZAPI sender result:', JSON.stringify(senderResult));
+
+        if (!senderResult.success) {
+          throw new Error(senderResult.error || 'Failed to create UAZAPI campaign');
+        }
+
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            mode: 'uazapi_native',
+            folderId: senderResult.folder_id,
+            count: senderResult.count,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+
+      } catch (error: any) {
+        console.error('UAZAPI native sender error:', error.message);
+        // Fall back to individual sending if native fails
+        console.log('Falling back to individual message sending...');
+      }
+    }
+
+    // Fallback: Individual message sending (for Evolution API, flows, or UAZAPI fallback)
+    console.log('Using individual message sending mode');
+
     // Fetch user's Evolution API config
     let { data: config } = await supabaseClient
       .from('maturador_config')
@@ -70,53 +205,6 @@ serve(async (req) => {
       }
     } else {
       console.log('Using user Evolution API config');
-    }
-
-    // Fetch assigned instances
-    const assignedInstanceIds = campaign.assigned_instances || [];
-    if (assignedInstanceIds.length === 0) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'No instances assigned' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const { data: instances } = await supabaseClient
-      .from('maturador_instances')
-      .select('*, api_provider, uazapi_token')
-      .in('id', assignedInstanceIds)
-      .in('status', ['connected', 'open']);
-
-    if (!instances || instances.length === 0) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'No connected instances found' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    console.log(`Found ${instances.length} connected instances`);
-
-    // Check if campaign uses a flow
-    const flowId = campaign.flow_id;
-    let flow: any = null;
-    
-    if (flowId) {
-      const { data: flowData, error: flowError } = await supabaseClient
-        .from('inbox_flows')
-        .select('*')
-        .eq('id', flowId)
-        .single();
-      
-      if (flowError || !flowData) {
-        console.error('Flow not found:', flowError);
-        return new Response(
-          JSON.stringify({ success: false, error: 'Flow not found' }),
-          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      flow = flowData;
-      console.log(`Using flow: ${flow.name} (${flowId})`);
     }
 
     // Update campaign status to running
@@ -370,6 +458,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: true, 
+        mode: 'individual',
         processed: endIndex - (campaign.current_index || 0),
         sentCount,
         failedCount,
