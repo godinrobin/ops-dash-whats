@@ -1431,6 +1431,198 @@ export const PropertiesPanel = ({
           </div>
         );
 
+      case 'interactiveBlock':
+        const interactionType = (nodeData.interactionType as string) || 'button';
+        const interactiveChoices = (nodeData.choices as string[]) || [];
+        
+        const addInteractiveChoice = () => {
+          const newChoices = [...interactiveChoices, ''];
+          onUpdateNode(selectedNode.id, { choices: newChoices });
+        };
+        
+        const removeInteractiveChoice = (index: number) => {
+          const newChoices = interactiveChoices.filter((_, i) => i !== index);
+          onUpdateNode(selectedNode.id, { choices: newChoices });
+        };
+        
+        const updateInteractiveChoice = (index: number, value: string) => {
+          const newChoices = interactiveChoices.map((c, i) => i === index ? value : c);
+          onUpdateNode(selectedNode.id, { choices: newChoices });
+        };
+        
+        const getInteractionTypeDescription = () => {
+          switch (interactionType) {
+            case 'poll':
+              return 'Cria uma enquete com opções de votação.';
+            case 'button':
+              return 'Cria botões clicáveis para ações rápidas.';
+            case 'imageButton':
+              return 'Envia uma imagem com botões interativos.';
+            case 'list':
+              return 'Cria um menu de lista com seções organizadas.';
+            default:
+              return '';
+          }
+        };
+        
+        const getChoicePlaceholder = () => {
+          switch (interactionType) {
+            case 'poll':
+              return 'Opção de votação';
+            case 'button':
+              return 'Texto do Botão|id_botao';
+            case 'imageButton':
+              return 'Texto do Botão|id_botao';
+            case 'list':
+              return '[Seção] ou Item|id|descrição';
+            default:
+              return 'Opção';
+          }
+        };
+        
+        const getChoiceHint = () => {
+          switch (interactionType) {
+            case 'poll':
+              return 'Uma opção por linha. Ex: "Manhã", "Tarde", "Noite"';
+            case 'button':
+              return 'Formato: "texto|id" ou apenas "texto". Para URL: "Ver Site|https://url.com". Para copiar: "Copiar Código|copy:CODIGO123"';
+            case 'imageButton':
+              return 'Mesmo formato dos botões. Adicione a URL da imagem acima.';
+            case 'list':
+              return 'Use [Nome] para criar uma seção. Itens: "texto|id|descrição"';
+            default:
+              return '';
+          }
+        };
+        
+        return (
+          <div className="space-y-4">
+            <div className="bg-gradient-to-r from-fuchsia-500/10 to-pink-500/10 border border-fuchsia-500/20 rounded-lg p-3 mb-2">
+              <p className="text-xs text-fuchsia-400">
+                Bloco Interativo permite enviar mensagens com interações nativas do WhatsApp.
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Tipo de Interação</Label>
+              <Select
+                value={interactionType}
+                onValueChange={(value) => onUpdateNode(selectedNode.id, { interactionType: value, choices: [] })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="poll">📊 Enquete</SelectItem>
+                  <SelectItem value="button">🔘 Mensagem com Botões</SelectItem>
+                  <SelectItem value="imageButton">🖼️ Imagem com Botões</SelectItem>
+                  <SelectItem value="list">📋 Menu Lista</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">{getInteractionTypeDescription()}</p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Texto Principal *</Label>
+              <Textarea
+                placeholder="Digite a mensagem que acompanha a interação..."
+                value={(nodeData.text as string) || ''}
+                onChange={(e) => onUpdateNode(selectedNode.id, { text: e.target.value })}
+                rows={3}
+              />
+            </div>
+            
+            {interactionType !== 'poll' && (
+              <div className="space-y-2">
+                <Label>Texto do Rodapé (opcional)</Label>
+                <Input
+                  placeholder="Rodapé da mensagem"
+                  value={(nodeData.footerText as string) || ''}
+                  onChange={(e) => onUpdateNode(selectedNode.id, { footerText: e.target.value })}
+                />
+              </div>
+            )}
+            
+            {interactionType === 'imageButton' && (
+              <div className="space-y-2">
+                <Label>URL da Imagem *</Label>
+                <Input
+                  placeholder="https://exemplo.com/imagem.jpg"
+                  value={(nodeData.imageUrl as string) || ''}
+                  onChange={(e) => onUpdateNode(selectedNode.id, { imageUrl: e.target.value })}
+                />
+              </div>
+            )}
+            
+            {interactionType === 'list' && (
+              <div className="space-y-2">
+                <Label>Texto do Botão da Lista *</Label>
+                <Input
+                  placeholder="Ver opções"
+                  value={(nodeData.listButton as string) || ''}
+                  onChange={(e) => onUpdateNode(selectedNode.id, { listButton: e.target.value })}
+                />
+              </div>
+            )}
+            
+            {interactionType === 'poll' && (
+              <div className="space-y-2">
+                <Label>Seleções Permitidas</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={(nodeData.selectableCount as number) || 1}
+                  onChange={(e) => onUpdateNode(selectedNode.id, { selectableCount: parseInt(e.target.value) || 1 })}
+                />
+                <p className="text-xs text-muted-foreground">Quantas opções o usuário pode selecionar</p>
+              </div>
+            )}
+            
+            <div className="space-y-2 border-t pt-4">
+              <div className="flex items-center justify-between">
+                <Label>Opções *</Label>
+                <Button size="sm" variant="outline" onClick={addInteractiveChoice}>
+                  <Plus className="h-3 w-3 mr-1" />
+                  Adicionar
+                </Button>
+              </div>
+              
+              <div className="space-y-2">
+                {interactiveChoices.map((choice, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      placeholder={getChoicePlaceholder()}
+                      value={choice}
+                      onChange={(e) => updateInteractiveChoice(index, e.target.value)}
+                      className="flex-1"
+                    />
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-9 w-9 shrink-0"
+                      onClick={() => removeInteractiveChoice(index)}
+                    >
+                      <Minus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                {interactiveChoices.length === 0 && (
+                  <p className="text-xs text-muted-foreground text-center py-2">
+                    Clique em "Adicionar" para criar opções
+                  </p>
+                )}
+              </div>
+              
+              <p className="text-xs text-muted-foreground">{getChoiceHint()}</p>
+            </div>
+            
+            <div className="p-2 rounded bg-amber-500/10 border border-amber-500/30 text-xs text-amber-400">
+              <strong>Nota:</strong> Funciona apenas com UazAPI. Botões mistos (resposta + URL/call) podem não aparecer corretamente no WhatsApp Web.
+            </div>
+          </div>
+        );
+
       default:
         return null;
     }
