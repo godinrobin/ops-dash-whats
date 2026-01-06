@@ -35,7 +35,7 @@ const nodeCategories = [
       { type: 'audio', label: 'Áudio', icon: Mic, color: 'bg-orange-500' },
       { type: 'video', label: 'Vídeo', icon: Video, color: 'bg-pink-500' },
       { type: 'document', label: 'Documento', icon: FileText, color: 'bg-red-500' },
-      { type: 'interactiveBlock', label: 'Bloco Interativo', icon: MousePointer2, color: 'bg-gradient-to-r from-fuchsia-500 to-pink-500' },
+      { type: 'interactiveBlock', label: 'Mensagem Interativa', icon: MousePointer2, color: 'bg-gradient-to-r from-fuchsia-500 to-pink-500' },
     ],
   },
   {

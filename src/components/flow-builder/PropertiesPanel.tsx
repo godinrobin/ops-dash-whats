@@ -1499,7 +1499,7 @@ export const PropertiesPanel = ({
           <div className="space-y-4">
             <div className="bg-gradient-to-r from-fuchsia-500/10 to-pink-500/10 border border-fuchsia-500/20 rounded-lg p-3 mb-2">
               <p className="text-xs text-fuchsia-400">
-                Bloco Interativo permite enviar mensagens com interações nativas do WhatsApp.
+                Mensagem Interativa permite enviar mensagens com interações nativas do WhatsApp. Cada opção gera uma saída no fluxo.
               </p>
             </div>
             
@@ -1618,7 +1618,7 @@ export const PropertiesPanel = ({
             </div>
             
             <div className="p-2 rounded bg-amber-500/10 border border-amber-500/30 text-xs text-amber-400">
-              <strong>Nota:</strong> Funciona apenas com UazAPI. Botões mistos (resposta + URL/call) podem não aparecer corretamente no WhatsApp Web.
+              <strong>Nota:</strong> Podem não aparecer corretamente no WhatsApp Web, apenas no dispositivo mobile.
             </div>
           </div>
         );

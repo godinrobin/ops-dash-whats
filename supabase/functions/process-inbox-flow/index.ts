@@ -2388,7 +2388,95 @@ Regras RIGOROSAS:
 
           case 'interactiveBlock':
             // Interactive Block node - sends polls, buttons, image+buttons, or list menus via UazAPI /send/menu
+            // Then waits for user response and routes based on the selected option
             console.log(`[${runId}] Interactive Block node: processing`);
+            
+            // Check if already sent (idempotency)
+            if (sentNodeIds.includes(currentNodeId)) {
+              console.log(`[${runId}] Interactive block ${currentNodeId} already sent, waiting for input`);
+              // Still need to wait for input - check if we have user input to route
+              if (userInput !== undefined && userInput !== null) {
+                // User has responded - find matching choice and route
+                const savedChoices = (currentNode.data.choices as string[]) || [];
+                const userResponse = String(userInput).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                
+                console.log(`[${runId}] Interactive block: user responded with "${userResponse}"`);
+                
+                // Find matching choice index
+                let matchedChoiceIndex = -1;
+                for (let i = 0; i < savedChoices.length; i++) {
+                  const choice = savedChoices[i].trim();
+                  // Skip section headers in list type
+                  if (choice.startsWith('[') && choice.endsWith(']')) continue;
+                  
+                  // Get the display text and id (format: "text|id|description" or "text|id" or "text")
+                  const parts = choice.split('|');
+                  const choiceText = parts[0].trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                  const choiceId = parts[1]?.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') || choiceText;
+                  
+                  // Match by text or id
+                  if (userResponse === choiceText || userResponse === choiceId || 
+                      userResponse.includes(choiceText) || choiceText.includes(userResponse)) {
+                    matchedChoiceIndex = i;
+                    console.log(`[${runId}] Matched choice ${i}: "${choice}"`);
+                    break; // Take the first match only
+                  }
+                }
+                
+                // Save the choice to variables
+                variables._interactive_response = userInput;
+                variables._interactive_choice_index = matchedChoiceIndex;
+                
+                // Find the edge for the matched choice
+                if (matchedChoiceIndex >= 0) {
+                  const choiceEdge = edges.find(e => e.source === currentNodeId && e.sourceHandle === `choice-${matchedChoiceIndex}`);
+                  if (choiceEdge) {
+                    currentNodeId = choiceEdge.target;
+                    console.log(`[${runId}] Routing to choice-${matchedChoiceIndex} -> ${currentNodeId}`);
+                  } else {
+                    // No specific edge for this choice, try default
+                    const defaultInteractiveEdge = edges.find(e => e.source === currentNodeId && !e.sourceHandle);
+                    if (defaultInteractiveEdge) {
+                      currentNodeId = defaultInteractiveEdge.target;
+                    } else {
+                      continueProcessing = false;
+                    }
+                  }
+                } else {
+                  // No match found, try to find any connected edge
+                  console.log(`[${runId}] No matching choice found for "${userResponse}"`);
+                  const anyEdge = edges.find(e => e.source === currentNodeId);
+                  if (anyEdge) {
+                    currentNodeId = anyEdge.target;
+                  } else {
+                    continueProcessing = false;
+                  }
+                }
+                break;
+              }
+              
+              // No user input yet, wait
+              await supabaseClient
+                .from('inbox_flow_sessions')
+                .update({
+                  current_node_id: currentNodeId,
+                  variables,
+                  last_interaction: new Date().toISOString(),
+                  processing: false,
+                  processing_started_at: null,
+                })
+                .eq('id', sessionId);
+              
+              continueProcessing = false;
+              return new Response(JSON.stringify({ 
+                success: true, 
+                currentNode: currentNodeId,
+                actions: processedActions,
+                waitingForInput: true
+              }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              });
+            }
             
             const interactionType = (currentNode.data.interactionType as string) || 'button';
             const interactiveText = replaceVariables(currentNode.data.text as string || '', variables);
@@ -2460,6 +2548,9 @@ Regras RIGOROSAS:
                   const interactiveTypeLabel = interactionType === 'poll' ? 'Enquete' : interactionType === 'list' ? 'Menu Lista' : 'Botões';
                   processedActions.push(`Sent interactive block (${interactiveTypeLabel})`);
                   await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, `[${interactiveTypeLabel}] ${interactiveText}`, 'text', flow.id);
+                  
+                  // Mark as sent for idempotency
+                  sentNodeIds.push(currentNodeId);
                 } else {
                   console.error(`[${runId}] Interactive block error:`, interactiveResult);
                   processedActions.push(`Interactive block error: ${JSON.stringify(interactiveResult)}`);
@@ -2469,20 +2560,45 @@ Regras RIGOROSAS:
                 processedActions.push('Interactive block error');
               }
             } else if (apiProvider !== 'uazapi') {
-              console.log(`[${runId}] Interactive block only supported on UazAPI`);
-              processedActions.push('Interactive block not supported (requires UazAPI)');
+              // For non-UazAPI, send as regular text message with options
+              const fallbackMessage = `${interactiveText}\n\n${interactiveChoices.map((c, i) => `${i + 1}. ${c.split('|')[0]}`).join('\n')}`;
+              const fallbackResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, fallbackMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken);
+              if (fallbackResult.ok) {
+                await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, fallbackMessage, 'text', flow.id);
+                sentNodeIds.push(currentNodeId);
+                processedActions.push('Sent interactive block as text (fallback)');
+              } else {
+                processedActions.push('Interactive block fallback failed');
+              }
             } else {
               console.log(`[${runId}] Missing interactive block configuration`);
               processedActions.push('Interactive block skipped (missing config)');
             }
             
-            const interactiveEdge = edges.find(e => e.source === currentNodeId);
-            if (interactiveEdge) {
-              currentNodeId = interactiveEdge.target;
-            } else {
-              continueProcessing = false;
-            }
-            break;
+            // Wait for user input after sending - save state and release lock
+            await supabaseClient
+              .from('inbox_flow_sessions')
+              .update({
+                current_node_id: currentNodeId,
+                variables,
+                last_interaction: new Date().toISOString(),
+                processing: false,
+                processing_started_at: null,
+              })
+              .eq('id', sessionId);
+            
+            processedActions.push('Waiting for user selection');
+            continueProcessing = false;
+            
+            // Return early - lock already released in the update above
+            return new Response(JSON.stringify({ 
+              success: true, 
+              currentNode: currentNodeId,
+              actions: processedActions,
+              waitingForInput: true
+            }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
 
           default:
             console.log(`[${runId}] Unknown node type: ${currentNode.type}`);
