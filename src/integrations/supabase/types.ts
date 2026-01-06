@@ -3412,6 +3412,7 @@ export type Database = {
       }
     }
     Functions: {
+      cleanup_old_data: { Args: never; Returns: undefined }
       cleanup_old_webhook_diagnostics: { Args: never; Returns: undefined }
       has_role: {
         Args: {
