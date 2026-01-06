@@ -12,6 +12,7 @@ import { ArrowLeft, Plus, RefreshCw, Loader2, Smartphone, QrCode, Trash2, PowerO
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { splashedToast as toast } from "@/hooks/useSplashedToast";
+import { useAutoCheckConnectingInstances } from "@/hooks/useAutoCheckConnectingInstances";
 import { QRCodeModal, setQrCodeCache, clearQrCodeCache } from "@/components/QRCodeModal";
 import { PairCodeModal } from "@/components/PairCodeModal";
 import { Header } from "@/components/Header";
@@ -66,7 +67,7 @@ export default function TagWhatsAddNumber() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
 
-  const fetchInstances = async () => {
+  const fetchInstances = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -85,11 +86,14 @@ export default function TagWhatsAddNumber() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     fetchInstances();
-  }, [user]);
+  }, [fetchInstances]);
+
+  // Auto-sync while there are instances stuck in "connecting" (updates without needing manual refresh)
+  useAutoCheckConnectingInstances(instances, fetchInstances, { enabled: !!user, intervalMs: 4000 });
 
   const handleRefresh = async () => {
     setRefreshing(true);

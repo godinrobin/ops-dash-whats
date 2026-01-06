@@ -15,6 +15,7 @@ import { ArrowLeft, MessageSquare, Smartphone, GitBranch, Tag, Plus, RefreshCw, 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
+import { useAutoCheckConnectingInstances } from "@/hooks/useAutoCheckConnectingInstances";
 import { toast } from "sonner";
 import automatizapIcon from "@/assets/automatizap-icon.png";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
@@ -121,6 +122,27 @@ export default function InboxDashboard() {
       setLoading(false);
     }
   };
+
+  const refreshInstancesOnly = useCallback(async () => {
+    const userId = effectiveUserId || user?.id;
+    if (!userId) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('maturador_instances')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setInstances(data || []);
+    } catch (error) {
+      console.error('Error refreshing instances:', error);
+    }
+  }, [effectiveUserId, user?.id]);
+
+  // While there are instances in "connecting", keep polling status so it flips to "connected" automatically
+  useAutoCheckConnectingInstances(instances, refreshInstancesOnly, { enabled: !!(effectiveUserId || user?.id), intervalMs: 4000 });
 
   // Fase 2: Carrega dados secundários em background (contatos e mensagens)
   const fetchSecondaryData = async () => {
