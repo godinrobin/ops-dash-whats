@@ -1192,10 +1192,11 @@ serve(async (req) => {
                 }
               }
               
-              // Check if current node is waiting for input (waitInput, menu, or paymentIdentifier)
+              // Check if current node is waiting for input (waitInput, menu, interactiveBlock, or paymentIdentifier)
               const isWaitingForInput = currentNode && (
                 currentNode.type === 'waitInput' || 
                 currentNode.type === 'menu' || 
+                currentNode.type === 'interactiveBlock' ||
                 currentNode.type === 'paymentIdentifier'
               );
               
@@ -1229,11 +1230,19 @@ serve(async (req) => {
                     console.error('[UAZAPI-WEBHOOK] Error calling process-inbox-flow for payment:', flowError);
                   }
                 } else {
-                  // For waitInput and menu nodes
+                  // For waitInput, menu and interactiveBlock nodes
                   // Accept ANY message type (text, audio, video, image, etc.)
                   // For media without text, we use "enviou mídia" as the value
                   const isMediaMessage = ['image', 'audio', 'video', 'document', 'sticker'].includes(messageType);
                   const hasTextContent = uazText && uazText.trim().length > 0;
+                  
+                  // Interactive blocks require a real selection text (avoid routing with empty string)
+                  if (currentNode.type === 'interactiveBlock' && !hasTextContent) {
+                    console.log('[UAZAPI-WEBHOOK] interactiveBlock received empty input (no vote/convertOptions/selectedName). Skipping flow advance.');
+                    return new Response(JSON.stringify({ success: true, skipped: true, reason: 'interactive_empty_input' }), {
+                      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                    });
+                  }
                   
                   // Determine what to pass as userInput
                   let userInputValue = uazText || '';
@@ -1244,7 +1253,6 @@ serve(async (req) => {
                   }
                   
                   console.log(`[UAZAPI-WEBHOOK] Valid input received: "${userInputValue?.substring(0, 50)}"`);
-                  
                   // Cancel any pending timeout job for this session
                   await supabaseClient
                     .from('inbox_flow_delay_jobs')
