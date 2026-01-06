@@ -778,11 +778,25 @@ serve(async (req) => {
         if (uazVoteRaw) {
           if (typeof uazVoteRaw === 'object') {
             // Handle object format: { selectedOptions: ['option1'], ... }
-            const selectedOptions = uazVoteRaw.selectedOptions || uazVoteRaw.options || [];
+            const selectedOptions = (uazVoteRaw as any).selectedOptions || (uazVoteRaw as any).options || [];
             uazVote = Array.isArray(selectedOptions) ? selectedOptions[0] || '' : String(selectedOptions);
             console.log(`[UAZAPI-WEBHOOK] Parsed vote from object: ${uazVote}`);
           } else {
-            uazVote = String(uazVoteRaw);
+            const voteStr = String(uazVoteRaw);
+            const trimmed = voteStr.trim();
+            // Sometimes vote comes as a JSON string
+            if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+              try {
+                const parsed = JSON.parse(trimmed);
+                const selectedOptions = parsed?.selectedOptions || parsed?.options || [];
+                uazVote = Array.isArray(selectedOptions) ? selectedOptions[0] || '' : String(selectedOptions || '');
+                console.log(`[UAZAPI-WEBHOOK] Parsed vote from JSON string: ${uazVote}`);
+              } catch {
+                uazVote = voteStr;
+              }
+            } else {
+              uazVote = voteStr;
+            }
           }
         }
         
@@ -823,9 +837,22 @@ serve(async (req) => {
         const uazTimestamp = uazMsg.messageTimestamp || Date.now();
         const uazFileUrl = uazMsg.fileURL || '';
         const uazWasSentByApi = uazMsg.wasSentByApi === true;
+
+        // Fallback: some interactive replies (especially polls) arrive without message text/vote,
+        // but the updated chat payload contains the selected text in wa_lastMessageTextVote.
+        if ((!uazText || uazText.trim().length === 0) && (payload as any)?.chat?.wa_lastMessageTextVote && (payload as any)?.chat?.wa_chatid === uazChatid) {
+          const chatTs = Number((payload as any).chat.wa_lastMsgTimestamp || 0);
+          const delta = chatTs ? Math.abs(chatTs - Number(uazTimestamp)) : null;
+          const isClose = delta === null ? true : delta < 120000; // 2 minutes
+          const chatType = String((payload as any).chat.wa_lastMessageType || '');
+          const looksInteractive = chatType.toLowerCase().includes('poll') || !!uazVoteRaw || !!uazConvertOptions || !!uazButtonOrListId || !!uazSelectedName || !!uazSelectedId;
+          if (isClose && looksInteractive) {
+            uazText = String((payload as any).chat.wa_lastMessageTextVote || '');
+            console.log(`[UAZAPI-WEBHOOK] Fallback to chat.wa_lastMessageTextVote: ${uazText.substring(0, 80)}`);
+          }
+        }
         
         console.log(`[UAZAPI-WEBHOOK] chatid=${uazChatid}, sender=${uazSender}, fromMe=${uazFromMe}, text=${uazText.substring(0, 50)}, vote=${uazVote}, convertOptions=${uazConvertOptions.substring(0, 50)}, selectedName=${uazSelectedName}, buttonOrListId=${uazButtonOrListId}, wasSentByApi=${uazWasSentByApi}`);
-        
         // Skip messages sent by API to prevent loops
         if (uazWasSentByApi) {
           console.log('[UAZAPI-WEBHOOK] Skipping message sent by API (wasSentByApi=true)');
