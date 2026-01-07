@@ -541,6 +541,7 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
 
     let labelApplied = false;
     let alreadyHasLabel = false;
+    let errorMessage: string | null = null;
 
     if (isPixPayment) {
       console.log("[TAG-WHATS] PIX payment detected! Checking if already labeled...");
@@ -593,27 +594,36 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
 
         if (pagoLabelId) {
           // Apply label to chat
+          const labelPayload = {
+            number: phone,
+            add_labelid: pagoLabelId,
+          };
+          console.log("[TAG-WHATS] Applying label with payload:", JSON.stringify(labelPayload));
+          console.log("[TAG-WHATS] API URL:", `${uazapiBaseUrl}/chat/labels`);
+          
           const labelResponse = await fetch(`${uazapiBaseUrl}/chat/labels`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
               "token": uazapiToken,
             },
-            body: JSON.stringify({
-              number: phone,
-              add_labelid: pagoLabelId,
-            }),
+            body: JSON.stringify(labelPayload),
           });
+
+          const labelResponseText = await labelResponse.text();
+          console.log("[TAG-WHATS] Label API response status:", labelResponse.status);
+          console.log("[TAG-WHATS] Label API response:", labelResponseText);
 
           if (labelResponse.ok) {
             labelApplied = true;
             console.log("[TAG-WHATS] Label applied successfully!");
           } else {
-            const labelError = await labelResponse.text();
-            console.error("[TAG-WHATS] Failed to apply label:", labelError);
+            console.error("[TAG-WHATS] Failed to apply label. Status:", labelResponse.status, "Response:", labelResponseText);
+            errorMessage = `Failed to apply label: ${labelResponseText}`;
           }
         } else {
           console.log("[TAG-WHATS] No 'Pago' label found. Please create it in WhatsApp Business first.");
+          errorMessage = "No 'Pago' label configured - create it in WhatsApp Business";
         }
       } // Close !alreadyHasLabel
     } // Close isPixPayment
@@ -847,6 +857,7 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
       conversion_error: conversionError,
       ctwa_clid: ctwaClid,
       extracted_value: extractedValue,
+      error_message: errorMessage,
     });
 
     return new Response(
