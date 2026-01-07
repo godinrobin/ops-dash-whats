@@ -1063,7 +1063,7 @@ Regras:
         // Get instance config
         const { data: inst } = await supabaseClient
           .from('maturador_instances')
-          .select('id, api_provider, uazapi_token')
+          .select('id, api_provider, uazapi_token, status')
           .eq('instance_name', instanceName)
           .eq('user_id', user.id)
           .single();
@@ -1072,6 +1072,30 @@ Regras:
 
         if (inst?.api_provider === 'uazapi') {
           const config = await getInstanceApiConfig(supabaseClient, inst.id);
+
+          // If forceNew is true OR DB status is disconnected, we should force a new connection attempt
+          const shouldForceReconnect = forceNew === true || inst?.status === 'disconnected';
+          
+          if (shouldForceReconnect) {
+            console.log('[UAZAPI-QR] forceNew or disconnected status detected, forcing reconnection...');
+            
+            // Step 0: First try to disconnect to reset the state
+            try {
+              console.log('[UAZAPI-QR] Step 0: Calling /instance/disconnect to reset state...');
+              await callWhatsAppApi(
+                config,
+                '/instance/disconnect',
+                'POST',
+                undefined,
+                false,
+                inst.uazapi_token || undefined
+              );
+              // Small delay to allow disconnect to complete
+              await new Promise(r => setTimeout(r, 500));
+            } catch (disconnectErr: any) {
+              console.log('[UAZAPI-QR] Disconnect error (may be normal if not connected):', disconnectErr?.message);
+            }
+          }
 
           // STEP 1: First check current status using /instance/status
           // Per UAZAPI docs: Use /instance/status to check connection state
@@ -1110,7 +1134,8 @@ Regras:
             
             console.log('[UAZAPI-QR] Connection check: isReallyConnected=', isReallyConnected, 'isConnectedByInstanceStatus=', isConnectedByInstanceStatus, 'isActuallyConnecting=', isActuallyConnecting);
             
-            if ((isReallyConnected || isConnectedByInstanceStatus) && !isActuallyConnecting) {
+            // Only return connected if NOT forcing new and truly connected
+            if (!shouldForceReconnect && (isReallyConnected || isConnectedByInstanceStatus) && !isActuallyConnecting) {
               console.log('[UAZAPI-QR] Already connected - updating DB status');
               await supabaseClient
                 .from('maturador_instances')
@@ -1156,20 +1181,58 @@ Regras:
                 connectRes?.qr?.base64 ||
                 null;
                 
-              // Double-check if it says connected (shouldn't happen if we checked status first)
+              // Double-check if it says connected
               const connectStatus = connectRes?.status;
               if (connectStatus?.connected === true && connectStatus?.loggedIn === true) {
                 console.log('[UAZAPI-QR] Connect returned connected=true - already connected');
-                await supabaseClient
-                  .from('maturador_instances')
-                  .update({ status: 'connected', qrcode: null, last_seen: new Date().toISOString() })
-                  .eq('instance_name', instanceName)
-                  .eq('user_id', user.id);
-                result = { base64: null, connected: true };
-                break;
+                // If forceNew and still getting connected, update and return
+                if (!qrcode) {
+                  await supabaseClient
+                    .from('maturador_instances')
+                    .update({ status: 'connected', qrcode: null, last_seen: new Date().toISOString() })
+                    .eq('instance_name', instanceName)
+                    .eq('user_id', user.id);
+                  result = { base64: null, connected: true };
+                  break;
+                }
               }
             } catch (connectErr: any) {
               console.log('[UAZAPI-QR] Connect error:', connectErr?.status, connectErr?.message);
+              
+              // STEP 3: If connect failed, try logout then connect again
+              if (shouldForceReconnect) {
+                try {
+                  console.log('[UAZAPI-QR] Step 3: Trying logout then connect...');
+                  await callWhatsAppApi(
+                    config,
+                    '/instance/logout',
+                    'POST',
+                    undefined,
+                    false,
+                    inst.uazapi_token || undefined
+                  );
+                  await new Promise(r => setTimeout(r, 1000));
+                  
+                  const retryRes = await callWhatsAppApi(
+                    config,
+                    '/instance/connect',
+                    'POST',
+                    undefined,
+                    false,
+                    inst.uazapi_token || undefined
+                  );
+                  console.log('[UAZAPI-QR] retry connect response:', JSON.stringify(retryRes).substring(0, 800));
+                  
+                  qrcode = 
+                    retryRes?.instance?.qrcode ||
+                    retryRes?.qrcode ||
+                    retryRes?.base64 ||
+                    retryRes?.qr?.base64 ||
+                    null;
+                } catch (retryErr: any) {
+                  console.log('[UAZAPI-QR] Retry after logout failed:', retryErr?.message);
+                }
+              }
             }
           }
         } else {
@@ -1187,7 +1250,12 @@ Regras:
             .eq('instance_name', instanceName)
             .eq('user_id', user.id);
         } else {
-          console.log('[UAZAPI-QR] No QR code obtained');
+          console.log('[UAZAPI-QR] No QR code obtained - updating status to disconnected');
+          await supabaseClient
+            .from('maturador_instances')
+            .update({ status: 'disconnected' })
+            .eq('instance_name', instanceName)
+            .eq('user_id', user.id);
         }
 
         result = { base64: qrcode };
