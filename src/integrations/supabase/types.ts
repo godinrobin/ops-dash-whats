@@ -119,6 +119,214 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_notify_configs: {
+        Row: {
+          admin_instance_ids: string[] | null
+          created_at: string
+          id: string
+          notifier_instance_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          admin_instance_ids?: string[] | null
+          created_at?: string
+          id?: string
+          notifier_instance_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          admin_instance_ids?: string[] | null
+          created_at?: string
+          id?: string
+          notifier_instance_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_notify_configs_notifier_instance_id_fkey"
+            columns: ["notifier_instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      admin_notify_daily_counts: {
+        Row: {
+          conversation_count: number
+          created_at: string
+          date: string
+          id: string
+          instance_id: string
+          limit_notified: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          conversation_count?: number
+          created_at?: string
+          date?: string
+          id?: string
+          instance_id: string
+          limit_notified?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          conversation_count?: number
+          created_at?: string
+          date?: string
+          id?: string
+          instance_id?: string
+          limit_notified?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_notify_daily_counts_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      admin_notify_instance_monitor: {
+        Row: {
+          config_id: string
+          created_at: string
+          id: string
+          instance_id: string
+          is_active: boolean
+          user_id: string
+        }
+        Insert: {
+          config_id: string
+          created_at?: string
+          id?: string
+          instance_id: string
+          is_active?: boolean
+          user_id: string
+        }
+        Update: {
+          config_id?: string
+          created_at?: string
+          id?: string
+          instance_id?: string
+          is_active?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_notify_instance_monitor_config_id_fkey"
+            columns: ["config_id"]
+            isOneToOne: false
+            referencedRelation: "admin_notify_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_notify_instance_monitor_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      admin_notify_lead_limits: {
+        Row: {
+          config_id: string
+          created_at: string
+          daily_limit: number
+          id: string
+          instance_id: string
+          is_active: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          config_id: string
+          created_at?: string
+          daily_limit?: number
+          id?: string
+          instance_id: string
+          is_active?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          config_id?: string
+          created_at?: string
+          daily_limit?: number
+          id?: string
+          instance_id?: string
+          is_active?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_notify_lead_limits_config_id_fkey"
+            columns: ["config_id"]
+            isOneToOne: false
+            referencedRelation: "admin_notify_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_notify_lead_limits_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      admin_notify_sales_monitor: {
+        Row: {
+          config_id: string
+          created_at: string
+          id: string
+          instance_id: string
+          is_active: boolean
+          user_id: string
+        }
+        Insert: {
+          config_id: string
+          created_at?: string
+          id?: string
+          instance_id: string
+          is_active?: boolean
+          user_id: string
+        }
+        Update: {
+          config_id?: string
+          created_at?: string
+          id?: string
+          instance_id?: string
+          is_active?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_notify_sales_monitor_config_id_fkey"
+            columns: ["config_id"]
+            isOneToOne: false
+            referencedRelation: "admin_notify_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_notify_sales_monitor_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       admin_role_audit_log: {
         Row: {
           action: string
