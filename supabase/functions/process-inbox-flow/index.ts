@@ -1213,18 +1213,53 @@ Regras RIGOROSAS:
               .eq('id', sessionId);
             
             // Create timeout job if timeout is enabled
+            // IMPORTANT: Check if there's already a pending delay job - don't overwrite it!
             if (timeoutAt) {
-              await supabaseClient
+              // First check if there's an existing scheduled delay job
+              const { data: existingJob } = await supabaseClient
                 .from('inbox_flow_delay_jobs')
-                .upsert({
-                  session_id: sessionId,
-                  user_id: session.user_id,
-                  run_at: timeoutAt,
-                  status: 'scheduled',
-                  attempts: 0,
-                }, { onConflict: 'session_id' });
+                .select('run_at, status')
+                .eq('session_id', sessionId)
+                .eq('status', 'scheduled')
+                .single();
               
-              console.log(`[${runId}] Timeout job created for session ${sessionId}, will expire at ${timeoutAt}`);
+              // Only create timeout job if there's no existing scheduled job, 
+              // OR if the existing job is set to run AFTER this timeout
+              // (we want the earlier one to fire first)
+              if (!existingJob) {
+                await supabaseClient
+                  .from('inbox_flow_delay_jobs')
+                  .upsert({
+                    session_id: sessionId,
+                    user_id: session.user_id,
+                    run_at: timeoutAt,
+                    status: 'scheduled',
+                    attempts: 0,
+                  }, { onConflict: 'session_id' });
+                
+                console.log(`[${runId}] Timeout job created for session ${sessionId}, will expire at ${timeoutAt}`);
+              } else {
+                const existingRunAt = new Date(existingJob.run_at).getTime();
+                const newTimeoutAt = new Date(timeoutAt).getTime();
+                
+                if (newTimeoutAt < existingRunAt) {
+                  // New timeout is earlier - update to use the timeout instead
+                  await supabaseClient
+                    .from('inbox_flow_delay_jobs')
+                    .update({
+                      run_at: timeoutAt,
+                      status: 'scheduled',
+                      attempts: 0,
+                      updated_at: new Date().toISOString(),
+                    })
+                    .eq('session_id', sessionId);
+                  
+                  console.log(`[${runId}] Updated job to earlier timeout: ${timeoutAt} (was: ${existingJob.run_at})`);
+                } else {
+                  // Existing delay job is earlier - keep it and let it fire first
+                  console.log(`[${runId}] Keeping existing delay job at ${existingJob.run_at} (timeout would be: ${timeoutAt})`);
+                }
+              }
             }
             
             processedActions.push(`Waiting for user input${timeoutAt ? ` (timeout: ${timeoutAt})` : ''}`);

@@ -115,6 +115,7 @@ serve(async (req) => {
         
         // More robust detection: check if we have a pending delay in variables
         const hasValidPendingDelay = pendingDelay && pendingDelay.resumeAt <= Date.now();
+        const hasPendingDelayNotReady = pendingDelay && pendingDelay.resumeAt > Date.now();
         
         // Check for pause schedule
         const hasPauseScheduled = sessionVars._pause_scheduled === true;
@@ -125,7 +126,25 @@ serve(async (req) => {
         const paymentNoResponseDelayKey = `_payment_no_response_delay_${session.current_node_id}`;
         const hasPaymentNoResponseDelay = sessionVars[paymentNoResponseDelayKey] !== undefined;
         
-        console.log(`[process-delay-queue] Session ${job.session_id}: isTimeoutJob=${isTimeoutJob}, isWaitingForInput=${isWaitingForInput}, isDelayNode=${isDelayNode}, isPaymentIdentifier=${isPaymentIdentifier}, hasValidPendingDelay=${hasValidPendingDelay}, hasPaymentNoResponseDelay=${hasPaymentNoResponseDelay}, hasPauseScheduled=${hasPauseScheduled}, pauseReady=${pauseReady}, nodeType=${currentNode?.type}`);
+        console.log(`[process-delay-queue] Session ${job.session_id}: isTimeoutJob=${isTimeoutJob}, isWaitingForInput=${isWaitingForInput}, isDelayNode=${isDelayNode}, isPaymentIdentifier=${isPaymentIdentifier}, hasValidPendingDelay=${hasValidPendingDelay}, hasPendingDelayNotReady=${hasPendingDelayNotReady}, hasPaymentNoResponseDelay=${hasPaymentNoResponseDelay}, hasPauseScheduled=${hasPauseScheduled}, pauseReady=${pauseReady}, nodeType=${currentNode?.type}`);
+        
+        // IMPORTANT: If there's a pending delay that hasn't expired yet, reschedule the job!
+        if (hasPendingDelayNotReady) {
+          const remainingMs = pendingDelay!.resumeAt - Date.now();
+          console.log(`[process-delay-queue] Session ${job.session_id} has pending delay not ready yet, ${remainingMs}ms remaining. Rescheduling job.`);
+          
+          await supabase
+            .from("inbox_flow_delay_jobs")
+            .update({ 
+              run_at: new Date(pendingDelay!.resumeAt).toISOString(),
+              status: "scheduled",
+              updated_at: new Date().toISOString()
+            })
+            .eq("session_id", job.session_id);
+          
+          console.log(`[process-delay-queue] Job rescheduled to ${new Date(pendingDelay!.resumeAt).toISOString()}`);
+          continue; // Skip to next job
+        }
         
         // If this is a timeout job and session is still waiting for input, trigger timeout
         if (isTimeoutJob && isWaitingForInput) {
