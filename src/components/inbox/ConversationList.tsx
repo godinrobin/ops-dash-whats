@@ -181,7 +181,8 @@ export const ConversationList = ({
     return Array.from(labelsSet);
   }, [contacts]);
 
-  // Filter contacts based on active filter
+  // Filter contacts based on active filter (tabs: Todos/Pagos/Ignorados)
+  // Note: The label dropdown filter is already applied by the parent component
   const filteredByType = useMemo(() => {
     return contacts.filter(contact => {
       const tags = Array.isArray((contact as any).tags) ? (contact as any).tags : [];
@@ -195,8 +196,9 @@ export const ConversationList = ({
           return isIgnored;
         case 'all':
         default:
-          // "Todos" shows contacts that are NOT paid AND NOT ignored
-          return !hasPagoTag && !isIgnored;
+          // "Todos" shows ALL contacts (except ignored) - regardless of Pago tag
+          // This allows the label dropdown to work properly
+          return !isIgnored;
       }
     });
   }, [contacts, activeFilter]);
@@ -241,7 +243,7 @@ export const ConversationList = ({
           </div>
           {allLabels.length > 0 && (
           <Select value={selectedLabel} onValueChange={(value) => onLabelChange?.(value)}>
-              <SelectTrigger className="h-9 w-28 text-xs bg-orange-500 text-white border-orange-500 hover:bg-orange-600">
+              <SelectTrigger className="h-9 w-28 text-xs">
                 <div className="flex items-center gap-1">
                   <Filter className="h-3 w-3" />
                   <span className="truncate">Etiqueta</span>
