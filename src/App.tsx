@@ -54,6 +54,8 @@ import SiteCloner from "./pages/SiteCloner";
 import AdsLayout from "./pages/ads/AdsLayout";
 import WhatsAppEditor from "./pages/WhatsAppEditor";
 import WhatsAppEditorAddNumber from "./pages/WhatsAppEditorAddNumber";
+import NotifyAdminPage from "./pages/NotifyAdminPage";
+import NotifyAdminAddNumber from "./pages/NotifyAdminAddNumber";
 
 const queryClient = new QueryClient();
 
@@ -110,6 +112,8 @@ const AppRoutes = () => {
         <Route path="/inbox/chat" element={<MemberRoute featureName="Automati-Zap"><InboxPage /></MemberRoute>} />
         <Route path="/inbox/flows" element={<MemberRoute featureName="Automati-Zap"><FlowListPage /></MemberRoute>} />
         <Route path="/inbox/flows/:id" element={<MemberRoute featureName="Automati-Zap"><FlowEditorPage /></MemberRoute>} />
+        <Route path="/inbox/notify-admin" element={<MemberRoute featureName="Automati-Zap"><NotifyAdminPage /></MemberRoute>} />
+        <Route path="/inbox/notify-admin/add-number" element={<MemberRoute featureName="Automati-Zap"><NotifyAdminAddNumber /></MemberRoute>} />
         <Route path="/disparador" element={<MemberRoute featureName="DisparaZap"><MessageBlaster /></MemberRoute>} />
         <Route path="/disparazap/fluxos" element={<MemberRoute featureName="DisparaZap"><FlowListPage /></MemberRoute>} />
         <Route path="/disparazap/fluxos/novo" element={<MemberRoute featureName="DisparaZap"><FlowEditorPage /></MemberRoute>} />

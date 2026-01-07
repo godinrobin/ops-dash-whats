@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ArrowLeft, MessageSquare, Smartphone, GitBranch, Tag, Plus, RefreshCw, Loader2, QrCode, Trash2, PowerOff, RotateCcw, ChevronDown, ChevronRight, Phone, Zap, Users, TrendingUp, Filter, Check, Hash } from "lucide-react";
+import { ArrowLeft, MessageSquare, Smartphone, GitBranch, Bell, Plus, RefreshCw, Loader2, QrCode, Trash2, PowerOff, RotateCcw, ChevronDown, ChevronRight, Phone, Zap, Users, TrendingUp, Filter, Check, Hash } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
@@ -762,13 +762,13 @@ export default function InboxDashboard() {
       comingSoon: false,
     },
     { 
-      title: "Etiquetas", 
-      description: "Organize contatos com etiquetas", 
-      icon: Tag, 
-      path: null,
-      count: tags.length,
-      gradient: "from-purple-400 to-pink-500",
-      comingSoon: true,
+      title: "Notificar Admin", 
+      description: "Configure alertas e notificações", 
+      icon: Bell, 
+      path: "/inbox/notify-admin",
+      count: null,
+      gradient: "from-amber-400 to-orange-500",
+      comingSoon: false,
     },
   ];
 
