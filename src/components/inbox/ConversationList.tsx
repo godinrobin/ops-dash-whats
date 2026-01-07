@@ -196,9 +196,8 @@ export const ConversationList = ({
           return isIgnored;
         case 'all':
         default:
-          // "Todos" shows ALL contacts (except ignored) - regardless of Pago tag
-          // This allows the label dropdown to work properly
-          return !isIgnored;
+          // "Todos" shows contacts that are NOT paid AND NOT ignored
+          return !hasPagoTag && !isIgnored;
       }
     });
   }, [contacts, activeFilter]);
