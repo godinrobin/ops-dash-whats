@@ -151,7 +151,19 @@ const runLoopIteration = async (conversationId: string) => {
       }
     }
     
-    toast.error(`${conversation.name}: ${errorMessage}`);
+    // Show user-friendly message for edge function errors
+    const isEdgeFunctionError = errorMessage.toLowerCase().includes('edge function') || 
+                                 errorMessage.toLowerCase().includes('non-2xx') ||
+                                 errorMessage.toLowerCase().includes('failed to fetch') ||
+                                 errorMessage.toLowerCase().includes('function returned');
+    
+    if (isEdgeFunctionError) {
+      toast.error(`${conversation.name}: Erro ao enviar. Verifique se os números estão conectados.`, {
+        duration: 8000,
+      });
+    } else {
+      toast.error(`${conversation.name}: ${errorMessage}`);
+    }
     stopLoop(conversationId);
   }
 };
