@@ -2100,91 +2100,56 @@ Regras:
           .single();
 
         if (inst?.api_provider === 'uazapi') {
-          // UazAPI doesn't have a restart endpoint - use disconnect + connect
+          // Seguir a doc UazAPI: "reiniciar" aqui significa encerrar a sessão.
+          // Para gerar um novo QR, o frontend chama depois `get-qrcode`.
           const config = await getInstanceApiConfig(supabaseClient, inst.id);
-          
+
           try {
-            // UazAPI docs: POST /instance/disconnect
-            await callWhatsAppApi(config, '/instance/disconnect', 'POST', undefined, false, inst.uazapi_token || undefined);
+            // UazAPI docs: POST /instance/disconnect (token da instância)
+            await callWhatsAppApi(
+              config,
+              '/instance/disconnect',
+              'POST',
+              undefined,
+              false,
+              inst.uazapi_token || undefined
+            );
           } catch (disconnectError: any) {
-            // Fallback for older/alternative deployments
-            if (disconnectError?.status === 405) {
-              try {
-                await callWhatsAppApi(config, '/instance/disconnect', 'DELETE', undefined, false, inst.uazapi_token || undefined);
-              } catch (e) {
-                console.log('[RESTART] Disconnect fallback failed, continuing...');
-              }
-            } else {
-              console.log('[RESTART] Disconnect error (continuing anyway):', disconnectError?.message);
-            }
+            // Se falhar, ainda atualizamos o status local para permitir novo QR.
+            console.log('[RESTART] Disconnect error (continuing):', disconnectError?.status, disconnectError?.message);
           }
 
-          // Clear DB state immediately
           await supabaseClient
             .from('maturador_instances')
             .update({ status: 'disconnected', qrcode: null })
             .eq('instance_name', instanceName)
             .eq('user_id', user.id);
 
-          // Wait a bit to let the backend settle
-          await new Promise((resolve) => setTimeout(resolve, 800));
-
-          // Then connect to get a new QR code
-          try {
-            result = await callWhatsAppApi(config, '/instance/connect', 'POST', undefined, false, inst.uazapi_token || undefined);
-            console.log('[RESTART] Connect result:', JSON.stringify(result).substring(0, 500));
-
-            let qrcode = result?.instance?.qrcode || result?.qrcode || result?.base64 || null;
-
-            // Some deployments only provide QR via /instance/status
-            if (!qrcode) {
-              for (let attempt = 1; attempt <= 6; attempt++) {
-                try {
-                  await new Promise((r) => setTimeout(r, 350));
-                  const statusRes = await callWhatsAppApi(config, '/instance/status', 'GET', undefined, false, inst.uazapi_token || undefined);
-                  qrcode = typeof statusRes?.instance?.qrcode === 'string' ? statusRes.instance.qrcode : qrcode;
-                  if (qrcode) break;
-                } catch (e: any) {
-                  console.log(`[RESTART] status retry failed attempt=${attempt}:`, e?.message);
-                }
-              }
-            }
-
-            if (qrcode) {
-              await supabaseClient
-                .from('maturador_instances')
-                .update({ qrcode, status: 'connecting' })
-                .eq('instance_name', instanceName)
-                .eq('user_id', user.id);
-              result = { ...result, base64: qrcode };
-            } else {
-              await supabaseClient
-                .from('maturador_instances')
-                .update({ status: 'disconnected', qrcode: null })
-                .eq('instance_name', instanceName)
-                .eq('user_id', user.id);
-            }
-          } catch (connectError: any) {
-            console.error('[RESTART] Connect error:', connectError);
-            await supabaseClient
-              .from('maturador_instances')
-              .update({ status: 'disconnected', qrcode: null })
-              .eq('instance_name', instanceName)
-              .eq('user_id', user.id);
-          }
+          result = { success: true, status: 'disconnected' };
         } else {
           // Evolution API
           try {
             result = await callEvolution(`/instance/restart/${instanceName}`, 'POST');
           } catch (e) {
             // If restart fails, try logout + connect approach
-            console.log('Restart failed, trying logout + connect');
-            await callEvolution(`/instance/logout/${instanceName}`, 'DELETE');
-            result = await callEvolution(`/instance/connect/${instanceName}`, 'GET');
+            try {
+              await callEvolution(`/instance/logout/${instanceName}`, 'DELETE');
+              await supabaseClient
+                .from('maturador_instances')
+                .update({ status: 'disconnected', qrcode: null })
+                .eq('instance_name', instanceName)
+                .eq('user_id', user.id);
+              result = { success: true, status: 'disconnected' };
+            } catch (e2) {
+              console.error('[RESTART] Evolution fallback failed:', e2);
+              result = { success: false, error: 'Erro ao reiniciar instância' };
+            }
           }
         }
+
         break;
       }
+
 
       // Test call action - for debugging calls
       case 'test-call': {
@@ -3187,7 +3152,7 @@ Regras IMPORTANTES:
         });
     }
 
-    return new Response(JSON.stringify(result), {
+    return new Response(JSON.stringify(result ?? {}), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
