@@ -1127,6 +1127,70 @@ serve(async (req) => {
           })
           .eq('id', contact.id);
         
+        // === ADMIN NOTIFY INTEGRATION ===
+        // For inbound messages, increment conversation count and check for commands
+        if (direction === 'inbound') {
+          try {
+            const supabaseUrl = Deno.env.get('SUPABASE_URL');
+            const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+            
+            // First, check if this is a command (#status or #vendas)
+            const trimmedContent = (uazText || '').trim().toLowerCase();
+            if (trimmedContent === '#status' || trimmedContent === '#vendas') {
+              console.log(`[ADMIN-NOTIFY] Command detected: ${trimmedContent}`);
+              
+              const commandResponse = await fetch(`${supabaseUrl}/functions/v1/admin-notify-handler`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${serviceRoleKey}`,
+                },
+                body: JSON.stringify({
+                  action: 'check-command',
+                  instanceId,
+                  userId,
+                  message: uazText,
+                  senderPhone: phone,
+                }),
+              });
+              
+              if (commandResponse.ok) {
+                const commandResult = await commandResponse.json();
+                console.log(`[ADMIN-NOTIFY] Command result:`, commandResult);
+              }
+            }
+            
+            // Increment daily conversation count (for first message from this contact today)
+            const { data: messagesFromContactToday } = await supabaseClient
+              .from('inbox_messages')
+              .select('id', { count: 'exact', head: true })
+              .eq('contact_id', contact.id)
+              .eq('direction', 'inbound')
+              .gte('created_at', new Date().toISOString().split('T')[0] + 'T00:00:00-03:00');
+            
+            // Only increment if this is the first message from this contact today
+            if (!messagesFromContactToday || (messagesFromContactToday as any).length <= 1) {
+              console.log(`[ADMIN-NOTIFY] First message from contact today, incrementing conversation count`);
+              
+              fetch(`${supabaseUrl}/functions/v1/admin-notify-handler`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${serviceRoleKey}`,
+                },
+                body: JSON.stringify({
+                  action: 'increment-conversation',
+                  instanceId,
+                  userId,
+                }),
+              }).catch(err => console.error('[ADMIN-NOTIFY] Error incrementing:', err));
+            }
+          } catch (notifyErr) {
+            console.error('[ADMIN-NOTIFY] Error processing notification:', notifyErr);
+          }
+        }
+        // === END ADMIN NOTIFY INTEGRATION ===
+        
         // For inbound messages with image/document, trigger Tag Whats processing
         console.log(`[TAG-WHATS-TRIGGER] Checking: direction=${direction}, messageType=${messageType}, instanceId=${instanceId}`);
         
@@ -2244,6 +2308,70 @@ serve(async (req) => {
           .update({ last_message_at: new Date().toISOString() })
           .eq('id', contact.id);
         console.log('[WEBHOOK] Message saved successfully, contact last_message_at updated');
+        
+        // === ADMIN NOTIFY INTEGRATION (Evolution API) ===
+        // For inbound messages, increment conversation count and check for commands
+        if (!isFromMe) {
+          try {
+            const supabaseUrlEnv = Deno.env.get('SUPABASE_URL');
+            const serviceRoleKeyEnv = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+            
+            // First, check if this is a command (#status or #vendas)
+            const trimmedContent = (content || '').trim().toLowerCase();
+            if (trimmedContent === '#status' || trimmedContent === '#vendas') {
+              console.log(`[ADMIN-NOTIFY] Command detected: ${trimmedContent}`);
+              
+              const commandResponse = await fetch(`${supabaseUrlEnv}/functions/v1/admin-notify-handler`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${serviceRoleKeyEnv}`,
+                },
+                body: JSON.stringify({
+                  action: 'check-command',
+                  instanceId,
+                  userId,
+                  message: content,
+                  senderPhone: phone,
+                }),
+              });
+              
+              if (commandResponse.ok) {
+                const commandResult = await commandResponse.json();
+                console.log(`[ADMIN-NOTIFY] Command result:`, commandResult);
+              }
+            }
+            
+            // Increment daily conversation count (for first message from this contact today)
+            const { data: messagesFromContactToday } = await supabaseClient
+              .from('inbox_messages')
+              .select('id', { count: 'exact', head: true })
+              .eq('contact_id', contact.id)
+              .eq('direction', 'inbound')
+              .gte('created_at', new Date().toISOString().split('T')[0] + 'T00:00:00-03:00');
+            
+            // Only increment if this is the first message from this contact today
+            if (!messagesFromContactToday || (messagesFromContactToday as any).length <= 1) {
+              console.log(`[ADMIN-NOTIFY] First message from contact today, incrementing conversation count`);
+              
+              fetch(`${supabaseUrlEnv}/functions/v1/admin-notify-handler`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${serviceRoleKeyEnv}`,
+                },
+                body: JSON.stringify({
+                  action: 'increment-conversation',
+                  instanceId,
+                  userId,
+                }),
+              }).catch(err => console.error('[ADMIN-NOTIFY] Error incrementing:', err));
+            }
+          } catch (notifyErr) {
+            console.error('[ADMIN-NOTIFY] Error processing notification:', notifyErr);
+          }
+        }
+        // === END ADMIN NOTIFY INTEGRATION ===
       }
 
       // === ADS LEAD TRACKING ===
