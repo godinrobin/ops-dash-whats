@@ -178,7 +178,8 @@ export const ConversationList = ({
       const tags = Array.isArray((contact as any).tags) ? (contact as any).tags : [];
       tags.forEach((tag: string) => labelsSet.add(tag));
     });
-    return Array.from(labelsSet);
+    // Remove "Pago" from dropdown since it has its own tab filter
+    return Array.from(labelsSet).filter(label => label.toLowerCase() !== 'pago');
   }, [contacts]);
 
   // Filter contacts based on active filter (tabs: Todos/Pagos/Ignorados)
