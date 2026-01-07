@@ -249,10 +249,32 @@ export const ChatPanel = ({
     } else {
       setContactLabels([]);
     }
-    // Get flow_paused and is_ignored status
+  // Get flow_paused and is_ignored status
     setFlowPaused((contact as any).flow_paused || false);
     setIsIgnored((contact as any).is_ignored || false);
   }, [contact]);
+
+  // Auto-mark as read when opening a conversation (if there are unread messages)
+  useEffect(() => {
+    if (!contact || !contact.id) return;
+    
+    // Check if there are unread messages
+    if (contact.unread_count && contact.unread_count > 0) {
+      // Mark as read when opening the chat
+      const markAsRead = async () => {
+        try {
+          await supabase
+            .from('inbox_contacts')
+            .update({ unread_count: 0 })
+            .eq('id', contact.id);
+          console.log('[ChatPanel] Marked conversation as read on open');
+        } catch (err) {
+          console.error('[ChatPanel] Error marking as read:', err);
+        }
+      };
+      markAsRead();
+    }
+  }, [contact?.id]); // Only trigger when contact changes, not on every update
 
   // Always open the conversation at the latest message
   useEffect(() => {
