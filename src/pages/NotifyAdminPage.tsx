@@ -213,27 +213,42 @@ export default function NotifyAdminPage() {
     const userId = effectiveUserId || user?.id;
     if (!userId) return;
 
+    // Check if limit already exists for this instance
+    const existingLimit = leadLimits.find(l => l.instance_id === selectedInstanceForLimit);
+    
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from('admin_notify_lead_limits')
-        .insert({
-          user_id: userId,
-          config_id: config.id,
-          instance_id: selectedInstanceForLimit,
-          daily_limit: newDailyLimit,
-          is_active: true,
-        });
+      if (existingLimit) {
+        // Update existing limit
+        const { error } = await supabase
+          .from('admin_notify_lead_limits')
+          .update({ daily_limit: newDailyLimit, is_active: true })
+          .eq('id', existingLimit.id);
 
-      if (error) throw error;
+        if (error) throw error;
+        toast.success('Limite de leads atualizado!');
+      } else {
+        // Insert new limit
+        const { error } = await supabase
+          .from('admin_notify_lead_limits')
+          .insert({
+            user_id: userId,
+            config_id: config.id,
+            instance_id: selectedInstanceForLimit,
+            daily_limit: newDailyLimit,
+            is_active: true,
+          });
 
-      toast.success('Limite de leads adicionado!');
+        if (error) throw error;
+        toast.success('Limite de leads adicionado!');
+      }
+
       setLeadLimitModalOpen(false);
       setSelectedInstanceForLimit("");
       setNewDailyLimit(30);
       fetchData();
     } catch (error: any) {
-      console.error('Error adding lead limit:', error);
+      console.error('Error adding/updating lead limit:', error);
       toast.error(error.message || 'Erro ao adicionar limite');
     } finally {
       setSaving(false);
@@ -352,9 +367,8 @@ export default function NotifyAdminPage() {
   };
 
   const connectedInstances = instances.filter(i => i.status === 'connected');
-  const availableForLimits = connectedInstances.filter(
-    i => !leadLimits.some(l => l.instance_id === i.id)
-  );
+  // Allow all connected instances for lead limits (user can add multiple)
+  const availableForLimits = connectedInstances;
 
   if (loading) {
     return (
@@ -535,9 +549,10 @@ export default function NotifyAdminPage() {
                       )}
                     >
                       <div className="flex items-center gap-3">
-                        <Switch
+                      <Switch
                           checked={limit.is_active}
                           onCheckedChange={() => handleToggleLeadLimit(limit.id, limit.is_active)}
+                          className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500"
                         />
                         <div>
                           <p className="text-sm font-medium">{getInstanceDisplay(limit.instance_id)}</p>
@@ -613,6 +628,7 @@ export default function NotifyAdminPage() {
                           checked={isMonitored}
                           onCheckedChange={() => handleToggleInstanceMonitor(instance.id)}
                           disabled={!config}
+                          className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500"
                         />
                       </div>
                     );
@@ -664,6 +680,7 @@ export default function NotifyAdminPage() {
                           checked={isMonitored}
                           onCheckedChange={() => handleToggleSalesMonitor(instance.id)}
                           disabled={!config}
+                          className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500"
                         />
                       </div>
                     );

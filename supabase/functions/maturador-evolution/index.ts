@@ -2001,6 +2001,7 @@ Regras:
           // Then connect to get new QR code
           try {
             result = await callWhatsAppApi(config, '/instance/connect', 'POST', undefined, false, inst.uazapi_token || undefined);
+            console.log('[RESTART] Connect result:', JSON.stringify(result).substring(0, 500));
             
             // Extract QR code if available
             const qrcode = result?.qrcode || result?.base64 || result?.instance?.qrcode || null;
@@ -2010,17 +2011,24 @@ Regras:
                 .update({ qrcode, status: 'connecting' })
                 .eq('instance_name', instanceName)
                 .eq('user_id', user.id);
+              result = { ...result, base64: qrcode };
+            } else {
+              // No QR code - update status to disconnected
+              await supabaseClient
+                .from('maturador_instances')
+                .update({ status: 'disconnected', qrcode: null })
+                .eq('instance_name', instanceName)
+                .eq('user_id', user.id);
             }
-          } catch (connectError) {
+          } catch (connectError: any) {
             console.error('[RESTART] Connect error:', connectError);
+            // Update status to disconnected if connect fails
+            await supabaseClient
+              .from('maturador_instances')
+              .update({ status: 'disconnected', qrcode: null })
+              .eq('instance_name', instanceName)
+              .eq('user_id', user.id);
           }
-          
-          // Update status
-          await supabaseClient
-            .from('maturador_instances')
-            .update({ status: 'disconnected' })
-            .eq('instance_name', instanceName)
-            .eq('user_id', user.id);
         } else {
           // Evolution API
           try {

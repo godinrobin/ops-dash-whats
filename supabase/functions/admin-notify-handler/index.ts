@@ -161,16 +161,28 @@ serve(async (req) => {
       }
 
       // Check if sender is an admin
-      const { data: senderInstance } = await supabase
+      // The sender phone can be:
+      // 1. A phone number from a connected instance (admin_instance_ids)
+      // 2. A phone number that matches one of the admin instances' phone_number
+      const { data: adminInstances } = await supabase
         .from('maturador_instances')
-        .select('id')
-        .eq('phone_number', senderPhone)
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      const isAdmin = senderInstance && config.admin_instance_ids.includes(senderInstance.id);
+        .select('id, phone_number')
+        .in('id', config.admin_instance_ids);
+      
+      // Check if senderPhone matches any admin instance's phone_number
+      const normalizedSenderPhone = senderPhone?.replace(/\D/g, '');
+      const isAdmin = adminInstances?.some(inst => {
+        const normalizedInstPhone = inst.phone_number?.replace(/\D/g, '');
+        return normalizedInstPhone && normalizedSenderPhone && 
+               (normalizedInstPhone.endsWith(normalizedSenderPhone) || 
+                normalizedSenderPhone.endsWith(normalizedInstPhone) ||
+                normalizedInstPhone === normalizedSenderPhone);
+      });
+      
+      console.log(`[ADMIN-CHECK] senderPhone: ${senderPhone}, isAdmin: ${isAdmin}, adminPhones: ${adminInstances?.map(i => i.phone_number).join(', ')}`);
       
       if (!isAdmin) {
+        console.log(`[ADMIN-CHECK] Sender ${senderPhone} is not an admin, ignoring command`);
         return new Response(JSON.stringify({ isCommand: false }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
