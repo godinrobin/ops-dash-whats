@@ -540,63 +540,83 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
     }
 
     let labelApplied = false;
+    let alreadyHasLabel = false;
 
     if (isPixPayment) {
-      console.log("[TAG-WHATS] PIX payment detected! Applying label...");
+      console.log("[TAG-WHATS] PIX payment detected! Checking if already labeled...");
+      
+      // Check if this contact already has the "Pago" label applied
+      const { data: existingLog, error: existingLogError } = await supabase
+        .from("tag_whats_logs")
+        .select("id")
+        .eq("instance_id", instance.id)
+        .eq("contact_phone", phone)
+        .eq("label_applied", true)
+        .limit(1)
+        .maybeSingle();
+      
+      if (existingLog) {
+        console.log("[TAG-WHATS] Contact already has 'Pago' label applied, skipping...");
+        alreadyHasLabel = true;
+      }
+      
+      if (!alreadyHasLabel) {
+        console.log("[TAG-WHATS] First time - applying label...");
 
-      // First, get or create the "Pago" label
-      let pagoLabelId = config.pago_label_id;
+        // First, get or create the "Pago" label
+        let pagoLabelId = config.pago_label_id;
 
-      if (!pagoLabelId) {
-        // Get all labels
-        const labelsResponse = await fetch(`${uazapiBaseUrl}/labels`, {
-          method: "GET",
-          headers: { "token": uazapiToken },
-        });
+        if (!pagoLabelId) {
+          // Get all labels
+          const labelsResponse = await fetch(`${uazapiBaseUrl}/labels`, {
+            method: "GET",
+            headers: { "token": uazapiToken },
+          });
 
-        if (labelsResponse.ok) {
-          const labels = await labelsResponse.json();
-          const pagoLabel = labels.find((l: any) => 
-            l.name?.toLowerCase() === PAGO_LABEL_NAME.toLowerCase()
-          );
-          
-          if (pagoLabel) {
-            pagoLabelId = pagoLabel.labelid || pagoLabel.id;
+          if (labelsResponse.ok) {
+            const labels = await labelsResponse.json();
+            const pagoLabel = labels.find((l: any) => 
+              l.name?.toLowerCase() === PAGO_LABEL_NAME.toLowerCase()
+            );
             
-            // Save to config
-            await supabase
-              .from("tag_whats_configs")
-              .update({ pago_label_id: pagoLabelId })
-              .eq("id", config.id);
+            if (pagoLabel) {
+              pagoLabelId = pagoLabel.labelid || pagoLabel.id;
+              
+              // Save to config
+              await supabase
+                .from("tag_whats_configs")
+                .update({ pago_label_id: pagoLabelId })
+                .eq("id", config.id);
+            }
           }
         }
-      }
 
-      if (pagoLabelId) {
-        // Apply label to chat
-        const labelResponse = await fetch(`${uazapiBaseUrl}/chat/labels`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "token": uazapiToken,
-          },
-          body: JSON.stringify({
-            number: phone,
-            add_labelid: pagoLabelId,
-          }),
-        });
+        if (pagoLabelId) {
+          // Apply label to chat
+          const labelResponse = await fetch(`${uazapiBaseUrl}/chat/labels`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "token": uazapiToken,
+            },
+            body: JSON.stringify({
+              number: phone,
+              add_labelid: pagoLabelId,
+            }),
+          });
 
-        if (labelResponse.ok) {
-          labelApplied = true;
-          console.log("[TAG-WHATS] Label applied successfully!");
+          if (labelResponse.ok) {
+            labelApplied = true;
+            console.log("[TAG-WHATS] Label applied successfully!");
+          } else {
+            const labelError = await labelResponse.text();
+            console.error("[TAG-WHATS] Failed to apply label:", labelError);
+          }
         } else {
-          const labelError = await labelResponse.text();
-          console.error("[TAG-WHATS] Failed to apply label:", labelError);
+          console.log("[TAG-WHATS] No 'Pago' label found. Please create it in WhatsApp Business first.");
         }
-      } else {
-        console.log("[TAG-WHATS] No 'Pago' label found. Please create it in WhatsApp Business first.");
-      }
-    }
+      } // Close !alreadyHasLabel
+    } // Close isPixPayment
 
     // Facebook Conversion Tracking
     let conversionSent = false;
