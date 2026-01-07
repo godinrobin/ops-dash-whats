@@ -240,8 +240,8 @@ export const ConversationList = ({
             />
           </div>
           {allLabels.length > 0 && (
-            <Select value={selectedLabel} onValueChange={(value) => onLabelChange?.(value)}>
-              <SelectTrigger className="h-9 w-28 text-xs">
+          <Select value={selectedLabel} onValueChange={(value) => onLabelChange?.(value)}>
+              <SelectTrigger className="h-9 w-28 text-xs bg-orange-500 text-white border-orange-500 hover:bg-orange-600">
                 <div className="flex items-center gap-1">
                   <Filter className="h-3 w-3" />
                   <span className="truncate">Etiqueta</span>
