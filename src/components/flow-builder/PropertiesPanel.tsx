@@ -587,10 +587,12 @@ export const PropertiesPanel = ({
             
             <div className="space-y-2">
               <Label>Legenda (opcional)</Label>
-              <Input
+              <Textarea
                 placeholder="Legenda..."
                 value={(nodeData.caption as string) || ''}
                 onChange={(e) => onUpdateNode(selectedNode.id, { caption: e.target.value })}
+                rows={3}
+                className="resize-none"
               />
             </div>
           </div>
