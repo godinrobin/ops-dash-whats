@@ -45,6 +45,8 @@ interface ConversationListProps {
   onSearchChange: (query: string) => void;
   selectedLabel?: string;
   onLabelChange?: (label: string) => void;
+  selectedFilter?: string;
+  onFilterChange?: (filter: string) => void;
 }
 
 // Generate consistent colors for instances
@@ -59,6 +61,8 @@ const instanceColors = [
   'bg-red-500',
 ];
 
+type FilterType = 'all' | 'paid' | 'ignored';
+
 export const ConversationList = ({
   contacts,
   loading,
@@ -68,9 +72,12 @@ export const ConversationList = ({
   onSearchChange,
   selectedLabel = '',
   onLabelChange,
+  selectedFilter = 'all',
+  onFilterChange,
 }: ConversationListProps) => {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [showNewConversation, setShowNewConversation] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<FilterType>(selectedFilter as FilterType);
 
   // Fetch instances to get names
   useEffect(() => {
@@ -174,6 +181,37 @@ export const ConversationList = ({
     return Array.from(labelsSet);
   }, [contacts]);
 
+  // Filter contacts based on active filter
+  const filteredByType = useMemo(() => {
+    return contacts.filter(contact => {
+      const tags = Array.isArray((contact as any).tags) ? (contact as any).tags : [];
+      const hasPagoTag = tags.some((tag: string) => tag.toLowerCase() === 'pago');
+      const isIgnored = (contact as any).is_ignored === true;
+
+      switch (activeFilter) {
+        case 'paid':
+          return hasPagoTag && !isIgnored;
+        case 'ignored':
+          return isIgnored;
+        case 'all':
+        default:
+          // "Todos" shows contacts that are NOT paid AND NOT ignored
+          return !hasPagoTag && !isIgnored;
+      }
+    });
+  }, [contacts, activeFilter]);
+
+  const handleFilterChange = (filter: FilterType) => {
+    setActiveFilter(filter);
+    onFilterChange?.(filter);
+  };
+
+  const filterButtons: { key: FilterType; label: string }[] = [
+    { key: 'all', label: 'Todos' },
+    { key: 'paid', label: 'Pagos' },
+    { key: 'ignored', label: 'Ignorados' },
+  ];
+
   return (
     <div className="w-80 border-r border-border flex flex-col bg-card flex-shrink-0 overflow-hidden">
       {/* Header */}
@@ -189,27 +227,28 @@ export const ConversationList = ({
             <Plus className="h-4 w-4" />
           </Button>
         </div>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar conversa..."
-            className="pl-10"
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-          />
-        </div>
-        {/* Label filter */}
-        {allLabels.length > 0 && (
-          <div className="mt-3">
+        
+        {/* Search and Label Filter Side by Side */}
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar..."
+              className="pl-10 h-9"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+            />
+          </div>
+          {allLabels.length > 0 && (
             <Select value={selectedLabel} onValueChange={(value) => onLabelChange?.(value)}>
-              <SelectTrigger className="h-8 text-xs">
-                <div className="flex items-center gap-2">
+              <SelectTrigger className="h-9 w-28 text-xs">
+                <div className="flex items-center gap-1">
                   <Filter className="h-3 w-3" />
-                  <SelectValue placeholder="Filtrar por etiqueta" />
+                  <span className="truncate">Etiqueta</span>
                 </div>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todas as etiquetas</SelectItem>
+                <SelectItem value="all">Todas</SelectItem>
                 {allLabels.map((label) => (
                   <SelectItem key={label} value={label}>
                     <div className="flex items-center gap-2">
@@ -220,8 +259,26 @@ export const ConversationList = ({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-        )}
+          )}
+        </div>
+
+        {/* Filter Tabs */}
+        <div className="flex gap-2 mt-3">
+          {filterButtons.map((filter) => (
+            <button
+              key={filter.key}
+              onClick={() => handleFilterChange(filter.key)}
+              className={cn(
+                "flex-1 px-3 py-1.5 rounded-full text-xs font-medium transition-all border",
+                activeFilter === filter.key
+                  ? "bg-orange-500 text-white border-orange-500"
+                  : "bg-orange-500/10 text-orange-600 border-orange-500/30 hover:bg-orange-500/20"
+              )}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Lista de Conversas */}
@@ -238,14 +295,20 @@ export const ConversationList = ({
               </div>
             ))}
           </div>
-        ) : contacts.length === 0 ? (
+        ) : filteredByType.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">
             <p>Nenhuma conversa encontrada</p>
-            <p className="text-sm mt-2">As conversas aparecerão aqui quando você receber mensagens</p>
+            <p className="text-sm mt-2">
+              {activeFilter === 'paid' 
+                ? 'Nenhum contato com etiqueta "Pago"'
+                : activeFilter === 'ignored'
+                ? 'Nenhum contato ignorado'
+                : 'As conversas aparecerão aqui quando você receber mensagens'}
+            </p>
           </div>
         ) : (
           <div>
-            {contacts.map((contact) => {
+            {filteredByType.map((contact) => {
               const instanceName = getInstanceName(contact.instance_id);
               const instancePhone = getInstancePhone(contact.instance_id);
               const instanceColor = getInstanceColor(contact.instance_id);

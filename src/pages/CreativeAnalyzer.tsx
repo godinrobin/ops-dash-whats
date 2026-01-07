@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Upload, Loader2, Video, Image, Star, Sparkles, RefreshCw } from "lucide-react";
+import { ArrowLeft, Upload, Loader2, Video, Image, Star, Sparkles, RefreshCw, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AnimatedTabs, AnimatedTabsList, AnimatedTabsTrigger, AnimatedTabsContent } from "@/components/ui/animated-tabs";
@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
+import { useMultiGenerationCooldown } from "@/hooks/useMultiGenerationCooldown";
 
 interface AnalysisResult {
   hookScore: number;
@@ -34,6 +35,16 @@ const CreativeAnalyzer = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Cooldown hook - 1 analysis per 5 minutes
+  const {
+    canGenerate,
+    remainingTime,
+    formattedTime,
+    startCooldown,
+    isAdmin,
+    generationsLeft,
+  } = useMultiGenerationCooldown("creative_analyzer_cooldown", 1);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -86,6 +97,11 @@ const CreativeAnalyzer = () => {
   const handleAnalyze = async () => {
     if (!file || !user) {
       toast.error("Selecione um arquivo para analisar");
+      return;
+    }
+
+    if (!canGenerate && !isAdmin) {
+      toast.error("Aguarde o cooldown para fazer uma nova análise");
       return;
     }
 
@@ -165,6 +181,8 @@ const CreativeAnalyzer = () => {
         });
       }
 
+      // Start cooldown after successful analysis
+      startCooldown();
       toast.success("Análise concluída com sucesso!");
     } catch (error: any) {
       console.error("Analysis error:", error);
@@ -299,13 +317,18 @@ const CreativeAnalyzer = () => {
                 <div className="flex gap-3">
                   <Button 
                     onClick={handleAnalyze} 
-                    disabled={isAnalyzing}
-                    className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600"
+                    disabled={isAnalyzing || (!canGenerate && !isAdmin)}
+                    className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 disabled:opacity-50"
                   >
                     {isAnalyzing ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         Analisando...
+                      </>
+                    ) : !canGenerate && !isAdmin ? (
+                      <>
+                        <Clock className="h-4 w-4 mr-2" />
+                        Aguarde {formattedTime}
                       </>
                     ) : (
                       <>

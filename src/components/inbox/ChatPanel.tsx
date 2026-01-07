@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
-import { User, MessageSquare, Smartphone, ChevronDown, Tag, X, Plus, Pause, Play, Mail, MailOpen, Trash2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { User, MessageSquare, Smartphone, ChevronDown, Tag, X, Plus, Pause, Play, Mail, MailOpen, Trash2, AlertTriangle, RefreshCw, Ban } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -153,6 +153,7 @@ export const ChatPanel = ({
   const [flowPaused, setFlowPaused] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [connectionError, setConnectionError] = useState<{ show: boolean; errorCode?: string; instanceName?: string }>({ show: false });
+  const [isIgnored, setIsIgnored] = useState(false);
 
   const scrollToBottom = useCallback(() => {
     const root = scrollAreaRef.current;
@@ -232,11 +233,12 @@ export const ChatPanel = ({
     }
   }, [contact?.instance_id, instances]);
 
-  // Fetch contact labels and flow_paused from tags field
+  // Fetch contact labels, flow_paused, and is_ignored from tags field
   useEffect(() => {
     if (!contact) {
       setContactLabels([]);
       setFlowPaused(false);
+      setIsIgnored(false);
       return;
     }
     const tags = (contact as any).tags;
@@ -247,8 +249,9 @@ export const ChatPanel = ({
     } else {
       setContactLabels([]);
     }
-    // Get flow_paused status
+    // Get flow_paused and is_ignored status
     setFlowPaused((contact as any).flow_paused || false);
+    setIsIgnored((contact as any).is_ignored || false);
   }, [contact]);
 
   // Always open the conversation at the latest message
@@ -389,6 +392,26 @@ export const ChatPanel = ({
     } catch (err) {
       console.error('Error marking as unread:', err);
       toast.error('Erro ao marcar como não lido');
+    }
+  };
+
+  // Handle ignore/unignore contact
+  const handleToggleIgnore = async () => {
+    if (!contact) return;
+    try {
+      const newIgnoredState = !isIgnored;
+      const { error } = await supabase
+        .from('inbox_contacts')
+        .update({ is_ignored: newIgnoredState })
+        .eq('id', contact.id);
+      
+      if (error) throw error;
+      setIsIgnored(newIgnoredState);
+      toast.success(newIgnoredState ? 'Contato ignorado' : 'Contato restaurado');
+      onRefreshContact?.();
+    } catch (err) {
+      console.error('Error toggling ignore:', err);
+      toast.error('Erro ao atualizar contato');
     }
   };
 
@@ -618,6 +641,26 @@ export const ChatPanel = ({
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Marcar como não lido</TooltipContent>
+            </Tooltip>
+
+            {/* Ignore/Unignore contact */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className={cn(
+                    "h-9 w-9",
+                    isIgnored 
+                      ? "text-orange-500 hover:text-orange-600 hover:bg-orange-500/10" 
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  onClick={handleToggleIgnore}
+                >
+                  <Ban className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{isIgnored ? 'Restaurar Contato' : 'Ignorar Contato'}</TooltipContent>
             </Tooltip>
           </TooltipProvider>
 

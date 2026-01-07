@@ -7,14 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { 
   ArrowLeft, Bell, Phone, Plus, RefreshCw, Loader2, Trash2, 
   Users, BarChart3, Wifi, WifiOff, Settings, Save, AlertTriangle,
-  Smartphone, ShoppingBag, Info
+  Smartphone, ShoppingBag, Info, X, Pencil, Lock
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -80,11 +78,9 @@ export default function NotifyAdminPage() {
 
   // Lead limit modal
   const [leadLimitModalOpen, setLeadLimitModalOpen] = useState(false);
+  const [editingLeadLimit, setEditingLeadLimit] = useState<LeadLimit | null>(null);
   const [selectedInstanceForLimit, setSelectedInstanceForLimit] = useState<string>("");
   const [newDailyLimit, setNewDailyLimit] = useState(30);
-
-  // Delete confirmation
-  const [deleteTarget, setDeleteTarget] = useState<{ type: string; id: string } | null>(null);
 
   const fetchData = useCallback(async () => {
     const userId = effectiveUserId || user?.id;
@@ -246,6 +242,7 @@ export default function NotifyAdminPage() {
       setLeadLimitModalOpen(false);
       setSelectedInstanceForLimit("");
       setNewDailyLimit(30);
+      setEditingLeadLimit(null);
       fetchData();
     } catch (error: any) {
       console.error('Error adding/updating lead limit:', error);
@@ -253,6 +250,13 @@ export default function NotifyAdminPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleEditLeadLimit = (limit: LeadLimit) => {
+    setEditingLeadLimit(limit);
+    setSelectedInstanceForLimit(limit.instance_id);
+    setNewDailyLimit(limit.daily_limit);
+    setLeadLimitModalOpen(true);
   };
 
   const handleToggleLeadLimit = async (id: string, isActive: boolean) => {
@@ -366,9 +370,19 @@ export default function NotifyAdminPage() {
       : instance.label || instance.instance_name;
   };
 
+  const handleAddAdminInstance = (instanceId: string) => {
+    if (instanceId && !adminInstanceIds.includes(instanceId)) {
+      setAdminInstanceIds([...adminInstanceIds, instanceId]);
+    }
+  };
+
+  const handleRemoveAdminInstance = (instanceId: string) => {
+    setAdminInstanceIds(adminInstanceIds.filter(id => id !== instanceId));
+  };
+
   const connectedInstances = instances.filter(i => i.status === 'connected');
-  // Allow all connected instances for lead limits (user can add multiple)
   const availableForLimits = connectedInstances;
+  const availableAdminInstances = connectedInstances.filter(i => !adminInstanceIds.includes(i.id));
 
   if (loading) {
     return (
@@ -453,7 +467,7 @@ export default function NotifyAdminPage() {
                 </Select>
               </div>
 
-              {/* Admin Selection */}
+              {/* Admin Selection with Dropdown and Chips */}
               <div className="space-y-3">
                 <Label className="flex items-center gap-2">
                   <Users className="h-4 w-4" />
@@ -462,48 +476,50 @@ export default function NotifyAdminPage() {
                 <p className="text-sm text-muted-foreground">
                   Estes números receberão os alertas
                 </p>
-                <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
-                  {connectedInstances.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-2">
-                      Nenhum número conectado
-                    </p>
-                  ) : (
-                    connectedInstances.map((instance) => (
-                      <div 
-                        key={instance.id}
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 cursor-pointer"
-                        onClick={() => {
-                          if (adminInstanceIds.includes(instance.id)) {
-                            setAdminInstanceIds(adminInstanceIds.filter(id => id !== instance.id));
-                          } else {
-                            setAdminInstanceIds([...adminInstanceIds, instance.id]);
-                          }
-                        }}
-                      >
-                        <Checkbox
-                          checked={adminInstanceIds.includes(instance.id)}
-                          onCheckedChange={() => {
-                            if (adminInstanceIds.includes(instance.id)) {
-                              setAdminInstanceIds(adminInstanceIds.filter(id => id !== instance.id));
-                            } else {
-                              setAdminInstanceIds([...adminInstanceIds, instance.id]);
-                            }
-                          }}
-                        />
-                        <Smartphone className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm">
+                <Select 
+                  value="" 
+                  onValueChange={handleAddAdminInstance}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um número para adicionar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableAdminInstances.length === 0 ? (
+                      <div className="p-2 text-sm text-muted-foreground text-center">
+                        Todos os números já foram adicionados
+                      </div>
+                    ) : (
+                      availableAdminInstances.map((instance) => (
+                        <SelectItem key={instance.id} value={instance.id}>
                           {instance.phone_number 
                             ? formatPhoneDisplay(instance.phone_number)
                             : instance.label || instance.instance_name}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                
+                {/* Selected Admin Chips */}
                 {adminInstanceIds.length > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {adminInstanceIds.length} número(s) selecionado(s)
-                  </p>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {adminInstanceIds.map((instanceId) => (
+                      <Badge 
+                        key={instanceId}
+                        variant="secondary"
+                        className="flex items-center gap-1 py-1 px-2"
+                      >
+                        <Smartphone className="h-3 w-3" />
+                        {getInstanceDisplay(instanceId)}
+                        <button
+                          onClick={() => handleRemoveAdminInstance(instanceId)}
+                          className="ml-1 hover:text-destructive transition-colors"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
@@ -549,7 +565,7 @@ export default function NotifyAdminPage() {
                       )}
                     >
                       <div className="flex items-center gap-3">
-                      <Switch
+                        <Switch
                           checked={limit.is_active}
                           onCheckedChange={() => handleToggleLeadLimit(limit.id, limit.is_active)}
                           className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500"
@@ -561,14 +577,24 @@ export default function NotifyAdminPage() {
                           </p>
                         </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive"
-                        onClick={() => handleDeleteLeadLimit(limit.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          onClick={() => handleEditLeadLimit(limit)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive"
+                          onClick={() => handleDeleteLeadLimit(limit.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -581,7 +607,12 @@ export default function NotifyAdminPage() {
               <Button 
                 variant="outline" 
                 className="w-full"
-                onClick={() => setLeadLimitModalOpen(true)}
+                onClick={() => {
+                  setEditingLeadLimit(null);
+                  setSelectedInstanceForLimit("");
+                  setNewDailyLimit(30);
+                  setLeadLimitModalOpen(true);
+                }}
                 disabled={!config || availableForLimits.length === 0}
               >
                 <Plus className="h-4 w-4 mr-2" />
@@ -590,8 +621,12 @@ export default function NotifyAdminPage() {
             </CardContent>
           </Card>
 
-          {/* Instance Disconnect Alert */}
-          <Card>
+          {/* Instance Disconnect Alert - Blurred */}
+          <Card className="relative overflow-hidden">
+            <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center">
+              <Lock className="h-8 w-8 text-muted-foreground mb-2" />
+              <p className="text-sm font-medium text-muted-foreground">Em breve</p>
+            </div>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <WifiOff className="h-5 w-5 text-red-500" />
@@ -642,8 +677,12 @@ export default function NotifyAdminPage() {
             </CardContent>
           </Card>
 
-          {/* Sales Monitor Alert */}
-          <Card>
+          {/* Sales Monitor Alert - Blurred */}
+          <Card className="relative overflow-hidden">
+            <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center">
+              <Lock className="h-8 w-8 text-muted-foreground mb-2" />
+              <p className="text-sm font-medium text-muted-foreground">Em breve</p>
+            </div>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <ShoppingBag className="h-5 w-5 text-green-500" />
@@ -700,7 +739,9 @@ export default function NotifyAdminPage() {
       <Dialog open={leadLimitModalOpen} onOpenChange={setLeadLimitModalOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Adicionar Limite de Leads</DialogTitle>
+            <DialogTitle>
+              {editingLeadLimit ? 'Editar Limite de Leads' : 'Adicionar Limite de Leads'}
+            </DialogTitle>
             <DialogDescription>
               Configure o limite diário de conversas para um número
             </DialogDescription>
@@ -709,7 +750,11 @@ export default function NotifyAdminPage() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Número para Monitorar</Label>
-              <Select value={selectedInstanceForLimit} onValueChange={setSelectedInstanceForLimit}>
+              <Select 
+                value={selectedInstanceForLimit} 
+                onValueChange={setSelectedInstanceForLimit}
+                disabled={!!editingLeadLimit}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione um número" />
                 </SelectTrigger>
@@ -744,8 +789,8 @@ export default function NotifyAdminPage() {
               Cancelar
             </Button>
             <Button onClick={handleAddLeadLimit} disabled={saving}>
-              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
-              Adicionar
+              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : editingLeadLimit ? <Save className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+              {editingLeadLimit ? 'Salvar' : 'Adicionar'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1370,6 +1370,7 @@ export type Database = {
           flow_paused: boolean | null
           id: string
           instance_id: string | null
+          is_ignored: boolean | null
           last_message_at: string | null
           name: string | null
           notes: string | null
@@ -1388,6 +1389,7 @@ export type Database = {
           flow_paused?: boolean | null
           id?: string
           instance_id?: string | null
+          is_ignored?: boolean | null
           last_message_at?: string | null
           name?: string | null
           notes?: string | null
@@ -1406,6 +1408,7 @@ export type Database = {
           flow_paused?: boolean | null
           id?: string
           instance_id?: string | null
+          is_ignored?: boolean | null
           last_message_at?: string | null
           name?: string | null
           notes?: string | null
