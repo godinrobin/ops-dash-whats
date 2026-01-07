@@ -1118,12 +1118,13 @@ serve(async (req) => {
         
         console.log(`[UAZAPI-WEBHOOK] Message inserted: ${insertedMessage.id}`);
         
-        // Update contact last_message_at
+        // Update contact last_message_at and unread_count
+        // For inbound: increment unread. For outbound: reset to 0 (flow/user responded)
         await supabaseClient
           .from('inbox_contacts')
           .update({ 
             last_message_at: new Date().toISOString(),
-            unread_count: contact.unread_count + (direction === 'inbound' ? 1 : 0)
+            unread_count: direction === 'inbound' ? (contact.unread_count || 0) + 1 : 0
           })
           .eq('id', contact.id);
         
@@ -2193,9 +2194,12 @@ serve(async (req) => {
         // Update existing contact - BUT NOT last_message_at yet (will update after message is saved)
         const updates: Record<string, any> = {};
         
-        // Only increment unread for inbound messages (not fromMe)
+        // For inbound messages: increment unread count
+        // For outbound messages (isFromMe): reset unread to 0 (flow/user responded)
         if (!isFromMe) {
           updates.unread_count = (contact.unread_count || 0) + 1;
+        } else {
+          updates.unread_count = 0;
         }
         
         // Only update name for INBOUND messages (not fromMe)
