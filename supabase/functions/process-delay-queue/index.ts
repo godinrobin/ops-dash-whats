@@ -35,20 +35,15 @@ serve(async (req) => {
       throw fetchError;
     }
     
-    if (!pendingJobs || pendingJobs.length === 0) {
-      console.log("[process-delay-queue] No pending jobs found");
-      return new Response(
-        JSON.stringify({ success: true, processed: 0, message: "No pending jobs" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    
-    console.log(`[process-delay-queue] Found ${pendingJobs.length} pending jobs`);
-    
     let processed = 0;
     let failed = 0;
     
-    for (const job of pendingJobs) {
+    if (!pendingJobs || pendingJobs.length === 0) {
+      console.log("[process-delay-queue] No pending jobs found");
+    } else {
+      console.log(`[process-delay-queue] Found ${pendingJobs.length} pending jobs`);
+    
+      for (const job of pendingJobs) {
       try {
         // Mark job as processing
         const { error: updateError } = await supabase
@@ -277,8 +272,63 @@ serve(async (req) => {
         failed++;
       }
     }
+    } // Close else block for pendingJobs check
     
     console.log(`[process-delay-queue] Completed: ${processed} processed, ${failed} failed`);
+    
+    // === TIMEOUT HEALING: Find sessions with expired timeout that still need processing ===
+    // This catches cases where timeout job was marked 'done' but flow didn't continue
+    console.log("[process-delay-queue] Checking for expired timeouts that need healing...");
+    
+    const expiredResult = await supabase
+      .from("inbox_flow_sessions")
+      .select("id, current_node_id, timeout_at, flow:inbox_flows(nodes)")
+      .eq("status", "active")
+      .not("timeout_at", "is", null)
+      .lt("timeout_at", new Date().toISOString())
+      .limit(20);
+    
+    const expiredTimeoutSessions = expiredResult.data as Array<{ id: string; current_node_id: string; timeout_at: string; flow: { nodes: any[] } | null }> | null;
+    const expiredError = expiredResult.error;
+    
+    if (expiredError) {
+      console.error("[process-delay-queue] Error fetching expired sessions:", expiredError);
+    } else if (expiredTimeoutSessions && expiredTimeoutSessions.length > 0) {
+      console.log(`[process-delay-queue] Found ${expiredTimeoutSessions.length} expired timeout sessions to heal`);
+      
+      let healed = 0;
+      for (const expiredSession of expiredTimeoutSessions) {
+        try {
+          // Verify session is still at a waitInput node
+          const flowNodes = (expiredSession.flow?.nodes || []) as Array<{ id: string; type: string }>;
+          const currentNode = flowNodes.find(n => n.id === expiredSession.current_node_id);
+          
+          if (currentNode?.type === 'waitInput' || currentNode?.type === 'menu') {
+            console.log(`[process-delay-queue] Healing expired timeout for session ${expiredSession.id} (node: ${currentNode.type})`);
+            
+            const { error: healError } = await supabase.functions.invoke("process-inbox-flow", {
+              body: {
+                sessionId: expiredSession.id,
+                resumeFromTimeout: true,
+              },
+            });
+            
+            if (healError) {
+              console.error(`[process-delay-queue] Error healing session ${expiredSession.id}:`, healError);
+            } else {
+              healed++;
+              console.log(`[process-delay-queue] Successfully healed session ${expiredSession.id}`);
+            }
+          }
+        } catch (healErr) {
+          console.error(`[process-delay-queue] Unexpected error healing session ${expiredSession.id}:`, healErr);
+        }
+      }
+      
+      console.log(`[process-delay-queue] Healed ${healed}/${expiredTimeoutSessions.length} expired timeout sessions`);
+    } else {
+      console.log("[process-delay-queue] No expired timeouts need healing");
+    }
     
     return new Response(
       JSON.stringify({ 
