@@ -6,9 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { 
   Smartphone, Search, RefreshCw, Loader2, MessageSquare, 
-  TrendingUp, Trophy, Medal
+  TrendingUp, Trophy, Medal, Trash2
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -25,6 +26,7 @@ interface InstanceData {
   conversation_count: number;
   last_conversation_sync: string | null;
   created_at: string;
+  disconnected_at?: string | null;
 }
 
 interface AdminInstancesProps {
@@ -36,6 +38,7 @@ interface AdminInstancesProps {
 export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesProps) => {
   const [syncing, setSyncing] = useState<string | null>(null);
   const [syncingAll, setSyncingAll] = useState(false);
+  const [deletingOld, setDeletingOld] = useState(false);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -44,6 +47,23 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
   const [minConversations, setMinConversations] = useState<string>('');
   const [sortBy, setSortBy] = useState<'conversations' | 'recent'>('conversations');
   const [rankingPeriod, setRankingPeriod] = useState<'3' | '7' | '15' | '30'>('7');
+
+  // Calculate instances disconnected for more than 7 days
+  const oldDisconnectedInstances = useMemo(() => {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    return instances.filter(inst => {
+      if (inst.status !== 'disconnected') return false;
+      
+      // Use disconnected_at if available, otherwise fall back to created_at
+      const disconnectedDate = inst.disconnected_at 
+        ? new Date(inst.disconnected_at) 
+        : new Date(inst.created_at);
+      
+      return disconnectedDate < sevenDaysAgo;
+    });
+  }, [instances]);
 
   const syncInstanceConversations = async (instanceId: string) => {
     setSyncing(instanceId);
@@ -80,6 +100,33 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
       toast.error(error.message || 'Erro ao sincronizar todas');
     } finally {
       setSyncingAll(false);
+    }
+  };
+
+  const deleteOldDisconnectedInstances = async () => {
+    if (oldDisconnectedInstances.length === 0) {
+      toast.info('Não há instâncias desconectadas há mais de 7 dias');
+      return;
+    }
+
+    setDeletingOld(true);
+    try {
+      const instanceIds = oldDisconnectedInstances.map(inst => inst.id);
+      
+      const { error } = await supabase
+        .from('maturador_instances')
+        .delete()
+        .in('id', instanceIds);
+
+      if (error) throw error;
+
+      toast.success(`${instanceIds.length} instância(s) excluída(s) com sucesso!`);
+      onRefresh();
+    } catch (error: any) {
+      console.error('Error deleting old instances:', error);
+      toast.error(error.message || 'Erro ao excluir instâncias');
+    } finally {
+      setDeletingOld(false);
     }
   };
 
@@ -213,6 +260,37 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
                   <RefreshCw className="h-4 w-4" />
                 )}
               </Button>
+              
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button 
+                    variant="destructive" 
+                    disabled={deletingOld || oldDisconnectedInstances.length === 0}
+                  >
+                    {deletingOld ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <Trash2 className="h-4 w-4 mr-2" />
+                    )}
+                    Excluir Desconectadas +7d ({oldDisconnectedInstances.length})
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Excluir instâncias desconectadas?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Esta ação irá excluir permanentemente <strong>{oldDisconnectedInstances.length}</strong> instância(s) 
+                      que estão desconectadas há mais de 7 dias. Esta ação não pode ser desfeita.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={deleteOldDisconnectedInstances}>
+                      Excluir {oldDisconnectedInstances.length} instância(s)
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           </div>
 
