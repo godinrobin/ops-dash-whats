@@ -1201,7 +1201,7 @@ Regras:
                 config,
                 '/instance/connect',
                 'POST',
-                undefined,
+                {},
                 false,
                 inst.uazapi_token || undefined
               );
@@ -1217,6 +1217,36 @@ Regras:
 
               if (!qrcode) {
                 qrcode = await fetchQrFromStatusWithRetry('after-connect');
+              }
+
+              // Alguns servidores só começam a gerar QR quando o POST /instance/connect recebe um body JSON.
+              // Então, se ainda não veio QR, fazemos mais 1 tentativa de connect e buscamos novamente no /instance/status.
+              if (!qrcode) {
+                try {
+                  console.log('[UAZAPI-QR] No QR yet, retrying POST /instance/connect once more...');
+                  const connectRes2 = await callWhatsAppApi(
+                    config,
+                    '/instance/connect',
+                    'POST',
+                    {},
+                    false,
+                    inst.uazapi_token || undefined
+                  );
+                  console.log('[UAZAPI-QR] retry connect (2) response:', JSON.stringify(connectRes2).substring(0, 800));
+
+                  qrcode =
+                    connectRes2?.instance?.qrcode ||
+                    connectRes2?.qrcode ||
+                    connectRes2?.base64 ||
+                    connectRes2?.qr?.base64 ||
+                    null;
+
+                  if (!qrcode) {
+                    qrcode = await fetchQrFromStatusWithRetry('after-connect-2');
+                  }
+                } catch (e: any) {
+                  console.log('[UAZAPI-QR] Retry connect (2) failed:', e?.status, e?.message);
+                }
               }
 
               const isConnectedFromConnectResponse =
@@ -1255,7 +1285,7 @@ Regras:
                     config,
                     '/instance/connect',
                     'POST',
-                    undefined,
+                    {},
                     false,
                     inst.uazapi_token || undefined
                   );
