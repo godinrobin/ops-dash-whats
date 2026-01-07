@@ -592,7 +592,7 @@ export const PropertiesPanel = ({
                 value={(nodeData.caption as string) || ''}
                 onChange={(e) => onUpdateNode(selectedNode.id, { caption: e.target.value })}
                 rows={3}
-                className="resize-none"
+                className="resize-y min-h-[80px]"
               />
             </div>
           </div>
