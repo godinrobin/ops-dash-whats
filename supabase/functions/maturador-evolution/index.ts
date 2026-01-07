@@ -217,10 +217,10 @@ function getUazApiEndpoint(evolutionEndpoint: string, instanceName?: string): { 
     // Instance endpoints (require token header)
     '/instance/connect': { endpoint: '/instance/connect', isAdmin: false },
     '/instance/connectionState': { endpoint: '/instance/status', isAdmin: false },
-    // UazAPI uses /instance/disconnect with DELETE method for logout
-    '/instance/logout': { endpoint: '/instance/disconnect', isAdmin: false, method: 'DELETE' },
-    // UazAPI may not have restart - use disconnect + connect instead
-    '/instance/restart': { endpoint: '/instance/disconnect', isAdmin: false, method: 'DELETE' },
+    // UazAPI docs: disconnect is POST /instance/disconnect (instance token)
+    '/instance/logout': { endpoint: '/instance/disconnect', isAdmin: false, method: 'POST' },
+    // "restart" isn't a native endpoint; we implement as disconnect (POST) and optionally reconnect in our code
+    '/instance/restart': { endpoint: '/instance/disconnect', isAdmin: false, method: 'POST' },
     
     // Message endpoints (require token header)
     '/message/sendText': { endpoint: '/message/sendText', isAdmin: false },
@@ -1159,60 +1159,98 @@ Regras:
           }
 
           // STEP 2: If no QR yet, call /instance/connect to initiate connection
-          // Per docs: POST /instance/connect - Initiates connection and generates QR code
+          // Per docs: POST /instance/connect - Initiates connection and generates QR code (omit "phone" to get QR)
           if (!qrcode) {
+            const fetchQrFromStatusWithRetry = async (label: string) => {
+              for (let attempt = 1; attempt <= 6; attempt++) {
+                try {
+                  await new Promise((r) => setTimeout(r, 350));
+                  const statusRes = await callWhatsAppApi(
+                    config,
+                    '/instance/status',
+                    'GET',
+                    undefined,
+                    false,
+                    inst.uazapi_token || undefined
+                  );
+
+                  const instanceObj = statusRes?.instance;
+                  const statusObj = typeof statusRes?.status === 'object' ? statusRes.status : null;
+
+                  const maybeQr = typeof instanceObj?.qrcode === 'string' ? instanceObj.qrcode : null;
+                  if (maybeQr) {
+                    console.log(`[UAZAPI-QR] Got QR from /instance/status (${label}) attempt=${attempt}`);
+                    return maybeQr;
+                  }
+
+                  // If it becomes fully connected, stop retrying.
+                  if (statusObj?.connected === true && statusObj?.loggedIn === true) {
+                    console.log(`[UAZAPI-QR] /instance/status says connected (${label}) attempt=${attempt}`);
+                    return null;
+                  }
+                } catch (e: any) {
+                  console.log(`[UAZAPI-QR] /instance/status retry failed (${label}) attempt=${attempt}:`, e?.message);
+                }
+              }
+              return null;
+            };
+
             try {
               console.log('[UAZAPI-QR] Step 2: Initiating connection via POST /instance/connect...');
               const connectRes = await callWhatsAppApi(
                 config,
                 '/instance/connect',
                 'POST',
-                undefined, // No body = generate QR code (per docs: omit phone to get QR)
+                undefined,
                 false,
                 inst.uazapi_token || undefined
               );
               console.log('[UAZAPI-QR] connect response:', JSON.stringify(connectRes).substring(0, 800));
-              
-              // Extract QR from connect response - per docs: instance object contains qrcode field
-              qrcode = 
+
+              // Extract QR from connect response (some deployments only return it via /instance/status)
+              qrcode =
                 connectRes?.instance?.qrcode ||
                 connectRes?.qrcode ||
                 connectRes?.base64 ||
                 connectRes?.qr?.base64 ||
                 null;
-                
-              // Double-check if it says connected
-              const connectStatus = connectRes?.status;
-              if (connectStatus?.connected === true && connectStatus?.loggedIn === true) {
+
+              if (!qrcode) {
+                qrcode = await fetchQrFromStatusWithRetry('after-connect');
+              }
+
+              const isConnectedFromConnectResponse =
+                (connectRes?.connected === true && connectRes?.loggedIn === true) ||
+                (connectRes?.status?.connected === true && connectRes?.status?.loggedIn === true) ||
+                connectRes?.instance?.status === 'connected';
+
+              if (isConnectedFromConnectResponse && !qrcode) {
                 console.log('[UAZAPI-QR] Connect returned connected=true - already connected');
-                // If forceNew and still getting connected, update and return
-                if (!qrcode) {
-                  await supabaseClient
-                    .from('maturador_instances')
-                    .update({ status: 'connected', qrcode: null, last_seen: new Date().toISOString() })
-                    .eq('instance_name', instanceName)
-                    .eq('user_id', user.id);
-                  result = { base64: null, connected: true };
-                  break;
-                }
+                await supabaseClient
+                  .from('maturador_instances')
+                  .update({ status: 'connected', qrcode: null, last_seen: new Date().toISOString() })
+                  .eq('instance_name', instanceName)
+                  .eq('user_id', user.id);
+                result = { base64: null, connected: true };
+                break;
               }
             } catch (connectErr: any) {
               console.log('[UAZAPI-QR] Connect error:', connectErr?.status, connectErr?.message);
-              
-              // STEP 3: If connect failed, try logout then connect again
+
+              // If connect fails, for a forced refresh we try a clean disconnect and connect again.
               if (shouldForceReconnect) {
                 try {
-                  console.log('[UAZAPI-QR] Step 3: Trying logout then connect...');
+                  console.log('[UAZAPI-QR] Step 3: Disconnect then connect again...');
                   await callWhatsAppApi(
                     config,
-                    '/instance/logout',
+                    '/instance/disconnect',
                     'POST',
                     undefined,
                     false,
                     inst.uazapi_token || undefined
                   );
-                  await new Promise(r => setTimeout(r, 1000));
-                  
+                  await new Promise((r) => setTimeout(r, 800));
+
                   const retryRes = await callWhatsAppApi(
                     config,
                     '/instance/connect',
@@ -1222,15 +1260,19 @@ Regras:
                     inst.uazapi_token || undefined
                   );
                   console.log('[UAZAPI-QR] retry connect response:', JSON.stringify(retryRes).substring(0, 800));
-                  
-                  qrcode = 
+
+                  qrcode =
                     retryRes?.instance?.qrcode ||
                     retryRes?.qrcode ||
                     retryRes?.base64 ||
                     retryRes?.qr?.base64 ||
                     null;
+
+                  if (!qrcode) {
+                    qrcode = await fetchQrFromStatusWithRetry('after-retry-connect');
+                  }
                 } catch (retryErr: any) {
-                  console.log('[UAZAPI-QR] Retry after logout failed:', retryErr?.message);
+                  console.log('[UAZAPI-QR] Retry after disconnect failed:', retryErr?.message);
                 }
               }
             }
@@ -1861,14 +1903,28 @@ Regras:
 
         if (inst?.api_provider === 'uazapi') {
           const config = await getInstanceApiConfig(supabaseClient, inst.id);
-          // UazAPI uses /instance/disconnect with DELETE method
+          // UazAPI docs: POST /instance/disconnect
           try {
-            result = await callWhatsAppApi(config, '/instance/disconnect', 'DELETE', undefined, false, inst.uazapi_token || undefined);
+            result = await callWhatsAppApi(
+              config,
+              '/instance/disconnect',
+              'POST',
+              undefined,
+              false,
+              inst.uazapi_token || undefined
+            );
           } catch (e: any) {
-            // Try POST if DELETE fails (some UazAPI versions)
+            // Fallback for older/alternative deployments
             if (e?.status === 405) {
-              console.log('[LOGOUT] DELETE failed with 405, trying POST...');
-              result = await callWhatsAppApi(config, '/instance/disconnect', 'POST', undefined, false, inst.uazapi_token || undefined);
+              console.log('[LOGOUT] POST failed with 405, trying DELETE...');
+              result = await callWhatsAppApi(
+                config,
+                '/instance/disconnect',
+                'DELETE',
+                undefined,
+                false,
+                inst.uazapi_token || undefined
+              );
             } else {
               throw e;
             }
@@ -2048,31 +2104,52 @@ Regras:
           const config = await getInstanceApiConfig(supabaseClient, inst.id);
           
           try {
-            // First disconnect
-            await callWhatsAppApi(config, '/instance/disconnect', 'DELETE', undefined, false, inst.uazapi_token || undefined);
+            // UazAPI docs: POST /instance/disconnect
+            await callWhatsAppApi(config, '/instance/disconnect', 'POST', undefined, false, inst.uazapi_token || undefined);
           } catch (disconnectError: any) {
-            // Try POST if DELETE fails
+            // Fallback for older/alternative deployments
             if (disconnectError?.status === 405) {
               try {
-                await callWhatsAppApi(config, '/instance/disconnect', 'POST', undefined, false, inst.uazapi_token || undefined);
+                await callWhatsAppApi(config, '/instance/disconnect', 'DELETE', undefined, false, inst.uazapi_token || undefined);
               } catch (e) {
-                console.log('[RESTART] Disconnect failed, continuing with connect...');
+                console.log('[RESTART] Disconnect fallback failed, continuing...');
               }
             } else {
-              console.log('[RESTART] Disconnect error (continuing anyway):', disconnectError.message);
+              console.log('[RESTART] Disconnect error (continuing anyway):', disconnectError?.message);
             }
           }
-          
-          // Wait a bit
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          // Then connect to get new QR code
+
+          // Clear DB state immediately
+          await supabaseClient
+            .from('maturador_instances')
+            .update({ status: 'disconnected', qrcode: null })
+            .eq('instance_name', instanceName)
+            .eq('user_id', user.id);
+
+          // Wait a bit to let the backend settle
+          await new Promise((resolve) => setTimeout(resolve, 800));
+
+          // Then connect to get a new QR code
           try {
             result = await callWhatsAppApi(config, '/instance/connect', 'POST', undefined, false, inst.uazapi_token || undefined);
             console.log('[RESTART] Connect result:', JSON.stringify(result).substring(0, 500));
-            
-            // Extract QR code if available
-            const qrcode = result?.qrcode || result?.base64 || result?.instance?.qrcode || null;
+
+            let qrcode = result?.instance?.qrcode || result?.qrcode || result?.base64 || null;
+
+            // Some deployments only provide QR via /instance/status
+            if (!qrcode) {
+              for (let attempt = 1; attempt <= 6; attempt++) {
+                try {
+                  await new Promise((r) => setTimeout(r, 350));
+                  const statusRes = await callWhatsAppApi(config, '/instance/status', 'GET', undefined, false, inst.uazapi_token || undefined);
+                  qrcode = typeof statusRes?.instance?.qrcode === 'string' ? statusRes.instance.qrcode : qrcode;
+                  if (qrcode) break;
+                } catch (e: any) {
+                  console.log(`[RESTART] status retry failed attempt=${attempt}:`, e?.message);
+                }
+              }
+            }
+
             if (qrcode) {
               await supabaseClient
                 .from('maturador_instances')
@@ -2081,7 +2158,6 @@ Regras:
                 .eq('user_id', user.id);
               result = { ...result, base64: qrcode };
             } else {
-              // No QR code - update status to disconnected
               await supabaseClient
                 .from('maturador_instances')
                 .update({ status: 'disconnected', qrcode: null })
@@ -2090,7 +2166,6 @@ Regras:
             }
           } catch (connectError: any) {
             console.error('[RESTART] Connect error:', connectError);
-            // Update status to disconnected if connect fails
             await supabaseClient
               .from('maturador_instances')
               .update({ status: 'disconnected', qrcode: null })
