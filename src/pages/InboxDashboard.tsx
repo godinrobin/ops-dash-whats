@@ -22,7 +22,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { InboxMenu } from '@/components/inbox/InboxMenu';
 import { cn } from '@/lib/utils';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
-import { QRCodeModal, getQrCodeFromCache, setQrCodeCache } from "@/components/QRCodeModal";
+import { QRCodeModal, clearQrCodeCache, setQrCodeCache } from "@/components/QRCodeModal";
 import { PairCodeModal } from "@/components/PairCodeModal";
 
 interface Instance {
@@ -353,17 +353,11 @@ export default function InboxDashboard() {
   const handleGetQrCode = useCallback(async (instance: Instance) => {
     setCurrentQrInstance(instance);
     setQrModalOpen(true);
-    
-    // Check cache first
-    const cachedQr = getQrCodeFromCache(instance.instance_name);
-    if (cachedQr) {
-      setQrCode(cachedQr);
-      setLoadingQr(false);
-      return;
-    }
-    
     setLoadingQr(true);
     setQrCode(null);
+
+    // Always force a fresh QR (cached QR can be invalidated server-side and cause WhatsApp to fail pairing)
+    clearQrCodeCache(instance.instance_name);
 
     try {
       const { data, error } = await supabase.functions.invoke('maturador-evolution', {
@@ -371,7 +365,7 @@ export default function InboxDashboard() {
       });
       if (error) throw error;
       if (data.error) throw new Error(data.error);
-      
+
       // Check if already connected
       if (data.connected) {
         toast.success('WhatsApp já está conectado!');
@@ -379,12 +373,14 @@ export default function InboxDashboard() {
         await fetchData();
         return;
       }
-      
+
       // UazAPI returns QR as data URI inside base64 or as instance.qrcode
       const qr = data.base64 || data.qrcode?.base64 || data.qrcode;
       if (qr) {
         setQrCodeCache(instance.instance_name, qr);
         setQrCode(qr);
+      } else {
+        toast.error('QR Code não disponível. Tente novamente.');
       }
     } catch (error: any) {
       console.error('Error getting QR code:', error);
@@ -393,12 +389,14 @@ export default function InboxDashboard() {
     } finally {
       setLoadingQr(false);
     }
-  }, []);
+  }, [fetchData]);
 
   const handleRefreshQrCode = useCallback(async () => {
     if (!currentQrInstance) return;
     setLoadingQr(true);
     setQrCode(null);
+
+    clearQrCodeCache(currentQrInstance.instance_name);
     
     try {
       const { data, error } = await supabase.functions.invoke('maturador-evolution', {
@@ -429,7 +427,7 @@ export default function InboxDashboard() {
     } finally {
       setLoadingQr(false);
     }
-  }, [currentQrInstance]);
+  }, [currentQrInstance, fetchData]);
 
   const handleCheckQrStatus = async () => {
     if (!currentQrInstance) return;
@@ -442,14 +440,15 @@ export default function InboxDashboard() {
       
       // Check if status is "connecting" FIRST - takes priority
       const rawInstanceStatus = data?.instance?.status;
-      const isConnecting = 
+      const isConnecting =
         rawInstanceStatus === 'connecting' ||
-        data?.status === 'connecting';
+        data?.status === 'connecting' ||
+        (data?.status?.loggedIn === true && data?.status?.connected === false);
 
       // Check for connection status
       const isConnected = !isConnecting && (
         data.instance?.state === 'open' ||
-        data.status?.connected === true ||
+        (data.status?.connected === true && data.status?.loggedIn === true) ||
         rawInstanceStatus === 'connected' ||
         data.connected === true
       );

@@ -950,7 +950,7 @@ Regras:
               config,
               '/instance/connect',
               'POST',
-              undefined,
+              {},
               false,
               inst.uazapi_token || undefined
             );
@@ -1469,10 +1469,13 @@ Regras:
 
           // PRIORITY 1: Trust instance.status field (most reliable per UAZAPI docs)
           let newStatus = 'disconnected';
+          const hasQrOrPair = Boolean(result?.instance?.qrcode || result?.instance?.paircode);
           
           if (rawInstanceStatus === 'connected') {
-            // Instance says connected - verify with status object if available
-            if (statusObj && statusConnected === true && statusLoggedIn === true) {
+            // If API is still returning QR/pair code, it's NOT fully connected yet.
+            if (hasQrOrPair) {
+              newStatus = 'connecting';
+            } else if (statusObj && statusConnected === true && statusLoggedIn === true) {
               newStatus = 'connected';
             } else if (statusObj && (statusConnected === false || statusLoggedIn === false)) {
               // Status object says not really connected
