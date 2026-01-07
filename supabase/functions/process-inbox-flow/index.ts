@@ -321,8 +321,20 @@ serve(async (req) => {
           console.log(`[${runId}] Saved user input to variable "${key}": "${userInputStr.substring(0, 50)}"`);
         }
 
-        // Find next node
-        const nextEdge = edges.find(e => e.source === currentNodeId);
+        // Find next node - for waitInput, prioritize 'default' handle (user responded)
+        let nextEdge;
+        if (currentNode?.type === 'waitInput') {
+          // First try to find the 'default' (response) edge
+          nextEdge = edges.find(e => e.source === currentNodeId && e.sourceHandle === 'default');
+          // Fallback: find any edge without a specific timeout handle
+          if (!nextEdge) {
+            nextEdge = edges.find(e => e.source === currentNodeId && e.sourceHandle !== 'timeout' && e.sourceHandle !== 'followup');
+          }
+          console.log(`[${runId}] waitInput user response: using edge with sourceHandle=${nextEdge?.sourceHandle || 'fallback'}`);
+        } else {
+          nextEdge = edges.find(e => e.source === currentNodeId);
+        }
+        
         if (nextEdge) {
           currentNodeId = nextEdge.target;
         }
@@ -331,6 +343,15 @@ serve(async (req) => {
         lockUpdate.current_node_id = currentNodeId;
         lockUpdate.variables = variables;
         lockUpdate.last_interaction = new Date().toISOString();
+        
+        // Also cancel any pending timeout job when user responds
+        if (currentNode?.type === 'waitInput') {
+          await supabaseClient
+            .from('inbox_flow_delay_jobs')
+            .delete()
+            .eq('session_id', sessionId);
+          console.log(`[${runId}] Cancelled pending timeout job for session ${sessionId}`);
+        }
         
         console.log(`[${runId}] Checkpoint saved: moved from ${session.current_node_id} to ${currentNodeId} after receiving input`);
       } else {
@@ -1114,15 +1135,16 @@ Regras RIGOROSAS:
             break;
 
           case 'waitInput':
-            // If resumeFromTimeout, skip waiting and move to next node (with empty variable)
+            // If resumeFromTimeout, skip waiting and move to TIMEOUT output (not default response)
             if (resumeFromTimeout) {
-              console.log(`[${runId}] Timeout expired, continuing flow without user input`);
+              console.log(`[${runId}] Timeout expired, continuing flow via TIMEOUT output`);
               const varName = currentNode.data.variableName as string;
               if (varName) {
-                variables[varName] = ''; // Empty value for timeout
+                const key = normalizeVarKey(varName);
+                variables[key] = ''; // Empty value for timeout
               }
               
-              // Clear timeout and move to next node
+              // Clear timeout and move to timeout node (sourceHandle = 'timeout')
               await supabaseClient
                 .from('inbox_flow_sessions')
                 .update({
@@ -1132,13 +1154,25 @@ Regras RIGOROSAS:
                 })
                 .eq('id', sessionId);
               
-              processedActions.push('Timeout expired, continuing without input');
+              processedActions.push('Timeout expired, following timeout path');
               
-              const timeoutEdge = edges.find((e: { source: string }) => e.source === currentNodeId);
+              // IMPORTANT: Find edge with sourceHandle = 'timeout', NOT the default edge
+              const timeoutEdge = edges.find((e: { source: string; sourceHandle?: string }) => 
+                e.source === currentNodeId && e.sourceHandle === 'timeout'
+              );
+              
               if (timeoutEdge) {
+                console.log(`[${runId}] Found timeout edge to node ${timeoutEdge.target}`);
                 currentNodeId = timeoutEdge.target;
               } else {
-                continueProcessing = false;
+                // Fallback: try to find any edge (for backwards compatibility)
+                console.log(`[${runId}] No timeout edge found, looking for any edge from ${currentNodeId}`);
+                const fallbackEdge = edges.find((e: { source: string }) => e.source === currentNodeId);
+                if (fallbackEdge) {
+                  currentNodeId = fallbackEdge.target;
+                } else {
+                  continueProcessing = false;
+                }
               }
               break;
             }
