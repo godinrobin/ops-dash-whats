@@ -143,7 +143,7 @@ export const InboxSidebar = ({ selectedInstanceId, onInstanceChange }: InboxSide
             value={selectedInstanceId || 'all'} 
             onValueChange={(value) => onInstanceChange(value === 'all' ? undefined : value)}
           >
-            <SelectTrigger className="w-10 h-10 p-0 border-0" title="Filtrar por número">
+            <SelectTrigger className="w-10 h-10 p-0 border-0 bg-orange-500 hover:bg-orange-600 text-white rounded-lg" title="Filtrar por número">
               <Filter className="h-5 w-5" />
             </SelectTrigger>
             <SelectContent>
