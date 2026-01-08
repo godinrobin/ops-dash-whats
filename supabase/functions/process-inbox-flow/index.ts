@@ -37,7 +37,8 @@ serve(async (req) => {
     );
 
     const { sessionId, userInput, resumeFromDelay, resumeFromTimeout } = await req.json();
-    console.log(`[${runId}] SessionId: ${sessionId}, Input: ${userInput}, ResumeFromDelay: ${resumeFromDelay}, ResumeFromTimeout: ${resumeFromTimeout}`);
+    let effectiveResumeFromTimeout = !!resumeFromTimeout;
+    console.log(`[${runId}] SessionId: ${sessionId}, Input: ${userInput}, ResumeFromDelay: ${resumeFromDelay}, ResumeFromTimeout: ${resumeFromTimeout}, EffectiveResumeFromTimeout: ${effectiveResumeFromTimeout}`);
 
     // Get session with flow data
     const { data: session, error: sessionError } = await supabaseClient
