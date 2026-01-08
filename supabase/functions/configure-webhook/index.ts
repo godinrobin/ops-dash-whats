@@ -157,7 +157,7 @@ serve(async (req) => {
       const uazapiWebhookPayload = {
         enabled: true,
         url: webhookUrl,
-        events: ['messages', 'messages_update'],
+        events: ['messages', 'messages_update', 'connection'],
         excludeMessages: ['wasSentByApi', 'isGroupYes'],
         addUrlEvents: false,
         addUrlTypesMessages: false,
