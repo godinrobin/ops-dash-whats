@@ -1611,6 +1611,8 @@ export type Database = {
           pause_schedule_end: string | null
           pause_schedule_start: string | null
           priority: number
+          reply_interval: number | null
+          reply_mode: string | null
           reply_to_last_message: boolean | null
           trigger_keywords: string[] | null
           trigger_type: string
@@ -1631,6 +1633,8 @@ export type Database = {
           pause_schedule_end?: string | null
           pause_schedule_start?: string | null
           priority?: number
+          reply_interval?: number | null
+          reply_mode?: string | null
           reply_to_last_message?: boolean | null
           trigger_keywords?: string[] | null
           trigger_type?: string
@@ -1651,6 +1655,8 @@ export type Database = {
           pause_schedule_end?: string | null
           pause_schedule_start?: string | null
           priority?: number
+          reply_interval?: number | null
+          reply_mode?: string | null
           reply_to_last_message?: boolean | null
           trigger_keywords?: string[] | null
           trigger_type?: string

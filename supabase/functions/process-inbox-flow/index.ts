@@ -546,6 +546,13 @@ serve(async (req) => {
       // === REPLY TO LAST MESSAGE FEATURE ===
       // If flow has reply_to_last_message enabled and we're using UazAPI, get the replyId
       const replyToLastMessageEnabled = flow.reply_to_last_message === true && apiProvider === 'uazapi';
+      const replyMode = flow.reply_mode || 'all'; // 'all' or 'interval'
+      const replyInterval = flow.reply_interval || 3; // Every N messages, 1 is a reply
+      
+      // Initialize or get the message sent counter from session variables
+      let messagesSentCounter = typeof variables._messagesSentCounter === 'number' 
+        ? variables._messagesSentCounter 
+        : 0;
       
       // If _lastInboundMessageId is not set, try to fetch it from the most recent inbound message
       let lastInboundMsgId = variables._lastInboundMessageId ? String(variables._lastInboundMessageId) : null;
@@ -575,17 +582,47 @@ serve(async (req) => {
         }
       }
       
-      const replyIdForMessages = replyToLastMessageEnabled && lastInboundMsgId 
-        ? lastInboundMsgId 
-        : undefined;
+      // Helper function to determine if this message should be sent as a reply
+      // Returns the replyId if it should be a reply, undefined otherwise
+      const shouldSendAsReply = (): string | undefined => {
+        if (!replyToLastMessageEnabled || !lastInboundMsgId) {
+          return undefined;
+        }
+        
+        if (replyMode === 'all') {
+          // All messages are replies
+          return lastInboundMsgId;
+        }
+        
+        // Interval mode: only 1 out of every N messages is a reply
+        // The first message (counter = 0) is a reply, then every Nth message
+        const isReplyMessage = messagesSentCounter % replyInterval === 0;
+        return isReplyMessage ? lastInboundMsgId : undefined;
+      };
       
-      // This is the DB ID to store as reply_to_message_id in our messages table
-      const replyToMessageDbId = replyToLastMessageEnabled && lastInboundMessageDbId
-        ? lastInboundMessageDbId
-        : null;
+      // Helper function to get DB ID for reply (for storing in our messages table)
+      const getReplyToMessageDbId = (): string | null => {
+        if (!replyToLastMessageEnabled || !lastInboundMessageDbId) {
+          return null;
+        }
+        
+        if (replyMode === 'all') {
+          return lastInboundMessageDbId;
+        }
+        
+        // Interval mode
+        const isReplyMessage = messagesSentCounter % replyInterval === 0;
+        return isReplyMessage ? lastInboundMessageDbId : null;
+      };
+      
+      // Helper to increment message counter after sending
+      const incrementMessageCounter = () => {
+        messagesSentCounter++;
+        variables._messagesSentCounter = messagesSentCounter;
+      };
       
       if (replyToLastMessageEnabled) {
-        console.log(`[${runId}] Reply to last message enabled, replyId: ${replyIdForMessages || 'none'}, dbId: ${replyToMessageDbId || 'none'}`);
+        console.log(`[${runId}] Reply to last message enabled, mode: ${replyMode}, interval: ${replyInterval}, counter: ${messagesSentCounter}`);
       }
 
       // Process nodes until we hit a wait point or end
@@ -777,11 +814,14 @@ serve(async (req) => {
               // For UazAPI, pass delay parameter; for Evolution, delay was already handled
               const uazapiDelay = apiProvider === 'uazapi' ? textDelayMs : 0;
               console.log(`[${runId}] Calling sendMessage with apiProvider=${apiProvider}, uazapiDelay=${uazapiDelay}ms`);
-              const sendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, message, 'text', undefined, undefined, apiProvider, instanceUazapiToken, uazapiDelay, replyIdForMessages);
+              const currentReplyId = shouldSendAsReply();
+              const currentReplyDbId = getReplyToMessageDbId();
+              const sendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, message, 'text', undefined, undefined, apiProvider, instanceUazapiToken, uazapiDelay, currentReplyId);
+              incrementMessageCounter();
               
               // Save message with correct status based on send result
               const messageStatus = sendResult.ok ? 'sent' : 'failed';
-              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, message, 'text', flow.id, undefined, sendResult.remoteMessageId, messageStatus, replyToMessageDbId);
+              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, message, 'text', flow.id, undefined, sendResult.remoteMessageId, messageStatus, currentReplyDbId);
               
               if (!sendResult.ok) {
                 await handleSendFailure(currentNodeId, sendResult.errorDetails || 'Unknown error');
@@ -952,11 +992,14 @@ Regras RIGOROSAS:
               // For UazAPI, pass delay parameter; for Evolution, delay was already handled
               const uazapiAiDelay = apiProvider === 'uazapi' ? aiTextDelayMs : 0;
               console.log(`[${runId}] Calling sendMessage with apiProvider=${apiProvider}, uazapiAiDelay=${uazapiAiDelay}ms`);
-              const aiSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, aiVariedMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken, uazapiAiDelay, replyIdForMessages);
+              const currentAiReplyId = shouldSendAsReply();
+              const currentAiReplyDbId = getReplyToMessageDbId();
+              const aiSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, aiVariedMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken, uazapiAiDelay, currentAiReplyId);
+              incrementMessageCounter();
               
               // Save message with correct status based on send result
               const aiMessageStatus = aiSendResult.ok ? 'sent' : 'failed';
-              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, aiVariedMessage, 'text', flow.id, undefined, aiSendResult.remoteMessageId, aiMessageStatus, replyToMessageDbId);
+              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, aiVariedMessage, 'text', flow.id, undefined, aiSendResult.remoteMessageId, aiMessageStatus, currentAiReplyDbId);
               
               if (!aiSendResult.ok) {
                 await handleSendFailure(currentNodeId, aiSendResult.errorDetails || 'Unknown error');
@@ -1076,11 +1119,14 @@ Regras RIGOROSAS:
               // For UazAPI, pass delay parameter; for Evolution, delay was already handled
               const uazapiMediaDelay = apiProvider === 'uazapi' ? mediaDelayMs : 0;
               console.log(`[${runId}] Calling sendMessage with apiProvider=${apiProvider}, uazapiMediaDelay=${uazapiMediaDelay}ms`);
-              const mediaSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, contentToSend, currentNode.type, mediaUrl, fileName, apiProvider, instanceUazapiToken, uazapiMediaDelay, replyIdForMessages);
+              const currentMediaReplyId = shouldSendAsReply();
+              const currentMediaReplyDbId = getReplyToMessageDbId();
+              const mediaSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, contentToSend, currentNode.type, mediaUrl, fileName, apiProvider, instanceUazapiToken, uazapiMediaDelay, currentMediaReplyId);
+              incrementMessageCounter();
               
               // Save message with correct status based on send result
               const mediaStatus = mediaSendResult.ok ? 'sent' : 'failed';
-              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, caption || '', currentNode.type, flow.id, mediaUrl, mediaSendResult.remoteMessageId, mediaStatus, replyToMessageDbId);
+              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, caption || '', currentNode.type, flow.id, mediaUrl, mediaSendResult.remoteMessageId, mediaStatus, currentMediaReplyDbId);
               
               if (!mediaSendResult.ok) {
                 await handleSendFailure(currentNodeId, mediaSendResult.errorDetails || 'Unknown error');
@@ -1470,10 +1516,13 @@ Regras RIGOROSAS:
             const fullMenuMessage = `${menuMessage}\n\n${options}`;
             
             if (instanceName && phone && fullMenuMessage) {
-              const menuSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, fullMenuMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken, 0, replyIdForMessages);
+              const menuReplyId = shouldSendAsReply();
+              const menuReplyDbId = getReplyToMessageDbId();
+              const menuSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, fullMenuMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken, 0, menuReplyId);
+              incrementMessageCounter();
               
               const menuStatus = menuSendResult.ok ? 'sent' : 'failed';
-              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, fullMenuMessage, 'text', flow.id, undefined, menuSendResult.remoteMessageId, menuStatus, replyToMessageDbId);
+              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, fullMenuMessage, 'text', flow.id, undefined, menuSendResult.remoteMessageId, menuStatus, menuReplyDbId);
               
               if (!menuSendResult.ok) {
                 await handleSendFailure(currentNodeId, menuSendResult.errorDetails || 'Unknown error');
@@ -1573,10 +1622,13 @@ Regras RIGOROSAS:
             if (!sentNodeIds.includes(currentNodeId)) {
               const transferMessage = replaceVariables(currentNode.data.message as string || 'Transferindo para atendimento humano...', variables);
               if (instanceName && phone && transferMessage) {
-                const transferSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, transferMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken, 0, replyIdForMessages);
+                const transferReplyId = shouldSendAsReply();
+                const transferReplyDbId = getReplyToMessageDbId();
+                const transferSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, transferMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken, 0, transferReplyId);
+                incrementMessageCounter();
                 
                 const transferStatus = transferSendResult.ok ? 'sent' : 'failed';
-                await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, transferMessage, 'text', flow.id, undefined, transferSendResult.remoteMessageId, transferStatus, replyToMessageDbId);
+                await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, transferMessage, 'text', flow.id, undefined, transferSendResult.remoteMessageId, transferStatus, transferReplyDbId);
                 
                 if (!transferSendResult.ok) {
                   await handleSendFailure(currentNodeId, transferSendResult.errorDetails || 'Unknown error');
@@ -2696,7 +2748,7 @@ Regras RIGOROSAS:
             } else if (apiProvider !== 'uazapi') {
               // For non-UazAPI, send as regular text message with options
               const fallbackMessage = `${interactiveText}\n\n${interactiveChoices.map((c, i) => `${i + 1}. ${c.split('|')[0]}`).join('\n')}`;
-              const fallbackResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, fallbackMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken, 0, replyIdForMessages);
+              const fallbackResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, fallbackMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken, 0, shouldSendAsReply());
               if (fallbackResult.ok) {
                 await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, fallbackMessage, 'text', flow.id);
                 sentNodeIds.push(currentNodeId);

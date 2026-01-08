@@ -32,6 +32,8 @@ export const useInboxFlows = () => {
         pause_schedule_start: flow.pause_schedule_start || null,
         pause_schedule_end: flow.pause_schedule_end || null,
         reply_to_last_message: flow.reply_to_last_message || false,
+        reply_mode: (flow.reply_mode as 'all' | 'interval') || 'all',
+        reply_interval: flow.reply_interval || 3,
       })));
     } catch (err: any) {
       setError(err.message);
@@ -69,6 +71,8 @@ export const useInboxFlows = () => {
         trigger_type: 'keyword',
         trigger_keywords: [],
         assigned_instances: [],
+        reply_mode: (data.reply_mode as 'all' | 'interval') || 'all',
+        reply_interval: data.reply_interval || 3,
       };
 
       setFlows(prev => [newFlow, ...prev]);
@@ -104,6 +108,8 @@ export const useInboxFlows = () => {
         pause_schedule_start: data.pause_schedule_start || null,
         pause_schedule_end: data.pause_schedule_end || null,
         reply_to_last_message: data.reply_to_last_message || false,
+        reply_mode: (data.reply_mode as 'all' | 'interval') || 'all',
+        reply_interval: data.reply_interval || 3,
       } : f));
 
       return { data };

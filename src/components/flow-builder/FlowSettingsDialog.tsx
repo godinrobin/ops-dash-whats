@@ -56,6 +56,8 @@ export const FlowSettingsDialog = ({
   const [pauseScheduleStart, setPauseScheduleStart] = useState('00:00');
   const [pauseScheduleEnd, setPauseScheduleEnd] = useState('06:00');
   const [replyToLastMessage, setReplyToLastMessage] = useState(false);
+  const [replyMode, setReplyMode] = useState<'all' | 'interval'>('all');
+  const [replyInterval, setReplyInterval] = useState(3);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -71,6 +73,8 @@ export const FlowSettingsDialog = ({
       setPauseScheduleStart(flow.pause_schedule_start || '00:00');
       setPauseScheduleEnd(flow.pause_schedule_end || '06:00');
       setReplyToLastMessage(flow.reply_to_last_message || false);
+      setReplyMode(flow.reply_mode || 'all');
+      setReplyInterval(flow.reply_interval || 3);
     }
   }, [flow]);
 
@@ -109,6 +113,8 @@ export const FlowSettingsDialog = ({
       pause_schedule_start: pauseScheduleEnabled ? pauseScheduleStart : null,
       pause_schedule_end: pauseScheduleEnabled ? pauseScheduleEnd : null,
       reply_to_last_message: replyToLastMessage,
+      reply_mode: replyToLastMessage ? replyMode : 'all',
+      reply_interval: replyToLastMessage && replyMode === 'interval' ? replyInterval : 3,
     };
 
     const result = await onSave(flow.id, updates);
@@ -234,22 +240,67 @@ export const FlowSettingsDialog = ({
           </div>
 
           {/* Responder Última Mensagem */}
-          <div className="flex items-center justify-between p-3 border rounded-md">
-            <div>
-              <Label>Responder Última Mensagem</Label>
-              <p className="text-xs text-muted-foreground">
-                Todas as mensagens do fluxo responderão à última mensagem do cliente (Reduz o Bloqueio)
-              </p>
+          <div className="space-y-3 border rounded-md p-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>Responder Última Mensagem</Label>
+                <p className="text-xs text-muted-foreground">
+                  Mensagens do fluxo responderão à última mensagem do cliente (Reduz o Bloqueio)
+                </p>
+              </div>
+              <Switch 
+                checked={replyToLastMessage} 
+                onCheckedChange={setReplyToLastMessage}
+                className={
+                  replyToLastMessage
+                    ? 'data-[state=checked]:bg-green-500'
+                    : 'data-[state=unchecked]:bg-red-500'
+                }
+              />
             </div>
-            <Switch 
-              checked={replyToLastMessage} 
-              onCheckedChange={setReplyToLastMessage}
-              className={
-                replyToLastMessage
-                  ? 'data-[state=checked]:bg-green-500'
-                  : 'data-[state=unchecked]:bg-red-500'
-              }
-            />
+
+            {replyToLastMessage && (
+              <div className="space-y-3 pt-2 border-t">
+                <div className="space-y-2">
+                  <Label className="text-xs">Modo de Resposta</Label>
+                  <Select value={replyMode} onValueChange={(v) => setReplyMode(v as 'all' | 'interval')}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas as mensagens</SelectItem>
+                      <SelectItem value="interval">A cada X mensagens</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {replyMode === 'interval' && (
+                  <div className="space-y-2">
+                    <Label className="text-xs">Intervalo de Mensagens</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={2}
+                        max={20}
+                        value={replyInterval}
+                        onChange={(e) => setReplyInterval(Math.max(2, Math.min(20, parseInt(e.target.value) || 3)))}
+                        className="w-20"
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        1 de cada {replyInterval} mensagens será marcada como resposta
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-xs text-muted-foreground bg-muted p-2 rounded">
+                  💡 {replyMode === 'all' 
+                    ? 'Todas as mensagens do fluxo serão enviadas como resposta à última mensagem do cliente.' 
+                    : `A cada ${replyInterval} mensagens enviadas, 1 será marcada como resposta à última mensagem do cliente.`
+                  }
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Pausar ao receber mídia */}

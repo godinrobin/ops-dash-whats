@@ -58,6 +58,8 @@ const FlowEditorPage = () => {
   const [pauseScheduleStart, setPauseScheduleStart] = useState('00:00');
   const [pauseScheduleEnd, setPauseScheduleEnd] = useState('06:00');
   const [replyToLastMessage, setReplyToLastMessage] = useState(false);
+  const [replyMode, setReplyMode] = useState<'all' | 'interval'>('all');
+  const [replyInterval, setReplyInterval] = useState(3);
   const [instances, setInstances] = useState<Instance[]>([]);
   const [assignedInstances, setAssignedInstances] = useState<string[]>([]);
   const [analyticsDateFilter, setAnalyticsDateFilter] = useState<DateFilter>('today');
@@ -145,6 +147,8 @@ const FlowEditorPage = () => {
           trigger_type: data.trigger_type as 'keyword' | 'all' | 'schedule',
           trigger_keywords: data.trigger_keywords || [],
           assigned_instances: data.assigned_instances || [],
+          reply_mode: (data.reply_mode as 'all' | 'interval') || 'all',
+          reply_interval: data.reply_interval || 3,
         };
 
         setFlow(flowData);
@@ -158,6 +162,8 @@ const FlowEditorPage = () => {
         setPauseScheduleStart(data.pause_schedule_start || '00:00');
         setPauseScheduleEnd(data.pause_schedule_end || '06:00');
         setReplyToLastMessage(data.reply_to_last_message || false);
+        setReplyMode((data.reply_mode as 'all' | 'interval') || 'all');
+        setReplyInterval(data.reply_interval || 3);
         setAssignedInstances(data.assigned_instances || []);
       } catch (error: unknown) {
         console.error('Error fetching flow:', error);
@@ -200,6 +206,8 @@ const FlowEditorPage = () => {
           pause_schedule_start: pauseScheduleEnabled ? pauseScheduleStart : null,
           pause_schedule_end: pauseScheduleEnabled ? pauseScheduleEnd : null,
           reply_to_last_message: replyToLastMessage,
+          reply_mode: replyToLastMessage ? replyMode : 'all',
+          reply_interval: replyToLastMessage && replyMode === 'interval' ? replyInterval : 3,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)
@@ -386,21 +394,66 @@ const FlowEditorPage = () => {
                   )}
                 </div>
 
-                <div className="flex items-center justify-between py-2">
-                  <div>
-                    <Label>Responder Última Mensagem</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Todas as mensagens do fluxo responderão à última mensagem do cliente (Reduz o Bloqueio)
-                    </p>
+                <div className="space-y-3 border rounded-md p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Responder Última Mensagem</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Mensagens do fluxo responderão à última mensagem do cliente (Reduz o Bloqueio)
+                      </p>
+                    </div>
+                    <Switch
+                      checked={replyToLastMessage}
+                      onCheckedChange={setReplyToLastMessage}
+                      className={replyToLastMessage 
+                        ? "data-[state=checked]:bg-green-500" 
+                        : "data-[state=unchecked]:bg-red-500"
+                      }
+                    />
                   </div>
-                  <Switch
-                    checked={replyToLastMessage}
-                    onCheckedChange={setReplyToLastMessage}
-                    className={replyToLastMessage 
-                      ? "data-[state=checked]:bg-green-500" 
-                      : "data-[state=unchecked]:bg-red-500"
-                    }
-                  />
+
+                  {replyToLastMessage && (
+                    <div className="space-y-3 pt-2 border-t">
+                      <div className="space-y-2">
+                        <Label className="text-xs">Modo de Resposta</Label>
+                        <Select value={replyMode} onValueChange={(v) => setReplyMode(v as 'all' | 'interval')}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todas as mensagens</SelectItem>
+                            <SelectItem value="interval">A cada X mensagens</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {replyMode === 'interval' && (
+                        <div className="space-y-2">
+                          <Label className="text-xs">Intervalo de Mensagens</Label>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              min={2}
+                              max={20}
+                              value={replyInterval}
+                              onChange={(e) => setReplyInterval(Math.max(2, Math.min(20, parseInt(e.target.value) || 3)))}
+                              className="w-20"
+                            />
+                            <span className="text-xs text-muted-foreground">
+                              1 de cada {replyInterval} mensagens será marcada como resposta
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      <p className="text-xs text-muted-foreground bg-muted p-2 rounded">
+                        💡 {replyMode === 'all' 
+                          ? 'Todas as mensagens do fluxo serão enviadas como resposta.' 
+                          : `A cada ${replyInterval} mensagens, 1 será marcada como resposta.`
+                        }
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between py-2">
