@@ -2023,6 +2023,39 @@ serve(async (req) => {
         '98', '99', // Maranhão
       ];
       
+      // === EXTRACT AD DATA (externalAdReply) FOR ALL CONTACTS ===
+      // This should be done before contact creation to ensure ad data is captured
+      const rawMsgContentForAd = data.message || {};
+      const messageContextInfoForAd = rawMsgContentForAd.extendedTextMessage?.contextInfo || rawMsgContentForAd.contextInfo || data.contextInfo || {};
+      const externalAdReplyData = messageContextInfoForAd.externalAdReply || {};
+      
+      let adSourceUrl: string | null = externalAdReplyData.sourceUrl || null;
+      let adTitle: string | null = externalAdReplyData.title || null;
+      let adBody: string | null = externalAdReplyData.body || null;
+      let ctwaClid: string | null = null;
+      
+      // Try to extract ctwa_clid from the source URL
+      if (adSourceUrl) {
+        try {
+          const urlObj = new URL(adSourceUrl);
+          ctwaClid = urlObj.searchParams.get('ctwa_clid') || null;
+        } catch (e) {
+          // Invalid URL, skip
+        }
+      }
+      
+      // Also check referral data
+      const referralDataForAd = data.referral || rawMsgContentForAd.referral || messageContextInfoForAd.referral || {};
+      if (!ctwaClid && referralDataForAd.ctwa_clid) {
+        ctwaClid = referralDataForAd.ctwa_clid;
+      }
+      
+      const hasAdData = !!(adSourceUrl || adTitle || adBody || ctwaClid);
+      if (hasAdData) {
+        console.log(`[AD-DATA] Extracted ad data: title=${adTitle?.substring(0, 30)}, body=${adBody?.substring(0, 30)}, url=${adSourceUrl?.substring(0, 50)}, ctwa_clid=${ctwaClid}`);
+      }
+      // === END AD DATA EXTRACTION ===
+
       // Generate phone variations for Brazilian numbers
       const getPhoneVariations = (phoneNum: string): string[] => {
         const variations: string[] = [phoneNum];
@@ -2151,18 +2184,30 @@ serve(async (req) => {
         const contactName = useLidAsFallback ? null : validPushName;
 
         // Create new contact using upsert to handle race conditions
+        // Include ad data if available
+        const contactInsertData: Record<string, any> = {
+          user_id: userId,
+          instance_id: instanceId,
+          phone,
+          name: contactName,
+          status: 'active',
+          unread_count: 1,
+          last_message_at: new Date().toISOString(),
+          remote_jid: remoteJidToStore || null,
+        };
+        
+        // Add ad data if present
+        if (hasAdData) {
+          if (adSourceUrl) contactInsertData.ad_source_url = adSourceUrl;
+          if (adTitle) contactInsertData.ad_title = adTitle;
+          if (adBody) contactInsertData.ad_body = adBody;
+          if (ctwaClid) contactInsertData.ctwa_clid = ctwaClid;
+          console.log(`[AD-DATA] Including ad data in new contact creation`);
+        }
+        
         const { data: newContact, error: insertError } = await supabaseClient
           .from('inbox_contacts')
-          .upsert({
-            user_id: userId,
-            instance_id: instanceId,
-            phone,
-            name: contactName,
-            status: 'active',
-            unread_count: 1,
-            last_message_at: new Date().toISOString(),
-            remote_jid: remoteJidToStore || null,
-          }, {
+          .upsert(contactInsertData, {
             onConflict: 'user_id,instance_id,phone',
             ignoreDuplicates: false,
           })
@@ -2228,6 +2273,17 @@ serve(async (req) => {
           if (remoteJidToStore) {
             updates.remote_jid = remoteJidToStore;
             console.log(`[WEBHOOK] Updating contact ${contact.id} with remote_jid: ${remoteJidToStore}`);
+          }
+        }
+        
+        // Update ad data if present and contact doesn't have it yet
+        if (hasAdData) {
+          if (adSourceUrl && !contact.ad_source_url) updates.ad_source_url = adSourceUrl;
+          if (adTitle && !contact.ad_title) updates.ad_title = adTitle;
+          if (adBody && !contact.ad_body) updates.ad_body = adBody;
+          if (ctwaClid && !contact.ctwa_clid) updates.ctwa_clid = ctwaClid;
+          if (Object.keys(updates).some(k => k.startsWith('ad_') || k === 'ctwa_clid')) {
+            console.log(`[AD-DATA] Updating existing contact ${contact.id} with ad data`);
           }
         }
         
