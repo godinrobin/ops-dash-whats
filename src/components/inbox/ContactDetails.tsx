@@ -196,8 +196,8 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
             )}
           </div>
 
-          {/* Ad Origin - only show if from ad */}
-          {(contact.ad_source_url || contact.ctwa_clid) && (
+          {/* Ad Origin - show if any ad metadata exists */}
+          {(contact.ad_source_url || contact.ctwa_clid || contact.ad_title || contact.ad_body) && (
             <>
               <Separator />
               <div className="space-y-3">
