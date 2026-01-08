@@ -96,8 +96,8 @@ Deno.serve(async (req) => {
       try {
         console.log(`[DISCONNECT-NOTIFY] Sending to ${adminPhoneDigits} via ${notifier.instance_name}`);
         
-        // UazAPI v2 uses /send/text with 'token' header
-        const uazapiBaseUrl = `https://api.uazapi.com/${notifier.instance_name}`;
+        // UazAPI v2 uses /send/text with 'token' header - base URL is zapdata.uazapi.com
+        const uazapiBaseUrl = `https://zapdata.uazapi.com/${notifier.instance_name}`;
         const response = await fetch(
           `${uazapiBaseUrl}/send/text`,
           {
