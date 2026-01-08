@@ -147,22 +147,28 @@ export const ConversationList = ({
     return phone.length > 15 || (remoteJid && remoteJid.includes('@lid'));
   };
   
-  // Helper to format display name - ONLY show phone numbers
+  // Helper to format display name - show name if available, otherwise phone
   const getDisplayName = (contact: InboxContact) => {
     const remoteJid = (contact as any).remote_jid;
     if (isLidContact(contact.phone, remoteJid)) {
-      return 'Desconhecido';
+      // For LID contacts, show name if available, otherwise "Desconhecido"
+      return contact.name?.trim() || 'Desconhecido';
     }
-    return formatPhoneDisplay(contact.phone);
+    // Show name if available, otherwise show phone number
+    return contact.name?.trim() || formatPhoneDisplay(contact.phone);
   };
   
-  // Helper to get subtitle
+  // Helper to get subtitle - show phone for contacts with names
   const getSubtitle = (contact: InboxContact) => {
     const remoteJid = (contact as any).remote_jid;
     if (isLidContact(contact.phone, remoteJid)) {
       // Show last 6 chars of LID as identifier
       const shortId = contact.phone.slice(-6);
       return `Lead via anúncio • ID ${shortId}`;
+    }
+    // If contact has a name, show phone as subtitle
+    if (contact.name?.trim()) {
+      return formatPhoneDisplay(contact.phone);
     }
     return null;
   };
