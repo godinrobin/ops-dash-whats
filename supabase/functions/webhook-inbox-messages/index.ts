@@ -852,10 +852,49 @@ serve(async (req) => {
         const uazContentObj = parsePossiblyJson(uazMsg.content);
         const uazExternalAdReply = findExternalAdReply(uazContentObj);
         if (uazExternalAdReply) {
-          uazAdSourceUrl = uazExternalAdReply.sourceUrl || uazExternalAdReply.source_url || null;
+          // Helper: extract first string value for a set of keys by traversing the object
+          const findFirstStringValue = (obj: any, keyCandidates: string[], depth = 0): string | null => {
+            if (!obj || depth > 6) return null;
+            if (typeof obj !== 'object') return null;
+
+            for (const key of keyCandidates) {
+              const v = (obj as any)[key];
+              if (typeof v === 'string' && v.trim()) return v.trim();
+            }
+
+            const entries = Array.isArray(obj) ? obj.entries() : Object.entries(obj);
+            let i = 0;
+            for (const [, value] of entries as any) {
+              i++;
+              if (i > 80) break;
+              const found = findFirstStringValue(value, keyCandidates, depth + 1);
+              if (found) return found;
+            }
+            return null;
+          };
+
           uazAdTitle = uazExternalAdReply.title || null;
           uazAdBody = uazExternalAdReply.body || null;
-          if (uazAdSourceUrl) {
+
+          // UazAPI often provides the link outside externalAdReply (e.g. contextInfo.sourceURL)
+          const preferredSourceUrl =
+            (uazExternalAdReply.sourceURL || uazExternalAdReply.sourceUrl || uazExternalAdReply.source_url) ||
+            findFirstStringValue(uazContentObj, ['sourceURL', 'sourceUrl', 'source_url']);
+
+          const fallbackMediaUrl =
+            (uazExternalAdReply.mediaURL || uazExternalAdReply.mediaUrl || uazExternalAdReply.media_url) ||
+            findFirstStringValue(uazContentObj, ['mediaURL', 'mediaUrl', 'media_url']);
+
+          uazAdSourceUrl = (preferredSourceUrl || fallbackMediaUrl) || null;
+
+          // ctwa_clid can also come as a field (ctwaClid) outside the URL
+          uazCtwaClid =
+            (uazExternalAdReply.ctwaClid || uazExternalAdReply.ctwa_clid) ||
+            findFirstStringValue(uazContentObj, ['ctwaClid', 'ctwa_clid']) ||
+            null;
+
+          // Try to extract ctwa_clid from the URL if still missing
+          if (!uazCtwaClid && uazAdSourceUrl) {
             try {
               const urlObj = new URL(uazAdSourceUrl);
               uazCtwaClid = urlObj.searchParams.get('ctwa_clid') || null;
@@ -863,8 +902,9 @@ serve(async (req) => {
               // ignore invalid URL
             }
           }
+
           console.log(
-            `[UAZAPI-AD] Found externalAdReply: title=${uazAdTitle?.substring(0, 30)}, url=${uazAdSourceUrl?.substring(0, 60)}, ctwa_clid=${uazCtwaClid}`,
+            `[UAZAPI-AD] Found externalAdReply: title=${uazAdTitle?.substring(0, 30)}, url=${uazAdSourceUrl?.substring(0, 80)}, ctwa_clid=${uazCtwaClid}`,
           );
         }
 
