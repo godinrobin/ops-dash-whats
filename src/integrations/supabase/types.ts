@@ -922,6 +922,7 @@ export type Database = {
         Row: {
           ad_account_id: string | null
           ad_id: string | null
+          ad_source_url: string | null
           adset_id: string | null
           campaign_id: string | null
           created_at: string
@@ -943,6 +944,7 @@ export type Database = {
         Insert: {
           ad_account_id?: string | null
           ad_id?: string | null
+          ad_source_url?: string | null
           adset_id?: string | null
           campaign_id?: string | null
           created_at?: string
@@ -964,6 +966,7 @@ export type Database = {
         Update: {
           ad_account_id?: string | null
           ad_id?: string | null
+          ad_source_url?: string | null
           adset_id?: string | null
           campaign_id?: string | null
           created_at?: string
@@ -1365,8 +1368,12 @@ export type Database = {
       }
       inbox_contacts: {
         Row: {
+          ad_body: string | null
+          ad_source_url: string | null
+          ad_title: string | null
           assigned_to: string | null
           created_at: string
+          ctwa_clid: string | null
           flow_paused: boolean | null
           id: string
           instance_id: string | null
@@ -1384,8 +1391,12 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          ad_body?: string | null
+          ad_source_url?: string | null
+          ad_title?: string | null
           assigned_to?: string | null
           created_at?: string
+          ctwa_clid?: string | null
           flow_paused?: boolean | null
           id?: string
           instance_id?: string | null
@@ -1403,8 +1414,12 @@ export type Database = {
           user_id: string
         }
         Update: {
+          ad_body?: string | null
+          ad_source_url?: string | null
+          ad_title?: string | null
           assigned_to?: string | null
           created_at?: string
+          ctwa_clid?: string | null
           flow_paused?: boolean | null
           id?: string
           instance_id?: string | null

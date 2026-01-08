@@ -2538,6 +2538,9 @@ serve(async (req) => {
                 console.log('[ADS LEAD] Could not fetch tag_whats_configs:', configError);
               }
               
+              // Get ad source URL (first valid URL from various sources)
+              const adSourceUrl = sourceUrls[0] || null;
+
               // Create new lead
               const { error: leadError } = await supabaseClient
                 .from('ads_whatsapp_leads')
@@ -2552,12 +2555,33 @@ serve(async (req) => {
                   first_message: content?.substring(0, 500),
                   first_contact_at: new Date().toISOString(),
                   ad_account_id: adAccountId,
+                  ad_source_url: adSourceUrl,
                 });
 
               if (leadError) {
                 console.error('[ADS LEAD] Error creating lead:', leadError);
               } else {
-                console.log(`[ADS LEAD] New lead created for phone ${phone} with ad_account_id ${adAccountId}`);
+                console.log(`[ADS LEAD] New lead created for phone ${phone} with ad_account_id ${adAccountId}, ad_source_url ${adSourceUrl}`);
+              }
+
+              // Update inbox_contact with ad metadata
+              if (adSourceUrl || adTitle || adBody || ctwaClid) {
+                const { error: contactUpdateError } = await supabaseClient
+                  .from('inbox_contacts')
+                  .update({
+                    ad_source_url: adSourceUrl,
+                    ad_title: adTitle || null,
+                    ad_body: adBody || null,
+                    ctwa_clid: ctwaClid,
+                  })
+                  .eq('phone', phone)
+                  .eq('user_id', monitoredNumber.user_id);
+
+                if (contactUpdateError) {
+                  console.error('[ADS LEAD] Error updating contact with ad metadata:', contactUpdateError);
+                } else {
+                  console.log(`[ADS LEAD] Updated contact ${phone} with ad metadata`);
+                }
               }
             } else {
               console.log(`[ADS LEAD] Lead already exists for phone ${phone}`);
