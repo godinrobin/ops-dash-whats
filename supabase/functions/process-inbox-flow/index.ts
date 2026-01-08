@@ -544,8 +544,33 @@ serve(async (req) => {
       // === REPLY TO LAST MESSAGE FEATURE ===
       // If flow has reply_to_last_message enabled and we're using UazAPI, get the replyId
       const replyToLastMessageEnabled = flow.reply_to_last_message === true && apiProvider === 'uazapi';
-      const replyIdForMessages = replyToLastMessageEnabled && variables._lastInboundMessageId 
-        ? String(variables._lastInboundMessageId) 
+      
+      // If _lastInboundMessageId is not set, try to fetch it from the most recent inbound message
+      let lastInboundMsgId = variables._lastInboundMessageId ? String(variables._lastInboundMessageId) : null;
+      if (replyToLastMessageEnabled && !lastInboundMsgId) {
+        try {
+          const { data: lastInboundMsg } = await supabaseClient
+            .from('inbox_messages')
+            .select('remote_message_id')
+            .eq('contact_id', contact.id)
+            .eq('direction', 'inbound')
+            .not('remote_message_id', 'is', null)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          
+          if (lastInboundMsg?.remote_message_id) {
+            lastInboundMsgId = lastInboundMsg.remote_message_id;
+            variables._lastInboundMessageId = lastInboundMsgId;
+            console.log(`[${runId}] Fetched _lastInboundMessageId from DB: ${lastInboundMsgId}`);
+          }
+        } catch (e) {
+          console.error(`[${runId}] Error fetching last inbound message for reply:`, e);
+        }
+      }
+      
+      const replyIdForMessages = replyToLastMessageEnabled && lastInboundMsgId 
+        ? lastInboundMsgId 
         : undefined;
       
       if (replyToLastMessageEnabled) {

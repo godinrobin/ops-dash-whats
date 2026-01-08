@@ -1458,6 +1458,8 @@ serve(async (req) => {
                           resposta: '',
                           lastMessage: uazText || '',
                           contactName: contact.name || phone,
+                          ultima_mensagem: uazText || '',
+                          _lastInboundMessageId: uazMessageIdNormalized || null,
                         },
                         status: 'active',
                       })
