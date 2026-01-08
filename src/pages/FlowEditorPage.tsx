@@ -287,11 +287,11 @@ const FlowEditorPage = () => {
                 Configurações
               </Button>
             </SheetTrigger>
-            <SheetContent>
-              <SheetHeader>
+            <SheetContent className="flex flex-col h-full overflow-hidden">
+              <SheetHeader className="flex-shrink-0">
                 <SheetTitle>Configurações do Fluxo</SheetTitle>
               </SheetHeader>
-              <div className="space-y-4 mt-6">
+              <div className="flex-1 overflow-y-auto space-y-4 mt-6 pr-2">
                 <div className="space-y-2">
                   <Label>Nome do Fluxo</Label>
                   <Input

@@ -767,7 +767,7 @@ export default function InboxDashboard() {
       path: "/inbox/notify-admin",
       count: null,
       gradient: "from-amber-400 to-orange-500",
-      comingSoon: false,
+      comingSoon: true,
     },
   ];
 

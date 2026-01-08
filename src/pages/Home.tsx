@@ -68,19 +68,19 @@ const SystemCard = ({ icon, title, shortTitle, description, onClick, isLocked, i
         </div>
       )}
       
-      <div className="flex flex-col items-center text-center h-full overflow-hidden">
+      <div className="flex flex-col items-center text-center h-full overflow-hidden p-2 sm:p-3">
         {/* Icon centered at top */}
-        <div className="w-12 h-12 rounded-xl border border-border/50 flex items-center justify-center bg-background/50 mb-3 md:mb-4 flex-shrink-0">
+        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl border border-border/50 flex items-center justify-center bg-background/50 mb-2 sm:mb-3 md:mb-4 flex-shrink-0">
           {icon}
         </div>
         
         {/* Title and description */}
-        <div className="flex-1 flex flex-col min-w-0 w-full px-1">
+        <div className="flex-1 flex flex-col min-w-0 w-full">
           <h3 className={cn(
-            "text-[10px] sm:text-xs md:text-lg font-semibold tracking-tight text-foreground mb-1 md:mb-2 leading-tight",
+            "text-[9px] xs:text-[10px] sm:text-xs md:text-lg font-semibold tracking-tight text-foreground mb-1 md:mb-2 leading-tight break-words hyphens-auto",
             gradient && `bg-gradient-to-r ${gradient} bg-clip-text text-transparent`
           )}>
-            {title}
+            {shortTitle || title}
           </h3>
           <p className="hidden md:block text-sm text-muted-foreground line-clamp-2">
             {description}
@@ -397,7 +397,7 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
 
           {/* Grid with 3 columns and equal sized cards with stagger animation */}
           <motion.div 
-            className="grid grid-cols-2 sm:grid-cols-3 gap-3 md:gap-4"
+            className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 md:gap-4"
             initial="hidden"
             animate="visible"
             variants={{
@@ -421,7 +421,7 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
               return (
                 <motion.div 
                   key={system.path} 
-                  className="h-40 md:h-48"
+                  className="h-32 xs:h-36 sm:h-40 md:h-48"
                   variants={{
                     hidden: { 
                       opacity: 0, 
