@@ -2928,6 +2928,7 @@ serve(async (req) => {
                 lastMessage: content,
                 contactName: contact.name || phone,
                 ultima_mensagem: content,
+                _lastInboundMessageId: messageId || null,
               },
               status: 'active',
               processing: false,

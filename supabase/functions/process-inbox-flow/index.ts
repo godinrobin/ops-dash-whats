@@ -313,6 +313,24 @@ serve(async (req) => {
       variables.ultima_mensagem = userInputStr;
       console.log(`[${runId}] Updated system variables: lastMessage/resposta/ultima_mensagem = "${userInputStr.substring(0, 50)}"`);
       
+      // Update _lastInboundMessageId: fetch the most recent inbound message from this contact
+      try {
+        const { data: lastInbound } = await supabaseClient
+          .from('inbox_messages')
+          .select('remote_message_id')
+          .eq('contact_id', contact.id)
+          .eq('direction', 'inbound')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (lastInbound?.remote_message_id) {
+          variables._lastInboundMessageId = lastInbound.remote_message_id;
+          console.log(`[${runId}] Updated _lastInboundMessageId: ${lastInbound.remote_message_id}`);
+        }
+      } catch (e) {
+        console.error(`[${runId}] Error fetching last inbound message:`, e);
+      }
       // Only do checkpoint skip for waitInput and menu nodes, NOT paymentIdentifier
       if (currentNode?.type !== 'paymentIdentifier') {
         if (currentNode?.type === 'waitInput' && currentNode.data.variableName) {
@@ -523,6 +541,17 @@ serve(async (req) => {
 
       console.log(`[${runId}] Using API provider: ${apiProvider}, baseUrl: ${effectiveBaseUrl}`);
 
+      // === REPLY TO LAST MESSAGE FEATURE ===
+      // If flow has reply_to_last_message enabled and we're using UazAPI, get the replyId
+      const replyToLastMessageEnabled = flow.reply_to_last_message === true && apiProvider === 'uazapi';
+      const replyIdForMessages = replyToLastMessageEnabled && variables._lastInboundMessageId 
+        ? String(variables._lastInboundMessageId) 
+        : undefined;
+      
+      if (replyToLastMessageEnabled) {
+        console.log(`[${runId}] Reply to last message enabled, replyId: ${replyIdForMessages || 'none'}`);
+      }
+
       // Process nodes until we hit a wait point or end
       let continueProcessing = true;
       const processedActions: string[] = [];
@@ -712,7 +741,7 @@ serve(async (req) => {
               // For UazAPI, pass delay parameter; for Evolution, delay was already handled
               const uazapiDelay = apiProvider === 'uazapi' ? textDelayMs : 0;
               console.log(`[${runId}] Calling sendMessage with apiProvider=${apiProvider}, uazapiDelay=${uazapiDelay}ms`);
-              const sendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, message, 'text', undefined, undefined, apiProvider, instanceUazapiToken, uazapiDelay);
+              const sendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, message, 'text', undefined, undefined, apiProvider, instanceUazapiToken, uazapiDelay, replyIdForMessages);
               
               // Save message with correct status based on send result
               const messageStatus = sendResult.ok ? 'sent' : 'failed';
@@ -887,7 +916,7 @@ Regras RIGOROSAS:
               // For UazAPI, pass delay parameter; for Evolution, delay was already handled
               const uazapiAiDelay = apiProvider === 'uazapi' ? aiTextDelayMs : 0;
               console.log(`[${runId}] Calling sendMessage with apiProvider=${apiProvider}, uazapiAiDelay=${uazapiAiDelay}ms`);
-              const aiSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, aiVariedMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken, uazapiAiDelay);
+              const aiSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, aiVariedMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken, uazapiAiDelay, replyIdForMessages);
               
               // Save message with correct status based on send result
               const aiMessageStatus = aiSendResult.ok ? 'sent' : 'failed';
@@ -1011,7 +1040,7 @@ Regras RIGOROSAS:
               // For UazAPI, pass delay parameter; for Evolution, delay was already handled
               const uazapiMediaDelay = apiProvider === 'uazapi' ? mediaDelayMs : 0;
               console.log(`[${runId}] Calling sendMessage with apiProvider=${apiProvider}, uazapiMediaDelay=${uazapiMediaDelay}ms`);
-              const mediaSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, contentToSend, currentNode.type, mediaUrl, fileName, apiProvider, instanceUazapiToken, uazapiMediaDelay);
+              const mediaSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, contentToSend, currentNode.type, mediaUrl, fileName, apiProvider, instanceUazapiToken, uazapiMediaDelay, replyIdForMessages);
               
               // Save message with correct status based on send result
               const mediaStatus = mediaSendResult.ok ? 'sent' : 'failed';
@@ -1405,7 +1434,7 @@ Regras RIGOROSAS:
             const fullMenuMessage = `${menuMessage}\n\n${options}`;
             
             if (instanceName && phone && fullMenuMessage) {
-              const menuSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, fullMenuMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken);
+              const menuSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, fullMenuMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken, 0, replyIdForMessages);
               
               const menuStatus = menuSendResult.ok ? 'sent' : 'failed';
               await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, fullMenuMessage, 'text', flow.id, undefined, menuSendResult.remoteMessageId, menuStatus);
@@ -1508,7 +1537,7 @@ Regras RIGOROSAS:
             if (!sentNodeIds.includes(currentNodeId)) {
               const transferMessage = replaceVariables(currentNode.data.message as string || 'Transferindo para atendimento humano...', variables);
               if (instanceName && phone && transferMessage) {
-                const transferSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, transferMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken);
+                const transferSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, transferMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken, 0, replyIdForMessages);
                 
                 const transferStatus = transferSendResult.ok ? 'sent' : 'failed';
                 await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, transferMessage, 'text', flow.id, undefined, transferSendResult.remoteMessageId, transferStatus);
@@ -2631,7 +2660,7 @@ Regras RIGOROSAS:
             } else if (apiProvider !== 'uazapi') {
               // For non-UazAPI, send as regular text message with options
               const fallbackMessage = `${interactiveText}\n\n${interactiveChoices.map((c, i) => `${i + 1}. ${c.split('|')[0]}`).join('\n')}`;
-              const fallbackResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, fallbackMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken);
+              const fallbackResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, fallbackMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken, 0, replyIdForMessages);
               if (fallbackResult.ok) {
                 await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, fallbackMessage, 'text', flow.id);
                 sentNodeIds.push(currentNodeId);
@@ -2835,7 +2864,8 @@ async function sendMessage(
   fileName?: string,
   apiProvider: string = 'evolution',
   instanceToken?: string,
-  delayMs: number = 0
+  delayMs: number = 0,
+  replyId?: string
 ): Promise<SendMessageResult> {
   const formattedPhone = phone.replace(/\D/g, '');
   
@@ -2846,35 +2876,38 @@ async function sendMessage(
   if (apiProvider === 'uazapi') {
     // UazAPI v2 (OpenAPI):
     // - Auth header: token (instance token)
-    // - Send text: POST /send/text with { number, text, delay? }
-    // - Send media: POST /send/media with { number, type, file, text?, docName?, delay? }
+    // - Send text: POST /send/text with { number, text, delay?, replyid? }
+    // - Send media: POST /send/media with { number, type, file, text?, docName?, delay?, replyid? }
     // - delay is in milliseconds and shows "typing..." or "recording audio..." before sending
+    // - replyid quotes the specified message (anti-blocking feature)
     authHeader = { 'token': instanceToken || apiKey };
 
     // Base delay parameter - if delay > 0, include it to show presence status
     const delayParam = delayMs > 0 ? { delay: delayMs } : {};
+    // Reply parameter - if replyId is provided, include it to quote the message
+    const replyParam = replyId ? { replyid: replyId } : {};
 
     switch (messageType) {
       case 'text':
         endpoint = `/send/text`;
-        body = { number: formattedPhone, text: content, ...delayParam };
+        body = { number: formattedPhone, text: content, ...delayParam, ...replyParam };
         break;
       case 'image':
         endpoint = `/send/media`;
-        body = { number: formattedPhone, type: 'image', file: mediaUrl, ...(content ? { text: content } : {}), ...delayParam };
+        body = { number: formattedPhone, type: 'image', file: mediaUrl, ...(content ? { text: content } : {}), ...delayParam, ...replyParam };
         break;
       case 'audio':
         // UazAPI uses 'ptt' (push-to-talk) for voice messages - shows "recording audio..."
         endpoint = `/send/media`;
-        body = { number: formattedPhone, type: 'ptt', file: mediaUrl, ...delayParam };
+        body = { number: formattedPhone, type: 'ptt', file: mediaUrl, ...delayParam, ...replyParam };
         break;
       case 'video':
         endpoint = `/send/media`;
-        body = { number: formattedPhone, type: 'video', file: mediaUrl, ...(content ? { text: content } : {}), ...delayParam };
+        body = { number: formattedPhone, type: 'video', file: mediaUrl, ...(content ? { text: content } : {}), ...delayParam, ...replyParam };
         break;
       case 'document':
         endpoint = `/send/media`;
-        body = { number: formattedPhone, type: 'document', file: mediaUrl, docName: fileName || 'document', ...(content ? { text: content } : {}), ...delayParam };
+        body = { number: formattedPhone, type: 'document', file: mediaUrl, docName: fileName || 'document', ...(content ? { text: content } : {}), ...delayParam, ...replyParam };
         break;
       default:
         console.log(`Unknown message type: ${messageType}`);

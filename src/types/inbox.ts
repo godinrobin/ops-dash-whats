@@ -47,6 +47,7 @@ export interface InboxFlow {
   pause_schedule_enabled?: boolean;
   pause_schedule_start?: string;
   pause_schedule_end?: string;
+  reply_to_last_message?: boolean;
   created_at: string;
   updated_at: string;
 }

@@ -55,6 +55,7 @@ export const FlowSettingsDialog = ({
   const [pauseScheduleEnabled, setPauseScheduleEnabled] = useState(false);
   const [pauseScheduleStart, setPauseScheduleStart] = useState('00:00');
   const [pauseScheduleEnd, setPauseScheduleEnd] = useState('06:00');
+  const [replyToLastMessage, setReplyToLastMessage] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -69,6 +70,7 @@ export const FlowSettingsDialog = ({
       setPauseScheduleEnabled(flow.pause_schedule_enabled || false);
       setPauseScheduleStart(flow.pause_schedule_start || '00:00');
       setPauseScheduleEnd(flow.pause_schedule_end || '06:00');
+      setReplyToLastMessage(flow.reply_to_last_message || false);
     }
   }, [flow]);
 
@@ -106,6 +108,7 @@ export const FlowSettingsDialog = ({
       pause_schedule_enabled: pauseScheduleEnabled,
       pause_schedule_start: pauseScheduleEnabled ? pauseScheduleStart : null,
       pause_schedule_end: pauseScheduleEnabled ? pauseScheduleEnd : null,
+      reply_to_last_message: replyToLastMessage,
     };
 
     const result = await onSave(flow.id, updates);
@@ -228,6 +231,25 @@ export const FlowSettingsDialog = ({
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Responder Última Mensagem */}
+          <div className="flex items-center justify-between p-3 border rounded-md">
+            <div>
+              <Label>Responder Última Mensagem</Label>
+              <p className="text-xs text-muted-foreground">
+                Todas as mensagens do fluxo responderão à última mensagem do cliente (anti-bloqueio)
+              </p>
+            </div>
+            <Switch 
+              checked={replyToLastMessage} 
+              onCheckedChange={setReplyToLastMessage}
+              className={
+                replyToLastMessage
+                  ? 'data-[state=checked]:bg-green-500'
+                  : 'data-[state=unchecked]:bg-red-500'
+              }
+            />
           </div>
 
           {/* Pausar ao receber mídia */}

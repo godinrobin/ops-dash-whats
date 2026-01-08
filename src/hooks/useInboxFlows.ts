@@ -31,6 +31,7 @@ export const useInboxFlows = () => {
         pause_schedule_enabled: flow.pause_schedule_enabled || false,
         pause_schedule_start: flow.pause_schedule_start || null,
         pause_schedule_end: flow.pause_schedule_end || null,
+        reply_to_last_message: flow.reply_to_last_message || false,
       })));
     } catch (err: any) {
       setError(err.message);
@@ -102,6 +103,7 @@ export const useInboxFlows = () => {
         pause_schedule_enabled: data.pause_schedule_enabled || false,
         pause_schedule_start: data.pause_schedule_start || null,
         pause_schedule_end: data.pause_schedule_end || null,
+        reply_to_last_message: data.reply_to_last_message || false,
       } : f));
 
       return { data };
