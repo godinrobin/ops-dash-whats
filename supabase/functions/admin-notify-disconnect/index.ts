@@ -66,6 +66,16 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Get UazAPI base URL from config
+    const { data: apiConfig } = await supabase
+      .from("whatsapp_api_config")
+      .select("uazapi_base_url")
+      .limit(1)
+      .single();
+    
+    const uazapiBaseUrl = (apiConfig?.uazapi_base_url || "https://zapdata.uazapi.com").replace(/\/$/, "");
+    console.log(`[DISCONNECT-NOTIFY] Using UazAPI base URL: ${uazapiBaseUrl}`);
+
     // Get admin instances
     const { data: admins, error: adminsError } = await supabase
       .from("maturador_instances")
@@ -94,10 +104,9 @@ Deno.serve(async (req) => {
       if (!adminPhoneDigits) continue;
 
       try {
-        console.log(`[DISCONNECT-NOTIFY] Sending to ${adminPhoneDigits} via ${notifier.instance_name}`);
+        console.log(`[DISCONNECT-NOTIFY] Sending to ${adminPhoneDigits} via ${notifier.instance_name} at ${uazapiBaseUrl}`);
         
-        // UazAPI v2 uses /send/text with 'token' header - base URL is zapdata.uazapi.com
-        const uazapiBaseUrl = `https://zapdata.uazapi.com/${notifier.instance_name}`;
+        // UazAPI v2 uses /send/text with 'token' header - base URL from config
         const response = await fetch(
           `${uazapiBaseUrl}/send/text`,
           {
