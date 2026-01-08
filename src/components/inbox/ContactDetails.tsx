@@ -1,4 +1,4 @@
-import { X, Tag, MessageSquare, Calendar, Edit2, Trash2, Megaphone, ExternalLink } from 'lucide-react';
+import { X, Tag, MessageSquare, Calendar, Edit2, Trash2, Megaphone, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { formatPhoneDisplay } from '@/utils/phoneFormatter';
@@ -21,6 +21,7 @@ interface ContactDetailsProps {
 export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
   const [notes, setNotes] = useState(contact.notes || '');
   const [editingNotes, setEditingNotes] = useState(false);
+  const [showFullAdBody, setShowFullAdBody] = useState(false);
 
   const getInitials = (name: string | null, phone: string) => {
     if (name && name.trim()) {
@@ -206,30 +207,57 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
                   <span className="text-sm font-medium">Origem do Anúncio</span>
                 </div>
                 
-                {contact.ad_title && (
-                  <p className="text-sm font-medium">{contact.ad_title}</p>
-                )}
-                
-                {contact.ad_body && (
-                  <p className="text-sm text-muted-foreground">{contact.ad_body}</p>
-                )}
-                
+                {/* Ver Anúncio button first - orange color */}
                 {contact.ad_source_url && (
                   <a 
                     href={contact.ad_source_url} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-orange-500 hover:bg-orange-600 text-white transition-colors"
                   >
-                    <ExternalLink className="h-3 w-3" />
-                    Ver anúncio
+                    <ExternalLink className="h-4 w-4" />
+                    Ver Anúncio
                   </a>
                 )}
+
+                {/* Ad Title */}
+                {contact.ad_title && (
+                  <div>
+                    <span className="text-xs text-muted-foreground uppercase tracking-wide">Título</span>
+                    <p className="text-sm font-medium mt-0.5">{contact.ad_title}</p>
+                  </div>
+                )}
                 
-                {contact.ctwa_clid && (
-                  <p className="text-xs text-muted-foreground font-mono">
-                    CTWA ID: {contact.ctwa_clid.slice(0, 20)}...
-                  </p>
+                {/* Ad Body / Copy with truncation */}
+                {contact.ad_body && (
+                  <div>
+                    <span className="text-xs text-muted-foreground uppercase tracking-wide">Texto do Anúncio</span>
+                    <div className="mt-0.5">
+                      <p className={`text-sm text-muted-foreground ${!showFullAdBody ? 'line-clamp-3' : ''}`}>
+                        {contact.ad_body}
+                      </p>
+                      {contact.ad_body.length > 150 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-0 text-xs text-primary hover:text-primary/80 mt-1"
+                          onClick={() => setShowFullAdBody(!showFullAdBody)}
+                        >
+                          {showFullAdBody ? (
+                            <>
+                              <ChevronUp className="h-3 w-3 mr-1" />
+                              Ver menos
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="h-3 w-3 mr-1" />
+                              Ver mais
+                            </>
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
             </>
