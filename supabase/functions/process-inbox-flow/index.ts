@@ -336,45 +336,60 @@ serve(async (req) => {
       }
       // Only do checkpoint skip for waitInput and menu nodes, NOT paymentIdentifier
       if (currentNode?.type !== 'paymentIdentifier') {
-        if (currentNode?.type === 'waitInput' && currentNode.data.variableName) {
-          const key = normalizeVarKey(currentNode.data.variableName as string);
-          variables[key] = userInputStr;
-          console.log(`[${runId}] Saved user input to variable "${key}": "${userInputStr.substring(0, 50)}"`);
-        }
+        // If the waitInput timeout already expired, ignore the user's late reply and follow the timeout path only
+        const timeoutExpired =
+          currentNode?.type === 'waitInput' &&
+          session.timeout_at &&
+          new Date(session.timeout_at).getTime() <= Date.now();
 
-        // Find next node - for waitInput, prioritize 'default' handle (user responded)
-        let nextEdge;
-        if (currentNode?.type === 'waitInput') {
-          // First try to find the 'default' (response) edge
-          nextEdge = edges.find(e => e.source === currentNodeId && e.sourceHandle === 'default');
-          // Fallback: find any edge without a specific timeout handle
-          if (!nextEdge) {
-            nextEdge = edges.find(e => e.source === currentNodeId && e.sourceHandle !== 'timeout' && e.sourceHandle !== 'followup');
-          }
-          console.log(`[${runId}] waitInput user response: using edge with sourceHandle=${nextEdge?.sourceHandle || 'fallback'}`);
+        if (timeoutExpired && !resumeFromTimeout) {
+          effectiveResumeFromTimeout = true;
+          lockUpdate.variables = variables;
+          lockUpdate.last_interaction = new Date().toISOString();
+          console.log(
+            `[${runId}] waitInput late response received after timeout (${session.timeout_at}). Forcing TIMEOUT route only.`
+          );
         } else {
-          nextEdge = edges.find(e => e.source === currentNodeId);
+          if (currentNode?.type === 'waitInput' && currentNode.data.variableName) {
+            const key = normalizeVarKey(currentNode.data.variableName as string);
+            variables[key] = userInputStr;
+            console.log(`[${runId}] Saved user input to variable "${key}": "${userInputStr.substring(0, 50)}"`);
+          }
+
+          // Find next node - for waitInput, prioritize 'default' handle (user responded)
+          let nextEdge;
+          if (currentNode?.type === 'waitInput') {
+            // First try to find the 'default' (response) edge
+            nextEdge = edges.find(e => e.source === currentNodeId && e.sourceHandle === 'default');
+            // Fallback: find any edge without a specific timeout handle
+            if (!nextEdge) {
+              nextEdge = edges.find(e => e.source === currentNodeId && e.sourceHandle !== 'timeout' && e.sourceHandle !== 'followup');
+            }
+            console.log(`[${runId}] waitInput user response: using edge with sourceHandle=${nextEdge?.sourceHandle || 'fallback'}`);
+          } else {
+            nextEdge = edges.find(e => e.source === currentNodeId);
+          }
+
+          if (nextEdge) {
+            currentNodeId = nextEdge.target;
+          }
+
+          // IMPORTANT: Save checkpoint immediately with lock to prevent duplicate processing
+          lockUpdate.current_node_id = currentNodeId;
+          lockUpdate.variables = variables;
+          lockUpdate.last_interaction = new Date().toISOString();
+
+          // Also cancel any pending timeout job when user responds
+          if (currentNode?.type === 'waitInput') {
+            await supabaseClient
+              .from('inbox_flow_delay_jobs')
+              .delete()
+              .eq('session_id', sessionId);
+            console.log(`[${runId}] Cancelled pending timeout job for session ${sessionId}`);
+          }
+
+          console.log(`[${runId}] Checkpoint saved: moved from ${session.current_node_id} to ${currentNodeId} after receiving input`);
         }
-        
-        if (nextEdge) {
-          currentNodeId = nextEdge.target;
-        }
-        
-        // IMPORTANT: Save checkpoint immediately with lock to prevent duplicate processing
-        lockUpdate.current_node_id = currentNodeId;
-        lockUpdate.variables = variables;
-        lockUpdate.last_interaction = new Date().toISOString();
-        
-        // Also cancel any pending timeout job when user responds
-        if (currentNode?.type === 'waitInput') {
-          await supabaseClient
-            .from('inbox_flow_delay_jobs')
-            .delete()
-            .eq('session_id', sessionId);
-          console.log(`[${runId}] Cancelled pending timeout job for session ${sessionId}`);
-        }
-        
-        console.log(`[${runId}] Checkpoint saved: moved from ${session.current_node_id} to ${currentNodeId} after receiving input`);
       } else {
         console.log(`[${runId}] paymentIdentifier node - will process media inline, no checkpoint skip`);
       }
@@ -1247,8 +1262,8 @@ Regras RIGOROSAS:
             break;
 
           case 'waitInput':
-            // If resumeFromTimeout, skip waiting and move to TIMEOUT output (not default response)
-            if (resumeFromTimeout) {
+            // If resumeFromTimeout (or late response), skip waiting and move to TIMEOUT output (not default response)
+            if (effectiveResumeFromTimeout) {
               console.log(`[${runId}] Timeout expired, continuing flow via TIMEOUT output`);
               const varName = currentNode.data.variableName as string;
               if (varName) {
