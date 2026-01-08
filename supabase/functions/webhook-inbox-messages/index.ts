@@ -3302,16 +3302,6 @@ serve(async (req) => {
 
       console.log(`[UAZAPI-CONNECTION] ${uazInstanceName}: instance.status=${rawInstanceStatus} connected=${statusConnected} loggedIn=${statusLoggedIn} -> ${newStatus}`);
 
-      // Get previous status BEFORE updating
-      const { data: previousInstanceData } = await supabaseClient
-        .from('maturador_instances')
-        .select('id, status, phone_number, user_id')
-        .eq('instance_name', uazInstanceName)
-        .single();
-
-      const previousStatus = previousInstanceData?.status;
-
-      // Update instance status
       await supabaseClient
         .from('maturador_instances')
         .update({
@@ -3319,73 +3309,6 @@ serve(async (req) => {
           last_seen: newStatus === 'connected' ? new Date().toISOString() : null,
         })
         .eq('instance_name', uazInstanceName);
-
-      // SEND NOTIFICATION if status changed from connected to disconnected
-      if (previousStatus === 'connected' && newStatus === 'disconnected' && previousInstanceData) {
-        console.log(`[STATUS-MONITOR] Instance ${uazInstanceName} disconnected, checking for global monitor...`);
-        
-        try {
-          // Check if user has global status monitoring enabled
-          const { data: configData } = await supabaseClient
-            .from('admin_notify_configs')
-            .select('*')
-            .eq('user_id', previousInstanceData.user_id)
-            .eq('status_monitor_enabled', true)
-            .single();
-
-          if (configData) {
-            const notifierInstanceId = configData.notifier_instance_id;
-            const adminInstanceIds = configData.admin_instance_ids || [];
-
-            if (notifierInstanceId && adminInstanceIds.length > 0) {
-              // Get notifier instance details
-              const { data: notifierInstance } = await supabaseClient
-                .from('maturador_instances')
-                .select('instance_name, uazapi_token')
-                .eq('id', notifierInstanceId)
-                .single();
-
-              if (notifierInstance?.uazapi_token) {
-                // Get admin phone numbers
-                const { data: adminInstances } = await supabaseClient
-                  .from('maturador_instances')
-                  .select('phone_number')
-                  .in('id', adminInstanceIds);
-
-                const phoneNumber = previousInstanceData.phone_number || uazInstanceName;
-                const message = `🚨 Número Caiu: ${phoneNumber}\n\n\`\`\`aviso zapdata\`\`\``;
-
-                // Send message to each admin
-                for (const admin of adminInstances || []) {
-                  if (admin.phone_number) {
-                    const cleanPhone = admin.phone_number.replace(/\D/g, '');
-                    const remoteJid = cleanPhone.includes('@') ? cleanPhone : `${cleanPhone}@s.whatsapp.net`;
-
-                    try {
-                      await fetch(`https://api.uazapi.com/message/text/${notifierInstance.instance_name}`, {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          'Authorization': `Bearer ${notifierInstance.uazapi_token}`,
-                        },
-                        body: JSON.stringify({
-                          to: remoteJid,
-                          text: message,
-                        }),
-                      });
-                      console.log(`[STATUS-MONITOR] Sent disconnect notification to ${cleanPhone}`);
-                    } catch (sendErr) {
-                      console.error(`[STATUS-MONITOR] Error sending to ${cleanPhone}:`, sendErr);
-                    }
-                  }
-                }
-              }
-            }
-          }
-        } catch (monitorErr) {
-          console.error('[STATUS-MONITOR] Error checking monitors:', monitorErr);
-        }
-      }
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

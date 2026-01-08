@@ -35,7 +35,6 @@ interface NotifyConfig {
   id: string;
   notifier_instance_id: string | null;
   admin_instance_ids: string[];
-  status_monitor_enabled: boolean;
 }
 
 interface LeadLimit {
@@ -76,7 +75,6 @@ export default function NotifyAdminPage() {
   // Form state
   const [notifierInstanceId, setNotifierInstanceId] = useState<string>("");
   const [adminInstanceIds, setAdminInstanceIds] = useState<string[]>([]);
-  const [statusMonitorEnabled, setStatusMonitorEnabled] = useState(false);
 
   // Lead limit modal
   const [leadLimitModalOpen, setLeadLimitModalOpen] = useState(false);
@@ -109,7 +107,6 @@ export default function NotifyAdminPage() {
         setConfig(configData);
         setNotifierInstanceId(configData.notifier_instance_id || "");
         setAdminInstanceIds(configData.admin_instance_ids || []);
-        setStatusMonitorEnabled(configData.status_monitor_enabled || false);
 
         // Fetch lead limits
         const { data: limitsData } = await supabase
@@ -168,7 +165,6 @@ export default function NotifyAdminPage() {
           .update({
             notifier_instance_id: notifierInstanceId,
             admin_instance_ids: adminInstanceIds,
-            status_monitor_enabled: statusMonitorEnabled,
           })
           .eq('id', config.id);
 
@@ -181,7 +177,6 @@ export default function NotifyAdminPage() {
             user_id: userId,
             notifier_instance_id: notifierInstanceId,
             admin_instance_ids: adminInstanceIds,
-            status_monitor_enabled: statusMonitorEnabled,
           })
           .select()
           .single();
@@ -295,26 +290,38 @@ export default function NotifyAdminPage() {
     }
   };
 
-  const handleToggleStatusMonitor = async () => {
+  const handleToggleInstanceMonitor = async (instanceId: string) => {
     if (!config) {
       toast.error('Salve a configuração principal primeiro');
       return;
     }
 
-    const newValue = !statusMonitorEnabled;
-    setStatusMonitorEnabled(newValue);
+    const userId = effectiveUserId || user?.id;
+    if (!userId) return;
+
+    const existing = instanceMonitors.find(m => m.instance_id === instanceId);
 
     try {
-      const { error } = await supabase
-        .from('admin_notify_configs')
-        .update({ status_monitor_enabled: newValue })
-        .eq('id', config.id);
-
-      if (error) throw error;
-      toast.success(newValue ? 'Monitoramento ativado!' : 'Monitoramento desativado');
+      if (existing) {
+        const { error } = await supabase
+          .from('admin_notify_instance_monitor')
+          .update({ is_active: !existing.is_active })
+          .eq('id', existing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('admin_notify_instance_monitor')
+          .insert({
+            user_id: userId,
+            config_id: config.id,
+            instance_id: instanceId,
+            is_active: true,
+          });
+        if (error) throw error;
+      }
+      fetchData();
     } catch (error) {
-      console.error('Error toggling status monitor:', error);
-      setStatusMonitorEnabled(!newValue); // Revert on error
+      console.error('Error toggling instance monitor:', error);
       toast.error('Erro ao atualizar monitoramento');
     }
   };
@@ -527,69 +534,9 @@ export default function NotifyAdminPage() {
         </Card>
 
         {/* Alert Types */}
-        <div className="space-y-6">
-          {/* Status Monitor Alert - FIRST AND FUNCTIONAL */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Lead Limit Alert */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <WifiOff className="h-5 w-5 text-red-500" />
-                Monitorar Status de Números
-              </CardTitle>
-              <CardDescription>
-                Receba alerta imediato quando um número for desconectado
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="bg-muted/50 p-3 rounded-lg flex items-start gap-2">
-                <Info className="h-4 w-4 text-orange-500 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-muted-foreground">
-                  Você receberá uma mensagem instantânea quando qualquer número mudar de conectado para desconectado
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between p-4 rounded-lg border bg-card">
-                <div className="flex items-center gap-3">
-                  <div className={cn(
-                    "p-2 rounded-full",
-                    statusMonitorEnabled ? "bg-green-500/20" : "bg-red-500/20"
-                  )}>
-                    {statusMonitorEnabled ? (
-                      <Wifi className="h-5 w-5 text-green-500" />
-                    ) : (
-                      <WifiOff className="h-5 w-5 text-red-500" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="font-medium">Monitorar Todos os Números</p>
-                    <p className="text-sm text-muted-foreground">
-                      {statusMonitorEnabled 
-                        ? "Você será avisado quando um número desconectar" 
-                        : "Ative para receber alertas de desconexão"}
-                    </p>
-                  </div>
-                </div>
-                <Switch
-                  checked={statusMonitorEnabled}
-                  onCheckedChange={handleToggleStatusMonitor}
-                  disabled={!config}
-                  className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500"
-                />
-              </div>
-
-              {!config && (
-                <p className="text-xs text-amber-500 text-center">
-                  Salve a configuração principal primeiro
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Lead Limit Alert - Blurred */}
-          <Card className="relative overflow-hidden">
-            <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center">
-              <Lock className="h-8 w-8 text-muted-foreground mb-2" />
-              <p className="text-sm font-medium text-muted-foreground">Em breve</p>
-            </div>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <BarChart3 className="h-5 w-5 text-blue-500" />
@@ -671,6 +618,118 @@ export default function NotifyAdminPage() {
                 <Plus className="h-4 w-4 mr-2" />
                 Adicionar Número
               </Button>
+            </CardContent>
+          </Card>
+
+          {/* Instance Disconnect Alert - Blurred */}
+          <Card className="relative overflow-hidden">
+            <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center">
+              <Lock className="h-8 w-8 text-muted-foreground mb-2" />
+              <p className="text-sm font-medium text-muted-foreground">Em breve</p>
+            </div>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <WifiOff className="h-5 w-5 text-red-500" />
+                Instância Desconectada
+              </CardTitle>
+              <CardDescription>
+                Envie <Badge variant="outline" className="text-xs">#status</Badge> para verificar as instâncias
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="bg-muted/50 p-3 rounded-lg flex items-start gap-2">
+                <Info className="h-4 w-4 text-orange-500 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-muted-foreground">
+                  Ao enviar #status, você receberá o status de cada número monitorado
+                </p>
+              </div>
+
+              {connectedInstances.length > 0 ? (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {connectedInstances.map((instance) => {
+                    const monitor = instanceMonitors.find(m => m.instance_id === instance.id);
+                    const isMonitored = monitor?.is_active ?? false;
+                    
+                    return (
+                      <div 
+                        key={instance.id}
+                        className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Wifi className="h-4 w-4 text-green-500" />
+                          <span className="text-sm">{getInstanceDisplay(instance.id)}</span>
+                        </div>
+                        <Switch
+                          checked={isMonitored}
+                          onCheckedChange={() => handleToggleInstanceMonitor(instance.id)}
+                          disabled={!config}
+                          className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Nenhum número conectado
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Sales Monitor Alert - Blurred */}
+          <Card className="relative overflow-hidden">
+            <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center">
+              <Lock className="h-8 w-8 text-muted-foreground mb-2" />
+              <p className="text-sm font-medium text-muted-foreground">Em breve</p>
+            </div>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <ShoppingBag className="h-5 w-5 text-green-500" />
+                Monitor de Vendas
+              </CardTitle>
+              <CardDescription>
+                Envie <Badge variant="outline" className="text-xs">#vendas</Badge> para ver vendas do dia
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="bg-muted/50 p-3 rounded-lg flex items-start gap-2">
+                <Info className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-muted-foreground">
+                  Dados provenientes do Tag Whats Cloud
+                </p>
+              </div>
+
+              {connectedInstances.length > 0 ? (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {connectedInstances.map((instance) => {
+                    const monitor = salesMonitors.find(m => m.instance_id === instance.id);
+                    const isMonitored = monitor?.is_active ?? false;
+                    
+                    return (
+                      <div 
+                        key={instance.id}
+                        className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50"
+                      >
+                        <div className="flex items-center gap-2">
+                          <ShoppingBag className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">{getInstanceDisplay(instance.id)}</span>
+                        </div>
+                        <Switch
+                          checked={isMonitored}
+                          onCheckedChange={() => handleToggleSalesMonitor(instance.id)}
+                          disabled={!config}
+                          className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Nenhum número conectado
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>

@@ -197,6 +197,3 @@ verify_jwt = true
 
 [functions.admin-notify-handler]
 verify_jwt = true
-
-[functions.admin-notify-disconnect]
-verify_jwt = false
