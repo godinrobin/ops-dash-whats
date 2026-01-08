@@ -28,7 +28,12 @@ export interface InboxMessage {
   status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
   is_from_flow: boolean;
   flow_id: string | null;
+  reply_to_message_id: string | null;
   created_at: string;
+}
+
+export interface InboxMessageWithReply extends InboxMessage {
+  reply_to_message?: InboxMessage | null;
 }
 
 export interface InboxFlow {

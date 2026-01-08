@@ -1673,6 +1673,7 @@ export type Database = {
           media_url: string | null
           message_type: string
           remote_message_id: string | null
+          reply_to_message_id: string | null
           status: string
           user_id: string
         }
@@ -1689,6 +1690,7 @@ export type Database = {
           media_url?: string | null
           message_type?: string
           remote_message_id?: string | null
+          reply_to_message_id?: string | null
           status?: string
           user_id: string
         }
@@ -1705,6 +1707,7 @@ export type Database = {
           media_url?: string | null
           message_type?: string
           remote_message_id?: string | null
+          reply_to_message_id?: string | null
           status?: string
           user_id?: string
         }
@@ -1721,6 +1724,13 @@ export type Database = {
             columns: ["instance_id"]
             isOneToOne: false
             referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_messages_reply_to_message_id_fkey"
+            columns: ["reply_to_message_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_messages"
             referencedColumns: ["id"]
           },
         ]
