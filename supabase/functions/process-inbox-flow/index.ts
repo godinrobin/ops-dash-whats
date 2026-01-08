@@ -313,20 +313,22 @@ serve(async (req) => {
       variables.ultima_mensagem = userInputStr;
       console.log(`[${runId}] Updated system variables: lastMessage/resposta/ultima_mensagem = "${userInputStr.substring(0, 50)}"`);
       
-      // Update _lastInboundMessageId: fetch the most recent inbound message from this contact
+      // Update _lastInboundMessageId and _lastInboundMessageDbId: fetch the most recent inbound message from this contact
       try {
         const { data: lastInbound } = await supabaseClient
           .from('inbox_messages')
-          .select('remote_message_id')
+          .select('id, remote_message_id')
           .eq('contact_id', contact.id)
           .eq('direction', 'inbound')
+          .not('remote_message_id', 'is', null)
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
         
         if (lastInbound?.remote_message_id) {
           variables._lastInboundMessageId = lastInbound.remote_message_id;
-          console.log(`[${runId}] Updated _lastInboundMessageId: ${lastInbound.remote_message_id}`);
+          variables._lastInboundMessageDbId = lastInbound.id;
+          console.log(`[${runId}] Updated _lastInboundMessageId: ${lastInbound.remote_message_id}, _lastInboundMessageDbId: ${lastInbound.id}`);
         }
       } catch (e) {
         console.error(`[${runId}] Error fetching last inbound message:`, e);
