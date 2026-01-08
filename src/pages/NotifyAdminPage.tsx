@@ -400,7 +400,23 @@ export default function NotifyAdminPage() {
       <Header />
       <div className="h-14 md:h-16" />
       
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
+      <div className="container mx-auto px-4 py-8 max-w-6xl relative">
+        {/* Full page blur overlay - Coming Soon */}
+        <div className="absolute inset-0 bg-background/60 backdrop-blur-md z-50 flex flex-col items-center justify-center rounded-lg">
+          <div className="text-center space-y-4">
+            <div className="p-4 rounded-full bg-muted inline-block">
+              <Lock className="h-12 w-12 text-muted-foreground" />
+            </div>
+            <h2 className="text-2xl font-bold text-foreground">Em Breve</h2>
+            <p className="text-muted-foreground max-w-md">
+              A função de Notificar Admin está em desenvolvimento e será liberada em breve.
+            </p>
+            <Button variant="outline" onClick={() => navigate('/inbox')}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Voltar para Inbox
+            </Button>
+          </div>
+        </div>
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">

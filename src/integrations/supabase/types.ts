@@ -125,6 +125,7 @@ export type Database = {
           created_at: string
           id: string
           notifier_instance_id: string | null
+          status_monitor_enabled: boolean | null
           updated_at: string
           user_id: string
         }
@@ -133,6 +134,7 @@ export type Database = {
           created_at?: string
           id?: string
           notifier_instance_id?: string | null
+          status_monitor_enabled?: boolean | null
           updated_at?: string
           user_id: string
         }
@@ -141,6 +143,7 @@ export type Database = {
           created_at?: string
           id?: string
           notifier_instance_id?: string | null
+          status_monitor_enabled?: boolean | null
           updated_at?: string
           user_id?: string
         }

@@ -1,17 +1,40 @@
 import { Check, CheckCheck, Clock, XCircle, Play, Pause, Download, Loader2, FileText, ImageOff, AlertCircle, Volume2, RefreshCw, Reply } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { InboxMessage, InboxMessageWithReply } from '@/types/inbox';
+import { InboxMessage, InboxMessageWithReply, InboxContact } from '@/types/inbox';
 import { format } from 'date-fns';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 interface ChatMessageProps {
   message: InboxMessageWithReply;
   allMessages?: InboxMessage[];
+  contact?: InboxContact | null;
 }
 
-export const ChatMessage = ({ message, allMessages = [] }: ChatMessageProps) => {
+export const ChatMessage = ({ message, allMessages = [], contact }: ChatMessageProps) => {
   const isOutbound = message.direction === 'outbound';
+  const isInbound = message.direction === 'inbound';
+  
+  // Get contact display info
+  const getContactInitials = () => {
+    if (contact?.name && contact.name.trim()) {
+      return contact.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    }
+    if (contact?.phone) {
+      // For LID-only contacts (long phone), show "?"
+      if (contact.phone.length > 15) return '?';
+      return contact.phone.slice(-2);
+    }
+    return '?';
+  };
+  
+  const getContactName = () => {
+    if (contact?.name && contact.name.trim()) {
+      return contact.name;
+    }
+    return null;
+  };
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioProgress, setAudioProgress] = useState(0);
@@ -533,42 +556,61 @@ export const ChatMessage = ({ message, allMessages = [] }: ChatMessageProps) => 
 
   return (
     <div className={cn(
-      "flex animate-in fade-in slide-in-from-bottom-2 duration-200",
+      "flex animate-in fade-in slide-in-from-bottom-2 duration-200 gap-2",
       isOutbound ? "justify-end" : "justify-start"
     )}>
-      <div className={cn(
-        "max-w-[70%] rounded-lg px-3 py-2 shadow-sm transition-all",
-        isOutbound 
-          ? "bg-primary text-primary-foreground rounded-br-none" 
-          : "bg-card border border-border rounded-bl-none",
-        message.status === 'pending' && "opacity-70",
-        message.status === 'failed' && "border-destructive bg-destructive/10"
-      )}>
-        {renderRepliedMessage()}
-        {renderContent()}
+      {/* Avatar for inbound messages */}
+      {isInbound && contact && (
+        <Avatar className="h-8 w-8 flex-shrink-0 mt-auto">
+          <AvatarImage src={contact.profile_pic_url || undefined} />
+          <AvatarFallback className="text-xs bg-muted">
+            {getContactInitials()}
+          </AvatarFallback>
+        </Avatar>
+      )}
+      
+      <div className="flex flex-col max-w-[70%]">
+        {/* Contact name for inbound messages */}
+        {isInbound && getContactName() && (
+          <span className="text-xs font-medium text-muted-foreground mb-1 ml-1">
+            {getContactName()}
+          </span>
+        )}
         
         <div className={cn(
-          "flex items-center justify-end gap-1 mt-1",
-          isOutbound ? "text-primary-foreground/70" : "text-muted-foreground"
+          "rounded-lg px-3 py-2 shadow-sm transition-all",
+          isOutbound 
+            ? "bg-primary text-primary-foreground rounded-br-none" 
+            : "bg-card border border-border rounded-bl-none",
+          message.status === 'pending' && "opacity-70",
+          message.status === 'failed' && "border-destructive bg-destructive/10"
         )}>
-          <span className="text-[10px]">
-            {format(new Date(message.created_at), 'HH:mm')}
-          </span>
-          {isOutbound && (
-            <span className="flex items-center">
-              {getStatusIcon()}
+          {renderRepliedMessage()}
+          {renderContent()}
+          
+          <div className={cn(
+            "flex items-center justify-end gap-1 mt-1",
+            isOutbound ? "text-primary-foreground/70" : "text-muted-foreground"
+          )}>
+            <span className="text-[10px]">
+              {format(new Date(message.created_at), 'HH:mm')}
             </span>
+            {isOutbound && (
+              <span className="flex items-center">
+                {getStatusIcon()}
+              </span>
+            )}
+          </div>
+          
+          {message.status === 'failed' && (
+            <p className={cn(
+              "text-[10px] mt-1",
+              isOutbound ? "text-primary-foreground/70" : "text-destructive"
+            )}>
+              Falha no envio
+            </p>
           )}
         </div>
-        
-        {message.status === 'failed' && (
-          <p className={cn(
-            "text-[10px] mt-1",
-            isOutbound ? "text-primary-foreground/70" : "text-destructive"
-          )}>
-            Falha no envio
-          </p>
-        )}
       </div>
     </div>
   );
