@@ -101,20 +101,27 @@ export default function MaturadorInstances() {
   const handleRefresh = async () => {
     setRefreshing(true);
     
-    // Update status of all instances
+    // Update status of all instances and reconfigure webhooks for connected ones
     for (const instance of instances) {
       try {
         await supabase.functions.invoke('maturador-evolution', {
           body: { action: 'check-status', instanceName: instance.instance_name },
         });
+        
+        // Reconfigure webhook if instance is connected
+        if (instance.status === 'connected') {
+          await supabase.functions.invoke('configure-webhook', {
+            body: { instanceId: instance.id },
+          });
+        }
       } catch (error) {
-        console.error(`Error checking status for ${instance.instance_name}:`, error);
+        console.error(`Error for ${instance.instance_name}:`, error);
       }
     }
     
     await fetchInstances();
     setRefreshing(false);
-    toast.success('Status atualizado');
+    toast.success('Status e webhooks atualizados');
   };
 
   const handleSyncPhoneNumbers = async () => {
@@ -128,7 +135,25 @@ export default function MaturadorInstances() {
       if (data.error) throw new Error(data.error);
 
       const syncedCount = data.results?.filter((r: any) => r.phoneNumber).length || 0;
-      toast.success(`${syncedCount} número(s) sincronizado(s)!`);
+      
+      // Reconfigure webhooks for all connected instances
+      const { data: currentInstances } = await supabase
+        .from('maturador_instances')
+        .select('id')
+        .eq('user_id', user?.id)
+        .eq('status', 'connected');
+      
+      if (currentInstances && currentInstances.length > 0) {
+        await Promise.all(
+          currentInstances.map(inst => 
+            supabase.functions.invoke('configure-webhook', {
+              body: { instanceId: inst.id },
+            })
+          )
+        );
+      }
+
+      toast.success(`${syncedCount} número(s) sincronizado(s) e webhooks configurados!`);
       await fetchInstances();
     } catch (error: any) {
       console.error('Error syncing phone numbers:', error);
@@ -371,7 +396,12 @@ export default function MaturadorInstances() {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
-      toast.success('Número reiniciado');
+      // Reconfigure webhook to ensure connection event is included
+      await supabase.functions.invoke('configure-webhook', {
+        body: { instanceId: instance.id },
+      });
+
+      toast.success('Número reiniciado e webhook configurado');
       await fetchInstances();
     } catch (error: any) {
       console.error('Error restarting:', error);
