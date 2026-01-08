@@ -238,7 +238,7 @@ export const FlowSettingsDialog = ({
             <div>
               <Label>Responder Última Mensagem</Label>
               <p className="text-xs text-muted-foreground">
-                Todas as mensagens do fluxo responderão à última mensagem do cliente (anti-bloqueio)
+                Todas as mensagens do fluxo responderão à última mensagem do cliente (Reduz o Bloqueio)
               </p>
             </div>
             <Switch 
