@@ -1,4 +1,4 @@
-import { X, Tag, MessageSquare, Calendar, Edit2, Trash2 } from 'lucide-react';
+import { X, Tag, MessageSquare, Calendar, Edit2, Trash2, Megaphone, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { formatPhoneDisplay } from '@/utils/phoneFormatter';
@@ -195,6 +195,45 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
               </p>
             )}
           </div>
+
+          {/* Ad Origin - only show if from ad */}
+          {(contact.ad_source_url || contact.ctwa_clid) && (
+            <>
+              <Separator />
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Megaphone className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Origem do Anúncio</span>
+                </div>
+                
+                {contact.ad_title && (
+                  <p className="text-sm font-medium">{contact.ad_title}</p>
+                )}
+                
+                {contact.ad_body && (
+                  <p className="text-sm text-muted-foreground">{contact.ad_body}</p>
+                )}
+                
+                {contact.ad_source_url && (
+                  <a 
+                    href={contact.ad_source_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Ver anúncio
+                  </a>
+                )}
+                
+                {contact.ctwa_clid && (
+                  <p className="text-xs text-muted-foreground font-mono">
+                    CTWA ID: {contact.ctwa_clid.slice(0, 20)}...
+                  </p>
+                )}
+              </div>
+            </>
+          )}
 
           <Separator />
 

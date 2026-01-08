@@ -13,6 +13,10 @@ export interface InboxContact {
   status: 'active' | 'archived';
   created_at: string;
   updated_at: string;
+  ad_source_url?: string | null;
+  ad_title?: string | null;
+  ad_body?: string | null;
+  ctwa_clid?: string | null;
 }
 
 export interface InboxMessage {
