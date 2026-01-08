@@ -532,13 +532,13 @@ export const ChatPanel = ({
     return phone.length > 15 || (remoteJid && remoteJid.includes('@lid'));
   };
   
-  // Get display name for contact - ONLY show phone numbers
+  // Get display name for contact - show name if available
   const getDisplayName = () => {
     const remoteJid = (contact as any).remote_jid;
     if (isLidContact(contact.phone, remoteJid)) {
-      return 'Desconhecido';
+      return contact.name?.trim() || 'Desconhecido';
     }
-    return formatPhoneDisplay(contact.phone);
+    return contact.name?.trim() || formatPhoneDisplay(contact.phone);
   };
   
   // Get subtitle for contact
@@ -547,6 +547,10 @@ export const ChatPanel = ({
     if (isLidContact(contact.phone, remoteJid)) {
       const shortId = contact.phone.slice(-6);
       return `Lead via anúncio • ID ${shortId}`;
+    }
+    // If contact has a name, show phone as subtitle
+    if (contact.name?.trim()) {
+      return formatPhoneDisplay(contact.phone);
     }
     return null;
   };
