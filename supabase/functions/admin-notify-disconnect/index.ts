@@ -96,16 +96,18 @@ Deno.serve(async (req) => {
       try {
         console.log(`[DISCONNECT-NOTIFY] Sending to ${adminPhoneDigits} via ${notifier.instance_name}`);
         
+        // UazAPI v2 uses /send/text with 'token' header
+        const uazapiBaseUrl = `https://api.uazapi.com/${notifier.instance_name}`;
         const response = await fetch(
-          `https://api.uazapi.com/message/text/${notifier.instance_name}`,
+          `${uazapiBaseUrl}/send/text`,
           {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "Authorization": `Bearer ${notifier.uazapi_token}`,
+              "token": notifier.uazapi_token,
             },
             body: JSON.stringify({
-              to: `${adminPhoneDigits}@s.whatsapp.net`,
+              number: adminPhoneDigits,
               text: message,
             }),
           }
