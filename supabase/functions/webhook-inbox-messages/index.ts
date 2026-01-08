@@ -809,7 +809,67 @@ serve(async (req) => {
             contentText = uazMsg.content;
           }
         }
-        
+
+        // === UAZAPI: Extract ad data from raw message (docs: "content" can be raw JSON) ===
+        let uazAdSourceUrl: string | null = null;
+        let uazAdTitle: string | null = null;
+        let uazAdBody: string | null = null;
+        let uazCtwaClid: string | null = null;
+
+        const parsePossiblyJson = (v: any): any => {
+          if (!v) return null;
+          if (typeof v === 'object') return v;
+          if (typeof v !== 'string') return null;
+          const s = v.trim();
+          if (!(s.startsWith('{') || s.startsWith('['))) return null;
+          try {
+            return JSON.parse(s);
+          } catch {
+            return null;
+          }
+        };
+
+        const findExternalAdReply = (obj: any, depth = 0): any | null => {
+          if (!obj || depth > 6) return null;
+          if (typeof obj !== 'object') return null;
+
+          if ((obj as any).externalAdReply && typeof (obj as any).externalAdReply === 'object') {
+            return (obj as any).externalAdReply;
+          }
+
+          // Traverse children (bounded)
+          const entries = Array.isArray(obj) ? obj.entries() : Object.entries(obj);
+          let i = 0;
+          for (const [, value] of entries as any) {
+            i++;
+            if (i > 60) break;
+            const found = findExternalAdReply(value, depth + 1);
+            if (found) return found;
+          }
+          return null;
+        };
+
+        const uazContentObj = parsePossiblyJson(uazMsg.content);
+        const uazExternalAdReply = findExternalAdReply(uazContentObj);
+        if (uazExternalAdReply) {
+          uazAdSourceUrl = uazExternalAdReply.sourceUrl || uazExternalAdReply.source_url || null;
+          uazAdTitle = uazExternalAdReply.title || null;
+          uazAdBody = uazExternalAdReply.body || null;
+          if (uazAdSourceUrl) {
+            try {
+              const urlObj = new URL(uazAdSourceUrl);
+              uazCtwaClid = urlObj.searchParams.get('ctwa_clid') || null;
+            } catch {
+              // ignore invalid URL
+            }
+          }
+          console.log(
+            `[UAZAPI-AD] Found externalAdReply: title=${uazAdTitle?.substring(0, 30)}, url=${uazAdSourceUrl?.substring(0, 60)}, ctwa_clid=${uazCtwaClid}`,
+          );
+        }
+
+        const uazHasAdData = !!(uazAdSourceUrl || uazAdTitle || uazAdBody || uazCtwaClid);
+        // === END UAZAPI AD DATA ===
         // Determine text content: prioritize interactive response fields, then content.text, then text
         let uazText = uazMsg.text || contentText || '';
         
@@ -941,26 +1001,49 @@ serve(async (req) => {
         
         if (existingContact) {
           contact = existingContact;
-          // Update name if we have a better one
+          // Update name/ad data if we have it (keep first-touch attribution)
+          const contactUpdates: Record<string, any> = {};
+
           if (uazSenderName && !existingContact.name) {
+            contactUpdates.name = uazSenderName;
+          }
+
+          if (uazHasAdData) {
+            if (uazAdSourceUrl && !existingContact.ad_source_url) contactUpdates.ad_source_url = uazAdSourceUrl;
+            if (uazAdTitle && !existingContact.ad_title) contactUpdates.ad_title = uazAdTitle;
+            if (uazAdBody && !existingContact.ad_body) contactUpdates.ad_body = uazAdBody;
+            if (uazCtwaClid && !existingContact.ctwa_clid) contactUpdates.ctwa_clid = uazCtwaClid;
+          }
+
+          if (Object.keys(contactUpdates).length > 0) {
             await supabaseClient
               .from('inbox_contacts')
-              .update({ name: uazSenderName, updated_at: new Date().toISOString() })
+              .update({ ...contactUpdates, updated_at: new Date().toISOString() })
               .eq('id', existingContact.id);
-            contact.name = uazSenderName;
+
+            contact = { ...existingContact, ...contactUpdates };
           }
         } else {
           // Create new contact - one per phone + instance combination
+          const contactInsertData: Record<string, any> = {
+            phone,
+            name: uazSenderName || null,
+            user_id: userId,
+            instance_id: instanceId,
+            remote_jid: uazChatid,
+            status: 'active',
+          };
+
+          if (uazHasAdData) {
+            if (uazAdSourceUrl) contactInsertData.ad_source_url = uazAdSourceUrl;
+            if (uazAdTitle) contactInsertData.ad_title = uazAdTitle;
+            if (uazAdBody) contactInsertData.ad_body = uazAdBody;
+            if (uazCtwaClid) contactInsertData.ctwa_clid = uazCtwaClid;
+          }
+
           const { data: newContact, error: contactError } = await supabaseClient
             .from('inbox_contacts')
-            .insert({
-              phone,
-              name: uazSenderName || null,
-              user_id: userId,
-              instance_id: instanceId,
-              remote_jid: uazChatid,
-              status: 'active',
-            })
+            .insert(contactInsertData)
             .select()
             .single();
           
