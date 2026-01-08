@@ -3256,7 +3256,66 @@ serve(async (req) => {
       });
     }
 
-    // Handle connection status updates
+    // Handle UazAPI connection status updates
+    // UazAPI sends event: "connection" with payload containing instance.status (connected/connecting/disconnected)
+    if (event === 'connection' || event === 'CONNECTION') {
+      const uazInstanceName =
+        typeof instance === 'string'
+          ? instance
+          : (instance as any)?.instanceName || (payload as any)?.instanceName || 'unknown';
+
+      const statusObj = typeof (data as any)?.status === 'object' ? (data as any).status : null;
+      const rawInstanceStatus =
+        (data as any)?.instance?.status || (payload as any)?.instance?.status || null;
+
+      const statusConnected = statusObj?.connected;
+      const statusLoggedIn = statusObj?.loggedIn;
+      const hasQrOrPair = Boolean((data as any)?.instance?.qrcode || (data as any)?.instance?.paircode);
+
+      let newStatus: 'connected' | 'connecting' | 'disconnected' = 'disconnected';
+
+      if (rawInstanceStatus === 'connected') {
+        if (hasQrOrPair) {
+          newStatus = 'connecting';
+        } else if (statusObj && statusConnected === true && statusLoggedIn === true) {
+          newStatus = 'connected';
+        } else if (statusObj && (statusConnected === false || statusLoggedIn === false)) {
+          newStatus = 'disconnected';
+        } else {
+          // No statusObj provided, trust instance.status
+          newStatus = 'connected';
+        }
+      } else if (rawInstanceStatus === 'connecting') {
+        newStatus = 'connecting';
+      } else if (rawInstanceStatus === 'disconnected') {
+        newStatus = 'disconnected';
+      } else {
+        // Fallback to status object if instance.status is missing
+        if (statusConnected === true && statusLoggedIn === true) {
+          newStatus = 'connected';
+        } else if (hasQrOrPair) {
+          newStatus = 'connecting';
+        } else {
+          newStatus = 'disconnected';
+        }
+      }
+
+      console.log(`[UAZAPI-CONNECTION] ${uazInstanceName}: instance.status=${rawInstanceStatus} connected=${statusConnected} loggedIn=${statusLoggedIn} -> ${newStatus}`);
+
+      await supabaseClient
+        .from('maturador_instances')
+        .update({
+          status: newStatus,
+          last_seen: newStatus === 'connected' ? new Date().toISOString() : null,
+        })
+        .eq('instance_name', uazInstanceName);
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Handle Evolution connection status updates
     if (event === 'connection.update' || event === 'CONNECTION_UPDATE') {
       const state = data.state || data.status;
       console.log(`Connection update for ${instance}: ${state}`);
