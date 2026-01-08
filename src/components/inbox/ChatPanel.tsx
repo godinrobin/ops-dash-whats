@@ -804,7 +804,7 @@ export const ChatPanel = ({
         ) : (
           <div className="space-y-2">
             {visibleMessages.map((message) => (
-              <ChatMessage key={message.id} message={message} />
+              <ChatMessage key={message.id} message={message} allMessages={visibleMessages} />
             ))}
           </div>
         )}

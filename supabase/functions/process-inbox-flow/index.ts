@@ -547,11 +547,13 @@ serve(async (req) => {
       
       // If _lastInboundMessageId is not set, try to fetch it from the most recent inbound message
       let lastInboundMsgId = variables._lastInboundMessageId ? String(variables._lastInboundMessageId) : null;
-      if (replyToLastMessageEnabled && !lastInboundMsgId) {
+      let lastInboundMessageDbId: string | null = variables._lastInboundMessageDbId ? String(variables._lastInboundMessageDbId) : null;
+      
+      if (replyToLastMessageEnabled && (!lastInboundMsgId || !lastInboundMessageDbId)) {
         try {
           const { data: lastInboundMsg } = await supabaseClient
             .from('inbox_messages')
-            .select('remote_message_id')
+            .select('id, remote_message_id')
             .eq('contact_id', contact.id)
             .eq('direction', 'inbound')
             .not('remote_message_id', 'is', null)
@@ -561,8 +563,10 @@ serve(async (req) => {
           
           if (lastInboundMsg?.remote_message_id) {
             lastInboundMsgId = lastInboundMsg.remote_message_id;
+            lastInboundMessageDbId = lastInboundMsg.id;
             variables._lastInboundMessageId = lastInboundMsgId;
-            console.log(`[${runId}] Fetched _lastInboundMessageId from DB: ${lastInboundMsgId}`);
+            variables._lastInboundMessageDbId = lastInboundMessageDbId;
+            console.log(`[${runId}] Fetched _lastInboundMessageId from DB: ${lastInboundMsgId}, dbId: ${lastInboundMessageDbId}`);
           }
         } catch (e) {
           console.error(`[${runId}] Error fetching last inbound message for reply:`, e);
@@ -573,8 +577,13 @@ serve(async (req) => {
         ? lastInboundMsgId 
         : undefined;
       
+      // This is the DB ID to store as reply_to_message_id in our messages table
+      const replyToMessageDbId = replyToLastMessageEnabled && lastInboundMessageDbId
+        ? lastInboundMessageDbId
+        : null;
+      
       if (replyToLastMessageEnabled) {
-        console.log(`[${runId}] Reply to last message enabled, replyId: ${replyIdForMessages || 'none'}`);
+        console.log(`[${runId}] Reply to last message enabled, replyId: ${replyIdForMessages || 'none'}, dbId: ${replyToMessageDbId || 'none'}`);
       }
 
       // Process nodes until we hit a wait point or end
@@ -770,7 +779,7 @@ serve(async (req) => {
               
               // Save message with correct status based on send result
               const messageStatus = sendResult.ok ? 'sent' : 'failed';
-              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, message, 'text', flow.id, undefined, sendResult.remoteMessageId, messageStatus);
+              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, message, 'text', flow.id, undefined, sendResult.remoteMessageId, messageStatus, replyToMessageDbId);
               
               if (!sendResult.ok) {
                 await handleSendFailure(currentNodeId, sendResult.errorDetails || 'Unknown error');
@@ -945,7 +954,7 @@ Regras RIGOROSAS:
               
               // Save message with correct status based on send result
               const aiMessageStatus = aiSendResult.ok ? 'sent' : 'failed';
-              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, aiVariedMessage, 'text', flow.id, undefined, aiSendResult.remoteMessageId, aiMessageStatus);
+              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, aiVariedMessage, 'text', flow.id, undefined, aiSendResult.remoteMessageId, aiMessageStatus, replyToMessageDbId);
               
               if (!aiSendResult.ok) {
                 await handleSendFailure(currentNodeId, aiSendResult.errorDetails || 'Unknown error');
@@ -1069,7 +1078,7 @@ Regras RIGOROSAS:
               
               // Save message with correct status based on send result
               const mediaStatus = mediaSendResult.ok ? 'sent' : 'failed';
-              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, caption || '', currentNode.type, flow.id, mediaUrl, mediaSendResult.remoteMessageId, mediaStatus);
+              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, caption || '', currentNode.type, flow.id, mediaUrl, mediaSendResult.remoteMessageId, mediaStatus, replyToMessageDbId);
               
               if (!mediaSendResult.ok) {
                 await handleSendFailure(currentNodeId, mediaSendResult.errorDetails || 'Unknown error');
@@ -1462,7 +1471,7 @@ Regras RIGOROSAS:
               const menuSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, fullMenuMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken, 0, replyIdForMessages);
               
               const menuStatus = menuSendResult.ok ? 'sent' : 'failed';
-              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, fullMenuMessage, 'text', flow.id, undefined, menuSendResult.remoteMessageId, menuStatus);
+              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, fullMenuMessage, 'text', flow.id, undefined, menuSendResult.remoteMessageId, menuStatus, replyToMessageDbId);
               
               if (!menuSendResult.ok) {
                 await handleSendFailure(currentNodeId, menuSendResult.errorDetails || 'Unknown error');
@@ -1565,7 +1574,7 @@ Regras RIGOROSAS:
                 const transferSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, transferMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken, 0, replyIdForMessages);
                 
                 const transferStatus = transferSendResult.ok ? 'sent' : 'failed';
-                await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, transferMessage, 'text', flow.id, undefined, transferSendResult.remoteMessageId, transferStatus);
+                await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, transferMessage, 'text', flow.id, undefined, transferSendResult.remoteMessageId, transferStatus, replyToMessageDbId);
                 
                 if (!transferSendResult.ok) {
                   await handleSendFailure(currentNodeId, transferSendResult.errorDetails || 'Unknown error');
@@ -3017,7 +3026,8 @@ async function saveOutboundMessage(
   flowId: string,
   mediaUrl?: string,
   remoteMessageId?: string | null,
-  status: 'sent' | 'failed' | 'pending' = 'sent'
+  status: 'sent' | 'failed' | 'pending' = 'sent',
+  replyToMessageId?: string | null
 ) {
   // If we have a remoteMessageId, check if message already exists (to prevent duplicates)
   if (remoteMessageId) {
@@ -3047,6 +3057,7 @@ async function saveOutboundMessage(
       is_from_flow: true,
       flow_id: flowId,
       remote_message_id: remoteMessageId || null,
+      reply_to_message_id: replyToMessageId || null,
     });
 
   if (error) {

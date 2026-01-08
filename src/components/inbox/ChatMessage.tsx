@@ -1,15 +1,16 @@
-import { Check, CheckCheck, Clock, XCircle, Play, Pause, Download, Loader2, FileText, ImageOff, AlertCircle, Volume2, RefreshCw } from 'lucide-react';
+import { Check, CheckCheck, Clock, XCircle, Play, Pause, Download, Loader2, FileText, ImageOff, AlertCircle, Volume2, RefreshCw, Reply } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { InboxMessage } from '@/types/inbox';
+import { InboxMessage, InboxMessageWithReply } from '@/types/inbox';
 import { format } from 'date-fns';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 interface ChatMessageProps {
-  message: InboxMessage;
+  message: InboxMessageWithReply;
+  allMessages?: InboxMessage[];
 }
 
-export const ChatMessage = ({ message }: ChatMessageProps) => {
+export const ChatMessage = ({ message, allMessages = [] }: ChatMessageProps) => {
   const isOutbound = message.direction === 'outbound';
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioDuration, setAudioDuration] = useState(0);
@@ -482,6 +483,54 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
         );
     }
   };
+  // Find the replied message if exists
+  const repliedMessage = message.reply_to_message_id 
+    ? allMessages.find(m => m.id === message.reply_to_message_id) 
+    : null;
+
+  const renderRepliedMessage = () => {
+    if (!repliedMessage) return null;
+    
+    const isRepliedInbound = repliedMessage.direction === 'inbound';
+    const previewContent = repliedMessage.content 
+      ? repliedMessage.content.length > 60 
+        ? repliedMessage.content.substring(0, 60) + '...' 
+        : repliedMessage.content
+      : repliedMessage.message_type === 'image' ? '📷 Imagem'
+      : repliedMessage.message_type === 'audio' ? '🎵 Áudio'
+      : repliedMessage.message_type === 'video' ? '🎬 Vídeo'
+      : repliedMessage.message_type === 'document' ? '📄 Documento'
+      : '[Mensagem]';
+
+    return (
+      <div className={cn(
+        "flex items-start gap-1.5 mb-2 pb-2 border-l-2 pl-2 rounded-sm",
+        isOutbound 
+          ? "border-primary-foreground/40 bg-primary-foreground/5" 
+          : "border-primary/40 bg-primary/5"
+      )}>
+        <Reply className={cn(
+          "h-3 w-3 mt-0.5 flex-shrink-0",
+          isOutbound ? "text-primary-foreground/60" : "text-muted-foreground"
+        )} />
+        <div className="flex flex-col min-w-0">
+          <span className={cn(
+            "text-[10px] font-medium",
+            isOutbound ? "text-primary-foreground/70" : "text-primary"
+          )}>
+            {isRepliedInbound ? 'Cliente' : 'Você'}
+          </span>
+          <span className={cn(
+            "text-xs truncate",
+            isOutbound ? "text-primary-foreground/60" : "text-muted-foreground"
+          )}>
+            {previewContent}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className={cn(
       "flex animate-in fade-in slide-in-from-bottom-2 duration-200",
@@ -495,6 +544,7 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
         message.status === 'pending' && "opacity-70",
         message.status === 'failed' && "border-destructive bg-destructive/10"
       )}>
+        {renderRepliedMessage()}
         {renderContent()}
         
         <div className={cn(
