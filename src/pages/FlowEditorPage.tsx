@@ -57,6 +57,7 @@ const FlowEditorPage = () => {
   const [pauseScheduleEnabled, setPauseScheduleEnabled] = useState(false);
   const [pauseScheduleStart, setPauseScheduleStart] = useState('00:00');
   const [pauseScheduleEnd, setPauseScheduleEnd] = useState('06:00');
+  const [replyToLastMessage, setReplyToLastMessage] = useState(false);
   const [instances, setInstances] = useState<Instance[]>([]);
   const [assignedInstances, setAssignedInstances] = useState<string[]>([]);
   const [analyticsDateFilter, setAnalyticsDateFilter] = useState<DateFilter>('today');
@@ -156,6 +157,7 @@ const FlowEditorPage = () => {
         setPauseScheduleEnabled(data.pause_schedule_enabled || false);
         setPauseScheduleStart(data.pause_schedule_start || '00:00');
         setPauseScheduleEnd(data.pause_schedule_end || '06:00');
+        setReplyToLastMessage(data.reply_to_last_message || false);
         setAssignedInstances(data.assigned_instances || []);
       } catch (error: unknown) {
         console.error('Error fetching flow:', error);
@@ -197,6 +199,7 @@ const FlowEditorPage = () => {
           pause_schedule_enabled: pauseScheduleEnabled,
           pause_schedule_start: pauseScheduleEnabled ? pauseScheduleStart : null,
           pause_schedule_end: pauseScheduleEnabled ? pauseScheduleEnd : null,
+          reply_to_last_message: replyToLastMessage,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)
@@ -381,6 +384,23 @@ const FlowEditorPage = () => {
                       })}
                     </div>
                   )}
+                </div>
+
+                <div className="flex items-center justify-between py-2">
+                  <div>
+                    <Label>Responder Última Mensagem</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Todas as mensagens do fluxo responderão à última mensagem do cliente (anti-bloqueio)
+                    </p>
+                  </div>
+                  <Switch
+                    checked={replyToLastMessage}
+                    onCheckedChange={setReplyToLastMessage}
+                    className={replyToLastMessage 
+                      ? "data-[state=checked]:bg-green-500" 
+                      : "data-[state=unchecked]:bg-red-500"
+                    }
+                  />
                 </div>
 
                 <div className="flex items-center justify-between py-2">
