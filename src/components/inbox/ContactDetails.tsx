@@ -240,7 +240,7 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 px-0 text-xs text-primary hover:text-primary/80 mt-1"
+                          className="h-6 px-0 text-xs text-orange-500 hover:text-orange-600 mt-1"
                           onClick={() => setShowFullAdBody(!showFullAdBody)}
                         >
                           {showFullAdBody ? (
