@@ -3322,21 +3322,20 @@ serve(async (req) => {
 
       // SEND NOTIFICATION if status changed from connected to disconnected
       if (previousStatus === 'connected' && newStatus === 'disconnected' && previousInstanceData) {
-        console.log(`[STATUS-MONITOR] Instance ${uazInstanceName} disconnected, checking for monitors...`);
+        console.log(`[STATUS-MONITOR] Instance ${uazInstanceName} disconnected, checking for global monitor...`);
         
         try {
-          // Check if this instance has active monitoring
-          const { data: monitorData } = await supabaseClient
-            .from('admin_notify_instance_monitor')
-            .select('*, admin_notify_configs(*)')
-            .eq('instance_id', previousInstanceData.id)
-            .eq('is_active', true)
+          // Check if user has global status monitoring enabled
+          const { data: configData } = await supabaseClient
+            .from('admin_notify_configs')
+            .select('*')
+            .eq('user_id', previousInstanceData.user_id)
+            .eq('status_monitor_enabled', true)
             .single();
 
-          if (monitorData && monitorData.admin_notify_configs) {
-            const config = monitorData.admin_notify_configs as any;
-            const notifierInstanceId = config.notifier_instance_id;
-            const adminInstanceIds = config.admin_instance_ids || [];
+          if (configData) {
+            const notifierInstanceId = configData.notifier_instance_id;
+            const adminInstanceIds = configData.admin_instance_ids || [];
 
             if (notifierInstanceId && adminInstanceIds.length > 0) {
               // Get notifier instance details
