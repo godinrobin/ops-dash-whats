@@ -122,15 +122,22 @@ export const ConversationList = ({
   const formatTime = (date: string | null) => {
     if (!date) return '';
     const distance = formatDistanceToNow(new Date(date), { addSuffix: false, locale: ptBR });
-    // Shorten common phrases
+    // Shorten common phrases to fit in the UI
     return distance
-      .replace('menos de um minuto', '< 1min')
+      .replace('menos de um minuto', '< 1m')
+      .replace('cerca de ', '')
+      .replace('mais de ', '+')
+      .replace('quase ', '~')
       .replace('minutos', 'min')
       .replace('minuto', 'min')
       .replace('horas', 'h')
       .replace('hora', 'h')
       .replace('dias', 'd')
-      .replace('dia', 'd');
+      .replace('dia', 'd')
+      .replace('meses', 'me')
+      .replace('mês', 'me')
+      .replace('anos', 'a')
+      .replace('ano', 'a');
   };
 
   const getInitials = (name: string | null, phone: string) => {
@@ -327,7 +334,7 @@ export const ConversationList = ({
                   key={contact.id}
                   onClick={() => onSelectContact(contact)}
                   className={cn(
-                    "flex items-start gap-3 p-3 cursor-pointer hover:bg-accent/50 transition-colors border-b border-border/50 min-h-0",
+                    "flex items-start gap-3 p-3 pr-4 cursor-pointer hover:bg-accent/50 transition-colors border-b border-border/50 min-h-0 overflow-hidden",
                     selectedContact?.id === contact.id && "bg-accent"
                   )}
                 >
