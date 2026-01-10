@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { LogOut, ArrowLeft, User, Shield, Settings, LayoutGrid, ShoppingBag, Megaphone } from "lucide-react";
+import { LogOut, ArrowLeft, User, Shield, Settings, LayoutGrid, ShoppingBag, Megaphone, Zap } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ProfileModal } from "./ProfileModal";
 import Dock from "@/components/ui/dock";
@@ -69,7 +69,10 @@ export const Header = ({ mode, onModeChange }: HeaderProps) => {
                 </Button>
               </motion.div>
             )}
-            <button onClick={() => navigate("/")} className="focus:outline-none">
+            <button onClick={() => navigate("/")} className="focus:outline-none flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent to-orange-500 flex items-center justify-center">
+                <Zap className="w-4 h-4 text-white" />
+              </div>
               <AnimatedText 
                 text="Zapdata" 
                 gradientColors="linear-gradient(90deg, hsl(var(--accent)), hsl(35 100% 60%), hsl(var(--accent)))"
