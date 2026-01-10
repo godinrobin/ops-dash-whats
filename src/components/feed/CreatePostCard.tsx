@@ -8,9 +8,10 @@ import { toast } from "sonner";
 
 interface CreatePostCardProps {
   onPostCreated: () => void;
+  isAdmin?: boolean;
 }
 
-export const CreatePostCard = ({ onPostCreated }: CreatePostCardProps) => {
+export const CreatePostCard = ({ onPostCreated, isAdmin = false }: CreatePostCardProps) => {
   const { user } = useAuth();
   const [content, setContent] = useState("");
   const [mediaFile, setMediaFile] = useState<File | null>(null);
@@ -75,18 +76,20 @@ export const CreatePostCard = ({ onPostCreated }: CreatePostCardProps) => {
         mediaUrl = publicUrlData.publicUrl;
       }
 
-      // Create post - using type assertion because types aren't synced yet
+      // Create post - admin posts are auto-approved
+      const postStatus = isAdmin ? "approved" : "pending";
       const { error } = await (supabase as any).from("feed_posts").insert({
         user_id: user.id,
         content: content.trim() || null,
         media_type: mediaFile ? mediaType : "text",
         media_url: mediaUrl,
-        status: "pending",
+        status: postStatus,
+        ...(isAdmin ? { approved_at: new Date().toISOString(), approved_by: user.id } : {}),
       });
 
       if (error) throw error;
 
-      toast.success("Postagem enviada para aprovação!");
+      toast.success(isAdmin ? "Postagem publicada!" : "Postagem enviada para aprovação!");
       setContent("");
       removeMedia();
       onPostCreated();

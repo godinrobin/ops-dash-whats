@@ -5,9 +5,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { ArrowUp, Loader2, Key, Sparkles, Search, Hash, Lightbulb } from "lucide-react";
-import { ResponseStream } from "@/components/ui/response-stream";
+import { ArrowUp, Loader2, Key, Sparkles, Search, Hash, Lightbulb, Copy, Check } from "lucide-react";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 
 interface Message {
   id: string;
@@ -15,7 +15,81 @@ interface Message {
   content: string;
 }
 
+// Component to render keyword list with copy buttons
+const KeywordList = ({ content }: { content: string }) => {
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  
+  const handleCopy = async (text: string, index: number) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedIndex(index);
+      toast.success("Copiado! 🔥");
+      setTimeout(() => setCopiedIndex(null), 2000);
+    } catch (err) {
+      toast.error("Erro ao copiar");
+    }
+  };
+
+  // Parse numbered keywords from content
+  const lines = content.split('\n');
+  const parsedContent: { type: 'keyword' | 'text', text: string, number?: number }[] = [];
+  
+  lines.forEach((line) => {
+    // Match numbered lines like "1. palavra-chave" or "1) palavra-chave"
+    const numberedMatch = line.match(/^(\d+)[.)]\s*(.+)$/);
+    if (numberedMatch) {
+      parsedContent.push({
+        type: 'keyword',
+        number: parseInt(numberedMatch[1]),
+        text: numberedMatch[2].trim()
+      });
+    } else if (line.trim()) {
+      parsedContent.push({
+        type: 'text',
+        text: line
+      });
+    }
+  });
+
+  return (
+    <div className="text-sm space-y-1">
+      {parsedContent.map((item, idx) => (
+        item.type === 'keyword' ? (
+          <div 
+            key={idx} 
+            className="flex items-center justify-between gap-2 py-1.5 px-2 rounded-lg hover:bg-background/50 transition-colors group"
+          >
+            <span className="flex items-center gap-2">
+              <span className="text-accent font-semibold min-w-[24px]">{item.number}.</span>
+              <span>{item.text}</span>
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={() => handleCopy(item.text, idx)}
+            >
+              {copiedIndex === idx ? (
+                <Check className="w-3.5 h-3.5 text-green-500" />
+              ) : (
+                <Copy className="w-3.5 h-3.5" />
+              )}
+            </Button>
+          </div>
+        ) : (
+          <p key={idx} className="whitespace-pre-wrap py-1">{item.text}</p>
+        )
+      ))}
+    </div>
+  );
+};
+
 const SYSTEM_PROMPT = `Você é um assistente especializado em gerar palavras-chave para pesquisar anúncios no gerenciador de anúncios do Facebook/Meta. Seu foco são anúncios de WhatsApp (vendas pelo WhatsApp, X1, etc).
+
+ESTILO DE COMUNICAÇÃO:
+- Use linguagem informal e descontraída, como se estivesse falando com um mano 🤙
+- Pode usar gírias leves e emojis pra deixar mais dinâmico
+- Público majoritariamente masculino, então pode mandar um "E aí, parça!" de vez em quando
 
 NICHOS QUE VOCÊ CONHECE BEM:
 - Religião: palavras relacionadas a fé, orações, produtos religiosos, bíblias, terços, etc.
@@ -23,8 +97,8 @@ NICHOS QUE VOCÊ CONHECE BEM:
 - Receitas: palavras sobre culinária, receitas, confeitaria, bolos, salgados, marmitas fit
 - Educação: palavras sobre cursos, ebooks, mentorias, treinamentos, aulas particulares
 
-REGRAS:
-1. Só responda sobre palavras-chave para anúncios. Se perguntarem sobre outros assuntos, diga: "Desculpe, fui configurada apenas para ajudar com palavras-chave para anúncios de WhatsApp. Como posso ajudar nesse tema?"
+REGRAS IMPORTANTES:
+1. Só responda sobre palavras-chave para anúncios. Se perguntarem sobre outros assuntos, diga: "Opa, parceiro! Fui programado só pra ajudar com palavras-chave de anúncios de WhatsApp. Cola comigo nesse tema! 🎯"
 
 2. Ao sugerir palavras-chave, inclua:
    - Palavras do nicho específico
@@ -32,14 +106,20 @@ REGRAS:
    - CTAs comuns: "fale comigo", "converse conosco", "chama no direct", "link na bio"
    - Termos de urgência: "vagas limitadas", "última chance", "promoção"
 
-3. No FINAL de TODA resposta com sugestões, adicione:
-   "💡 Dica: Use a extensão do Zapdata para filtrar apenas anúncios de WhatsApp! E experimente adicionar '+whatsapp' no final das palavras-chave para encontrar mais ofertas."
+3. FORMATO OBRIGATÓRIO DAS PALAVRAS-CHAVE:
+   Sempre liste as palavras-chave em formato numerado, uma abaixo da outra, assim:
+   1. primeira palavra-chave
+   2. segunda palavra-chave
+   3. terceira palavra-chave
+   
+   NÃO use bullets, asteriscos ou outros formatos. Apenas números seguidos de ponto.
 
-4. Se pedirem nichos que você não conhece bem, use sua criatividade baseada nos padrões dos nichos conhecidos. Anúncios de WhatsApp geralmente têm CTAs de contato direto.
+4. No FINAL de TODA resposta com sugestões, adicione:
+   "💡 Dica esperta: Use a extensão do Zapdata pra filtrar só anúncios de WhatsApp! E testa adicionar '+whatsapp' no final das palavras-chave pra achar mais ofertas, tmj! 🚀"
 
-5. Formate as palavras-chave em listas organizadas e fáceis de copiar.
+5. Se pedirem nichos que você não conhece bem, use sua criatividade baseada nos padrões dos nichos conhecidos.
 
-6. Seja amigável e prestativo, mas sempre focado em palavras-chave para anúncios.`;
+6. Seja parceiro e prestativo, sempre focado em ajudar o mano a encontrar as melhores palavras-chave!`;
 
 const GeradorPalavrasChaves = () => {
   const { user } = useAuth();
@@ -131,7 +211,7 @@ const GeradorPalavrasChaves = () => {
     <>
       <Header />
       <div className="h-14 md:h-16" />
-      <div className="min-h-screen bg-background flex flex-col">
+      <div className="min-h-[calc(100vh-3.5rem)] md:min-h-[calc(100vh-4rem)] bg-background flex flex-col">
         <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full px-4">
           {/* Messages Area */}
           {messages.length === 0 ? (
@@ -189,12 +269,7 @@ const GeradorPalavrasChaves = () => {
                     )}
                   >
                     {message.role === "assistant" ? (
-                      <ResponseStream
-                        textStream={message.content}
-                        mode="fade"
-                        speed={50}
-                        className="text-sm whitespace-pre-wrap"
-                      />
+                      <KeywordList content={message.content} />
                     ) : (
                       <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                     )}

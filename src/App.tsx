@@ -17,7 +17,7 @@ import { setGlobalToasterRef } from "@/hooks/useSplashedToast";
 import HomePage from "./pages/HomePage";
 import Index from "./pages/Index";
 import ProductMetrics from "./pages/ProductMetrics";
-import ZapConverter from "./pages/ZapConverter";
+import ZapdataConverter from "./pages/ZapdataConverter";
 import GeradorPalavrasChaves from "./pages/GeradorPalavrasChaves";
 import ProductAnalysis from "./pages/ProductAnalysis";
 import NumberOrganizer from "./pages/NumberOrganizer";
@@ -79,7 +79,7 @@ const AppRoutes = () => {
       <Routes>
         <Route path="/auth" element={<Auth />} />
         <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
-        <Route path="/zap-converter" element={<ProtectedRoute><ZapConverter /></ProtectedRoute>} />
+        <Route path="/zap-converter" element={<ProtectedRoute><ZapdataConverter /></ProtectedRoute>} />
         <Route path="/gerador-palavras-chaves" element={<ProtectedRoute><GeradorPalavrasChaves /></ProtectedRoute>} />
         
         {/* FREE SYSTEMS - Available to all users */}

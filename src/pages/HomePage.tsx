@@ -3,19 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { SystemsSidebar } from "@/components/layout/SystemsSidebar";
 import { Feed } from "@/components/feed/Feed";
-import { CreatePostCard } from "@/components/feed/CreatePostCard";
 import { RestrictedFeatureModal } from "@/components/RestrictedFeatureModal";
-import { useAccessLevel } from "@/hooks/useAccessLevel";
-import { useAuth } from "@/contexts/AuthContext";
 import Marketplace from "./Marketplace";
-import { cn } from "@/lib/utils";
 
 export type AppMode = "sistemas" | "marketplace" | "ads";
 
 const HomePage = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const { isFullMember, loading: accessLoading } = useAccessLevel();
   const [restrictedModalOpen, setRestrictedModalOpen] = useState(false);
   const [selectedFeatureName, setSelectedFeatureName] = useState<string>("");
   const [refreshFeed, setRefreshFeed] = useState(0);
@@ -42,10 +36,6 @@ const HomePage = () => {
     setRestrictedModalOpen(true);
   };
 
-  const handlePostCreated = () => {
-    setRefreshFeed(prev => prev + 1);
-  };
-
   if (mode === "marketplace") {
     return <Marketplace onModeChange={setMode} currentMode={mode} />;
   }
@@ -68,14 +58,7 @@ const HomePage = () => {
             </p>
           </div>
 
-          {/* Create Post - Only for full members */}
-          {!accessLoading && isFullMember && (
-            <div className="mb-6">
-              <CreatePostCard onPostCreated={handlePostCreated} />
-            </div>
-          )}
-
-          {/* Feed */}
+          {/* Feed (includes CreatePostCard, pending posts for admin, and approved posts) */}
           <Feed key={refreshFeed} />
         </div>
       </div>
