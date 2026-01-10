@@ -69,12 +69,14 @@ export const Header = ({ mode, onModeChange }: HeaderProps) => {
                 </Button>
               </motion.div>
             )}
-            <AnimatedText 
-              text="Zapdata" 
-              gradientColors="linear-gradient(90deg, hsl(var(--accent)), hsl(35 100% 60%), hsl(var(--accent)))"
-              gradientAnimationDuration={2}
-              textClassName="text-xl font-bold"
-            />
+            <button onClick={() => navigate("/")} className="focus:outline-none">
+              <AnimatedText 
+                text="Zapdata" 
+                gradientColors="linear-gradient(90deg, hsl(var(--accent)), hsl(35 100% 60%), hsl(var(--accent)))"
+                gradientAnimationDuration={2}
+                textClassName="text-xl font-bold cursor-pointer hover:opacity-80 transition-opacity"
+              />
+            </button>
           </div>
 
           <div className="flex items-center gap-2">

@@ -14,9 +14,11 @@ import { useImpersonation } from "@/contexts/ImpersonationContext";
 
 import Toaster, { ToasterRef } from "@/components/ui/toast";
 import { setGlobalToasterRef } from "@/hooks/useSplashedToast";
-import Home from "./pages/Home";
+import HomePage from "./pages/HomePage";
 import Index from "./pages/Index";
 import ProductMetrics from "./pages/ProductMetrics";
+import ZapConverter from "./pages/ZapConverter";
+import GeradorPalavrasChaves from "./pages/GeradorPalavrasChaves";
 import ProductAnalysis from "./pages/ProductAnalysis";
 import NumberOrganizer from "./pages/NumberOrganizer";
 import TrackOfertas from "./pages/TrackOfertas";
@@ -76,7 +78,9 @@ const AppRoutes = () => {
       
       <Routes>
         <Route path="/auth" element={<Auth />} />
-        <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+        <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
+        <Route path="/zap-converter" element={<ProtectedRoute><ZapConverter /></ProtectedRoute>} />
+        <Route path="/gerador-palavras-chaves" element={<ProtectedRoute><GeradorPalavrasChaves /></ProtectedRoute>} />
         
         {/* FREE SYSTEMS - Available to all users */}
         <Route path="/metricas" element={<ProtectedRoute><Index /></ProtectedRoute>} />
