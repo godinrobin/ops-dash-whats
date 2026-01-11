@@ -11,6 +11,7 @@ import { AdminRoute } from "@/components/AdminRoute";
 import { AnnouncementPopup } from "@/components/AnnouncementPopup";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
+import { usePushQueueProcessor } from "@/hooks/usePushQueueProcessor";
 
 import Toaster, { ToasterRef } from "@/components/ui/toast";
 import { setGlobalToasterRef } from "@/hooks/useSplashedToast";
@@ -70,6 +71,9 @@ const ImpersonationWrapper = () => {
 };
 
 const AppRoutes = () => {
+  // Process push notification queue in realtime
+  usePushQueueProcessor();
+  
   return (
     <>
       <FacebookOAuthHandler />
