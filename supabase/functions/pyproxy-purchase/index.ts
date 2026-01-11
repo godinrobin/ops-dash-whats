@@ -179,6 +179,207 @@ async function validateGateway(hostname: string, port: string): Promise<{ valid:
   }
 }
 
+// ============= SOCKS5 PROXY TEST HELPER =============
+// Makes an HTTPS request through a SOCKS5 proxy to discover the egress IP + geo.
+// This avoids relying on external proxy-testing services.
+async function testProxyViaSocks5IpWhoIs(
+  proxyHost: string,
+  proxyPort: string,
+  username: string,
+  password: string,
+): Promise<{
+  success: boolean;
+  ip?: string;
+  country?: string;
+  city?: string;
+  isp?: string;
+  latency?: number;
+  error?: string;
+}> {
+  const startTime = Date.now();
+
+  const withTimeout = async <T>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
+    const timeout = new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timeout after ${ms}ms`)), ms)
+    );
+    return await Promise.race([promise, timeout]);
+  };
+
+  const readExactly = async (conn: Deno.Conn, bytes: number): Promise<Uint8Array> => {
+    const buf = new Uint8Array(bytes);
+    let offset = 0;
+    while (offset < bytes) {
+      const n = await conn.read(buf.subarray(offset));
+      if (n === null) throw new Error('Connection closed');
+      offset += n;
+    }
+    return buf;
+  };
+
+  const readAll = async (conn: Deno.Conn): Promise<Uint8Array> => {
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    const tmp = new Uint8Array(16_384);
+    while (true) {
+      const n = await conn.read(tmp);
+      if (n === null) break;
+      if (n > 0) {
+        chunks.push(tmp.slice(0, n));
+        total += n;
+      }
+      // Safety stop (responses here are tiny)
+      if (total > 1_000_000) break;
+    }
+    const out = new Uint8Array(total);
+    let off = 0;
+    for (const c of chunks) {
+      out.set(c, off);
+      off += c.length;
+    }
+    return out;
+  };
+
+  const encode = (s: string) => new TextEncoder().encode(s);
+  const decode = (b: Uint8Array) => new TextDecoder().decode(b);
+
+  // Target that returns IP + geo (HTTPS)
+  const targetHost = 'ipwho.is';
+  const targetPort = 443;
+
+  let conn: Deno.Conn | null = null;
+
+  try {
+    conn = await withTimeout(
+      Deno.connect({ hostname: proxyHost, port: Number(proxyPort) }),
+      8000,
+      'SOCKS connect',
+    );
+
+    // Greeting: SOCKS5 + 1 method + username/password
+    await conn.write(new Uint8Array([0x05, 0x01, 0x02]));
+    const methodSelect = await readExactly(conn, 2);
+    if (methodSelect[0] !== 0x05) throw new Error('Invalid SOCKS version');
+    if (methodSelect[1] !== 0x02) throw new Error('Proxy does not accept username/password');
+
+    // Username/password auth (RFC1929)
+    const u = encode(username);
+    const p = encode(password);
+    if (u.length > 255 || p.length > 255) throw new Error('Username/password too long');
+
+    const authReq = new Uint8Array(3 + u.length + p.length);
+    authReq[0] = 0x01;
+    authReq[1] = u.length;
+    authReq.set(u, 2);
+    authReq[2 + u.length] = p.length;
+    authReq.set(p, 3 + u.length);
+    await conn.write(authReq);
+
+    const authRes = await readExactly(conn, 2);
+    if (authRes[0] !== 0x01) throw new Error('Invalid auth response');
+    if (authRes[1] !== 0x00) throw new Error('Invalid proxy credentials');
+
+    // CONNECT target (domain)
+    const hostBytes = encode(targetHost);
+    const portHi = (targetPort >> 8) & 0xff;
+    const portLo = targetPort & 0xff;
+
+    const connectReq = new Uint8Array(7 + hostBytes.length);
+    connectReq[0] = 0x05; // ver
+    connectReq[1] = 0x01; // cmd connect
+    connectReq[2] = 0x00; // rsv
+    connectReq[3] = 0x03; // atyp domain
+    connectReq[4] = hostBytes.length;
+    connectReq.set(hostBytes, 5);
+    connectReq[5 + hostBytes.length] = portHi;
+    connectReq[6 + hostBytes.length] = portLo;
+
+    await conn.write(connectReq);
+
+    // CONNECT response: ver, rep, rsv, atyp, bnd.addr, bnd.port
+    const header = await readExactly(conn, 4);
+    if (header[0] !== 0x05) throw new Error('Invalid connect response');
+    if (header[1] !== 0x00) throw new Error(`SOCKS connect failed (code ${header[1]})`);
+
+    // Drain BND.ADDR + BND.PORT based on ATYP
+    const atyp = header[3];
+    if (atyp === 0x01) {
+      await readExactly(conn, 4 + 2);
+    } else if (atyp === 0x03) {
+      const lenBuf = await readExactly(conn, 1);
+      const len = lenBuf[0];
+      await readExactly(conn, len + 2);
+    } else if (atyp === 0x04) {
+      await readExactly(conn, 16 + 2);
+    }
+
+    // Upgrade to TLS
+    const tlsConn = await withTimeout(Deno.startTls(conn as Deno.TcpConn, { hostname: targetHost }), 8000, 'TLS');
+
+    // HTTP request
+    const reqStr =
+      `GET / HTTP/1.1\r\n` +
+      `Host: ${targetHost}\r\n` +
+      `User-Agent: LovableProxyValidator/1.0\r\n` +
+      `Accept: application/json\r\n` +
+      `Connection: close\r\n\r\n`;
+
+    await tlsConn.write(encode(reqStr));
+
+    const raw = await withTimeout(readAll(tlsConn), 12000, 'Read response');
+    const text = decode(raw);
+
+    const splitIdx = text.indexOf('\r\n\r\n');
+    const body = splitIdx >= 0 ? text.slice(splitIdx + 4) : text;
+
+    let json: any;
+    try {
+      json = JSON.parse(body);
+    } catch {
+      // Sometimes servers add extra bytes; try to extract JSON object
+      const start = body.indexOf('{');
+      const end = body.lastIndexOf('}');
+      if (start >= 0 && end > start) {
+        json = JSON.parse(body.slice(start, end + 1));
+      } else {
+        throw new Error('Could not parse JSON from IP service');
+      }
+    }
+
+    if (json?.success === false) {
+      return {
+        success: false,
+        error: json?.message || 'IP service returned failure',
+        latency: Date.now() - startTime,
+      };
+    }
+
+    const ip = json?.ip;
+    const city = json?.city;
+    const country = json?.country;
+    const isp = json?.connection?.isp || json?.isp;
+
+    if (!ip || typeof ip !== 'string') {
+      return { success: false, error: 'IP not found in response', latency: Date.now() - startTime };
+    }
+
+    return {
+      success: true,
+      ip,
+      city: typeof city === 'string' ? city : undefined,
+      country: typeof country === 'string' ? country : undefined,
+      isp: typeof isp === 'string' ? isp : undefined,
+      latency: Date.now() - startTime,
+    };
+  } catch (err) {
+    console.warn('[PROXY TEST] SOCKS5 test failed:', err);
+    return { success: false, error: err instanceof Error ? err.message : String(err), latency: Date.now() - startTime };
+  } finally {
+    try {
+      conn?.close();
+    } catch {}
+  }
+}
+
 // ============= APIFY PROXY TEST HELPER =============
 async function testProxyViaApify(
   host: string, 
@@ -1552,42 +1753,54 @@ Deno.serve(async (req) => {
       // Try multiple methods to get the proxy IP
       let proxyTestSuccess = false;
       
-      // Method 1: Use APIFY if available
-      const proxyTest = await testProxyViaApify(host, port, username, password);
-      latencyMs = proxyTest.latency || 0;
-      
-      if (proxyTest.success && proxyTest.ip && proxyTest.ip !== 'unknown' && !proxyTest.ip.includes('pending') && !proxyTest.ip.includes('error')) {
-        ipInfo.ip = proxyTest.ip;
+      // Method 0: Native SOCKS5 test (real egress IP + geo)
+      const socksTest = await testProxyViaSocks5IpWhoIs(host, port, username, password);
+      latencyMs = socksTest.latency || 0;
+
+      if (socksTest.success && socksTest.ip && /^\d+\.\d+\.\d+\.\d+$/.test(socksTest.ip)) {
+        ipInfo.ip = socksTest.ip;
+        ipInfo.country = socksTest.country || '';
+        ipInfo.city = socksTest.city || '';
+        ipInfo.isp = socksTest.isp || '';
+        ipInfo.location = [ipInfo.city, ipInfo.country].filter(Boolean).join(', ');
         proxyTestSuccess = true;
-        console.log('[VALIDATE] APIFY test returned IP:', proxyTest.ip);
+        console.log('[VALIDATE] SOCKS5 test returned:', { ip: ipInfo.ip, location: ipInfo.location });
       } else {
-        console.log('[VALIDATE] APIFY test failed or returned invalid IP:', proxyTest);
-        
-        // Method 2: Use ProxyCheck.io API (free tier available)
-        try {
-          // Try to verify the proxy via a simple GET request to check the gateway is alive
-          // We can't actually route through the proxy, but we can validate the credentials
-          // by checking if the PYPROXY user exists
-          const pyproxyApiKey = Deno.env.get('PYPROXY_API_KEY');
-          const pyproxyApiSecret = Deno.env.get('PYPROXY_API_SECRET');
-          
-          if (pyproxyApiKey && pyproxyApiSecret) {
-            const accessToken = await getPyProxyAccessToken(pyproxyApiKey, pyproxyApiSecret);
-            if (accessToken) {
-              // Extract base username (before -zone- part)
-              const baseUsername = username.split('-zone-')[0];
-              const userResult = await getPyProxyUserList(accessToken, baseUsername);
-              
-              if (userResult.user) {
-                console.log('[VALIDATE] User found in PYPROXY:', userResult.user.account);
-                proxyTestSuccess = true;
-                // Can't get real IP without proxy routing, but credentials are valid
-                ipInfo.ip = 'credentials_valid';
+        console.log('[VALIDATE] SOCKS5 test failed:', socksTest);
+
+        // Method 1: Use APIFY if available
+        const proxyTest = await testProxyViaApify(host, port, username, password);
+        latencyMs = proxyTest.latency || latencyMs;
+
+        if (proxyTest.success && proxyTest.ip && proxyTest.ip !== 'unknown' && !proxyTest.ip.includes('pending') && !proxyTest.ip.includes('error')) {
+          ipInfo.ip = proxyTest.ip;
+          proxyTestSuccess = true;
+          console.log('[VALIDATE] APIFY test returned IP:', proxyTest.ip);
+        } else {
+          console.log('[VALIDATE] APIFY test failed or returned invalid IP:', proxyTest);
+
+          // Method 2: Validate credentials by checking if the PYPROXY user exists
+          try {
+            const pyproxyApiKey = Deno.env.get('PYPROXY_API_KEY');
+            const pyproxyApiSecret = Deno.env.get('PYPROXY_API_SECRET');
+
+            if (pyproxyApiKey && pyproxyApiSecret) {
+              const accessToken = await getPyProxyAccessToken(pyproxyApiKey, pyproxyApiSecret);
+              if (accessToken) {
+                // Extract base username (before -zone- part)
+                const baseUsername = username.split('-zone-')[0];
+                const userResult = await getPyProxyUserList(accessToken, baseUsername);
+
+                if (userResult.user) {
+                  console.log('[VALIDATE] User found in PYPROXY:', userResult.user.account);
+                  proxyTestSuccess = true;
+                  ipInfo.ip = 'credentials_valid';
+                }
               }
             }
+          } catch (e) {
+            console.warn('[VALIDATE] PYPROXY user check failed:', e);
           }
-        } catch (e) {
-          console.warn('[VALIDATE] PYPROXY user check failed:', e);
         }
       }
       
