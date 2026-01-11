@@ -52,17 +52,17 @@ export const Feed = () => {
     if (!user) return;
 
     try {
-      // Fetch approved posts
+      // Fetch approved posts - remove profiles join that may be causing issues
       const { data: postsData, error: postsError } = await (supabase as any)
         .from("feed_posts")
-        .select(`
-          *,
-          profiles:user_id (username)
-        `)
+        .select("*")
         .eq("status", "approved")
         .order("created_at", { ascending: false });
 
-      if (postsError) throw postsError;
+      if (postsError) {
+        console.error("Error fetching posts:", postsError);
+        throw postsError;
+      }
 
       setPosts(postsData || []);
 
@@ -103,10 +103,7 @@ export const Feed = () => {
     try {
       const { data, error } = await (supabase as any)
         .from("feed_posts")
-        .select(`
-          *,
-          profiles:user_id (username)
-        `)
+        .select("*")
         .eq("status", "pending")
         .order("created_at", { ascending: false });
 

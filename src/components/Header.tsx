@@ -25,10 +25,12 @@ export const Header = ({ mode, onModeChange, onSidebarToggle }: HeaderProps) => 
   const [profileOpen, setProfileOpen] = useState(false);
   
   const isOnHomePage = location.pathname === "/";
-  
-  const showBackButton = location.pathname !== "/" && location.pathname !== "/auth" && !location.pathname.startsWith("/ads");
+  const isOnAuthPage = location.pathname === "/auth";
   const isInAdsSection = location.pathname.startsWith("/ads");
-  const showModeToggle = (location.pathname === "/" || isInAdsSection) && mode && onModeChange;
+  
+  // Show sidebar toggle on home page or on system pages (not auth, not ads)
+  const showSidebarToggle = !isOnAuthPage && !isInAdsSection;
+  const showModeToggle = (isOnHomePage || isInAdsSection) && mode && onModeChange;
 
   const dockItems = [
     { 
@@ -56,8 +58,8 @@ export const Header = ({ mode, onModeChange, onSidebarToggle }: HeaderProps) => 
       <header className="fixed top-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-b border-border z-50">
         <div className="container mx-auto px-4 h-14 md:h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {/* Sidebar toggle - only on home page */}
-            {isOnHomePage && onSidebarToggle && (
+            {/* Sidebar toggle - on all pages except auth and ads */}
+            {showSidebarToggle && onSidebarToggle && (
               <motion.div
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.95 }}
@@ -69,21 +71,6 @@ export const Header = ({ mode, onModeChange, onSidebarToggle }: HeaderProps) => 
                   className="shrink-0"
                 >
                   <Menu className="h-5 w-5" />
-                </Button>
-              </motion.div>
-            )}
-            {showBackButton && (
-              <motion.div
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => navigate("/")}
-                  className="shrink-0"
-                >
-                  <ArrowLeft className="h-5 w-5" />
                 </Button>
               </motion.div>
             )}

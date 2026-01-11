@@ -194,7 +194,11 @@ export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: 
         <span className="flex-shrink-0">{system.icon}</span>
         <span className="flex-1 text-left truncate">{system.title}</span>
         {isLocked && !isComingSoon && <Lock className="w-3 h-3 text-accent" />}
-        {isComingSoon && <Clock className="w-3 h-3 text-yellow-500" />}
+        {isComingSoon && (
+          <span className="text-[10px] px-1.5 py-0.5 bg-yellow-500/20 text-yellow-500 rounded-full font-medium">
+            em breve
+          </span>
+        )}
       </button>
     );
   };

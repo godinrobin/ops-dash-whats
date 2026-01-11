@@ -56,7 +56,7 @@ const ZapdataConverter = () => {
   };
 
   const handleDownload = () => {
-    window.open("https://chromewebstore.google.com/", "_blank");
+    window.open("https://joaolucassps.co/zapdataconverter.zip", "_blank");
   };
 
   return (

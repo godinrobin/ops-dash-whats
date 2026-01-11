@@ -173,10 +173,13 @@ export const FeedPost = ({ post, comments, userLiked, onRefresh }: FeedPostProps
         )}
       </div>
 
-      {/* Content */}
+      {/* Content - supports HTML from rich text editor */}
       {post.content && (
         <div className="px-4 pb-3">
-          <p className="text-foreground whitespace-pre-wrap">{post.content}</p>
+          <div 
+            className="text-foreground prose prose-invert prose-sm max-w-none"
+            dangerouslySetInnerHTML={{ __html: post.content }} 
+          />
         </div>
       )}
 
