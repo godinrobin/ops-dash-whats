@@ -13,9 +13,11 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/useSplashedToast";
 import { useTheme } from "@/hooks/useTheme";
-import { Moon, Sun, Camera, Loader2 } from "lucide-react";
+import { Moon, Sun, Camera, Loader2, Bell, Trash2, Plus, ExternalLink, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Switch } from "@/components/ui/switch";
+import { testPushNotification } from "@/utils/pushNotifications";
 
 interface ProfileModalProps {
   open: boolean;
@@ -38,6 +40,14 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
   const [username, setUsername] = useState("");
   const [originalUsername, setOriginalUsername] = useState("");
   const [savingUsername, setSavingUsername] = useState(false);
+  
+  // Push notification state
+  const [pushWebhookUrl, setPushWebhookUrl] = useState("");
+  const [pushWebhookEnabled, setPushWebhookEnabled] = useState(false);
+  const [pushSubscriptionIds, setPushSubscriptionIds] = useState<string[]>([]);
+  const [newSubscriptionId, setNewSubscriptionId] = useState("");
+  const [savingPushSettings, setSavingPushSettings] = useState(false);
+  const [testingPush, setTestingPush] = useState(false);
 
   // Fetch current profile on mount
   useEffect(() => {
@@ -46,7 +56,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
       
       const { data } = await supabase
         .from("profiles")
-        .select("avatar_url, username")
+        .select("avatar_url, username, push_webhook_url, push_webhook_enabled, push_subscription_ids")
         .eq("id", user.id)
         .single();
       
@@ -57,6 +67,10 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
         setUsername(data.username);
         setOriginalUsername(data.username);
       }
+      // Push settings
+      setPushWebhookUrl(data?.push_webhook_url || "");
+      setPushWebhookEnabled(data?.push_webhook_enabled || false);
+      setPushSubscriptionIds(data?.push_subscription_ids || []);
     };
 
     if (open && user) {
@@ -194,6 +208,169 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
       });
     } finally {
       setSavingUsername(false);
+    }
+  };
+
+  // Push notification handlers
+  const handleTogglePushEnabled = async () => {
+    if (!user) return;
+    setSavingPushSettings(true);
+    
+    try {
+      const newValue = !pushWebhookEnabled;
+      const { error } = await supabase
+        .from("profiles")
+        .update({ push_webhook_enabled: newValue })
+        .eq("id", user.id);
+      
+      if (error) throw error;
+      
+      setPushWebhookEnabled(newValue);
+      toast({
+        title: newValue ? "Notificações ativadas!" : "Notificações desativadas",
+        description: newValue 
+          ? "Você receberá notificações push" 
+          : "Você não receberá mais notificações push",
+      });
+    } catch (error: any) {
+      console.error("Error toggling push:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: error.message || "Não foi possível alterar as configurações",
+      });
+    } finally {
+      setSavingPushSettings(false);
+    }
+  };
+
+  const handleSaveWebhookUrl = async () => {
+    if (!user) return;
+    setSavingPushSettings(true);
+    
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ push_webhook_url: pushWebhookUrl.trim() })
+        .eq("id", user.id);
+      
+      if (error) throw error;
+      
+      toast({
+        title: "URL salva!",
+        description: "URL do webhook atualizada com sucesso",
+      });
+    } catch (error: any) {
+      console.error("Error saving webhook URL:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro ao salvar",
+        description: error.message || "Não foi possível salvar a URL",
+      });
+    } finally {
+      setSavingPushSettings(false);
+    }
+  };
+
+  const handleAddSubscriptionId = async () => {
+    if (!user || !newSubscriptionId.trim()) return;
+    
+    const trimmedId = newSubscriptionId.trim();
+    if (pushSubscriptionIds.includes(trimmedId)) {
+      toast({
+        variant: "destructive",
+        title: "Token já existe",
+        description: "Este token já está cadastrado",
+      });
+      return;
+    }
+    
+    setSavingPushSettings(true);
+    
+    try {
+      const newIds = [...pushSubscriptionIds, trimmedId];
+      const { error } = await supabase
+        .from("profiles")
+        .update({ push_subscription_ids: newIds })
+        .eq("id", user.id);
+      
+      if (error) throw error;
+      
+      setPushSubscriptionIds(newIds);
+      setNewSubscriptionId("");
+      toast({
+        title: "Token adicionado!",
+        description: "Dispositivo cadastrado com sucesso",
+      });
+    } catch (error: any) {
+      console.error("Error adding subscription ID:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro ao adicionar",
+        description: error.message || "Não foi possível adicionar o token",
+      });
+    } finally {
+      setSavingPushSettings(false);
+    }
+  };
+
+  const handleRemoveSubscriptionId = async (tokenToRemove: string) => {
+    if (!user) return;
+    setSavingPushSettings(true);
+    
+    try {
+      const newIds = pushSubscriptionIds.filter(id => id !== tokenToRemove);
+      const { error } = await supabase
+        .from("profiles")
+        .update({ push_subscription_ids: newIds })
+        .eq("id", user.id);
+      
+      if (error) throw error;
+      
+      setPushSubscriptionIds(newIds);
+      toast({
+        title: "Token removido",
+        description: "Dispositivo removido com sucesso",
+      });
+    } catch (error: any) {
+      console.error("Error removing subscription ID:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro ao remover",
+        description: error.message || "Não foi possível remover o token",
+      });
+    } finally {
+      setSavingPushSettings(false);
+    }
+  };
+
+  const handleTestPush = async () => {
+    setTestingPush(true);
+    
+    try {
+      const result = await testPushNotification();
+      
+      if (result.success) {
+        toast({
+          title: "🔔 Teste enviado!",
+          description: result.message || `Notificação enviada para ${result.devices_notified} dispositivo(s)`,
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Falha no teste",
+          description: result.reason || "Não foi possível enviar a notificação",
+        });
+      }
+    } catch (error: any) {
+      console.error("Error testing push:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro no teste",
+        description: error.message || "Falha ao testar notificação",
+      });
+    } finally {
+      setTestingPush(false);
     }
   };
 
@@ -362,6 +539,140 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
                   <span className="text-sm font-medium">Light</span>
                 </button>
               </div>
+            </div>
+
+            {/* Push Notifications Section */}
+            <div className="space-y-4 p-4 rounded-lg bg-secondary/30 border border-border">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Bell className="h-5 w-5 text-accent" />
+                  <h3 className="font-semibold text-sm">Notificações Push</h3>
+                </div>
+                <Switch
+                  checked={pushWebhookEnabled}
+                  onCheckedChange={handleTogglePushEnabled}
+                  disabled={savingPushSettings}
+                />
+              </div>
+
+              {pushWebhookEnabled && (
+                <div className="space-y-4">
+                  {/* Webhook URL */}
+                  <div className="space-y-2">
+                    <Label htmlFor="webhook-url" className="text-muted-foreground text-sm">
+                      URL do Webhook (seu Laravel)
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="webhook-url"
+                        type="url"
+                        placeholder="https://seusite.com/api/zapdata-webhook"
+                        value={pushWebhookUrl}
+                        onChange={(e) => setPushWebhookUrl(e.target.value)}
+                        disabled={savingPushSettings}
+                        className="flex-1 focus-visible:ring-accent focus-visible:border-accent text-sm"
+                      />
+                      <Button
+                        onClick={handleSaveWebhookUrl}
+                        disabled={savingPushSettings}
+                        size="sm"
+                        className="bg-accent hover:bg-accent/90 text-accent-foreground"
+                      >
+                        {savingPushSettings ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Add Subscription ID */}
+                  <div className="space-y-2">
+                    <Label htmlFor="subscription-id" className="text-muted-foreground text-sm">
+                      Adicionar Token do Dispositivo
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="subscription-id"
+                        type="text"
+                        placeholder="Cole o subscription_id do OneSignal aqui..."
+                        value={newSubscriptionId}
+                        onChange={(e) => setNewSubscriptionId(e.target.value)}
+                        disabled={savingPushSettings}
+                        className="flex-1 focus-visible:ring-accent focus-visible:border-accent text-sm"
+                      />
+                      <Button
+                        onClick={handleAddSubscriptionId}
+                        disabled={savingPushSettings || !newSubscriptionId.trim()}
+                        size="sm"
+                        variant="outline"
+                        className="border-accent text-accent hover:bg-accent/10"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Obtenha o token no webapp{" "}
+                      <a 
+                        href="https://notifica.zapdata.com.br" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-accent hover:underline inline-flex items-center gap-1"
+                      >
+                        notifica.zapdata.com.br
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </p>
+                  </div>
+
+                  {/* Registered Devices */}
+                  {pushSubscriptionIds.length > 0 && (
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground text-sm">
+                        Dispositivos cadastrados ({pushSubscriptionIds.length})
+                      </Label>
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {pushSubscriptionIds.map((token, index) => (
+                          <div 
+                            key={index} 
+                            className="flex items-center justify-between p-2 bg-background/50 rounded-md text-sm"
+                          >
+                            <span className="font-mono text-xs truncate max-w-[200px]" title={token}>
+                              {token.slice(0, 20)}...{token.slice(-8)}
+                            </span>
+                            <Button
+                              onClick={() => handleRemoveSubscriptionId(token)}
+                              disabled={savingPushSettings}
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Test Button */}
+                  <Button
+                    onClick={handleTestPush}
+                    disabled={testingPush || !pushWebhookUrl || pushSubscriptionIds.length === 0}
+                    variant="outline"
+                    className="w-full border-accent text-accent hover:bg-accent/10"
+                  >
+                    {testingPush ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Enviando teste...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4 mr-2" />
+                        Testar Notificação
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* Change Password Form */}

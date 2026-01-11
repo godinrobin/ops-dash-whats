@@ -2548,6 +2548,9 @@ export type Database = {
           created_at: string
           id: string
           is_full_member: boolean
+          push_subscription_ids: string[] | null
+          push_webhook_enabled: boolean | null
+          push_webhook_url: string | null
           username: string
         }
         Insert: {
@@ -2555,6 +2558,9 @@ export type Database = {
           created_at?: string
           id: string
           is_full_member?: boolean
+          push_subscription_ids?: string[] | null
+          push_webhook_enabled?: boolean | null
+          push_webhook_url?: string | null
           username: string
         }
         Update: {
@@ -2562,6 +2568,9 @@ export type Database = {
           created_at?: string
           id?: string
           is_full_member?: boolean
+          push_subscription_ids?: string[] | null
+          push_webhook_enabled?: boolean | null
+          push_webhook_url?: string | null
           username?: string
         }
         Relationships: []
