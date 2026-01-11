@@ -181,6 +181,12 @@ export default function InboxDashboard() {
           error: proxyInfo.validation_error ? proxyInfo.last_test_error : undefined,
         },
       }));
+    } catch (err) {
+      console.error('[handleValidateInstanceProxy] Unexpected error:', err);
+      setInstanceProxyResults((prev) => ({
+        ...prev,
+        [instance.id]: { error: 'Erro ao validar proxy' },
+      }));
     } finally {
       setValidatingInstanceProxy(null);
     }
