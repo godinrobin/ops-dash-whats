@@ -26,6 +26,7 @@ interface Instance {
   qrcode: string | null;
   last_seen: string | null;
   created_at: string;
+  proxy_string: string | null;
 }
 
 export default function MaturadorInstances() {
@@ -63,8 +64,12 @@ export default function MaturadorInstances() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   
-  // Proxy validation
+  // Proxy validation (for create modal)
   const { validateProxy, validating: validatingProxy, result: proxyValidationResult, clearResult: clearProxyResult } = useProxyValidator();
+  
+  // Card proxy validation state (per-instance)
+  const [validatingInstanceProxy, setValidatingInstanceProxy] = useState<string | null>(null);
+  const [instanceProxyResults, setInstanceProxyResults] = useState<Record<string, { ip?: string; location?: string; latency_ms?: number; error?: string }>>({});
 
   const fetchInstances = useCallback(async () => {
     if (!user) return;
@@ -178,6 +183,32 @@ export default function MaturadorInstances() {
     await validateProxy(proxyString);
   };
 
+  // Handle card WiFi icon click to validate instance proxy
+  const handleValidateInstanceProxy = async (instance: Instance) => {
+    if (!instance.proxy_string) {
+      toast.info('Esta instância não tem proxy configurada');
+      return;
+    }
+    
+    setValidatingInstanceProxy(instance.id);
+    try {
+      const result = await validateProxy(instance.proxy_string);
+      if (result) {
+        setInstanceProxyResults(prev => ({
+          ...prev,
+          [instance.id]: {
+            ip: result.ip,
+            location: result.location,
+            latency_ms: result.latency_ms,
+            error: result.error,
+          }
+        }));
+      }
+    } finally {
+      setValidatingInstanceProxy(null);
+    }
+  };
+
   // Parse SOCKS5 string format: socks5://username:password@host:port
   const parseSocks5String = (str: string) => {
     try {
@@ -232,6 +263,14 @@ export default function MaturadorInstances() {
       toast.success('Número criado com sucesso!');
       setCreateModalOpen(false);
       resetCreateForm();
+      
+      // Save proxy_string to instance if provided
+      if (proxyEnabled && proxyString && data.instanceId) {
+        await supabase
+          .from('maturador_instances')
+          .update({ proxy_string: proxyString })
+          .eq('id', data.instanceId);
+      }
       
       await fetchInstances();
       
@@ -539,12 +578,65 @@ export default function MaturadorInstances() {
               <Card key={instance.id}>
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">{instance.label || instance.phone_number || instance.instance_name}</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-base">{instance.label || instance.phone_number || instance.instance_name}</CardTitle>
+                      {/* Proxy WiFi indicator */}
+                      {instance.proxy_string && (
+                        <button
+                          onClick={() => handleValidateInstanceProxy(instance)}
+                          disabled={validatingInstanceProxy === instance.id}
+                          className={`p-1 rounded hover:bg-muted transition-colors ${
+                            instanceProxyResults[instance.id]?.ip && !instanceProxyResults[instance.id]?.error
+                              ? 'text-green-500' 
+                              : instanceProxyResults[instance.id]?.error 
+                                ? 'text-red-500' 
+                                : 'text-muted-foreground'
+                          }`}
+                          title={
+                            instanceProxyResults[instance.id]?.ip 
+                              ? `IP: ${instanceProxyResults[instance.id].ip}${instanceProxyResults[instance.id].location ? ` | ${instanceProxyResults[instance.id].location}` : ''}` 
+                              : 'Clique para validar proxy'
+                          }
+                        >
+                          {validatingInstanceProxy === instance.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Wifi className="h-4 w-4" />
+                          )}
+                        </button>
+                      )}
+                    </div>
                     <Badge variant="outline" className={`flex items-center gap-1 ${instance.status === 'connected' ? 'border-green-500 text-green-500' : ''}`}>
                       <div className={`w-2 h-2 rounded-full ${getStatusColor(instance.status)}`} />
                       {getStatusText(instance.status)}
                     </Badge>
                   </div>
+                  {/* Show proxy IP/location info if available */}
+                  {instance.proxy_string && instanceProxyResults[instance.id]?.ip && (
+                    <div className="flex items-center gap-1 text-xs">
+                      {instanceProxyResults[instance.id]?.error ? (
+                        <span className="text-red-500">{instanceProxyResults[instance.id].error}</span>
+                      ) : (
+                        <>
+                          <Wifi className="h-3 w-3 text-green-500" />
+                          <span className="text-green-500">
+                            IP: {instanceProxyResults[instance.id].ip}
+                          </span>
+                          {instanceProxyResults[instance.id].location && (
+                            <>
+                              <MapPin className="h-3 w-3 ml-1 text-muted-foreground" />
+                              <span className="text-muted-foreground">{instanceProxyResults[instance.id].location}</span>
+                            </>
+                          )}
+                          {instanceProxyResults[instance.id].latency_ms && (
+                            <span className="text-muted-foreground ml-1">
+                              ({instanceProxyResults[instance.id].latency_ms}ms)
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
                   <CardDescription>
                     {instance.phone_number || instance.instance_name}
                   </CardDescription>
