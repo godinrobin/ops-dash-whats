@@ -1,4 +1,4 @@
-import { Header } from "@/components/Header";
+import { SystemLayout } from "@/components/layout/SystemLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -152,9 +152,7 @@ const TagWhatsSales = () => {
 
 
   return (
-    <>
-      <Header />
-      <div className="h-14 md:h-16" />
+    <SystemLayout>
       <div className="min-h-screen bg-background p-6 md:p-10">
         <div className="container mx-auto max-w-6xl">
           <Button
@@ -255,7 +253,7 @@ const TagWhatsSales = () => {
         </div>
       </div>
 
-    </>
+    </SystemLayout>
   );
 };
 

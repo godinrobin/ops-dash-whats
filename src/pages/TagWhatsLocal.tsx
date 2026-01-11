@@ -1,4 +1,4 @@
-import { Header } from "@/components/Header";
+import { SystemLayout } from "@/components/layout/SystemLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Download, Monitor, Apple } from "lucide-react";
@@ -86,9 +86,7 @@ const TagWhatsLocal = () => {
   };
 
   return (
-    <>
-      <Header />
-      <div className="h-14 md:h-16" />
+    <SystemLayout>
       <div className="min-h-screen bg-background p-6 md:p-10">
         <div className="container mx-auto max-w-4xl">
           <Button
@@ -171,7 +169,7 @@ const TagWhatsLocal = () => {
           </footer>
         </div>
       </div>
-    </>
+    </SystemLayout>
   );
 };
 
