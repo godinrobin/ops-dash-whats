@@ -47,7 +47,7 @@ export const Feed = () => {
   const [pendingPosts, setPendingPosts] = useState<Post[]>([]);
   const [myPendingPosts, setMyPendingPosts] = useState<Post[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
-  const [userLikes, setUserLikes] = useState<Set<string>>(new Set());
+  const [userLikes, setUserLikes] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [pendingExpanded, setPendingExpanded] = useState(true);
   const [approvingId, setApprovingId] = useState<string | null>(null);
@@ -70,7 +70,7 @@ export const Feed = () => {
       if (!postsData || postsData.length === 0) {
         setPosts([]);
         setComments([]);
-        setUserLikes(new Set());
+        setUserLikes(new Map());
         return;
       }
 
@@ -138,14 +138,16 @@ export const Feed = () => {
       setPosts(postsFinal);
       setComments(commentsFinal);
 
-      // Likes
+      // Likes with reactions
       const { data: likesData } = await (supabase as any)
         .from("feed_likes")
-        .select("post_id")
+        .select("post_id, reaction")
         .eq("user_id", user.id)
         .in("post_id", postIds);
 
-      setUserLikes(new Set((likesData || []).map((l: any) => l.post_id)));
+      const likesMap = new Map<string, string>();
+      (likesData || []).forEach((l: any) => likesMap.set(l.post_id, l.reaction || "🔥"));
+      setUserLikes(likesMap);
     } catch (error) {
       console.error("Error fetching feed:", error);
     } finally {
@@ -422,6 +424,7 @@ export const Feed = () => {
             post={post}
             comments={comments.filter((c) => c.post_id === post.id)}
             userLiked={userLikes.has(post.id)}
+            userReaction={userLikes.get(post.id)}
             onRefresh={fetchPosts}
           />
         ))
