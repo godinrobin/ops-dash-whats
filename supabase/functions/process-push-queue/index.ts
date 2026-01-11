@@ -77,12 +77,10 @@ Deno.serve(async (req) => {
           firefox_icon: notification.icon_url || "https://zapdata.com.br/favicon.png",
           // Priority settings for urgent notifications (like instance disconnect)
           priority: isHighPriority ? 10 : 5, // 10 = highest priority
-          // Android priority
-          android_channel_id: isHighPriority ? "urgent_channel" : undefined,
           // iOS settings for urgent notifications
-          ios_interruption_level: isHighPriority ? "critical" : "active",
+          ios_interruption_level: isHighPriority ? "time-sensitive" : "active",
           // TTL - time to live (urgent notifications should be delivered quickly or not at all)
-          ttl: isHighPriority ? 60 : 86400, // 1 minute for urgent, 24 hours for normal
+          ttl: isHighPriority ? 300 : 86400, // 5 minutes for urgent, 24 hours for normal
           // Require interaction for important notifications
           require_interaction: isHighPriority,
         };
