@@ -143,128 +143,86 @@ Deno.serve(async (req) => {
 
     console.log(`[CHECK-LEAD-ROTATION-MANUAL] Found ${instanceLeadCounts.length} instances with leads today`);
 
-    // 3. Get today's notification status from lead_rotation_daily_counts
+    // Get today's date in São Paulo timezone
     const now = new Date();
     const saoPauloOffset = -3 * 60;
     const utcOffset = now.getTimezoneOffset();
     const saoPauloTime = new Date(now.getTime() + (utcOffset + saoPauloOffset) * 60000);
     const today = saoPauloTime.toISOString().split('T')[0];
 
-    const { data: notificationStatuses } = await supabase
-      .from("lead_rotation_daily_counts")
-      .select("instance_id, notification_sent")
-      .eq("user_id", user_id)
-      .eq("date", today);
-
-    const notifiedMap = new Map(
-      (notificationStatuses || []).map(s => [s.instance_id, s.notification_sent])
-    );
-
     let notificationsQueued = 0;
     const instancesAboveLimit: string[] = [];
-    const instancesAlreadyNotified: string[] = [];
-    let instancesBelowLimit = 0;
 
-    // 4. Check each instance with leads
+    // 4. Check each instance with leads - MANUAL CHECK ALWAYS SENDS NOTIFICATIONS
     for (const instance of instanceLeadCounts) {
       const currentCount = instance.lead_count;
-      const alreadyNotified = notifiedMap.get(instance.instance_id) || false;
       const instanceDisplay = instance.instance_name || instance.phone_number || instance.instance_id.slice(0, 8);
 
-      console.log(`[CHECK-LEAD-ROTATION-MANUAL] Instance ${instanceDisplay}: count=${currentCount}, limit=${limit}, notified=${alreadyNotified}`);
+      console.log(`[CHECK-LEAD-ROTATION-MANUAL] Instance ${instanceDisplay}: count=${currentCount}, limit=${limit}`);
 
       if (currentCount >= limit) {
-        if (alreadyNotified) {
-          // Already notified today
-          instancesAlreadyNotified.push(`${instanceDisplay} (${currentCount})`);
-        } else {
-          // Above limit and not notified - send notification
-          instancesAboveLimit.push(instanceDisplay);
+        instancesAboveLimit.push(`${instanceDisplay} (${currentCount})`);
 
-          // Upsert notification status
-          const { error: upsertError } = await supabase
+        // Queue push notification - always send on manual check
+        await supabase
+          .from("push_notification_queue")
+          .insert({
+            user_id,
+            subscription_ids: subscriptionIds,
+            title: "🔄 Rotação de Leads",
+            message: `A instância ${instanceDisplay} atingiu o limite de ${limit} leads hoje! (${currentCount} leads)`,
+            icon_url: "https://zapdata.com.br/favicon.png",
+            priority: 10,
+          });
+
+        notificationsQueued++;
+
+        // Update the daily count record
+        const { data: existing } = await supabase
+          .from("lead_rotation_daily_counts")
+          .select("id")
+          .eq("user_id", user_id)
+          .eq("instance_id", instance.instance_id)
+          .eq("date", today)
+          .maybeSingle();
+
+        if (existing) {
+          await supabase
             .from("lead_rotation_daily_counts")
-            .upsert({
+            .update({ notification_sent: true, lead_count: currentCount })
+            .eq("id", existing.id);
+        } else {
+          await supabase
+            .from("lead_rotation_daily_counts")
+            .insert({
               user_id,
               instance_id: instance.instance_id,
               date: today,
               lead_count: currentCount,
               notification_sent: true,
-            }, {
-              onConflict: 'user_id,instance_id,date'
             });
-
-          if (upsertError) {
-            console.error("[CHECK-LEAD-ROTATION-MANUAL] Error upserting notification status:", upsertError);
-            // Try insert/update separately
-            const { data: existing } = await supabase
-              .from("lead_rotation_daily_counts")
-              .select("id")
-              .eq("user_id", user_id)
-              .eq("instance_id", instance.instance_id)
-              .eq("date", today)
-              .maybeSingle();
-
-            if (existing) {
-              await supabase
-                .from("lead_rotation_daily_counts")
-                .update({ notification_sent: true, lead_count: currentCount })
-                .eq("id", existing.id);
-            } else {
-              await supabase
-                .from("lead_rotation_daily_counts")
-                .insert({
-                  user_id,
-                  instance_id: instance.instance_id,
-                  date: today,
-                  lead_count: currentCount,
-                  notification_sent: true,
-                });
-            }
-          }
-
-          // Queue push notification
-          await supabase
-            .from("push_notification_queue")
-            .insert({
-              user_id,
-              subscription_ids: subscriptionIds,
-              title: "🔄 Rotação de Leads",
-              message: `A instância ${instanceDisplay} atingiu o limite de ${limit} leads hoje! (${currentCount} leads)`,
-              icon_url: "https://zapdata.com.br/favicon.png",
-              priority: 10,
-            });
-
-          notificationsQueued++;
         }
-      } else {
-        instancesBelowLimit++;
       }
     }
 
-    // Build comprehensive message
+    // Build message
     let message = "";
     if (notificationsQueued > 0) {
-      message = `${notificationsQueued} nova(s) notificação(ões) enviada(s)!`;
-    } else if (instancesAlreadyNotified.length > 0) {
-      message = `${instancesAlreadyNotified.length} instância(s) já foi(ram) notificada(s) hoje: ${instancesAlreadyNotified.join(", ")}`;
+      message = `${notificationsQueued} instância(s) acima do limite! Notificações enviadas: ${instancesAboveLimit.join(", ")}`;
     } else if (instanceLeadCounts.length > 0) {
       message = `Nenhuma instância atingiu o limite de ${limit} leads ainda hoje.`;
     } else {
       message = "Nenhum lead registrado hoje.";
     }
 
-    console.log(`[CHECK-LEAD-ROTATION-MANUAL] Done. Notified: ${notificationsQueued}, Already notified: ${instancesAlreadyNotified.length}`);
+    console.log(`[CHECK-LEAD-ROTATION-MANUAL] Done. Notified: ${notificationsQueued}`);
 
     return new Response(
       JSON.stringify({ 
         message,
         checked: instanceLeadCounts.length,
         notified: notificationsQueued,
-        alreadyNotified: instancesAlreadyNotified.length,
         instancesAboveLimit,
-        instancesAlreadyNotified,
-        belowLimit: instancesBelowLimit,
         limit,
         date: today,
       }),

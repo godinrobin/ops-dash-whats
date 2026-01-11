@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/useSplashedToast";
 import { useTheme } from "@/hooks/useTheme";
-import { Moon, Sun, Camera, Loader2, Bell, Trash2, Plus, ExternalLink, Send, Search } from "lucide-react";
+import { Moon, Sun, Camera, Loader2, Bell, Trash2, Plus, ExternalLink, Send, Search, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
@@ -52,7 +52,9 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
   const [notifyOnDisconnect, setNotifyOnDisconnect] = useState(false);
   const [notifyOnLeadRotation, setNotifyOnLeadRotation] = useState(false);
   const [leadRotationLimit, setLeadRotationLimit] = useState<number>(30);
+  const [originalLeadRotationLimit, setOriginalLeadRotationLimit] = useState<number>(30);
   const [checkingLeadRotation, setCheckingLeadRotation] = useState(false);
+  const [savingLeadLimit, setSavingLeadLimit] = useState(false);
 
   // Fetch current profile on mount
   useEffect(() => {
@@ -79,6 +81,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
       setNotifyOnDisconnect(data?.notify_on_disconnect || false);
       setNotifyOnLeadRotation(data?.notify_on_lead_rotation || false);
       setLeadRotationLimit(data?.lead_rotation_limit || 30);
+      setOriginalLeadRotationLimit(data?.lead_rotation_limit || 30);
     };
 
     if (open && user) {
@@ -345,22 +348,22 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
     }
   };
 
-  const handleUpdateLeadRotationLimit = async (value: number) => {
-    if (!user || value < 1) return;
-    setLeadRotationLimit(value);
-    setSavingPushSettings(true);
+  const handleSaveLeadRotationLimit = async () => {
+    if (!user || leadRotationLimit < 1) return;
+    setSavingLeadLimit(true);
     
     try {
       const { error } = await supabase
         .from("profiles")
-        .update({ lead_rotation_limit: value })
+        .update({ lead_rotation_limit: leadRotationLimit })
         .eq("id", user.id);
       
       if (error) throw error;
       
+      setOriginalLeadRotationLimit(leadRotationLimit);
       toast({
         title: "Limite atualizado!",
-        description: `Limite de leads definido para ${value}`,
+        description: `Limite de leads definido para ${leadRotationLimit}`,
       });
     } catch (error: any) {
       console.error("Error updating lead rotation limit:", error);
@@ -370,7 +373,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
         description: error.message || "Não foi possível atualizar o limite",
       });
     } finally {
-      setSavingPushSettings(false);
+      setSavingLeadLimit(false);
     }
   };
 
@@ -830,7 +833,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
                       <Label htmlFor="lead-rotation-limit" className="text-sm text-muted-foreground">
                         Limite máximo de leads por instância
                       </Label>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
                         <Input
                           id="lead-rotation-limit"
                           type="number"
@@ -840,13 +843,25 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
                             const val = parseInt(e.target.value) || 30;
                             setLeadRotationLimit(val);
                           }}
-                          onBlur={(e) => {
-                            const val = parseInt(e.target.value) || 30;
-                            handleUpdateLeadRotationLimit(val);
-                          }}
-                          disabled={savingPushSettings}
-                          className="w-24 focus-visible:ring-accent focus-visible:border-accent"
+                          disabled={savingLeadLimit}
+                          className="w-20 focus-visible:ring-accent focus-visible:border-accent"
                         />
+                        {leadRotationLimit !== originalLeadRotationLimit && (
+                          <Button
+                            onClick={handleSaveLeadRotationLimit}
+                            disabled={savingLeadLimit}
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-green-500 hover:text-green-400 hover:bg-green-500/10"
+                            title="Salvar limite"
+                          >
+                            {savingLeadLimit ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Save className="w-4 h-4" />
+                            )}
+                          </Button>
+                        )}
                         <Button
                           onClick={handleManualCheckLeadRotation}
                           disabled={checkingLeadRotation || pushSubscriptionIds.length === 0}
