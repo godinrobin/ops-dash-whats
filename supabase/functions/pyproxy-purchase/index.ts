@@ -360,7 +360,7 @@ Deno.serve(async (req) => {
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { action, orderId, quantity, planType = 'residential', country = 'br', state, city } = await req.json();
+    const { action, orderId, quantity, planType = 'residential', country = 'br', state, city, host, port, username, password } = await req.json();
     console.log('=== PYPROXY PURCHASE START ===');
     console.log('Action:', action);
     console.log('Plan type:', planType);
@@ -1498,8 +1498,7 @@ Deno.serve(async (req) => {
       );
     } else if (action === 'validate-proxy') {
       // Validate a proxy string without requiring an order
-      const requestData = await req.json().catch(() => ({}));
-      const { host, port, username, password } = requestData;
+      // host, port, username, password already destructured from body at the top
       
       if (!host || !port || !username || !password) {
         return new Response(
