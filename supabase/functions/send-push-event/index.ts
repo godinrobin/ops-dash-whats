@@ -25,6 +25,18 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Get OneSignal credentials
+    const ONESIGNAL_APP_ID = Deno.env.get('ONESIGNAL_APP_ID');
+    const ONESIGNAL_REST_API_KEY = Deno.env.get('ONESIGNAL_REST_API_KEY');
+
+    if (!ONESIGNAL_APP_ID || !ONESIGNAL_REST_API_KEY) {
+      console.error('[send-push-event] OneSignal credentials not configured');
+      return new Response(
+        JSON.stringify({ error: 'OneSignal credentials not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Parse payload
     const payload: PushEventPayload = await req.json();
     const { user_id, event_type, title, content, data, icon_url } = payload;
@@ -42,7 +54,7 @@ Deno.serve(async (req) => {
     // Fetch user's push settings
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('push_webhook_url, push_webhook_enabled, push_subscription_ids')
+      .select('push_webhook_enabled, push_subscription_ids')
       .eq('id', user_id)
       .single();
 
@@ -63,15 +75,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Check if webhook URL is configured
-    if (!profile.push_webhook_url) {
-      console.log('[send-push-event] No webhook URL configured');
-      return new Response(
-        JSON.stringify({ success: false, reason: 'No webhook URL configured' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     // Check if there are subscription IDs
     const subscriptionIds = profile.push_subscription_ids || [];
     if (subscriptionIds.length === 0) {
@@ -82,41 +85,44 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Build webhook payload (same format expected by Laravel NotificationTrait)
-    const webhookPayload = {
-      subscription_ids: subscriptionIds,
-      event_type,
-      title,
-      content,
-      icon_url: icon_url || 'https://zapdata.com.br/favicon.png',
-      data: data || {},
+    // Build OneSignal payload
+    const onesignalPayload = {
+      app_id: ONESIGNAL_APP_ID,
+      include_subscription_ids: subscriptionIds,
+      headings: title,
+      contents: content,
+      chrome_web_icon: icon_url || 'https://zapdata.com.br/favicon.png',
+      firefox_icon: icon_url || 'https://zapdata.com.br/favicon.png',
+      data: {
+        ...data,
+        event_type,
+        timestamp: new Date().toISOString(),
+      },
     };
 
-    console.log(`[send-push-event] Sending to webhook: ${profile.push_webhook_url}`);
-    console.log(`[send-push-event] Payload:`, JSON.stringify(webhookPayload));
+    console.log(`[send-push-event] Sending to OneSignal API with ${subscriptionIds.length} subscription(s)`);
 
-    // Send to Laravel webhook
-    const webhookResponse = await fetch(profile.push_webhook_url, {
+    // Send directly to OneSignal
+    const onesignalResponse = await fetch('https://onesignal.com/api/v1/notifications', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'X-Zapdata-Event': event_type,
-        'X-Zapdata-Timestamp': new Date().toISOString(),
+        'Content-Type': 'application/json; charset=utf-8',
+        'Authorization': `Key ${ONESIGNAL_REST_API_KEY}`,
       },
-      body: JSON.stringify(webhookPayload),
+      body: JSON.stringify(onesignalPayload),
     });
 
-    const responseText = await webhookResponse.text();
-    console.log(`[send-push-event] Webhook response: ${webhookResponse.status} - ${responseText}`);
+    const responseData = await onesignalResponse.json();
+    console.log(`[send-push-event] OneSignal response: ${onesignalResponse.status}`, responseData);
 
-    if (!webhookResponse.ok) {
-      console.error(`[send-push-event] Webhook failed with status ${webhookResponse.status}`);
+    if (!onesignalResponse.ok) {
+      console.error(`[send-push-event] OneSignal API failed with status ${onesignalResponse.status}`);
       return new Response(
         JSON.stringify({ 
           success: false, 
-          reason: 'Webhook request failed',
-          status: webhookResponse.status,
-          response: responseText 
+          reason: 'OneSignal API request failed',
+          status: onesignalResponse.status,
+          response: responseData 
         }),
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -126,7 +132,8 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        webhook_status: webhookResponse.status,
+        onesignal_id: responseData.id,
+        recipients: responseData.recipients,
         subscription_count: subscriptionIds.length 
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

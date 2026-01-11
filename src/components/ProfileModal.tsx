@@ -42,7 +42,6 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
   const [savingUsername, setSavingUsername] = useState(false);
   
   // Push notification state
-  const [pushWebhookUrl, setPushWebhookUrl] = useState("");
   const [pushWebhookEnabled, setPushWebhookEnabled] = useState(false);
   const [pushSubscriptionIds, setPushSubscriptionIds] = useState<string[]>([]);
   const [newSubscriptionId, setNewSubscriptionId] = useState("");
@@ -56,7 +55,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
       
       const { data } = await supabase
         .from("profiles")
-        .select("avatar_url, username, push_webhook_url, push_webhook_enabled, push_subscription_ids")
+        .select("avatar_url, username, push_webhook_enabled, push_subscription_ids")
         .eq("id", user.id)
         .single();
       
@@ -68,7 +67,6 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
         setOriginalUsername(data.username);
       }
       // Push settings
-      setPushWebhookUrl(data?.push_webhook_url || "");
       setPushWebhookEnabled(data?.push_webhook_enabled || false);
       setPushSubscriptionIds(data?.push_subscription_ids || []);
     };
@@ -238,34 +236,6 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
         variant: "destructive",
         title: "Erro",
         description: error.message || "Não foi possível alterar as configurações",
-      });
-    } finally {
-      setSavingPushSettings(false);
-    }
-  };
-
-  const handleSaveWebhookUrl = async () => {
-    if (!user) return;
-    setSavingPushSettings(true);
-    
-    try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ push_webhook_url: pushWebhookUrl.trim() })
-        .eq("id", user.id);
-      
-      if (error) throw error;
-      
-      toast({
-        title: "URL salva!",
-        description: "URL do webhook atualizada com sucesso",
-      });
-    } catch (error: any) {
-      console.error("Error saving webhook URL:", error);
-      toast({
-        variant: "destructive",
-        title: "Erro ao salvar",
-        description: error.message || "Não foi possível salvar a URL",
       });
     } finally {
       setSavingPushSettings(false);
@@ -557,32 +527,6 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
 
               {pushWebhookEnabled && (
                 <div className="space-y-4">
-                  {/* Webhook URL */}
-                  <div className="space-y-2">
-                    <Label htmlFor="webhook-url" className="text-muted-foreground text-sm">
-                      URL do Webhook (seu Laravel)
-                    </Label>
-                    <div className="flex gap-2">
-                      <Input
-                        id="webhook-url"
-                        type="url"
-                        placeholder="https://seusite.com/api/zapdata-webhook"
-                        value={pushWebhookUrl}
-                        onChange={(e) => setPushWebhookUrl(e.target.value)}
-                        disabled={savingPushSettings}
-                        className="flex-1 focus-visible:ring-accent focus-visible:border-accent text-sm"
-                      />
-                      <Button
-                        onClick={handleSaveWebhookUrl}
-                        disabled={savingPushSettings}
-                        size="sm"
-                        className="bg-accent hover:bg-accent/90 text-accent-foreground"
-                      >
-                        {savingPushSettings ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar"}
-                      </Button>
-                    </div>
-                  </div>
-
                   {/* Add Subscription ID */}
                   <div className="space-y-2">
                     <Label htmlFor="subscription-id" className="text-muted-foreground text-sm">
@@ -655,7 +599,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
                   {/* Test Button */}
                   <Button
                     onClick={handleTestPush}
-                    disabled={testingPush || !pushWebhookUrl || pushSubscriptionIds.length === 0}
+                    disabled={testingPush || pushSubscriptionIds.length === 0}
                     variant="outline"
                     className="w-full border-accent text-accent hover:bg-accent/10"
                   >
