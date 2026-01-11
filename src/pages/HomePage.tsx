@@ -13,7 +13,7 @@ const HomePage = () => {
   const [restrictedModalOpen, setRestrictedModalOpen] = useState(false);
   const [selectedFeatureName, setSelectedFeatureName] = useState<string>("");
   const [refreshFeed, setRefreshFeed] = useState(0);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const [mode, setMode] = useState<AppMode>(() => {
     const saved = localStorage.getItem("homeMode");

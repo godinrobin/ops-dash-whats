@@ -2704,6 +2704,7 @@ export type Database = {
       }
       proxy_orders: {
         Row: {
+          city: string | null
           country: string | null
           created_at: string
           expires_at: string | null
@@ -2715,6 +2716,7 @@ export type Database = {
           plan_type: string | null
           port: string | null
           pyproxy_subuser_id: string | null
+          state: string | null
           status: string
           test_ip: string | null
           test_result: string | null
@@ -2723,6 +2725,7 @@ export type Database = {
           username: string | null
         }
         Insert: {
+          city?: string | null
           country?: string | null
           created_at?: string
           expires_at?: string | null
@@ -2734,6 +2737,7 @@ export type Database = {
           plan_type?: string | null
           port?: string | null
           pyproxy_subuser_id?: string | null
+          state?: string | null
           status?: string
           test_ip?: string | null
           test_result?: string | null
@@ -2742,6 +2746,7 @@ export type Database = {
           username?: string | null
         }
         Update: {
+          city?: string | null
           country?: string | null
           created_at?: string
           expires_at?: string | null
@@ -2753,6 +2758,7 @@ export type Database = {
           plan_type?: string | null
           port?: string | null
           pyproxy_subuser_id?: string | null
+          state?: string | null
           status?: string
           test_ip?: string | null
           test_result?: string | null
