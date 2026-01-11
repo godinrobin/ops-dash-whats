@@ -631,22 +631,23 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
                   )}
 
                   {/* Notify on Sale Checkbox */}
-                  <div className="flex items-center space-x-3 pt-2 border-t border-border/50">
+                  <div className="flex items-start space-x-3 pt-3 mt-2 border-t border-border/50">
                     <Checkbox
                       id="notify-on-sale"
                       checked={notifyOnSale}
-                      onCheckedChange={handleToggleNotifyOnSale}
+                      onCheckedChange={(checked) => handleToggleNotifyOnSale(checked as boolean)}
                       disabled={savingPushSettings}
+                      className="mt-0.5"
                     />
-                    <div className="space-y-0.5">
+                    <div className="space-y-1 flex-1">
                       <Label 
                         htmlFor="notify-on-sale" 
-                        className="text-sm font-medium cursor-pointer"
+                        className="text-sm font-medium cursor-pointer leading-none"
                       >
                         🔥 Notificar novas vendas
                       </Label>
-                      <p className="text-xs text-muted-foreground">
-                        Receba "Pix Pago no x1! 🔥" quando o Tag Whats Cloud detectar uma venda
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Receba uma notificação "Pix Pago no x1! 🔥" quando o Tag Whats Cloud detectar uma venda
                       </p>
                     </div>
                   </div>
