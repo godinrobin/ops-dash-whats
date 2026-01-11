@@ -259,18 +259,29 @@ serve(async (req) => {
   }
 
   try {
+    const authHeader = req.headers.get('Authorization') ?? req.headers.get('authorization') ?? '';
+    const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       {
         global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
+          headers: jwt ? { Authorization: `Bearer ${jwt}` } : {},
         },
       }
     );
 
     // Verify user is authenticated
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    if (!jwt) {
+      console.error('Auth error: missing Authorization header');
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(jwt);
     if (authError || !user) {
       console.error('Auth error:', authError);
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
