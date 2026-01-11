@@ -44,24 +44,24 @@ export const RestrictedFeatureModal = ({
     <AnimatePresence>
       {open && (
         <>
-          {/* Custom overlay that starts below the header */}
+          {/* Custom overlay - full screen with high z-index */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 top-14 md:top-16 bg-black/80 z-40"
+            className="fixed inset-0 bg-black/80 z-[100]"
             onClick={() => onOpenChange(false)}
           />
           
-          {/* Modal content */}
+          {/* Modal content - centered with higher z-index */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="fixed inset-0 top-14 md:top-16 z-50 flex items-center justify-center pointer-events-none"
+            className="fixed inset-0 z-[101] flex items-center justify-center p-4"
           >
-            <div className="w-full max-w-md p-6 bg-background border border-accent rounded-lg shadow-lg mx-4 pointer-events-auto relative">
+            <div className="w-full max-w-md p-6 bg-background border border-accent rounded-lg shadow-lg relative" onClick={(e) => e.stopPropagation()}>
               {/* Close button */}
               <button
                 onClick={() => onOpenChange(false)}
