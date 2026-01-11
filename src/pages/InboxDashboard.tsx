@@ -112,6 +112,7 @@ export default function InboxDashboard() {
     setValidatingInstanceProxy(instance.id);
 
     try {
+      // For proxy-configured instances, validate the proxy directly
       if (instance.proxy_string) {
         const result = await validateProxy(instance.proxy_string);
         setInstanceProxyResults((prev) => ({
@@ -126,12 +127,16 @@ export default function InboxDashboard() {
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke('get-egress-ip', { body: {} });
+      // For instances without local proxy_string, fetch proxy info from UAZAPI directly
+      // This will show the UAZAPI internal proxy (São Paulo) or any proxy configured in UAZAPI
+      const { data, error } = await supabase.functions.invoke('maturador-evolution', {
+        body: { action: 'get-instance-proxy', instanceId: instance.id },
+      });
 
       const edgeError = error ? ((error as any)?.context?.body?.error || error.message) : null;
-      const message = edgeError || data?.error || 'Não foi possível obter IP e localização';
 
       if (edgeError || !data?.success) {
+        const message = edgeError || data?.error || 'Não foi possível obter informações da proxy';
         setInstanceProxyResults((prev) => ({
           ...prev,
           [instance.id]: { error: message },
@@ -139,12 +144,17 @@ export default function InboxDashboard() {
         return;
       }
 
+      // Extract proxy info from UAZAPI response
+      const proxyInfo = data?.proxy || {};
+      const ip = proxyInfo.ip || 'Proxy interno UAZAPI';
+      const location = proxyInfo.location || (proxyInfo.enabled ? 'Configurada' : 'Proxy interno (São Paulo)');
+
       setInstanceProxyResults((prev) => ({
         ...prev,
         [instance.id]: {
-          ip: data?.ip,
-          location: data?.location,
-          latency_ms: data?.latency_ms,
+          ip,
+          location,
+          error: proxyInfo.validation_error ? proxyInfo.last_test_error : undefined,
         },
       }));
     } finally {
