@@ -39,6 +39,11 @@ const Auth = () => {
   const [verifyingMfa, setVerifyingMfa] = useState(false);
   const [rememberDevice, setRememberDevice] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  // Forgot password states
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
+  const [sendingPasswordReset, setSendingPasswordReset] = useState(false);
   
   const { signIn, signUp, user } = useAuth();
   const navigate = useNavigate();
@@ -283,6 +288,42 @@ const Auth = () => {
     }
   };
 
+  const handleForgotPassword = async () => {
+    if (!forgotPasswordEmail) {
+      splashedToast.error("Email obrigatório", "Por favor, insira seu email");
+      return;
+    }
+
+    if (!forgotPasswordEmail.includes("@") || !forgotPasswordEmail.includes(".")) {
+      splashedToast.error("Email inválido", "Por favor, insira um email válido");
+      return;
+    }
+
+    setSendingPasswordReset(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('forgot-password', {
+        body: { email: forgotPasswordEmail },
+      });
+
+      if (error) throw error;
+
+      splashedToast.success(
+        "Email enviado!",
+        "Se o email estiver cadastrado, você receberá as instruções de recuperação."
+      );
+      setShowForgotPassword(false);
+      setForgotPasswordEmail("");
+    } catch (err: any) {
+      splashedToast.error(
+        "Erro",
+        err?.message || "Não foi possível enviar o email. Tente novamente."
+      );
+    } finally {
+      setSendingPasswordReset(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background overflow-hidden relative isolate">
       {/* Background gradient effect using accent (orange) - pointer-events-none */}
@@ -493,6 +534,17 @@ const Auth = () => {
                   </div>
                 </div>
 
+                {/* Forgot password link */}
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(true)}
+                    className="text-sm text-muted-foreground hover:text-accent transition-colors"
+                  >
+                    Esqueci minha senha
+                  </button>
+                </div>
+
                 <div className="relative pt-2">
                   <div
                     className="absolute -inset-1 rounded-lg bg-gradient-to-r from-accent/50 to-accent/30 opacity-50 blur-sm animate-pulse pointer-events-none"
@@ -679,6 +731,69 @@ const Auth = () => {
                 )}
               </Button>
               <Button variant="outline" onClick={handleMfaDialogClose}>
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Forgot Password Dialog */}
+      <Dialog open={showForgotPassword} onOpenChange={setShowForgotPassword}>
+        <DialogContent className="sm:max-w-md bg-card/95 backdrop-blur-xl border-border/50">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Mail className="h-5 w-5 text-accent" />
+              Esqueci minha senha
+            </DialogTitle>
+            <DialogDescription>
+              Digite seu email e enviaremos uma nova senha para você.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="forgot-email" className="text-foreground/80 text-sm">Email</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  id="forgot-email"
+                  type="email"
+                  placeholder="Digite seu email"
+                  value={forgotPasswordEmail}
+                  onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                  disabled={sendingPasswordReset}
+                  className="pl-10 bg-muted/30 border-border/50 focus:border-accent focus:bg-muted/50 transition-all"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleForgotPassword();
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={handleForgotPassword}
+                disabled={sendingPasswordReset || !forgotPasswordEmail.trim()}
+                className="flex-1 bg-accent hover:bg-accent/90 text-accent-foreground"
+              >
+                {sendingPasswordReset ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  "Enviar nova senha"
+                )}
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setShowForgotPassword(false);
+                  setForgotPasswordEmail("");
+                }}
+              >
                 Cancelar
               </Button>
             </div>

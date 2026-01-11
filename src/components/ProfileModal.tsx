@@ -727,7 +727,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
                       rel="noopener noreferrer"
                       className="text-accent hover:underline inline-flex items-center gap-1 text-xs"
                     >
-                      <ExternalLink className="w-3 h-3" />
+                      Gere o token aqui: <ExternalLink className="w-3 h-3" />
                     </a>
                   </div>
 
@@ -822,7 +822,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
                         🔄 Alerta de rotação de leads
                       </Label>
                       <p className="text-xs text-muted-foreground leading-relaxed">
-                        Receba um alerta quando uma instância atingir o limite diário de leads (contagem individual por número, reseta à meia-noite - horário de São Paulo)
+                        Receba um alerta quando uma instância atingir o limite diário de leads.
                       </p>
                     </div>
                   </div>
