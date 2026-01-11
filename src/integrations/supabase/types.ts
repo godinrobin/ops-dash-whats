@@ -2178,6 +2178,7 @@ export type Database = {
           last_seen: string | null
           persona_id: string | null
           phone_number: string | null
+          proxy_string: string | null
           qrcode: string | null
           status: string
           uazapi_token: string | null
@@ -2198,6 +2199,7 @@ export type Database = {
           last_seen?: string | null
           persona_id?: string | null
           phone_number?: string | null
+          proxy_string?: string | null
           qrcode?: string | null
           status?: string
           uazapi_token?: string | null
@@ -2218,6 +2220,7 @@ export type Database = {
           last_seen?: string | null
           persona_id?: string | null
           phone_number?: string | null
+          proxy_string?: string | null
           qrcode?: string | null
           status?: string
           uazapi_token?: string | null
