@@ -11,19 +11,21 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ArrowLeft, MessageSquare, Smartphone, GitBranch, Bell, Plus, RefreshCw, Loader2, QrCode, Trash2, PowerOff, RotateCcw, ChevronDown, ChevronRight, Phone, Zap, Users, TrendingUp, Filter, Check, Hash } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ArrowLeft, MessageSquare, Smartphone, GitBranch, Bell, Plus, RefreshCw, Loader2, QrCode, Trash2, PowerOff, RotateCcw, ChevronDown, ChevronRight, Phone, Zap, Users, TrendingUp, Filter, Check, Hash, Wifi, MapPin, CheckCircle, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { useAutoCheckConnectingInstances } from "@/hooks/useAutoCheckConnectingInstances";
 import { toast } from "sonner";
 import automatizapIcon from "@/assets/automatizap-icon.png";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
 import { InboxMenu } from '@/components/inbox/InboxMenu';
 import { cn } from '@/lib/utils';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { QRCodeModal, clearQrCodeCache, setQrCodeCache } from "@/components/QRCodeModal";
 import { PairCodeModal } from "@/components/PairCodeModal";
+import { useProxyValidator } from "@/hooks/useProxyValidator";
 
 interface Instance {
   id: string;
@@ -95,6 +97,9 @@ export default function InboxDashboard() {
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  
+  // Proxy validation
+  const { validateProxy, validating: validatingProxy, result: proxyValidationResult, clearResult: clearProxyResult } = useProxyValidator();
 
   // Fase 1: Carrega apenas dados essenciais (instâncias e fluxos)
   const fetchEssentialData = async () => {
@@ -341,6 +346,15 @@ export default function InboxDashboard() {
     setNewInstanceName("");
     setProxyEnabled(false);
     setProxyString("");
+    clearProxyResult();
+  };
+
+  const handleValidateProxy = async () => {
+    if (!proxyString) {
+      toast.error('Digite a string de proxy primeiro');
+      return;
+    }
+    await validateProxy(proxyString);
   };
 
   // Parse SOCKS5 string format: socks5://username:password@host:port
@@ -988,7 +1002,7 @@ export default function InboxDashboard() {
                     allowDecimals={false}
                     domain={[0, 'auto']}
                   />
-                  <Tooltip 
+                  <RechartsTooltip 
                     contentStyle={{ 
                       backgroundColor: 'hsl(var(--card))', 
                       border: '1px solid hsl(var(--border))',
@@ -1065,7 +1079,34 @@ export default function InboxDashboard() {
                   <Card key={instance.id}>
                     <CardHeader className="pb-2">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-base">{instance.label || instance.phone_number || instance.instance_name}</CardTitle>
+                        <div className="flex items-center gap-2">
+                          <CardTitle className="text-base">{instance.label || instance.phone_number || instance.instance_name}</CardTitle>
+                          {/* Connection Status Icon with Tooltip */}
+                          {instance.status === 'connected' && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="cursor-help">
+                                    <Wifi className="h-4 w-4 text-green-500" />
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-xs">
+                                  <div className="text-xs space-y-1">
+                                    <p className="font-medium">Conexão Ativa</p>
+                                    <p className="text-muted-foreground">
+                                      Número: {instance.phone_number || 'N/A'}
+                                    </p>
+                                    {instance.last_seen && (
+                                      <p className="text-muted-foreground">
+                                        Último acesso: {new Date(instance.last_seen).toLocaleString('pt-BR')}
+                                      </p>
+                                    )}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </div>
                         <Badge variant="outline" className={`flex items-center gap-1 ${instance.status === 'connected' ? 'border-green-500 text-green-500' : ''}`}>
                           <div className={`w-2 h-2 rounded-full ${getStatusColor(instance.status)}`} />
                           {getStatusText(instance.status)}
@@ -1178,11 +1219,68 @@ export default function InboxDashboard() {
                   <Input 
                     placeholder="socks5://usuario:senha@host:porta" 
                     value={proxyString} 
-                    onChange={(e) => setProxyString(e.target.value)} 
+                    onChange={(e) => {
+                      setProxyString(e.target.value);
+                      clearProxyResult();
+                    }} 
                   />
                   <p className="text-xs text-muted-foreground">
                     Cole a string de proxy gerada pelo Marketplace no formato SOCKS5
                   </p>
+                  
+                  {/* Validate Proxy Button */}
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleValidateProxy}
+                    disabled={validatingProxy || !proxyString}
+                    className="w-full"
+                  >
+                    {validatingProxy ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Wifi className="h-4 w-4 mr-2" />
+                    )}
+                    Validar IP
+                  </Button>
+                  
+                  {/* Validation Result */}
+                  {proxyValidationResult && (
+                    <div className={`p-3 rounded-lg border ${proxyValidationResult.valid ? 'border-green-500/30 bg-green-500/10' : 'border-red-500/30 bg-red-500/10'}`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        {proxyValidationResult.valid ? (
+                          <CheckCircle className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-red-500" />
+                        )}
+                        <span className={`text-sm font-medium ${proxyValidationResult.valid ? 'text-green-500' : 'text-red-500'}`}>
+                          {proxyValidationResult.valid ? 'Proxy Válida' : 'Proxy Inválida'}
+                        </span>
+                      </div>
+                      {proxyValidationResult.valid && proxyValidationResult.ip && (
+                        <div className="text-xs text-muted-foreground space-y-1">
+                          <div className="flex items-center gap-1">
+                            <span className="font-medium">IP:</span> {proxyValidationResult.ip}
+                          </div>
+                          {proxyValidationResult.location && (
+                            <div className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3" />
+                              <span>{proxyValidationResult.location}</span>
+                            </div>
+                          )}
+                          {proxyValidationResult.latency_ms && (
+                            <div className="flex items-center gap-1">
+                              <span className="font-medium">Latência:</span> {proxyValidationResult.latency_ms}ms
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {!proxyValidationResult.valid && proxyValidationResult.error && (
+                        <p className="text-xs text-red-400">{proxyValidationResult.error}</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </CollapsibleContent>
             </Collapsible>

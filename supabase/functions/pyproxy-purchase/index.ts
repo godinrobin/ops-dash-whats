@@ -1496,6 +1496,68 @@ Deno.serve(async (req) => {
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    } else if (action === 'validate-proxy') {
+      // Validate a proxy string without requiring an order
+      const requestData = await req.json().catch(() => ({}));
+      const { host, port, username, password } = requestData;
+      
+      if (!host || !port || !username || !password) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Dados incompletos: host, port, username e password são obrigatórios' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log('[VALIDATE] Validating proxy:', { host, port, username: username.substring(0, 20) + '...' });
+
+      // Validate the gateway first
+      const gatewayResult = await validateGateway(host, port);
+      
+      // Try to get location info using ip-api via APIFY
+      let ipInfo = { ip: 'unknown', location: '', country: '', city: '', isp: '' };
+      let latencyMs = 0;
+      
+      // Test the proxy via APIFY (if available)
+      const proxyTest = await testProxyViaApify(host, port, username, password);
+      latencyMs = proxyTest.latency || 0;
+      
+      if (proxyTest.success && proxyTest.ip && proxyTest.ip !== 'unknown') {
+        ipInfo.ip = proxyTest.ip;
+        
+        // Fetch location from ip-api directly using the IP
+        try {
+          const ipApiRes = await fetch(`http://ip-api.com/json/${proxyTest.ip}?fields=status,message,country,city,isp,query`, {
+            signal: AbortSignal.timeout(5000)
+          });
+          if (ipApiRes.ok) {
+            const ipApiData = await ipApiRes.json();
+            if (ipApiData.status === 'success') {
+              ipInfo.country = ipApiData.country || '';
+              ipInfo.city = ipApiData.city || '';
+              ipInfo.isp = ipApiData.isp || '';
+              ipInfo.location = [ipApiData.city, ipApiData.country].filter(Boolean).join(', ');
+            }
+          }
+        } catch (e) {
+          console.warn('[VALIDATE] ip-api lookup failed:', e);
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ 
+          success: gatewayResult.valid || proxyTest.success,
+          validation: {
+            ip: ipInfo.ip,
+            location: ipInfo.location,
+            country: ipInfo.country,
+            city: ipInfo.city,
+            isp: ipInfo.isp,
+            latency_ms: latencyMs,
+            gateway_valid: gatewayResult.valid
+          }
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     return new Response(

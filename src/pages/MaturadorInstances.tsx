@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Plus, RefreshCw, Loader2, Smartphone, QrCode, Trash2, PowerOff, RotateCcw, Phone, ChevronDown, ChevronRight, Hash } from "lucide-react";
+import { ArrowLeft, Plus, RefreshCw, Loader2, Smartphone, QrCode, Trash2, PowerOff, RotateCcw, Phone, ChevronDown, ChevronRight, Hash, Wifi, MapPin, CheckCircle, XCircle } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,6 +15,7 @@ import { splashedToast as toast } from "@/hooks/useSplashedToast";
 import { useAutoCheckConnectingInstances } from "@/hooks/useAutoCheckConnectingInstances";
 import { QRCodeModal, setQrCodeCache, clearQrCodeCache } from "@/components/QRCodeModal";
 import { PairCodeModal } from "@/components/PairCodeModal";
+import { useProxyValidator } from "@/hooks/useProxyValidator";
 
 interface Instance {
   id: string;
@@ -61,6 +62,9 @@ export default function MaturadorInstances() {
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  
+  // Proxy validation
+  const { validateProxy, validating: validatingProxy, result: proxyValidationResult, clearResult: clearProxyResult } = useProxyValidator();
 
   const fetchInstances = useCallback(async () => {
     if (!user) return;
@@ -163,6 +167,15 @@ export default function MaturadorInstances() {
     setNewInstanceName("");
     setProxyEnabled(false);
     setProxyString("");
+    clearProxyResult();
+  };
+
+  const handleValidateProxy = async () => {
+    if (!proxyString) {
+      toast.error('Digite a string de proxy primeiro');
+      return;
+    }
+    await validateProxy(proxyString);
   };
 
   // Parse SOCKS5 string format: socks5://username:password@host:port
@@ -656,11 +669,68 @@ export default function MaturadorInstances() {
                       id="proxyString"
                       placeholder="socks5://usuario:senha@host:porta"
                       value={proxyString}
-                      onChange={(e) => setProxyString(e.target.value)}
+                      onChange={(e) => {
+                        setProxyString(e.target.value);
+                        clearProxyResult();
+                      }}
                     />
                     <p className="text-xs text-muted-foreground">
                       Cole a string de proxy gerada pelo Marketplace no formato SOCKS5
                     </p>
+                    
+                    {/* Validate Proxy Button */}
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={handleValidateProxy}
+                      disabled={validatingProxy || !proxyString}
+                      className="w-full"
+                    >
+                      {validatingProxy ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Wifi className="h-4 w-4 mr-2" />
+                      )}
+                      Validar IP
+                    </Button>
+                    
+                    {/* Validation Result */}
+                    {proxyValidationResult && (
+                      <div className={`p-3 rounded-lg border ${proxyValidationResult.valid ? 'border-green-500/30 bg-green-500/10' : 'border-red-500/30 bg-red-500/10'}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          {proxyValidationResult.valid ? (
+                            <CheckCircle className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <XCircle className="h-4 w-4 text-red-500" />
+                          )}
+                          <span className={`text-sm font-medium ${proxyValidationResult.valid ? 'text-green-500' : 'text-red-500'}`}>
+                            {proxyValidationResult.valid ? 'Proxy Válida' : 'Proxy Inválida'}
+                          </span>
+                        </div>
+                        {proxyValidationResult.valid && proxyValidationResult.ip && (
+                          <div className="text-xs text-muted-foreground space-y-1">
+                            <div className="flex items-center gap-1">
+                              <span className="font-medium">IP:</span> {proxyValidationResult.ip}
+                            </div>
+                            {proxyValidationResult.location && (
+                              <div className="flex items-center gap-1">
+                                <MapPin className="h-3 w-3" />
+                                <span>{proxyValidationResult.location}</span>
+                              </div>
+                            )}
+                            {proxyValidationResult.latency_ms && (
+                              <div className="flex items-center gap-1">
+                                <span className="font-medium">Latência:</span> {proxyValidationResult.latency_ms}ms
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {!proxyValidationResult.valid && proxyValidationResult.error && (
+                          <p className="text-xs text-red-400">{proxyValidationResult.error}</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </CollapsibleContent>
               </Collapsible>
