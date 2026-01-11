@@ -737,6 +737,17 @@ Regras:
           insertData.evolution_base_url = evolutionConfig.baseUrl.replace(/\/$/, '');
           insertData.evolution_api_key = evolutionConfig.apiKey;
         }
+        
+        // Save proxy_string if proxy was configured
+        if (proxy && proxy.host && proxy.port) {
+          let proxyUrl = `${proxy.protocol || 'socks5'}://`;
+          if (proxy.username && proxy.password) {
+            proxyUrl += `${proxy.username}:${proxy.password}@`;
+          }
+          proxyUrl += `${proxy.host}:${proxy.port}`;
+          insertData.proxy_string = proxyUrl;
+          console.log(`[CREATE-INSTANCE] Saving proxy_string to database`);
+        }
         const { error: insertError } = await supabaseClient
           .from('maturador_instances')
           .insert(insertData);
@@ -3174,6 +3185,100 @@ Regras IMPORTANTES:
             failed: failCount,
             skipped: skippedCount
           }
+        };
+        break;
+      }
+
+      case 'get-instance-proxy': {
+        // Fetch proxy configuration from UAZAPI /instance/proxy endpoint
+        // This returns the actual proxy in use by the instance, including its IP/location info
+        const { instanceId } = params;
+        
+        if (!instanceId) {
+          return new Response(JSON.stringify({ error: 'instanceId is required' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Get instance details
+        const { data: inst, error: instError } = await supabaseClient
+          .from('maturador_instances')
+          .select('id, instance_name, api_provider, uazapi_token')
+          .eq('id', instanceId)
+          .eq('user_id', user.id)
+          .single();
+
+        if (instError || !inst) {
+          return new Response(JSON.stringify({ error: 'Instance not found' }), {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (inst.api_provider !== 'uazapi') {
+          // For non-uazapi instances, just return that there's no proxy info available
+          result = {
+            success: true,
+            provider: inst.api_provider || 'evolution',
+            message: 'Proxy info only available for UAZAPI instances',
+          };
+          break;
+        }
+
+        // Fetch proxy config from UAZAPI
+        const { data: globalConfig } = await supabaseClient
+          .from('whatsapp_api_config')
+          .select('uazapi_base_url')
+          .limit(1)
+          .single();
+
+        const uazapiBaseUrl = globalConfig?.uazapi_base_url || 'https://zapdata.uazapi.com';
+        const uazapiToken = inst.uazapi_token;
+
+        if (!uazapiToken) {
+          return new Response(JSON.stringify({ error: 'No UAZAPI token for this instance' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        console.log(`[GET-INSTANCE-PROXY] Fetching proxy config for ${inst.instance_name} from ${uazapiBaseUrl}/instance/proxy`);
+
+        const proxyRes = await fetch(`${uazapiBaseUrl}/instance/proxy`, {
+          method: 'GET',
+          headers: {
+            'token': uazapiToken,
+          },
+        });
+
+        const proxyData = await proxyRes.json();
+        console.log(`[GET-INSTANCE-PROXY] Response:`, JSON.stringify(proxyData));
+
+        if (!proxyRes.ok) {
+          return new Response(JSON.stringify({ 
+            error: proxyData?.error || 'Failed to fetch proxy config',
+            success: false,
+          }), {
+            status: proxyRes.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Return the proxy info from UAZAPI
+        result = {
+          success: true,
+          provider: 'uazapi',
+          proxy: {
+            enabled: proxyData.enabled ?? false,
+            proxy_url: proxyData.proxy_url || null,
+            last_test_at: proxyData.last_test_at || null,
+            last_test_error: proxyData.last_test_error || null,
+            validation_error: proxyData.validation_error ?? false,
+            // Additional IP/location info if available
+            ip: proxyData.ip || proxyData.external_ip || null,
+            location: proxyData.location || proxyData.geo || null,
+          },
         };
         break;
       }
