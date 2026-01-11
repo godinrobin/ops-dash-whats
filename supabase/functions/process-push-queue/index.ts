@@ -64,11 +64,7 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Determine if this is a high priority notification
-        const isHighPriority = notification.priority >= 10;
-
-        // Send push notification via OneSignal
-        // Note: For web push, priority options are limited compared to mobile
+        // Send push notification via OneSignal - simple payload only
         const oneSignalPayload: Record<string, unknown> = {
           app_id: oneSignalAppId,
           include_subscription_ids: subscriptionIds,
@@ -76,12 +72,6 @@ Deno.serve(async (req) => {
           contents: { en: notification.message },
           chrome_web_icon: notification.icon_url || "https://zapdata.com.br/favicon.png",
           firefox_icon: notification.icon_url || "https://zapdata.com.br/favicon.png",
-          // Priority: 10 = high priority (wake device), 5 = normal
-          priority: isHighPriority ? 10 : 5,
-          // TTL - time to live in seconds
-          ttl: isHighPriority ? 300 : 86400, // 5 minutes for urgent, 24 hours for normal
-          // Require user interaction for important notifications (keeps notification visible)
-          require_interaction: isHighPriority,
         };
 
         console.log(`Sending notification to ${subscriptionIds.length} devices:`, notification.title);
