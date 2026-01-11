@@ -15,8 +15,11 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/useSplashedToast";
-import { BRAZIL_STATES as BRAZIL_STATES_DATA } from "@/data/brazilLocations";
+import { BRAZIL_STATES } from "@/data/brazilLocations";
 import { cn } from "@/lib/utils";
+
+// Use the imported states data
+const BRAZIL_STATES_DATA = BRAZIL_STATES;
 
 interface ProxyOrder {
   id: string;
