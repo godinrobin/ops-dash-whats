@@ -101,7 +101,7 @@ const systemGroups: SystemGroup[] = [
     id: "extras",
     title: "Extras",
     systems: [
-      { id: "tiktok", path: "/video-downloader", title: "Tiktok", icon: <img src={tiktokLogo} alt="TikTok" className="w-4 h-4 object-contain" />, restricted: false },
+      { id: "tiktok", path: "/video-downloader", title: "Download Vídeos Tiktok", icon: <img src={tiktokLogo} alt="TikTok" className="w-4 h-4 object-contain" />, restricted: false },
       { id: "zap-converter", path: "/zap-converter", title: "Zap Converter", icon: <RefreshCw className="w-4 h-4" />, restricted: false },
     ]
   },

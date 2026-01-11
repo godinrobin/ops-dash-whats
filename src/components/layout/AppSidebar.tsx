@@ -112,7 +112,7 @@ const sidebarGroups: SidebarGroup[] = [
       { 
         path: "/video-downloader", 
         icon: <img src={tiktokLogo} className="w-4 h-4" alt="TikTok" />, 
-        label: "TikTok", 
+        label: "Download Vídeos Tiktok", 
         restricted: false 
       },
       { path: "/zap-converter", icon: <LayoutGrid className="w-4 h-4" />, label: "Zap Converter", restricted: false },
