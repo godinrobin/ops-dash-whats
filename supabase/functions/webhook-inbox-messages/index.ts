@@ -1096,6 +1096,26 @@ serve(async (req) => {
           }
           contact = newContact;
           console.log(`[UAZAPI-WEBHOOK] Created new contact: ${contact.id} for instance ${instanceId}`);
+          
+          // Check lead rotation limit (fire and forget - don't block main flow)
+          try {
+            const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+            fetch(`${supabaseUrl}/functions/v1/check-lead-rotation`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              },
+              body: JSON.stringify({
+                user_id: instance.user_id,
+                instance_id: instanceId,
+                instance_name: instance.label || instance.instance_name,
+                phone_number: instance.phone_number,
+              }),
+            }).catch(err => console.log('[LEAD-ROTATION] Fire and forget call failed:', err));
+          } catch (rotationErr) {
+            console.log('[LEAD-ROTATION] Error calling check-lead-rotation:', rotationErr);
+          }
         }
         
         // Map UazAPI message type to our types
@@ -2429,6 +2449,26 @@ serve(async (req) => {
         } else {
           contact = newContact;
           console.log(`Created contact with remote_jid: ${remoteJidToStore}, isLid: ${useLidAsFallback}`);
+          
+          // Check lead rotation limit (fire and forget - don't block main flow)
+          try {
+            const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+            fetch(`${supabaseUrl}/functions/v1/check-lead-rotation`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              },
+              body: JSON.stringify({
+                user_id: userId,
+                instance_id: instanceId,
+                instance_name: instance?.label || instance?.instance_name,
+                phone_number: instance?.phone_number,
+              }),
+            }).catch(err => console.log('[LEAD-ROTATION] Fire and forget call failed:', err));
+          } catch (rotationErr) {
+            console.log('[LEAD-ROTATION] Error calling check-lead-rotation:', rotationErr);
+          }
         }
       } else {
         // Update existing contact - BUT NOT last_message_at yet (will update after message is saved)
