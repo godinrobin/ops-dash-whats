@@ -105,6 +105,7 @@ export default function InboxDashboard() {
   // Card proxy validation state (per-instance)
   const [validatingInstanceProxy, setValidatingInstanceProxy] = useState<string | null>(null);
   const [instanceProxyResults, setInstanceProxyResults] = useState<Record<string, { ip?: string; location?: string; latency_ms?: number; error?: string }>>({});
+  const [openWifiPopoverId, setOpenWifiPopoverId] = useState<string | null>(null);
 
   // Handle card WiFi icon click to validate instance proxy
   const handleValidateInstanceProxy = async (instance: Instance) => {
@@ -1112,35 +1113,80 @@ export default function InboxDashboard() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <CardTitle className="text-base">{instance.label || instance.phone_number || instance.instance_name}</CardTitle>
-                          {/* Proxy WiFi indicator - clickable to validate */}
-                          {instance.proxy_string && (
-                            <button
-                              onClick={() => handleValidateInstanceProxy(instance)}
-                              disabled={validatingInstanceProxy === instance.id}
-                              className={`p-1 rounded hover:bg-muted transition-colors ${
-                                instanceProxyResults[instance.id]?.ip && !instanceProxyResults[instance.id]?.error
-                                  ? 'text-green-500' 
-                                  : instanceProxyResults[instance.id]?.error 
-                                    ? 'text-red-500' 
-                                    : 'text-muted-foreground'
-                              }`}
-                              title={
-                                instanceProxyResults[instance.id]?.ip 
-                                  ? `IP: ${instanceProxyResults[instance.id].ip}${instanceProxyResults[instance.id].location ? ` | ${instanceProxyResults[instance.id].location}` : ''}` 
-                                  : 'Clique para validar proxy'
-                              }
-                            >
-                              {validatingInstanceProxy === instance.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Wifi className="h-4 w-4" />
-                              )}
-                            </button>
-                          )}
-                          {/* Connection status icon (only if no proxy) */}
-                          {!instance.proxy_string && instance.status === 'connected' && (
-                            <Wifi className="h-4 w-4 text-green-500" />
-                          )}
+                          {/* WiFi icon: click/tap opens details; if proxy exists it also validates IP/location */}
+                          <Popover
+                            open={openWifiPopoverId === instance.id}
+                            onOpenChange={(open) => setOpenWifiPopoverId(open ? instance.id : null)}
+                          >
+                            <PopoverTrigger asChild>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenWifiPopoverId(instance.id);
+                                  if (instance.proxy_string) void handleValidateInstanceProxy(instance);
+                                }}
+                                disabled={validatingInstanceProxy === instance.id}
+                                className={`p-1 rounded hover:bg-muted transition-colors ${
+                                  instance.proxy_string
+                                    ? (instanceProxyResults[instance.id]?.ip && !instanceProxyResults[instance.id]?.error
+                                        ? 'text-green-500'
+                                        : instanceProxyResults[instance.id]?.error
+                                          ? 'text-red-500'
+                                          : 'text-muted-foreground')
+                                    : instance.status === 'connected'
+                                      ? 'text-green-500'
+                                      : 'text-muted-foreground'
+                                }`}
+                                aria-label={instance.proxy_string ? 'Validar proxy (IP e localização)' : 'Detalhes da conexão'}
+                                title={instance.proxy_string ? 'Clique para validar proxy' : 'Clique para ver detalhes'}
+                              >
+                                {validatingInstanceProxy === instance.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Wifi className="h-4 w-4" />
+                                )}
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent side="top" className="max-w-xs">
+                              <div className="text-xs space-y-2">
+                                <div className="space-y-1">
+                                  <p className="font-medium">Conexão</p>
+                                  <p className="text-muted-foreground">Número: {instance.phone_number || 'N/A'}</p>
+                                  {instance.last_seen && (
+                                    <p className="text-muted-foreground">
+                                      Último acesso: {new Date(instance.last_seen).toLocaleString('pt-BR')}
+                                    </p>
+                                  )}
+                                </div>
+
+                                <div className="h-px bg-border" />
+
+                                <div className="space-y-1">
+                                  <p className="font-medium">Proxy</p>
+                                  {!instance.proxy_string ? (
+                                    <p className="text-muted-foreground">Nenhuma proxy configurada nesta instância.</p>
+                                  ) : validatingInstanceProxy === instance.id ? (
+                                    <p className="text-muted-foreground">Validando IP e localização...</p>
+                                  ) : instanceProxyResults[instance.id]?.error ? (
+                                    <p className="text-red-500">{instanceProxyResults[instance.id]?.error}</p>
+                                  ) : instanceProxyResults[instance.id]?.ip ? (
+                                    <div className="space-y-0.5">
+                                      <p className="text-green-500 font-medium">IP: {instanceProxyResults[instance.id]?.ip}</p>
+                                      {instanceProxyResults[instance.id]?.location && (
+                                        <p className="text-muted-foreground">{instanceProxyResults[instance.id]?.location}</p>
+                                      )}
+                                      {instanceProxyResults[instance.id]?.latency_ms && (
+                                        <p className="text-muted-foreground">({instanceProxyResults[instance.id]?.latency_ms}ms)</p>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <p className="text-muted-foreground">Toque no ícone para validar IP e localização.</p>
+                                  )}
+                                </div>
+                              </div>
+                            </PopoverContent>
+                          </Popover>
                         </div>
                         {/* Show proxy IP/location info if available */}
                         {instance.proxy_string && instanceProxyResults[instance.id] && (
