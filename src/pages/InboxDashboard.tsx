@@ -72,13 +72,9 @@ export default function InboxDashboard() {
   const [newInstanceName, setNewInstanceName] = useState("");
   const [creating, setCreating] = useState(false);
   
-  // Proxy configuration (optional)
+  // Proxy configuration (optional) - now accepts SOCKS5 string only
   const [proxyEnabled, setProxyEnabled] = useState(false);
-  const [proxyHost, setProxyHost] = useState("");
-  const [proxyPort, setProxyPort] = useState("");
-  const [proxyProtocol, setProxyProtocol] = useState("http");
-  const [proxyUsername, setProxyUsername] = useState("");
-  const [proxyPassword, setProxyPassword] = useState("");
+  const [proxyString, setProxyString] = useState("");
   
 
   // QR Code modal
@@ -301,14 +297,15 @@ export default function InboxDashboard() {
       const body: any = { action: 'create-instance', instanceName: newInstanceName };
       
       // Add proxy configuration if enabled
-      if (proxyEnabled && proxyHost && proxyPort) {
-        body.proxy = {
-          host: proxyHost,
-          port: proxyPort,
-          protocol: proxyProtocol,
-          username: proxyUsername || undefined,
-          password: proxyPassword || undefined,
-        };
+      if (proxyEnabled && proxyString) {
+        const parsed = parseSocks5String(proxyString);
+        if (parsed) {
+          body.proxy = parsed;
+        } else {
+          toast.error('Formato de proxy inválido. Use: socks5://usuario:senha@host:porta');
+          setCreating(false);
+          return;
+        }
       }
       
 
@@ -343,11 +340,27 @@ export default function InboxDashboard() {
   const resetCreateForm = () => {
     setNewInstanceName("");
     setProxyEnabled(false);
-    setProxyHost("");
-    setProxyPort("");
-    setProxyProtocol("http");
-    setProxyUsername("");
-    setProxyPassword("");
+    setProxyString("");
+  };
+
+  // Parse SOCKS5 string format: socks5://username:password@host:port
+  const parseSocks5String = (str: string) => {
+    try {
+      const regex = /^socks5:\/\/([^:]+):([^@]+)@([^:]+):(\d+)$/;
+      const match = str.match(regex);
+      if (match) {
+        return {
+          protocol: 'socks5',
+          username: match[1],
+          password: match[2],
+          host: match[3],
+          port: match[4]
+        };
+      }
+      return null;
+    } catch {
+      return null;
+    }
   };
 
   const handleGetQrCode = useCallback(async (instance: Instance) => {
@@ -1160,38 +1173,16 @@ export default function InboxDashboard() {
                 </Button>
               </CollapsibleTrigger>
               <CollapsibleContent className="pt-4 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label>Host</Label>
-                    <Input placeholder="proxy.example.com" value={proxyHost} onChange={(e) => setProxyHost(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Porta</Label>
-                    <Input placeholder="8080" value={proxyPort} onChange={(e) => setProxyPort(e.target.value)} />
-                  </div>
-                </div>
                 <div className="space-y-2">
-                  <Label>Protocolo</Label>
-                  <select 
-                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-                    value={proxyProtocol}
-                    onChange={(e) => setProxyProtocol(e.target.value)}
-                  >
-                    <option value="http">HTTP</option>
-                    <option value="https">HTTPS</option>
-                    <option value="socks4">SOCKS4</option>
-                    <option value="socks5">SOCKS5</option>
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label>Usuário (opcional)</Label>
-                    <Input placeholder="username" value={proxyUsername} onChange={(e) => setProxyUsername(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Senha (opcional)</Label>
-                    <Input type="password" placeholder="password" value={proxyPassword} onChange={(e) => setProxyPassword(e.target.value)} />
-                  </div>
+                  <Label>String SOCKS5 do Marketplace</Label>
+                  <Input 
+                    placeholder="socks5://usuario:senha@host:porta" 
+                    value={proxyString} 
+                    onChange={(e) => setProxyString(e.target.value)} 
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Cole a string de proxy gerada pelo Marketplace no formato SOCKS5
+                  </p>
                 </div>
               </CollapsibleContent>
             </Collapsible>

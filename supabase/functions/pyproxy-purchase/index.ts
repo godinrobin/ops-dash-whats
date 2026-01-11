@@ -360,11 +360,13 @@ Deno.serve(async (req) => {
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { action, orderId, quantity, planType = 'residential', country = 'br' } = await req.json();
+    const { action, orderId, quantity, planType = 'residential', country = 'br', state, city } = await req.json();
     console.log('=== PYPROXY PURCHASE START ===');
     console.log('Action:', action);
     console.log('Plan type:', planType);
     console.log('Country:', country);
+    console.log('State:', state || 'not specified');
+    console.log('City:', city || 'not specified');
     console.log('Timestamp:', new Date().toISOString());
 
     // get-price is public - no auth required
@@ -554,7 +556,9 @@ Deno.serve(async (req) => {
           status: 'pending',
           plan_type: planType,
           gateway_used: `${gatewayConfig.gateway_host}:${gatewayConfig.gateway_port}`,
-          country: country
+          country: country,
+          state: state || null,
+          city: city || null
         })
         .select()
         .single();

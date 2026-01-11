@@ -29,6 +29,8 @@ interface ProxyOrder {
   test_result?: string | null;
   test_ip?: string | null;
   country?: string | null;
+  state?: string | null;
+  city?: string | null;
 }
 
 interface ProxyTestResult {
@@ -93,6 +95,38 @@ const COUNTRY_OPTIONS = [
   { code: 'gb', label: 'Reino Unido', flag: '🇬🇧' },
 ];
 
+// Brazilian states for PyProxy targeting
+const BRAZIL_STATES = [
+  { code: 'random', label: 'Aleatório (qualquer estado)', cities: [] },
+  { code: 'saopaulo', label: 'São Paulo', cities: ['saopaulo', 'campinas', 'santos', 'guarulhos', 'ribeiraopreto'] },
+  { code: 'riodejaneiro', label: 'Rio de Janeiro', cities: ['riodejaneiro', 'niteroi', 'petropolis', 'novaiguacu'] },
+  { code: 'minasgerais', label: 'Minas Gerais', cities: ['belohorizonte', 'uberlandia', 'juizdefora', 'contagem'] },
+  { code: 'bahia', label: 'Bahia', cities: ['salvador', 'feiradeSantana', 'vitoriaDaConquista'] },
+  { code: 'parana', label: 'Paraná', cities: ['curitiba', 'londrina', 'maringa', 'pontagrossa'] },
+  { code: 'riograndedosul', label: 'Rio Grande do Sul', cities: ['portoalegre', 'caxiasdosul', 'pelotas'] },
+  { code: 'pernambuco', label: 'Pernambuco', cities: ['recife', 'olinda', 'jaboataodosguararapes'] },
+  { code: 'ceara', label: 'Ceará', cities: ['fortaleza', 'caucaia', 'juazeirodonorte'] },
+  { code: 'para', label: 'Pará', cities: ['belem', 'ananindeua', 'santarem'] },
+  { code: 'santacatarina', label: 'Santa Catarina', cities: ['florianopolis', 'joinville', 'blumenau'] },
+  { code: 'goias', label: 'Goiás', cities: ['goiania', 'aparecidadegoiania', 'anapolis'] },
+  { code: 'maranhao', label: 'Maranhão', cities: ['saoluis', 'imperatriz'] },
+  { code: 'amazonas', label: 'Amazonas', cities: ['manaus', 'parintins'] },
+  { code: 'espiritosanto', label: 'Espírito Santo', cities: ['vitoria', 'vilavelha', 'serra', 'cariacica'] },
+  { code: 'paraiba', label: 'Paraíba', cities: ['joaopessoa', 'campinagrande'] },
+  { code: 'matogrosso', label: 'Mato Grosso', cities: ['cuiaba', 'varzealarga', 'rondonopolis'] },
+  { code: 'riograndedonorte', label: 'Rio Grande do Norte', cities: ['natal', 'mossoro', 'parnamirim'] },
+  { code: 'alagoas', label: 'Alagoas', cities: ['maceio', 'arapiraca'] },
+  { code: 'piaui', label: 'Piauí', cities: ['teresina', 'parnaiba'] },
+  { code: 'distritofederal', label: 'Distrito Federal', cities: ['brasilia', 'taguatinga', 'ceilandia'] },
+  { code: 'matogrossodosul', label: 'Mato Grosso do Sul', cities: ['campograNde', 'dourados'] },
+  { code: 'sergipe', label: 'Sergipe', cities: ['aracaju', 'lagarto'] },
+  { code: 'rondonia', label: 'Rondônia', cities: ['portovelho', 'jiparana'] },
+  { code: 'tocantins', label: 'Tocantins', cities: ['palmas', 'araguaina'] },
+  { code: 'acre', label: 'Acre', cities: ['riobranco', 'cruzeirodosul'] },
+  { code: 'amapa', label: 'Amapá', cities: ['macapa', 'santana'] },
+  { code: 'roraima', label: 'Roraima', cities: ['boavista'] },
+];
+
 export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabProps) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -110,6 +144,8 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
   const [editingLabel, setEditingLabel] = useState<string | null>(null);
   const [labelValue, setLabelValue] = useState("");
+  const [selectedState, setSelectedState] = useState('random');
+  const [selectedCity, setSelectedCity] = useState('');
 
   useEffect(() => {
     if (user) {
@@ -166,8 +202,16 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
       let lastError = '';
 
       for (let i = 0; i < quantity; i++) {
+        const purchaseBody: any = { action: 'purchase', planType, country };
+        // Add state/city for Brazil targeting
+        if (country === 'br' && selectedState !== 'random') {
+          purchaseBody.state = selectedState;
+          if (selectedCity) {
+            purchaseBody.city = selectedCity;
+          }
+        }
         const { data, error } = await supabase.functions.invoke('pyproxy-purchase', {
-          body: { action: 'purchase', planType, country }
+          body: purchaseBody
         });
 
         if (error) {
@@ -421,7 +465,23 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
     if (!order.username) return '-';
     const zoneType = order.plan_type === 'isp' ? 'isp' : order.plan_type === 'datacenter' ? 'dc' : 'resi';
     const region = order.country || 'br';
-    return `${order.username}-zone-${zoneType}-region-${region}`;
+    let username = `${order.username}-zone-${zoneType}-region-${region}`;
+    // Add state targeting if available
+    if (order.state && order.state !== 'random') {
+      username += `-st-${order.state}`;
+    }
+    // Add city targeting if available
+    if (order.city) {
+      username += `-city-${order.city}`;
+    }
+    return username;
+  };
+
+  // Generate SOCKS5 formatted string for Automati-Zap
+  const formatSocks5String = (order: ProxyOrder) => {
+    if (!order.host || !order.port || !order.username || !order.password) return '';
+    const username = formatUsername(order);
+    return `socks5://${username}:${order.password}@${order.host}:${order.port}`;
   };
 
   const activeOrders = orders.filter(o => o.status === 'active' && o.expires_at && new Date(o.expires_at) > new Date());
@@ -494,7 +554,14 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                 {/* Country Selector */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-foreground">País do IP</label>
-                  <Select value={country} onValueChange={setCountry}>
+                  <Select value={country} onValueChange={(val) => {
+                    setCountry(val);
+                    // Reset state/city when country changes
+                    if (val !== 'br') {
+                      setSelectedState('random');
+                      setSelectedCity('');
+                    }
+                  }}>
                     <SelectTrigger className="w-full md:w-64">
                       <SelectValue placeholder="Selecione o país" />
                     </SelectTrigger>
@@ -510,6 +577,50 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* State Selector - Only for Brazil */}
+                {country === 'br' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground">Estado do IP (opcional)</label>
+                      <Select value={selectedState} onValueChange={(val) => {
+                        setSelectedState(val);
+                        setSelectedCity(''); // Reset city when state changes
+                      }}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Selecione o estado" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-64">
+                          {BRAZIL_STATES.map((st) => (
+                            <SelectItem key={st.code} value={st.code}>
+                              {st.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* City Selector - Only when a state is selected */}
+                    {selectedState !== 'random' && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-foreground">Cidade (opcional)</label>
+                        <Select value={selectedCity} onValueChange={setSelectedCity}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Qualquer cidade" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">Qualquer cidade</SelectItem>
+                            {BRAZIL_STATES.find(s => s.code === selectedState)?.cities.map((city) => (
+                              <SelectItem key={city} value={city}>
+                                {city.charAt(0).toUpperCase() + city.slice(1)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between">
                   <div>
@@ -925,27 +1036,55 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                           </div>
                         )}
 
-                        {/* Full Proxy String - With formatted username */}
+                        {/* SOCKS5 String for Automati-Zap */}
                         <div className="mt-4 space-y-1">
-                          <label className="text-xs text-muted-foreground">
-                            String Completa (host:port:user:pass)
+                          <label className="text-xs text-muted-foreground font-medium text-green-400">
+                            🔗 String SOCKS5 para Automati-Zap (copie e cole)
                           </label>
                           <div className="flex items-center gap-2">
-                            <code className="flex-1 bg-muted px-3 py-2 rounded text-sm font-mono truncate">
+                            <code className="flex-1 bg-green-500/10 border border-green-500/30 px-3 py-2 rounded text-sm font-mono text-green-400 truncate">
+                              {formatSocks5String(order)}
+                            </code>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-green-500/30 hover:bg-green-500/10"
+                              onClick={() => copyToClipboard(
+                                formatSocks5String(order),
+                                `socks5-${order.id}`
+                              )}
+                            >
+                              {copiedField === `socks5-${order.id}` ? (
+                                <Check className="h-4 w-4 text-green-500" />
+                              ) : (
+                                <Copy className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Legacy format (collapsed) */}
+                        <div className="mt-3 space-y-1">
+                          <label className="text-xs text-muted-foreground">
+                            Formato alternativo (host:port:user:pass)
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <code className="flex-1 bg-muted px-3 py-2 rounded text-xs font-mono truncate opacity-70">
                               {order.host}:{order.port}:{formatUsername(order)}:{showPasswords[order.id] ? order.password : '••••'}
                             </code>
                             <Button
                               size="sm"
                               variant="ghost"
+                              className="h-8 w-8 p-0"
                               onClick={() => copyToClipboard(
                                 `${order.host}:${order.port}:${formatUsername(order)}:${order.password}`,
                                 `full-${order.id}`
                               )}
                             >
                               {copiedField === `full-${order.id}` ? (
-                                <Check className="h-4 w-4 text-green-500" />
+                                <Check className="h-3 w-3 text-green-500" />
                               ) : (
-                                <Copy className="h-4 w-4" />
+                                <Copy className="h-3 w-3" />
                               )}
                             </Button>
                           </div>
