@@ -122,10 +122,11 @@ export const RichTextEditor = ({ value, onChange, placeholder }: RichTextEditorP
       <div
         ref={editorRef}
         contentEditable
+        dir="ltr"
         onInput={handleInput}
         onPaste={handlePaste}
         data-placeholder={placeholder}
-        className="min-h-[80px] max-h-[200px] overflow-y-auto bg-transparent outline-none text-foreground empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground"
+        className="min-h-[80px] max-h-[200px] overflow-y-auto bg-transparent outline-none text-foreground text-left empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground"
         dangerouslySetInnerHTML={{ __html: value }}
       />
     </div>
