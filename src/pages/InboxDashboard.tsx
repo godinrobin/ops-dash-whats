@@ -132,7 +132,23 @@ export default function InboxDashboard() {
         body: { action: 'get-instance-proxy', instanceId: instance.id },
       });
 
-      const edgeError = error ? ((error as any)?.context?.body?.error || error.message) : null;
+      // Handle edge function errors gracefully (including 401 from UAZAPI)
+      let edgeError: string | null = null;
+      if (error) {
+        try {
+          const body = (error as any)?.context?.body;
+          if (typeof body === 'string') {
+            const parsed = JSON.parse(body);
+            edgeError = parsed?.error || error.message;
+          } else if (body?.error) {
+            edgeError = body.error;
+          } else {
+            edgeError = error.message;
+          }
+        } catch {
+          edgeError = error.message || 'Erro desconhecido';
+        }
+      }
 
       if (edgeError || !data?.success) {
         const message = edgeError || data?.error || 'Não foi possível obter informações da proxy';
