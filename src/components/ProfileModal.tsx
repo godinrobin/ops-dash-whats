@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/useSplashedToast";
 import { useTheme } from "@/hooks/useTheme";
-import { Moon, Sun, Camera, Loader2, Bell, Trash2, Plus, ExternalLink, Send } from "lucide-react";
+import { Moon, Sun, Camera, Loader2, Bell, Trash2, Plus, ExternalLink, Send, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
@@ -52,6 +52,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
   const [notifyOnDisconnect, setNotifyOnDisconnect] = useState(false);
   const [notifyOnLeadRotation, setNotifyOnLeadRotation] = useState(false);
   const [leadRotationLimit, setLeadRotationLimit] = useState<number>(30);
+  const [checkingLeadRotation, setCheckingLeadRotation] = useState(false);
 
   // Fetch current profile on mount
   useEffect(() => {
@@ -370,6 +371,40 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
       });
     } finally {
       setSavingPushSettings(false);
+    }
+  };
+
+  const handleManualCheckLeadRotation = async () => {
+    if (!user) return;
+    setCheckingLeadRotation(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('check-lead-rotation-manual', {
+        body: { user_id: user.id }
+      });
+      
+      if (error) throw error;
+      
+      if (data.notified > 0) {
+        toast({
+          title: "🔔 Notificações enviadas!",
+          description: data.message,
+        });
+      } else {
+        toast({
+          title: "✅ Verificação concluída",
+          description: data.message,
+        });
+      }
+    } catch (error: any) {
+      console.error("Error checking lead rotation:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro na verificação",
+        description: error.message || "Não foi possível verificar as instâncias",
+      });
+    } finally {
+      setCheckingLeadRotation(false);
     }
   };
 
@@ -795,22 +830,38 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
                       <Label htmlFor="lead-rotation-limit" className="text-sm text-muted-foreground">
                         Limite máximo de leads por instância
                       </Label>
-                      <Input
-                        id="lead-rotation-limit"
-                        type="number"
-                        min={1}
-                        value={leadRotationLimit}
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value) || 30;
-                          setLeadRotationLimit(val);
-                        }}
-                        onBlur={(e) => {
-                          const val = parseInt(e.target.value) || 30;
-                          handleUpdateLeadRotationLimit(val);
-                        }}
-                        disabled={savingPushSettings}
-                        className="w-24 focus-visible:ring-accent focus-visible:border-accent"
-                      />
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="lead-rotation-limit"
+                          type="number"
+                          min={1}
+                          value={leadRotationLimit}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value) || 30;
+                            setLeadRotationLimit(val);
+                          }}
+                          onBlur={(e) => {
+                            const val = parseInt(e.target.value) || 30;
+                            handleUpdateLeadRotationLimit(val);
+                          }}
+                          disabled={savingPushSettings}
+                          className="w-24 focus-visible:ring-accent focus-visible:border-accent"
+                        />
+                        <Button
+                          onClick={handleManualCheckLeadRotation}
+                          disabled={checkingLeadRotation || pushSubscriptionIds.length === 0}
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-muted-foreground hover:text-accent hover:bg-accent/10"
+                          title="Verificar agora se alguma instância atingiu o limite"
+                        >
+                          {checkingLeadRotation ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Search className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
                       <p className="text-xs text-muted-foreground">
                         Quando uma instância atingir este número de leads no dia, você será notificado (uma vez por dia por instância).
                       </p>
