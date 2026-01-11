@@ -560,45 +560,119 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                   </Select>
                 </div>
 
-                {/* State Selector - Only for Brazil */}
+{/* State Selector - Only for Brazil */}
                 {country === 'br' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-foreground">Estado do IP (opcional)</label>
-                      <Select value={selectedState} onValueChange={(val) => {
-                        setSelectedState(val);
-                        setSelectedCity(''); // Reset city when state changes
-                      }}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Selecione o estado" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-64">
-                          {BRAZIL_STATES.map((st) => (
-                            <SelectItem key={st.code} value={st.code}>
-                              {st.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Popover open={stateOpen} onOpenChange={setStateOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={stateOpen}
+                            className="w-full justify-between"
+                          >
+                            {selectedState === 'random' 
+                              ? 'Aleatório (qualquer estado)'
+                              : BRAZIL_STATES_DATA.find(s => s.code === selectedState)?.label || 'Selecione o estado'}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[300px] p-0" align="start">
+                          <Command>
+                            <CommandInput placeholder="Buscar estado..." />
+                            <CommandList>
+                              <CommandEmpty>Nenhum estado encontrado.</CommandEmpty>
+                              <CommandGroup className="max-h-64 overflow-auto">
+                                {BRAZIL_STATES_DATA.map((st) => (
+                                  <CommandItem
+                                    key={st.code}
+                                    value={st.label}
+                                    onSelect={() => {
+                                      setSelectedState(st.code);
+                                      setSelectedCity('');
+                                      setStateOpen(false);
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        selectedState === st.code ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    {st.label}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                     </div>
 
                     {/* City Selector - Only when a state is selected */}
                     {selectedState !== 'random' && (
                       <div className="space-y-2">
                         <label className="text-sm font-medium text-foreground">Cidade (opcional)</label>
-                        <Select value={selectedCity || 'any'} onValueChange={(v) => setSelectedCity(v === 'any' ? '' : v)}>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Qualquer cidade" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="any">Qualquer cidade</SelectItem>
-                            {BRAZIL_STATES.find(s => s.code === selectedState)?.cities.map((city) => (
-                              <SelectItem key={city} value={city}>
-                                {city.charAt(0).toUpperCase() + city.slice(1)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Popover open={cityOpen} onOpenChange={setCityOpen}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={cityOpen}
+                              className="w-full justify-between"
+                            >
+                              {selectedCity 
+                                ? availableCities.find(c => c.code === selectedCity)?.label || selectedCity
+                                : 'Qualquer cidade'}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[300px] p-0" align="start">
+                            <Command>
+                              <CommandInput placeholder="Buscar cidade..." />
+                              <CommandList>
+                                <CommandEmpty>Nenhuma cidade encontrada.</CommandEmpty>
+                                <CommandGroup className="max-h-64 overflow-auto">
+                                  <CommandItem
+                                    value="any"
+                                    onSelect={() => {
+                                      setSelectedCity('');
+                                      setCityOpen(false);
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        !selectedCity ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    Qualquer cidade
+                                  </CommandItem>
+                                  {availableCities.map((city) => (
+                                    <CommandItem
+                                      key={city.code}
+                                      value={city.label}
+                                      onSelect={() => {
+                                        setSelectedCity(city.code);
+                                        setCityOpen(false);
+                                      }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          "mr-2 h-4 w-4",
+                                          selectedCity === city.code ? "opacity-100" : "opacity-0"
+                                        )}
+                                      />
+                                      {city.label}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                       </div>
                     )}
                   </div>
@@ -948,6 +1022,24 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                                       : 'Esgotado'
                                 }</span>
                               </div>
+
+                              {/* IP and Location */}
+                              {testResults[order.id].external_ip && testResults[order.id].external_ip !== 'unknown' && testResults[order.id].external_ip !== 'pending_client_test' && (
+                                <div className="p-3 mt-2 rounded-lg border border-green-500/30 bg-green-500/10">
+                                  <div className="flex items-center gap-2 text-green-400 font-medium mb-1">
+                                    <Globe className="h-4 w-4" />
+                                    IP da Proxy
+                                  </div>
+                                  <div className="text-sm text-foreground font-mono">
+                                    {testResults[order.id].external_ip}
+                                  </div>
+                                  {testResults[order.id].details?.proxy_ip && testResults[order.id].details?.proxy_ip !== testResults[order.id].external_ip && (
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                      Gateway IP: {testResults[order.id].details?.proxy_ip as string}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
 
                               {/* HTTP Test Result */}
                               {testResults[order.id].http_test_result && testResults[order.id].http_test_result !== 'pending' && (
