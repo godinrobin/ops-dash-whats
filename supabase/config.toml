@@ -112,7 +112,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.maturador-evolution]
-verify_jwt = true
+verify_jwt = false
 
 [functions.remove-watermark]
 verify_jwt = true
