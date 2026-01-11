@@ -16,6 +16,10 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const REACTION_EMOJIS = ["🔥", "🚀", "👑", "👍🏻", "🚨"] as const;
 
+interface ReactionCounts {
+  [emoji: string]: number;
+}
+
 interface FeedPostProps {
   post: {
     id: string;
@@ -31,6 +35,7 @@ interface FeedPostProps {
       avatar_url?: string | null;
     };
     is_admin_post?: boolean;
+    reactionCounts?: ReactionCounts;
   };
   comments: Array<{
     id: string;
@@ -254,21 +259,37 @@ export const FeedPost = ({ post, comments, userLiked, userReaction, onRefresh }:
 
       {/* Actions */}
       <div className="flex items-center gap-4 px-4 py-3 border-t border-border/50">
-        <div className="relative" ref={reactionRef}>
+        <div className="relative flex items-center gap-1" ref={reactionRef}>
+          {/* Display individual emoji counts */}
+          {REACTION_EMOJIS.map((emoji) => {
+            const count = post.reactionCounts?.[emoji] || 0;
+            if (count === 0 && userReaction !== emoji) return null;
+            
+            return (
+              <button
+                key={emoji}
+                onClick={() => handleReaction(emoji)}
+                disabled={isLiking}
+                className={cn(
+                  "flex items-center gap-1 px-2 py-1.5 rounded-lg transition-all hover:bg-secondary/50",
+                  userReaction === emoji && "bg-accent/20 ring-1 ring-accent/50"
+                )}
+              >
+                <span className="text-lg">{emoji}</span>
+                {count > 0 && <span className="text-sm text-muted-foreground">{count}</span>}
+              </button>
+            );
+          })}
+
+          {/* Add reaction button (shows picker) */}
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setShowReactionPicker(!showReactionPicker)}
             disabled={isLiking}
-            className={cn(
-              "gap-2",
-              userLiked && "text-accent"
-            )}
+            className="px-2"
           >
-            <span className="text-lg">
-              {userLiked && userReaction ? userReaction : "🔥"}
-            </span>
-            <span>{post.likes_count}</span>
+            <span className="text-lg">+</span>
           </Button>
 
           <AnimatePresence>
