@@ -1922,6 +1922,47 @@ export type Database = {
         }
         Relationships: []
       }
+      lead_rotation_daily_counts: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          instance_id: string
+          lead_count: number
+          notification_sent: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date?: string
+          id?: string
+          instance_id: string
+          lead_count?: number
+          notification_sent?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          instance_id?: string
+          lead_count?: number
+          notification_sent?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_rotation_daily_counts_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       marketplace_orders: {
         Row: {
           created_at: string
@@ -2548,7 +2589,9 @@ export type Database = {
           created_at: string
           id: string
           is_full_member: boolean
+          lead_rotation_limit: number | null
           notify_on_disconnect: boolean | null
+          notify_on_lead_rotation: boolean | null
           notify_on_sale: boolean | null
           push_subscription_ids: string[] | null
           push_webhook_enabled: boolean | null
@@ -2560,7 +2603,9 @@ export type Database = {
           created_at?: string
           id: string
           is_full_member?: boolean
+          lead_rotation_limit?: number | null
           notify_on_disconnect?: boolean | null
+          notify_on_lead_rotation?: boolean | null
           notify_on_sale?: boolean | null
           push_subscription_ids?: string[] | null
           push_webhook_enabled?: boolean | null
@@ -2572,7 +2617,9 @@ export type Database = {
           created_at?: string
           id?: string
           is_full_member?: boolean
+          lead_rotation_limit?: number | null
           notify_on_disconnect?: boolean | null
+          notify_on_lead_rotation?: boolean | null
           notify_on_sale?: boolean | null
           push_subscription_ids?: string[] | null
           push_webhook_enabled?: boolean | null

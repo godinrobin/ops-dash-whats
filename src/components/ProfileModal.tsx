@@ -50,6 +50,8 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
   const [testingPush, setTestingPush] = useState(false);
   const [notifyOnSale, setNotifyOnSale] = useState(false);
   const [notifyOnDisconnect, setNotifyOnDisconnect] = useState(false);
+  const [notifyOnLeadRotation, setNotifyOnLeadRotation] = useState(false);
+  const [leadRotationLimit, setLeadRotationLimit] = useState<number>(30);
 
   // Fetch current profile on mount
   useEffect(() => {
@@ -58,7 +60,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
       
       const { data } = await supabase
         .from("profiles")
-        .select("avatar_url, username, push_webhook_enabled, push_subscription_ids, notify_on_sale, notify_on_disconnect")
+        .select("avatar_url, username, push_webhook_enabled, push_subscription_ids, notify_on_sale, notify_on_disconnect, notify_on_lead_rotation, lead_rotation_limit")
         .eq("id", user.id)
         .single();
       
@@ -74,6 +76,8 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
       setPushSubscriptionIds(data?.push_subscription_ids || []);
       setNotifyOnSale(data?.notify_on_sale || false);
       setNotifyOnDisconnect(data?.notify_on_disconnect || false);
+      setNotifyOnLeadRotation(data?.notify_on_lead_rotation || false);
+      setLeadRotationLimit(data?.lead_rotation_limit || 30);
     };
 
     if (open && user) {
@@ -303,6 +307,66 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
         variant: "destructive",
         title: "Erro",
         description: error.message || "Não foi possível alterar as configurações",
+      });
+    } finally {
+      setSavingPushSettings(false);
+    }
+  };
+
+  const handleToggleNotifyOnLeadRotation = async (checked: boolean) => {
+    if (!user) return;
+    setSavingPushSettings(true);
+    
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ notify_on_lead_rotation: checked })
+        .eq("id", user.id);
+      
+      if (error) throw error;
+      
+      setNotifyOnLeadRotation(checked);
+      toast({
+        title: checked ? "🔄 Alerta de rotação ativado!" : "Alerta de rotação desativado",
+        description: checked 
+          ? "Você receberá uma notificação quando uma instância atingir o limite de leads" 
+          : "Você não receberá mais alertas de rotação",
+      });
+    } catch (error: any) {
+      console.error("Error toggling notify on lead rotation:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: error.message || "Não foi possível alterar as configurações",
+      });
+    } finally {
+      setSavingPushSettings(false);
+    }
+  };
+
+  const handleUpdateLeadRotationLimit = async (value: number) => {
+    if (!user || value < 1) return;
+    setLeadRotationLimit(value);
+    setSavingPushSettings(true);
+    
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ lead_rotation_limit: value })
+        .eq("id", user.id);
+      
+      if (error) throw error;
+      
+      toast({
+        title: "Limite atualizado!",
+        description: `Limite de leads definido para ${value}`,
+      });
+    } catch (error: any) {
+      console.error("Error updating lead rotation limit:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: error.message || "Não foi possível atualizar o limite",
       });
     } finally {
       setSavingPushSettings(false);
@@ -603,7 +667,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
                       <Input
                         id="subscription-id"
                         type="text"
-                        placeholder="Cole o subscription_id do OneSignal aqui..."
+                        placeholder="Insira o Token"
                         value={newSubscriptionId}
                         onChange={(e) => setNewSubscriptionId(e.target.value)}
                         disabled={savingPushSettings}
@@ -619,18 +683,14 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
                         <Plus className="w-4 h-4" />
                       </Button>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Obtenha o token no webapp{" "}
-                      <a 
-                        href="https://notifica.zapdata.com.br" 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-accent hover:underline inline-flex items-center gap-1"
-                      >
-                        notifica.zapdata.com.br
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </p>
+                    <a 
+                      href="https://zapdatanotifica.joaolucassps.co/" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-accent hover:underline inline-flex items-center gap-1 text-xs"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
                   </div>
 
                   {/* Registered Devices */}
@@ -680,7 +740,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
                         🔥 Notificar novas vendas
                       </Label>
                       <p className="text-xs text-muted-foreground leading-relaxed">
-                        Receba uma notificação "Pix Pago no x1! 🔥" quando o Tag Whats Cloud detectar uma venda
+                        Receba uma notificação quando o Tag Whats Cloud detectar uma nova venda!
                       </p>
                     </div>
                   </div>
@@ -706,6 +766,56 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
                       </p>
                     </div>
                   </div>
+
+                  {/* Notify on Lead Rotation Checkbox */}
+                  <div className="flex items-start space-x-3 pt-2">
+                    <Checkbox
+                      id="notify-on-lead-rotation"
+                      checked={notifyOnLeadRotation}
+                      onCheckedChange={(checked) => handleToggleNotifyOnLeadRotation(checked as boolean)}
+                      disabled={savingPushSettings}
+                      className="mt-0.5"
+                    />
+                    <div className="space-y-1 flex-1">
+                      <Label 
+                        htmlFor="notify-on-lead-rotation" 
+                        className="text-sm font-medium cursor-pointer leading-none"
+                      >
+                        🔄 Alerta de rotação de leads
+                      </Label>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Receba um alerta quando uma instância atingir o limite diário de leads (contagem individual por número, reseta à meia-noite - horário de São Paulo)
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Lead Rotation Limit Input (visible only when rotation enabled) */}
+                  {notifyOnLeadRotation && (
+                    <div className="ml-6 space-y-2 pl-4 border-l-2 border-accent/30">
+                      <Label htmlFor="lead-rotation-limit" className="text-sm text-muted-foreground">
+                        Limite máximo de leads por instância
+                      </Label>
+                      <Input
+                        id="lead-rotation-limit"
+                        type="number"
+                        min={1}
+                        value={leadRotationLimit}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value) || 30;
+                          setLeadRotationLimit(val);
+                        }}
+                        onBlur={(e) => {
+                          const val = parseInt(e.target.value) || 30;
+                          handleUpdateLeadRotationLimit(val);
+                        }}
+                        disabled={savingPushSettings}
+                        className="w-24 focus-visible:ring-accent focus-visible:border-accent"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Quando uma instância atingir este número de leads no dia, você será notificado (uma vez por dia por instância).
+                      </p>
+                    </div>
+                  )}
 
                   {/* Test Button */}
                   <Button
