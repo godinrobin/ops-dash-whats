@@ -36,6 +36,7 @@ interface Instance {
   qrcode: string | null;
   last_seen: string | null;
   created_at: string;
+  proxy_string: string | null;
 }
 
 interface Flow {
@@ -100,6 +101,36 @@ export default function InboxDashboard() {
   
   // Proxy validation
   const { validateProxy, validating: validatingProxy, result: proxyValidationResult, clearResult: clearProxyResult } = useProxyValidator();
+  
+  // Card proxy validation state (per-instance)
+  const [validatingInstanceProxy, setValidatingInstanceProxy] = useState<string | null>(null);
+  const [instanceProxyResults, setInstanceProxyResults] = useState<Record<string, { ip?: string; location?: string; latency_ms?: number; error?: string }>>({});
+
+  // Handle card WiFi icon click to validate instance proxy
+  const handleValidateInstanceProxy = async (instance: Instance) => {
+    if (!instance.proxy_string) {
+      toast.info('Esta instância não tem proxy configurada');
+      return;
+    }
+    
+    setValidatingInstanceProxy(instance.id);
+    try {
+      const result = await validateProxy(instance.proxy_string);
+      if (result) {
+        setInstanceProxyResults(prev => ({
+          ...prev,
+          [instance.id]: {
+            ip: result.ip,
+            location: result.location,
+            latency_ms: result.latency_ms,
+            error: result.error,
+          }
+        }));
+      }
+    } finally {
+      setValidatingInstanceProxy(null);
+    }
+  };
 
   // Fase 1: Carrega apenas dados essenciais (instâncias e fluxos)
   const fetchEssentialData = async () => {
@@ -1081,32 +1112,62 @@ export default function InboxDashboard() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <CardTitle className="text-base">{instance.label || instance.phone_number || instance.instance_name}</CardTitle>
-                          {/* Connection Status Icon with Tooltip */}
-                          {instance.status === 'connected' && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div className="cursor-help">
-                                    <Wifi className="h-4 w-4 text-green-500" />
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="max-w-xs">
-                                  <div className="text-xs space-y-1">
-                                    <p className="font-medium">Conexão Ativa</p>
-                                    <p className="text-muted-foreground">
-                                      Número: {instance.phone_number || 'N/A'}
-                                    </p>
-                                    {instance.last_seen && (
-                                      <p className="text-muted-foreground">
-                                        Último acesso: {new Date(instance.last_seen).toLocaleString('pt-BR')}
-                                      </p>
-                                    )}
-                                  </div>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
+                          {/* Proxy WiFi indicator - clickable to validate */}
+                          {instance.proxy_string && (
+                            <button
+                              onClick={() => handleValidateInstanceProxy(instance)}
+                              disabled={validatingInstanceProxy === instance.id}
+                              className={`p-1 rounded hover:bg-muted transition-colors ${
+                                instanceProxyResults[instance.id]?.ip && !instanceProxyResults[instance.id]?.error
+                                  ? 'text-green-500' 
+                                  : instanceProxyResults[instance.id]?.error 
+                                    ? 'text-red-500' 
+                                    : 'text-muted-foreground'
+                              }`}
+                              title={
+                                instanceProxyResults[instance.id]?.ip 
+                                  ? `IP: ${instanceProxyResults[instance.id].ip}${instanceProxyResults[instance.id].location ? ` | ${instanceProxyResults[instance.id].location}` : ''}` 
+                                  : 'Clique para validar proxy'
+                              }
+                            >
+                              {validatingInstanceProxy === instance.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Wifi className="h-4 w-4" />
+                              )}
+                            </button>
+                          )}
+                          {/* Connection status icon (only if no proxy) */}
+                          {!instance.proxy_string && instance.status === 'connected' && (
+                            <Wifi className="h-4 w-4 text-green-500" />
                           )}
                         </div>
+                        {/* Show proxy IP/location info if available */}
+                        {instance.proxy_string && instanceProxyResults[instance.id] && (
+                          <div className="flex items-center gap-1 text-xs">
+                            {instanceProxyResults[instance.id]?.error ? (
+                              <span className="text-red-500">{instanceProxyResults[instance.id].error}</span>
+                            ) : instanceProxyResults[instance.id]?.ip ? (
+                              <>
+                                <Wifi className="h-3 w-3 text-green-500" />
+                                <span className="text-green-500">
+                                  IP: {instanceProxyResults[instance.id].ip}
+                                </span>
+                                {instanceProxyResults[instance.id].location && (
+                                  <>
+                                    <MapPin className="h-3 w-3 ml-1 text-muted-foreground" />
+                                    <span className="text-muted-foreground">{instanceProxyResults[instance.id].location}</span>
+                                  </>
+                                )}
+                                {instanceProxyResults[instance.id].latency_ms && (
+                                  <span className="text-muted-foreground ml-1">
+                                    ({instanceProxyResults[instance.id].latency_ms}ms)
+                                  </span>
+                                )}
+                              </>
+                            ) : null}
+                          </div>
+                        )}
                         <Badge variant="outline" className={`flex items-center gap-1 ${instance.status === 'connected' ? 'border-green-500 text-green-500' : ''}`}>
                           <div className={`w-2 h-2 rounded-full ${getStatusColor(instance.status)}`} />
                           {getStatusText(instance.status)}
