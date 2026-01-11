@@ -1,18 +1,22 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { 
   Globe, Copy, Check, Loader2, Shield, Zap, Clock, 
   Eye, EyeOff, RefreshCw, RotateCcw, Minus, Plus, ChevronDown, ChevronRight, Pencil,
-  Server, Wifi, Building2, PlayCircle, CheckCircle, XCircle, AlertCircle
+  Server, Wifi, Building2, PlayCircle, CheckCircle, XCircle, AlertCircle, ChevronsUpDown, Search
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/useSplashedToast";
+import { BRAZIL_STATES as BRAZIL_STATES_DATA } from "@/data/brazilLocations";
+import { cn } from "@/lib/utils";
 
 interface ProxyOrder {
   id: string;
@@ -95,37 +99,7 @@ const COUNTRY_OPTIONS = [
   { code: 'gb', label: 'Reino Unido', flag: '🇬🇧' },
 ];
 
-// Brazilian states for PyProxy targeting
-const BRAZIL_STATES = [
-  { code: 'random', label: 'Aleatório (qualquer estado)', cities: [] },
-  { code: 'saopaulo', label: 'São Paulo', cities: ['saopaulo', 'campinas', 'santos', 'guarulhos', 'ribeiraopreto'] },
-  { code: 'riodejaneiro', label: 'Rio de Janeiro', cities: ['riodejaneiro', 'niteroi', 'petropolis', 'novaiguacu'] },
-  { code: 'minasgerais', label: 'Minas Gerais', cities: ['belohorizonte', 'uberlandia', 'juizdefora', 'contagem'] },
-  { code: 'bahia', label: 'Bahia', cities: ['salvador', 'feiradeSantana', 'vitoriaDaConquista'] },
-  { code: 'parana', label: 'Paraná', cities: ['curitiba', 'londrina', 'maringa', 'pontagrossa'] },
-  { code: 'riograndedosul', label: 'Rio Grande do Sul', cities: ['portoalegre', 'caxiasdosul', 'pelotas'] },
-  { code: 'pernambuco', label: 'Pernambuco', cities: ['recife', 'olinda', 'jaboataodosguararapes'] },
-  { code: 'ceara', label: 'Ceará', cities: ['fortaleza', 'caucaia', 'juazeirodonorte'] },
-  { code: 'para', label: 'Pará', cities: ['belem', 'ananindeua', 'santarem'] },
-  { code: 'santacatarina', label: 'Santa Catarina', cities: ['florianopolis', 'joinville', 'blumenau'] },
-  { code: 'goias', label: 'Goiás', cities: ['goiania', 'aparecidadegoiania', 'anapolis'] },
-  { code: 'maranhao', label: 'Maranhão', cities: ['saoluis', 'imperatriz'] },
-  { code: 'amazonas', label: 'Amazonas', cities: ['manaus', 'parintins'] },
-  { code: 'espiritosanto', label: 'Espírito Santo', cities: ['vitoria', 'vilavelha', 'serra', 'cariacica'] },
-  { code: 'paraiba', label: 'Paraíba', cities: ['joaopessoa', 'campinagrande'] },
-  { code: 'matogrosso', label: 'Mato Grosso', cities: ['cuiaba', 'varzealarga', 'rondonopolis'] },
-  { code: 'riograndedonorte', label: 'Rio Grande do Norte', cities: ['natal', 'mossoro', 'parnamirim'] },
-  { code: 'alagoas', label: 'Alagoas', cities: ['maceio', 'arapiraca'] },
-  { code: 'piaui', label: 'Piauí', cities: ['teresina', 'parnaiba'] },
-  { code: 'distritofederal', label: 'Distrito Federal', cities: ['brasilia', 'taguatinga', 'ceilandia'] },
-  { code: 'matogrossodosul', label: 'Mato Grosso do Sul', cities: ['campograNde', 'dourados'] },
-  { code: 'sergipe', label: 'Sergipe', cities: ['aracaju', 'lagarto'] },
-  { code: 'rondonia', label: 'Rondônia', cities: ['portovelho', 'jiparana'] },
-  { code: 'tocantins', label: 'Tocantins', cities: ['palmas', 'araguaina'] },
-  { code: 'acre', label: 'Acre', cities: ['riobranco', 'cruzeirodosul'] },
-  { code: 'amapa', label: 'Amapá', cities: ['macapa', 'santana'] },
-  { code: 'roraima', label: 'Roraima', cities: ['boavista'] },
-];
+// Use imported BRAZIL_STATES_DATA
 
 export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabProps) {
   const { user } = useAuth();
@@ -146,6 +120,14 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
   const [labelValue, setLabelValue] = useState("");
   const [selectedState, setSelectedState] = useState('random');
   const [selectedCity, setSelectedCity] = useState('');
+  const [stateOpen, setStateOpen] = useState(false);
+  const [cityOpen, setCityOpen] = useState(false);
+
+  // Memoized cities for selected state
+  const availableCities = useMemo(() => {
+    const state = BRAZIL_STATES_DATA.find(s => s.code === selectedState);
+    return state?.cities || [];
+  }, [selectedState]);
 
   useEffect(() => {
     if (user) {
