@@ -3265,19 +3265,33 @@ Regras IMPORTANTES:
           });
         }
 
-        // Return the proxy info from UAZAPI
+        // The UAZAPI /instance/proxy endpoint doesn't return IP info directly
+        // UAZAPI uses internal proxies but doesn't expose their IPs
+        // We return the proxy config status and indicate if custom proxy is set
+        const hasCustomProxy = proxyData.enabled && proxyData.proxy_url;
+        
+        // If user has a custom proxy configured in UAZAPI, we can't validate it from here
+        // (we would need to route through the instance which isn't possible)
+        // For instances without proxy_string in our DB but with UAZAPI internal proxy,
+        // we indicate this clearly
+        
         result = {
           success: true,
           provider: 'uazapi',
+          // No direct IP available from UAZAPI API
+          ip: null,
+          location: null,
+          hasCustomProxy,
+          usingInternalProxy: !hasCustomProxy,
+          message: hasCustomProxy 
+            ? 'Proxy customizado configurado na UAZAPI' 
+            : 'Usando proxy interno UAZAPI (Brasil)',
           proxy: {
             enabled: proxyData.enabled ?? false,
             proxy_url: proxyData.proxy_url || null,
             last_test_at: proxyData.last_test_at || null,
             last_test_error: proxyData.last_test_error || null,
             validation_error: proxyData.validation_error ?? false,
-            // Additional IP/location info if available
-            ip: proxyData.ip || proxyData.external_ip || null,
-            location: proxyData.location || proxyData.geo || null,
           },
         };
         break;
