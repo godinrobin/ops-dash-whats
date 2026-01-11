@@ -13,6 +13,7 @@ const HomePage = () => {
   const [restrictedModalOpen, setRestrictedModalOpen] = useState(false);
   const [selectedFeatureName, setSelectedFeatureName] = useState<string>("");
   const [refreshFeed, setRefreshFeed] = useState(0);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [mode, setMode] = useState<AppMode>(() => {
     const saved = localStorage.getItem("homeMode");
@@ -42,10 +43,10 @@ const HomePage = () => {
 
   return (
     <>
-      <Header mode={mode} onModeChange={setMode} />
+      <Header mode={mode} onModeChange={setMode} onSidebarToggle={() => setSidebarOpen(!sidebarOpen)} />
       <div className="h-14 md:h-16" />
       
-      <SystemsSidebar onRestrictedClick={handleRestrictedClick} />
+      <SystemsSidebar onRestrictedClick={handleRestrictedClick} isOpen={sidebarOpen} onToggle={() => setSidebarOpen(false)} />
       
       {/* Main Content Area */}
       <div className="lg:ml-64 min-h-screen bg-background">

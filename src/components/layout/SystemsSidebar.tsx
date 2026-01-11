@@ -144,10 +144,11 @@ const CollapsibleSection = ({ title, children, defaultOpen = true }: Collapsible
 
 interface SystemsSidebarProps {
   onRestrictedClick?: (featureName: string) => void;
+  isOpen?: boolean;
+  onToggle?: () => void;
 }
 
-export const SystemsSidebar = ({ onRestrictedClick }: SystemsSidebarProps) => {
-  const [isOpen, setIsOpen] = useState(false);
+export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: SystemsSidebarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { isFullMember, loading: accessLoading } = useAccessLevel();
@@ -164,7 +165,7 @@ export const SystemsSidebar = ({ onRestrictedClick }: SystemsSidebarProps) => {
     }
     
     navigate(system.path);
-    setIsOpen(false);
+    onToggle?.();
   };
 
   const isActiveSystem = (path: string) => {
@@ -203,7 +204,7 @@ export const SystemsSidebar = ({ onRestrictedClick }: SystemsSidebarProps) => {
       {/* Home button */}
       <div className="p-3 border-b border-border/50">
         <button
-          onClick={() => { navigate("/"); setIsOpen(false); }}
+          onClick={() => { navigate("/"); onToggle?.(); }}
           className={cn(
             "flex items-center gap-3 w-full px-3 py-2 text-sm rounded-lg transition-all duration-200",
             location.pathname === "/" 
@@ -231,14 +232,6 @@ export const SystemsSidebar = ({ onRestrictedClick }: SystemsSidebarProps) => {
 
   return (
     <>
-      {/* Mobile Toggle Button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="lg:hidden fixed top-16 left-4 z-50 p-2 bg-background/95 backdrop-blur-sm border border-border rounded-lg shadow-lg"
-      >
-        {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-      </button>
-
       {/* Mobile Sidebar */}
       <AnimatePresence>
         {isOpen && (
@@ -248,7 +241,7 @@ export const SystemsSidebar = ({ onRestrictedClick }: SystemsSidebarProps) => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setIsOpen(false)}
+              onClick={() => onToggle?.()}
               className="lg:hidden fixed inset-0 bg-black/50 z-40"
             />
             
