@@ -2,36 +2,27 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { LogOut, ArrowLeft, User, Shield, LayoutGrid, ShoppingBag, Megaphone, Menu } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ProfileModal } from "./ProfileModal";
 import Dock from "@/components/ui/dock";
 import { AnimatedText } from "@/components/ui/animated-shiny-text";
 import { motion } from "framer-motion";
-import { useSidebar } from "@/components/ui/sidebar";
 
 export type AppMode = "sistemas" | "marketplace" | "ads";
 
 interface HeaderProps {
   mode?: AppMode;
   onModeChange?: (mode: AppMode) => void;
+  onSidebarToggle?: () => void;
 }
 
-export const Header = ({ mode, onModeChange }: HeaderProps) => {
+export const Header = ({ mode, onModeChange, onSidebarToggle }: HeaderProps) => {
   const { signOut } = useAuth();
   const { isAdmin } = useAdminStatus();
   const navigate = useNavigate();
   const location = useLocation();
   const [profileOpen, setProfileOpen] = useState(false);
-  
-  // Try to get sidebar context, but don't fail if not available
-  let sidebarContext: { toggleSidebar?: () => void } | null = null;
-  try {
-    sidebarContext = useSidebar();
-  } catch {
-    // Sidebar context not available
-  }
   
   const isOnHomePage = location.pathname === "/";
   
@@ -66,7 +57,7 @@ export const Header = ({ mode, onModeChange }: HeaderProps) => {
         <div className="container mx-auto px-4 h-14 md:h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {/* Sidebar toggle - only on home page */}
-            {isOnHomePage && sidebarContext?.toggleSidebar && (
+            {isOnHomePage && onSidebarToggle && (
               <motion.div
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.95 }}
@@ -74,7 +65,7 @@ export const Header = ({ mode, onModeChange }: HeaderProps) => {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={sidebarContext.toggleSidebar}
+                  onClick={onSidebarToggle}
                   className="shrink-0"
                 >
                   <Menu className="h-5 w-5" />
