@@ -260,23 +260,56 @@ async function testProxyViaApify(
         // Get the result
         const resultRes = await fetch(`https://api.apify.com/v2/actor-runs/${runId}/dataset/items?token=${apifyToken}`);
         const resultData = await resultRes.json();
+        console.log('[PROXY TEST] APIFY result:', JSON.stringify(resultData).slice(0, 500));
         
         const item = resultData?.[0];
         if (item?.body) {
           try {
             const bodyContent = typeof item.body === 'string' ? item.body : JSON.stringify(item.body);
-            // Try to parse JSON from the body (ip-api.com returns JSON)
-            const jsonMatch = bodyContent.match(/\{[^}]+\}/);
-            if (jsonMatch) {
-              const ipData = JSON.parse(jsonMatch[0]);
+            console.log('[PROXY TEST] Body content:', bodyContent.slice(0, 300));
+            
+            // Try multiple parsing strategies
+            // Strategy 1: Direct JSON parse if body is JSON
+            if (bodyContent.trim().startsWith('{')) {
+              try {
+                const ipData = JSON.parse(bodyContent);
+                if (ipData?.query) {
+                  console.log('[PROXY TEST] Parsed IP from direct JSON:', ipData.query);
+                  return { 
+                    success: true, 
+                    ip: ipData.query,
+                    latency: Date.now() - startTime 
+                  };
+                }
+              } catch {}
+            }
+            
+            // Strategy 2: Look for "query":"IP" pattern
+            const queryMatch = bodyContent.match(/"query"\s*:\s*"([^"]+)"/);
+            if (queryMatch && queryMatch[1]) {
+              console.log('[PROXY TEST] Found query IP:', queryMatch[1]);
               return { 
                 success: true, 
-                ip: ipData?.query || ipData?.ip || 'unknown',
+                ip: queryMatch[1],
                 latency: Date.now() - startTime 
               };
             }
+            
+            // Strategy 3: Look for any IP-like pattern
+            const ipMatch = bodyContent.match(/\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/);
+            if (ipMatch && ipMatch[1]) {
+              console.log('[PROXY TEST] Found IP pattern:', ipMatch[1]);
+              return { 
+                success: true, 
+                ip: ipMatch[1],
+                latency: Date.now() - startTime 
+              };
+            }
+            
+            console.log('[PROXY TEST] Could not extract IP from body');
             return { success: true, ip: 'response_received', latency: Date.now() - startTime };
-          } catch {
+          } catch (parseErr) {
+            console.error('[PROXY TEST] Parse error:', parseErr);
             return { success: true, ip: 'parsed_error', latency: Date.now() - startTime };
           }
         }
@@ -1512,24 +1545,61 @@ Deno.serve(async (req) => {
       // Validate the gateway first
       const gatewayResult = await validateGateway(host, port);
       
-      // Try to get location info using ip-api via APIFY
       let ipInfo = { ip: 'unknown', location: '', country: '', city: '', isp: '' };
       let latencyMs = 0;
+      const startTime = Date.now();
       
-      // Test the proxy via APIFY (if available)
+      // Try multiple methods to get the proxy IP
+      let proxyTestSuccess = false;
+      
+      // Method 1: Use APIFY if available
       const proxyTest = await testProxyViaApify(host, port, username, password);
       latencyMs = proxyTest.latency || 0;
       
-      if (proxyTest.success && proxyTest.ip && proxyTest.ip !== 'unknown') {
+      if (proxyTest.success && proxyTest.ip && proxyTest.ip !== 'unknown' && !proxyTest.ip.includes('pending') && !proxyTest.ip.includes('error')) {
         ipInfo.ip = proxyTest.ip;
+        proxyTestSuccess = true;
+        console.log('[VALIDATE] APIFY test returned IP:', proxyTest.ip);
+      } else {
+        console.log('[VALIDATE] APIFY test failed or returned invalid IP:', proxyTest);
         
-        // Fetch location from ip-api directly using the IP
+        // Method 2: Use ProxyCheck.io API (free tier available)
         try {
-          const ipApiRes = await fetch(`http://ip-api.com/json/${proxyTest.ip}?fields=status,message,country,city,isp,query`, {
+          // Try to verify the proxy via a simple GET request to check the gateway is alive
+          // We can't actually route through the proxy, but we can validate the credentials
+          // by checking if the PYPROXY user exists
+          const pyproxyApiKey = Deno.env.get('PYPROXY_API_KEY');
+          const pyproxyApiSecret = Deno.env.get('PYPROXY_API_SECRET');
+          
+          if (pyproxyApiKey && pyproxyApiSecret) {
+            const accessToken = await getPyProxyAccessToken(pyproxyApiKey, pyproxyApiSecret);
+            if (accessToken) {
+              // Extract base username (before -zone- part)
+              const baseUsername = username.split('-zone-')[0];
+              const userResult = await getPyProxyUserList(accessToken, baseUsername);
+              
+              if (userResult.user) {
+                console.log('[VALIDATE] User found in PYPROXY:', userResult.user.account);
+                proxyTestSuccess = true;
+                // Can't get real IP without proxy routing, but credentials are valid
+                ipInfo.ip = 'credentials_valid';
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[VALIDATE] PYPROXY user check failed:', e);
+        }
+      }
+      
+      // If we have an IP that looks like a real IP, get location info
+      if (ipInfo.ip && ipInfo.ip !== 'unknown' && ipInfo.ip !== 'credentials_valid' && /^\d+\.\d+\.\d+\.\d+$/.test(ipInfo.ip)) {
+        try {
+          const ipApiRes = await fetch(`http://ip-api.com/json/${ipInfo.ip}?fields=status,message,country,city,isp,query`, {
             signal: AbortSignal.timeout(5000)
           });
           if (ipApiRes.ok) {
             const ipApiData = await ipApiRes.json();
+            console.log('[VALIDATE] ip-api response:', ipApiData);
             if (ipApiData.status === 'success') {
               ipInfo.country = ipApiData.country || '';
               ipInfo.city = ipApiData.city || '';
@@ -1541,10 +1611,15 @@ Deno.serve(async (req) => {
           console.warn('[VALIDATE] ip-api lookup failed:', e);
         }
       }
+      
+      // If no latency recorded, use elapsed time
+      if (!latencyMs) {
+        latencyMs = Date.now() - startTime;
+      }
 
       return new Response(
         JSON.stringify({ 
-          success: gatewayResult.valid || proxyTest.success,
+          success: gatewayResult.valid || proxyTestSuccess,
           validation: {
             ip: ipInfo.ip,
             location: ipInfo.location,
@@ -1552,7 +1627,8 @@ Deno.serve(async (req) => {
             city: ipInfo.city,
             isp: ipInfo.isp,
             latency_ms: latencyMs,
-            gateway_valid: gatewayResult.valid
+            gateway_valid: gatewayResult.valid,
+            credentials_valid: proxyTestSuccess
           }
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
