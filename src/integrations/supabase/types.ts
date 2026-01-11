@@ -2548,6 +2548,7 @@ export type Database = {
           created_at: string
           id: string
           is_full_member: boolean
+          notify_on_sale: boolean | null
           push_subscription_ids: string[] | null
           push_webhook_enabled: boolean | null
           push_webhook_url: string | null
@@ -2558,6 +2559,7 @@ export type Database = {
           created_at?: string
           id: string
           is_full_member?: boolean
+          notify_on_sale?: boolean | null
           push_subscription_ids?: string[] | null
           push_webhook_enabled?: boolean | null
           push_webhook_url?: string | null
@@ -2568,6 +2570,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_full_member?: boolean
+          notify_on_sale?: boolean | null
           push_subscription_ids?: string[] | null
           push_webhook_enabled?: boolean | null
           push_webhook_url?: string | null
