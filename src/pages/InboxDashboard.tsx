@@ -143,16 +143,25 @@ export default function InboxDashboard() {
         return;
       }
 
-      // UAZAPI doesn't expose external IPs directly
-      // We show the proxy status message
+      // Extract IP and location from response
+      const ip = data?.ip || null;
+      const location = data?.location || null;
       const proxyInfo = data?.proxy || {};
-      const message = data?.message || 'Proxy configurado';
       
+      if (!ip) {
+        setInstanceProxyResults((prev) => ({
+          ...prev,
+          [instance.id]: { error: 'Não foi possível obter o IP da instância' },
+        }));
+        return;
+      }
+
       setInstanceProxyResults((prev) => ({
         ...prev,
         [instance.id]: {
-          ip: data?.usingInternalProxy ? 'Proxy interno UAZAPI' : (data?.ip || 'Proxy customizado'),
-          location: data?.usingInternalProxy ? 'Brasil (São Paulo)' : (data?.location || message),
+          ip,
+          location,
+          latency_ms: data?.latency_ms,
           error: proxyInfo.validation_error ? proxyInfo.last_test_error : undefined,
         },
       }));
