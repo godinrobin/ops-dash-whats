@@ -229,6 +229,17 @@ export const FeedPost = ({ post, comments, userLiked, userReaction, onRefresh }:
         )}
       </div>
 
+      {/* Image Media - appears BEFORE text */}
+      {post.media_url && post.media_type === "image" && (
+        <div className="px-4 pb-3">
+          <img
+            src={post.media_url}
+            alt="Post"
+            className="w-full rounded-xl max-h-96 object-cover"
+          />
+        </div>
+      )}
+
       {/* Content - supports HTML from rich text editor */}
       {post.content && (
         <div className="px-4 pb-3">
@@ -239,18 +250,10 @@ export const FeedPost = ({ post, comments, userLiked, userReaction, onRefresh }:
         </div>
       )}
 
-      {/* Media */}
-      {post.media_url && (
+      {/* Video Media - appears AFTER text */}
+      {post.media_url && post.media_type === "video" && (
         <div className="px-4 pb-3">
-          {post.media_type === "image" ? (
-            <img
-              src={post.media_url}
-              alt="Post"
-              className="w-full rounded-xl max-h-96 object-cover"
-            />
-          ) : (
-            <VideoPlayer src={post.media_url} />
-          )}
+          <VideoPlayer src={post.media_url} />
         </div>
       )}
 
