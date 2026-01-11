@@ -107,27 +107,46 @@ export default function InboxDashboard() {
   const [instanceProxyResults, setInstanceProxyResults] = useState<Record<string, { ip?: string; location?: string; latency_ms?: number; error?: string }>>({});
   const [openWifiPopoverId, setOpenWifiPopoverId] = useState<string | null>(null);
 
-  // Handle card WiFi icon click to validate instance proxy
+  // Handle card WiFi icon click to fetch instance IP/location (with or without proxy)
   const handleValidateInstanceProxy = async (instance: Instance) => {
-    if (!instance.proxy_string) {
-      toast.info('Esta instância não tem proxy configurada');
-      return;
-    }
-    
     setValidatingInstanceProxy(instance.id);
+
     try {
-      const result = await validateProxy(instance.proxy_string);
-      if (result) {
-        setInstanceProxyResults(prev => ({
+      if (instance.proxy_string) {
+        const result = await validateProxy(instance.proxy_string);
+        setInstanceProxyResults((prev) => ({
           ...prev,
           [instance.id]: {
-            ip: result.ip,
-            location: result.location,
-            latency_ms: result.latency_ms,
-            error: result.error,
-          }
+            ip: result?.ip,
+            location: result?.location,
+            latency_ms: result?.latency_ms,
+            error: result?.valid ? undefined : result?.error,
+          },
         }));
+        return;
       }
+
+      const { data, error } = await supabase.functions.invoke('get-egress-ip', { body: {} });
+
+      const edgeError = error ? ((error as any)?.context?.body?.error || error.message) : null;
+      const message = edgeError || data?.error || 'Não foi possível obter IP e localização';
+
+      if (edgeError || !data?.success) {
+        setInstanceProxyResults((prev) => ({
+          ...prev,
+          [instance.id]: { error: message },
+        }));
+        return;
+      }
+
+      setInstanceProxyResults((prev) => ({
+        ...prev,
+        [instance.id]: {
+          ip: data?.ip,
+          location: data?.location,
+          latency_ms: data?.latency_ms,
+        },
+      }));
     } finally {
       setValidatingInstanceProxy(null);
     }
@@ -1124,7 +1143,7 @@ export default function InboxDashboard() {
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setOpenWifiPopoverId(instance.id);
-                                  if (instance.proxy_string) void handleValidateInstanceProxy(instance);
+                                  void handleValidateInstanceProxy(instance);
                                 }}
                                 disabled={validatingInstanceProxy === instance.id}
                                 className={`p-1 rounded hover:bg-muted transition-colors ${
@@ -1163,11 +1182,12 @@ export default function InboxDashboard() {
                                 <div className="h-px bg-border" />
 
                                 <div className="space-y-1">
-                                  <p className="font-medium">Proxy</p>
-                                  {!instance.proxy_string ? (
-                                    <p className="text-muted-foreground">Nenhuma proxy configurada nesta instância.</p>
-                                  ) : validatingInstanceProxy === instance.id ? (
-                                    <p className="text-muted-foreground">Validando IP e localização...</p>
+                                  <p className="font-medium">IP e localização</p>
+                                  <p className="text-muted-foreground">
+                                    {instance.proxy_string ? 'Via proxy' : 'Sem proxy (IP padrão)'}
+                                  </p>
+                                  {validatingInstanceProxy === instance.id ? (
+                                    <p className="text-muted-foreground">Consultando IP e localização...</p>
                                   ) : instanceProxyResults[instance.id]?.error ? (
                                     <p className="text-red-500">{instanceProxyResults[instance.id]?.error}</p>
                                   ) : instanceProxyResults[instance.id]?.ip ? (
@@ -1181,7 +1201,7 @@ export default function InboxDashboard() {
                                       )}
                                     </div>
                                   ) : (
-                                    <p className="text-muted-foreground">Toque no ícone para validar IP e localização.</p>
+                                    <p className="text-muted-foreground">Clique no ícone para consultar IP e localização.</p>
                                   )}
                                 </div>
                               </div>
