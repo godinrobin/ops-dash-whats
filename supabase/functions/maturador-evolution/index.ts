@@ -3266,8 +3266,12 @@ Regras IMPORTANTES:
         }
 
         // The UAZAPI /instance/proxy endpoint doesn't return IP info directly
-        // Check if user has a custom proxy configured
-        const hasCustomProxy = proxyData.enabled && proxyData.proxy_url;
+        // Check if user has a custom proxy configured (not managed_pool which is internal)
+        const proxyUrl = proxyData.proxy_url || '';
+        const isInternalProxy = !proxyData.enabled || 
+          !proxyUrl || 
+          proxyUrl.startsWith('managed_pool://') || 
+          proxyData.managed === true;
         
         let externalIp: string | null = null;
         let location: string | null = null;
@@ -3276,8 +3280,8 @@ Regras IMPORTANTES:
         let country: string | null = null;
         let latency_ms: number | undefined = undefined;
 
-        // If no custom proxy, fetch the UAZAPI server's external IP using ipwho.is
-        if (!hasCustomProxy) {
+        // For internal proxy or no custom proxy, fetch the UAZAPI server's external IP using ipwho.is
+        if (isInternalProxy) {
           try {
             const startTime = Date.now();
             const ipRes = await fetch('https://ipwho.is/');
@@ -3285,13 +3289,18 @@ Regras IMPORTANTES:
             
             if (ipRes.ok) {
               const ipData = await ipRes.json();
+              console.log('[GET-INSTANCE-PROXY] ipwho.is response:', JSON.stringify(ipData));
               if (ipData?.success) {
                 externalIp = ipData.ip || null;
                 city = ipData.city || null;
                 region = ipData.region || null;
                 country = ipData.country || null;
                 location = [city, region, country].filter(Boolean).join(', ') || null;
+              } else {
+                console.log('[GET-INSTANCE-PROXY] ipwho.is returned success=false:', ipData?.message);
               }
+            } else {
+              console.log('[GET-INSTANCE-PROXY] ipwho.is returned status:', ipRes.status);
             }
           } catch (e) {
             console.log('[GET-INSTANCE-PROXY] Error fetching IP from ipwho.is:', e);
@@ -3307,8 +3316,8 @@ Regras IMPORTANTES:
           region,
           country,
           latency_ms,
-          hasCustomProxy,
-          usingInternalProxy: !hasCustomProxy,
+          hasCustomProxy: !isInternalProxy,
+          usingInternalProxy: isInternalProxy,
           proxy: {
             enabled: proxyData.enabled ?? false,
             proxy_url: proxyData.proxy_url || null,
