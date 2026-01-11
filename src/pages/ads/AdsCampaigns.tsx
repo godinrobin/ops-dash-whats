@@ -1195,7 +1195,17 @@ export default function AdsCampaigns() {
                       className="border-orange-500 data-[state=checked]:bg-orange-500 data-[state=checked]:text-white"
                     />
                   </TableHead>
-                  <TableHead className="w-[60px] border-r border-border/30">On/Off</TableHead>
+                  <TableHead 
+                    className="w-[60px] border-r border-border/30 cursor-pointer hover:text-foreground transition-colors"
+                    onClick={() => handleSort('status')}
+                  >
+                    <div className="flex items-center gap-1">
+                      On/Off
+                      {sortField === 'status' && (
+                        sortOrder === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                      )}
+                    </div>
+                  </TableHead>
                   {visibleColumns.map((col) => {
                     const width = getColumnWidth(col);
                     return (
