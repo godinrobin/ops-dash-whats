@@ -1134,10 +1134,12 @@ Regras RIGOROSAS:
               const contentToSend = currentNode.type === 'document' ? fileName : caption;
               // For UazAPI, pass delay parameter; for Evolution, delay was already handled
               const uazapiMediaDelay = apiProvider === 'uazapi' ? mediaDelayMs : 0;
-              console.log(`[${runId}] Calling sendMessage with apiProvider=${apiProvider}, uazapiMediaDelay=${uazapiMediaDelay}ms`);
+              // Check if audio should be sent as forwarded (appears as "Encaminhado" in WhatsApp)
+              const sendAsForwarded = currentNode.type === 'audio' && (currentNode.data.sendAsForwarded as boolean);
+              console.log(`[${runId}] Calling sendMessage with apiProvider=${apiProvider}, uazapiMediaDelay=${uazapiMediaDelay}ms, sendAsForwarded=${sendAsForwarded}`);
               const currentMediaReplyId = shouldSendAsReply();
               const currentMediaReplyDbId = getReplyToMessageDbId();
-              const mediaSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, contentToSend, currentNode.type, mediaUrl, fileName, apiProvider, instanceUazapiToken, uazapiMediaDelay, currentMediaReplyId);
+              const mediaSendResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, contentToSend, currentNode.type, mediaUrl, fileName, apiProvider, instanceUazapiToken, uazapiMediaDelay, currentMediaReplyId, sendAsForwarded);
               incrementMessageCounter();
               
               // Save message with correct status based on send result
@@ -2969,7 +2971,8 @@ async function sendMessage(
   apiProvider: string = 'evolution',
   instanceToken?: string,
   delayMs: number = 0,
-  replyId?: string
+  replyId?: string,
+  forwarded: boolean = false
 ): Promise<SendMessageResult> {
   const formattedPhone = phone.replace(/\D/g, '');
   
@@ -3002,8 +3005,9 @@ async function sendMessage(
         break;
       case 'audio':
         // UazAPI uses 'ptt' (push-to-talk) for voice messages - shows "recording audio..."
+        // forwarded: true makes the audio appear as "Encaminhado" (forwarded) in WhatsApp
         endpoint = `/send/media`;
-        body = { number: formattedPhone, type: 'ptt', file: mediaUrl, ...delayParam, ...replyParam };
+        body = { number: formattedPhone, type: 'ptt', file: mediaUrl, ...delayParam, ...replyParam, ...(forwarded ? { forward: true } : {}) };
         break;
       case 'video':
         endpoint = `/send/media`;
