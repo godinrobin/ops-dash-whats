@@ -1,4 +1,4 @@
-import { Header } from "@/components/Header";
+import { SystemLayout } from "@/components/layout/SystemLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Monitor, Cloud, Download, Zap, Power, Shield } from "lucide-react";
@@ -10,9 +10,7 @@ const TagWhatsSelect = () => {
   const navigate = useNavigate();
 
   return (
-    <>
-      <Header />
-      <div className="h-14 md:h-16" />
+    <SystemLayout>
       <div className="min-h-screen bg-background p-6 md:p-10">
         <div className="container mx-auto max-w-5xl">
           <Button
@@ -114,7 +112,7 @@ const TagWhatsSelect = () => {
           </footer>
         </div>
       </div>
-    </>
+    </SystemLayout>
   );
 };
 
