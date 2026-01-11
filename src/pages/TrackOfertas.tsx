@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Header } from "@/components/Header";
+import { SystemLayout } from "@/components/layout/SystemLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -342,8 +342,8 @@ const TrackOfertas = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background relative">
-      <Header />
+    <SystemLayout>
+      <div className="min-h-screen bg-background relative">
       
       <Dialog open={isInitialLoading}>
         <DialogContent className="sm:max-w-[400px] bg-card border-border text-center">
@@ -881,7 +881,8 @@ const TrackOfertas = () => {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </SystemLayout>
   );
 };
 

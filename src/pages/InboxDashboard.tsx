@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Header } from "@/components/Header";
+import { SystemLayout } from "@/components/layout/SystemLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -712,32 +712,32 @@ export default function InboxDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <div className="h-14 md:h-16" />
-        <div className="container mx-auto px-4 py-8">
-          {/* Skeleton para header */}
-          <div className="flex items-center gap-4 mb-8">
-            <div className="w-10 h-10 bg-muted rounded-full animate-pulse" />
-            <div className="space-y-2">
-              <div className="h-6 w-40 bg-muted rounded animate-pulse" />
-              <div className="h-4 w-60 bg-muted rounded animate-pulse" />
+      <SystemLayout>
+        <div className="min-h-screen bg-background">
+          <div className="container mx-auto px-4 py-8">
+            {/* Skeleton para header */}
+            <div className="flex items-center gap-4 mb-8">
+              <div className="w-10 h-10 bg-muted rounded-full animate-pulse" />
+              <div className="space-y-2">
+                <div className="h-6 w-40 bg-muted rounded animate-pulse" />
+                <div className="h-4 w-60 bg-muted rounded animate-pulse" />
+              </div>
+            </div>
+            {/* Skeleton para cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-32 bg-muted rounded-lg animate-pulse" />
+              ))}
+            </div>
+            {/* Skeleton para stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-24 bg-muted rounded-lg animate-pulse" />
+              ))}
             </div>
           </div>
-          {/* Skeleton para cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-32 bg-muted rounded-lg animate-pulse" />
-            ))}
-          </div>
-          {/* Skeleton para stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-24 bg-muted rounded-lg animate-pulse" />
-            ))}
-          </div>
         </div>
-      </div>
+      </SystemLayout>
     );
   }
 
@@ -772,11 +772,9 @@ export default function InboxDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      <div className="h-14 md:h-16" />
-      
-      <div className="container mx-auto px-4 py-8">
+    <SystemLayout>
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
@@ -1247,6 +1245,7 @@ export default function InboxDashboard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+      </div>
+    </SystemLayout>
   );
 }

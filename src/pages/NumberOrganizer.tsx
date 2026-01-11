@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Header } from "@/components/Header";
+import { SystemLayout } from "@/components/layout/SystemLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -421,9 +421,7 @@ const NumberOrganizer = () => {
   };
 
   return (
-    <>
-      <Header />
-      <div className="h-14 md:h-16" />
+    <SystemLayout>
       <div className="min-h-screen bg-background p-6 md:p-10">
         <div className="container mx-auto max-w-6xl">
           <header className="text-center mb-12">
@@ -743,7 +741,7 @@ const NumberOrganizer = () => {
           </footer>
         </div>
       </div>
-    </>
+    </SystemLayout>
   );
 };
 
