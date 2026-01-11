@@ -306,7 +306,23 @@ const Auth = () => {
         body: { email: forgotPasswordEmail },
       });
 
-      if (error) throw error;
+      // Handle edge function errors (including 404 for user not found)
+      if (error) {
+        // Try to parse the error body for custom error messages
+        let errorMessage = "Não foi possível enviar o email. Tente novamente.";
+        try {
+          if (error?.context?.body) {
+            const body = typeof error.context.body === 'string' 
+              ? JSON.parse(error.context.body) 
+              : error.context.body;
+            if (body?.error) {
+              errorMessage = body.error;
+            }
+          }
+        } catch {}
+        splashedToast.error("Erro", errorMessage);
+        return;
+      }
 
       // Check if the response indicates user not found
       if (data && data.success === false && data.error) {
@@ -321,19 +337,9 @@ const Auth = () => {
       setShowForgotPassword(false);
       setForgotPasswordEmail("");
     } catch (err: any) {
-      // Try to parse the error body for custom error messages
-      let errorMessage = "Não foi possível enviar o email. Tente novamente.";
-      try {
-        if (err?.context?.body) {
-          const body = JSON.parse(err.context.body);
-          if (body?.error) {
-            errorMessage = body.error;
-          }
-        }
-      } catch {}
       splashedToast.error(
         "Erro",
-        errorMessage
+        "Não foi possível enviar o email. Tente novamente."
       );
     } finally {
       setSendingPasswordReset(false);
