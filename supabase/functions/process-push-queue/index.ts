@@ -26,17 +26,50 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get unprocessed notifications from queue
-    const { data: pendingNotifications, error: fetchError } = await supabase
-      .from("push_notification_queue")
-      .select("*")
-      .eq("processed", false)
-      .order("created_at", { ascending: true })
-      .limit(50);
+    // Use UPDATE ... RETURNING to atomically claim notifications (prevents race conditions)
+    // This marks them as processed BEFORE we process them, so parallel calls won't pick the same ones
+    const { data: claimedNotifications, error: claimError } = await supabase
+      .rpc('claim_push_notifications', { batch_size: 50 });
 
-    if (fetchError) {
-      console.error("Error fetching queue:", fetchError);
-      throw fetchError;
+    // If RPC doesn't exist, fallback to regular query but with immediate update
+    let pendingNotifications = claimedNotifications;
+    
+    if (claimError) {
+      console.log("RPC not available, using fallback with immediate claim");
+      
+      // Get unprocessed notifications
+      const { data: fetchedNotifications, error: fetchError } = await supabase
+        .from("push_notification_queue")
+        .select("*")
+        .eq("processed", false)
+        .order("created_at", { ascending: true })
+        .limit(50);
+
+      if (fetchError) {
+        console.error("Error fetching queue:", fetchError);
+        throw fetchError;
+      }
+
+      if (!fetchedNotifications || fetchedNotifications.length === 0) {
+        return new Response(
+          JSON.stringify({ message: "No pending notifications", processed: 0 }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Immediately mark all fetched notifications as processed to prevent duplicates
+      const ids = fetchedNotifications.map(n => n.id);
+      const { error: markError } = await supabase
+        .from("push_notification_queue")
+        .update({ processed: true })
+        .in("id", ids);
+
+      if (markError) {
+        console.error("Error marking as processed:", markError);
+        // Continue anyway, might cause duplicates but better than failing
+      }
+
+      pendingNotifications = fetchedNotifications;
     }
 
     if (!pendingNotifications || pendingNotifications.length === 0) {
@@ -56,11 +89,7 @@ Deno.serve(async (req) => {
         const subscriptionIds = notification.subscription_ids;
         
         if (!subscriptionIds || subscriptionIds.length === 0) {
-          console.log(`Notification ${notification.id} has no subscription IDs, marking as processed`);
-          await supabase
-            .from("push_notification_queue")
-            .update({ processed: true })
-            .eq("id", notification.id);
+          console.log(`Notification ${notification.id} has no subscription IDs, skipping`);
           continue;
         }
 
@@ -95,21 +124,9 @@ Deno.serve(async (req) => {
           successCount++;
         }
 
-        // Mark as processed regardless of success/failure to avoid retry loops
-        await supabase
-          .from("push_notification_queue")
-          .update({ processed: true })
-          .eq("id", notification.id);
-
       } catch (notifError) {
         console.error(`Error processing notification ${notification.id}:`, notifError);
         failCount++;
-        
-        // Mark as processed to avoid infinite retry
-        await supabase
-          .from("push_notification_queue")
-          .update({ processed: true })
-          .eq("id", notification.id);
       }
     }
 
