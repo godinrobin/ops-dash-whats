@@ -49,6 +49,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
   const [savingPushSettings, setSavingPushSettings] = useState(false);
   const [testingPush, setTestingPush] = useState(false);
   const [notifyOnSale, setNotifyOnSale] = useState(false);
+  const [notifyOnDisconnect, setNotifyOnDisconnect] = useState(false);
 
   // Fetch current profile on mount
   useEffect(() => {
@@ -57,7 +58,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
       
       const { data } = await supabase
         .from("profiles")
-        .select("avatar_url, username, push_webhook_enabled, push_subscription_ids, notify_on_sale")
+        .select("avatar_url, username, push_webhook_enabled, push_subscription_ids, notify_on_sale, notify_on_disconnect")
         .eq("id", user.id)
         .single();
       
@@ -72,6 +73,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
       setPushWebhookEnabled(data?.push_webhook_enabled || false);
       setPushSubscriptionIds(data?.push_subscription_ids || []);
       setNotifyOnSale(data?.notify_on_sale || false);
+      setNotifyOnDisconnect(data?.notify_on_disconnect || false);
     };
 
     if (open && user) {
@@ -266,6 +268,37 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
       });
     } catch (error: any) {
       console.error("Error toggling notify on sale:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: error.message || "Não foi possível alterar as configurações",
+      });
+    } finally {
+      setSavingPushSettings(false);
+    }
+  };
+
+  const handleToggleNotifyOnDisconnect = async (checked: boolean) => {
+    if (!user) return;
+    setSavingPushSettings(true);
+    
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ notify_on_disconnect: checked })
+        .eq("id", user.id);
+      
+      if (error) throw error;
+      
+      setNotifyOnDisconnect(checked);
+      toast({
+        title: checked ? "🚨 Alertas de instâncias ativados!" : "Alertas de instâncias desativados",
+        description: checked 
+          ? "Você receberá uma notificação quando uma instância desconectar" 
+          : "Você não receberá mais alertas de instâncias",
+      });
+    } catch (error: any) {
+      console.error("Error toggling notify on disconnect:", error);
       toast({
         variant: "destructive",
         title: "Erro",
@@ -648,6 +681,28 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
                       </Label>
                       <p className="text-xs text-muted-foreground leading-relaxed">
                         Receba uma notificação "Pix Pago no x1! 🔥" quando o Tag Whats Cloud detectar uma venda
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Notify on Disconnect Checkbox */}
+                  <div className="flex items-start space-x-3 pt-2">
+                    <Checkbox
+                      id="notify-on-disconnect"
+                      checked={notifyOnDisconnect}
+                      onCheckedChange={(checked) => handleToggleNotifyOnDisconnect(checked as boolean)}
+                      disabled={savingPushSettings}
+                      className="mt-0.5"
+                    />
+                    <div className="space-y-1 flex-1">
+                      <Label 
+                        htmlFor="notify-on-disconnect" 
+                        className="text-sm font-medium cursor-pointer leading-none"
+                      >
+                        🚨 Alertar instância desconectada
+                      </Label>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Receba um alerta quando uma instância do WhatsApp desconectar
                       </p>
                     </div>
                   </div>

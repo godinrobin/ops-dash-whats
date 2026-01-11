@@ -2548,6 +2548,7 @@ export type Database = {
           created_at: string
           id: string
           is_full_member: boolean
+          notify_on_disconnect: boolean | null
           notify_on_sale: boolean | null
           push_subscription_ids: string[] | null
           push_webhook_enabled: boolean | null
@@ -2559,6 +2560,7 @@ export type Database = {
           created_at?: string
           id: string
           is_full_member?: boolean
+          notify_on_disconnect?: boolean | null
           notify_on_sale?: boolean | null
           push_subscription_ids?: string[] | null
           push_webhook_enabled?: boolean | null
@@ -2570,6 +2572,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_full_member?: boolean
+          notify_on_disconnect?: boolean | null
           notify_on_sale?: boolean | null
           push_subscription_ids?: string[] | null
           push_webhook_enabled?: boolean | null
@@ -2709,6 +2712,39 @@ export type Database = {
           updated_at?: string
           user_id?: string
           username?: string | null
+        }
+        Relationships: []
+      }
+      push_notification_queue: {
+        Row: {
+          created_at: string
+          icon_url: string | null
+          id: string
+          message: string
+          processed: boolean | null
+          subscription_ids: string[]
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          icon_url?: string | null
+          id?: string
+          message: string
+          processed?: boolean | null
+          subscription_ids: string[]
+          title: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          icon_url?: string | null
+          id?: string
+          message?: string
+          processed?: boolean | null
+          subscription_ids?: string[]
+          title?: string
+          user_id?: string
         }
         Relationships: []
       }
