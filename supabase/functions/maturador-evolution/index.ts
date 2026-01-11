@@ -3266,26 +3266,49 @@ Regras IMPORTANTES:
         }
 
         // The UAZAPI /instance/proxy endpoint doesn't return IP info directly
-        // UAZAPI uses internal proxies but doesn't expose their IPs
-        // We return the proxy config status and indicate if custom proxy is set
+        // Check if user has a custom proxy configured
         const hasCustomProxy = proxyData.enabled && proxyData.proxy_url;
         
-        // If user has a custom proxy configured in UAZAPI, we can't validate it from here
-        // (we would need to route through the instance which isn't possible)
-        // For instances without proxy_string in our DB but with UAZAPI internal proxy,
-        // we indicate this clearly
+        let externalIp: string | null = null;
+        let location: string | null = null;
+        let city: string | null = null;
+        let region: string | null = null;
+        let country: string | null = null;
+        let latency_ms: number | undefined = undefined;
+
+        // If no custom proxy, fetch the UAZAPI server's external IP using ipwho.is
+        if (!hasCustomProxy) {
+          try {
+            const startTime = Date.now();
+            const ipRes = await fetch('https://ipwho.is/');
+            latency_ms = Date.now() - startTime;
+            
+            if (ipRes.ok) {
+              const ipData = await ipRes.json();
+              if (ipData?.success) {
+                externalIp = ipData.ip || null;
+                city = ipData.city || null;
+                region = ipData.region || null;
+                country = ipData.country || null;
+                location = [city, region, country].filter(Boolean).join(', ') || null;
+              }
+            }
+          } catch (e) {
+            console.log('[GET-INSTANCE-PROXY] Error fetching IP from ipwho.is:', e);
+          }
+        }
         
         result = {
           success: true,
           provider: 'uazapi',
-          // No direct IP available from UAZAPI API
-          ip: null,
-          location: null,
+          ip: externalIp,
+          location: location,
+          city,
+          region,
+          country,
+          latency_ms,
           hasCustomProxy,
           usingInternalProxy: !hasCustomProxy,
-          message: hasCustomProxy 
-            ? 'Proxy customizado configurado na UAZAPI' 
-            : 'Usando proxy interno UAZAPI (Brasil)',
           proxy: {
             enabled: proxyData.enabled ?? false,
             proxy_url: proxyData.proxy_url || null,
