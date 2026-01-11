@@ -205,21 +205,21 @@ export const AppSidebar = ({ isOpen, onClose, onOpenRestrictedModal }: AppSideba
                     onClick={() => handleItemClick(item)}
                     disabled={showComingSoon}
                     className={cn(
-                      "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-all",
+                      "flex items-start gap-2 w-full px-3 py-2 rounded-lg text-sm transition-all",
                       isActive
                         ? "bg-accent/20 text-accent font-medium"
                         : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
                       showComingSoon && "opacity-50 cursor-not-allowed"
                     )}
                   >
-                    <span className="flex-shrink-0">{item.icon}</span>
-                    <span className="truncate">{item.shortLabel || item.label}</span>
+                    <span className="flex-shrink-0 mt-0.5">{item.icon}</span>
+                    <span className="flex-1 min-w-0 whitespace-normal break-words leading-snug">{item.shortLabel || item.label}</span>
                     
                     {showComingSoon && (
-                      <Clock className="w-3 h-3 ml-auto text-yellow-500 flex-shrink-0" />
+                      <Clock className="w-3 h-3 ml-auto text-yellow-500 flex-shrink-0 mt-1" />
                     )}
                     {isLocked && !showComingSoon && (
-                      <Lock className="w-3 h-3 ml-auto text-accent flex-shrink-0" />
+                      <Lock className="w-3 h-3 ml-auto text-accent flex-shrink-0 mt-1" />
                     )}
                   </button>
                 );

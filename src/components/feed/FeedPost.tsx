@@ -133,13 +133,11 @@ export const FeedPost = ({ post, comments, userLiked, onRefresh }: FeedPostProps
     }
   };
 
-  // Get display name: username or email before @
-  const rawUsername = post.profiles?.username || "";
-  const displayName = rawUsername.includes("@") 
-    ? rawUsername.split("@")[0] 
-    : rawUsername || "Usuário";
+  // Get display name and avatar from profiles
+  const profileUsername = post.profiles?.username || "";
+  const displayName = profileUsername || "Usuário";
   const initials = displayName.slice(0, 2).toUpperCase();
-  const avatarUrl = post.profiles?.avatar_url;
+  const avatarUrl = post.profiles?.avatar_url || null;
   return (
     <div className={cn(
       "bg-card border rounded-xl overflow-hidden",
@@ -261,12 +259,10 @@ export const FeedPost = ({ post, comments, userLiked, onRefresh }: FeedPostProps
           {/* Comments List */}
           <div className="max-h-64 overflow-y-auto">
             {comments.map((comment) => {
-              const rawCommentUsername = comment.profiles?.username || "";
-              const commentDisplayName = rawCommentUsername.includes("@")
-                ? rawCommentUsername.split("@")[0]
-                : rawCommentUsername || "Usuário";
+              const profileCommentUsername = comment.profiles?.username || "";
+              const commentDisplayName = profileCommentUsername || "Usuário";
               const commentInitials = commentDisplayName.slice(0, 2).toUpperCase();
-              const commentAvatarUrl = comment.profiles?.avatar_url;
+              const commentAvatarUrl = comment.profiles?.avatar_url || null;
               const canDelete = user?.id === comment.user_id || isAdmin;
 
               return (

@@ -56,7 +56,7 @@ export const Feed = () => {
     if (!user) return;
 
     try {
-      const { data: postsData, error: postsError } = await (supabase as any)
+      const { data: postsData, error: postsError } = await supabase
         .from("feed_posts")
         .select("*")
         .eq("status", "approved")
@@ -76,8 +76,8 @@ export const Feed = () => {
 
       const postIds = postsData.map((p: any) => p.id);
 
-      // Comments
-      const { data: commentsData, error: commentsError } = await (supabase as any)
+      // Fetch comments
+      const { data: commentsData, error: commentsError } = await supabase
         .from("feed_comments")
         .select("*")
         .in("post_id", postIds)
@@ -87,12 +87,13 @@ export const Feed = () => {
         console.error("Error fetching comments:", commentsError);
       }
 
+      // Collect all unique user IDs
       const postsUserIds = [...new Set(postsData.map((p: any) => p.user_id))];
       const commentUserIds = [...new Set((commentsData || []).map((c: any) => c.user_id))];
       const allUserIds = [...new Set([...postsUserIds, ...commentUserIds])];
 
-      // Profiles (no FK relationship exists, so we attach manually)
-      const { data: profilesData, error: profilesError } = await (supabase as any)
+      // Fetch profiles for all users
+      const { data: profilesData, error: profilesError } = await supabase
         .from("profiles")
         .select("id, username, avatar_url")
         .in("id", allUserIds);
@@ -101,6 +102,7 @@ export const Feed = () => {
         console.error("Error fetching profiles:", profilesError);
       }
 
+      // Create a map of profiles by user ID
       const profileById = new Map<string, { username: string | null; avatar_url?: string | null }>();
       (profilesData || []).forEach((p: any) => {
         profileById.set(p.id, { username: p.username, avatar_url: p.avatar_url });
@@ -110,7 +112,7 @@ export const Feed = () => {
       const adminUserIds = new Set<string>();
       if (isAdmin) adminUserIds.add(user.id);
 
-      const { data: adminRoles, error: adminRolesError } = await (supabase as any)
+      const { data: adminRoles, error: adminRolesError } = await supabase
         .from("user_roles")
         .select("user_id")
         .in("user_id", postsUserIds)
@@ -120,15 +122,17 @@ export const Feed = () => {
         (adminRoles || []).forEach((r: any) => adminUserIds.add(r.user_id));
       }
 
+      // Attach profiles and admin status to posts
       const postsFinal = postsData.map((p: any) => ({
         ...p,
-        profiles: profileById.get(p.user_id),
+        profiles: profileById.get(p.user_id) || { username: null, avatar_url: null },
         is_admin_post: adminUserIds.has(p.user_id),
       }));
 
+      // Attach profiles to comments
       const commentsFinal = (commentsData || []).map((c: any) => ({
         ...c,
-        profiles: profileById.get(c.user_id),
+        profiles: profileById.get(c.user_id) || { username: null, avatar_url: null },
       }));
 
       setPosts(postsFinal);
@@ -180,25 +184,28 @@ export const Feed = () => {
       setMyPendingPosts(myPending || []);
       allPending = allPending.concat(myPending || []);
 
-      // Attach profiles (manual)
+      // Attach profiles manually
       const pendingUserIds = [...new Set(allPending.map((p: any) => p.user_id))];
       if (pendingUserIds.length > 0) {
-        const { data: profilesData } = await (supabase as any)
+        const { data: profilesData } = await supabase
           .from("profiles")
           .select("id, username, avatar_url")
           .in("id", pendingUserIds);
 
         const profileById = new Map<string, any>();
-        (profilesData || []).forEach((p: any) => profileById.set(p.id, p));
+        (profilesData || []).forEach((p: any) => profileById.set(p.id, {
+          username: p.username,
+          avatar_url: p.avatar_url
+        }));
 
         if (isAdmin) {
           setPendingPosts((prev) =>
-            prev.map((p: any) => ({ ...p, profiles: profileById.get(p.user_id) }))
+            prev.map((p: any) => ({ ...p, profiles: profileById.get(p.user_id) || { username: null, avatar_url: null } }))
           );
         }
 
         setMyPendingPosts((prev) =>
-          prev.map((p: any) => ({ ...p, profiles: profileById.get(p.user_id) }))
+          prev.map((p: any) => ({ ...p, profiles: profileById.get(p.user_id) || { username: null, avatar_url: null } }))
         );
       }
     } catch (error) {

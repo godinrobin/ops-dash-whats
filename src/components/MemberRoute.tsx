@@ -78,20 +78,25 @@ export const MemberRoute = ({ children, featureName }: MemberRouteProps) => {
     return null;
   }
 
-  // If not a full member, show the Home page with blurred content area and modal
+  // If not a full member, show modal and prevent content access
   if (isFullMember === false) {
     return (
-      <div className="relative min-h-screen">
-        {/* Show home page with functional header */}
-        <Home restrictedMode restrictedFeatureName={featureName} />
-        
-        {/* Restricted modal - uses custom overlay that doesn't cover header */}
+      <>
+        {/* Show restricted modal immediately */}
         <RestrictedFeatureModal
-          open={showModal}
+          open={true}
           onOpenChange={handleModalClose}
           featureName={featureName}
         />
-      </div>
+        
+        {/* Blurred placeholder content */}
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <div className="text-center space-y-4 opacity-20 blur-sm select-none pointer-events-none">
+            <h1 className="text-4xl font-bold">Sistema Restrito</h1>
+            <p className="text-muted-foreground">Conteúdo disponível apenas para membros</p>
+          </div>
+        </div>
+      </>
     );
   }
 
