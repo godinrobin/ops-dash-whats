@@ -168,7 +168,7 @@ export const FeedPost = ({ post, comments, userLiked, userReaction, onRefresh }:
   const avatarUrl = post.profiles?.avatar_url || null;
   return (
     <div className={cn(
-      "bg-card border rounded-xl overflow-hidden",
+      "bg-card border rounded-xl",
       post.is_admin_post 
         ? "border-2 border-accent ring-1 ring-accent/30" 
         : "border-border"
