@@ -604,12 +604,12 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                     {selectedState !== 'random' && (
                       <div className="space-y-2">
                         <label className="text-sm font-medium text-foreground">Cidade (opcional)</label>
-                        <Select value={selectedCity} onValueChange={setSelectedCity}>
+                        <Select value={selectedCity || 'any'} onValueChange={(v) => setSelectedCity(v === 'any' ? '' : v)}>
                           <SelectTrigger className="w-full">
                             <SelectValue placeholder="Qualquer cidade" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">Qualquer cidade</SelectItem>
+                            <SelectItem value="any">Qualquer cidade</SelectItem>
                             {BRAZIL_STATES.find(s => s.code === selectedState)?.cities.map((city) => (
                               <SelectItem key={city} value={city}>
                                 {city.charAt(0).toUpperCase() + city.slice(1)}
