@@ -2541,18 +2541,21 @@ export type Database = {
       }
       profiles: {
         Row: {
+          avatar_url: string | null
           created_at: string
           id: string
           is_full_member: boolean
           username: string
         }
         Insert: {
+          avatar_url?: string | null
           created_at?: string
           id: string
           is_full_member?: boolean
           username: string
         }
         Update: {
+          avatar_url?: string | null
           created_at?: string
           id?: string
           is_full_member?: boolean

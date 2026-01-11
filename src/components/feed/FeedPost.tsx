@@ -1,8 +1,8 @@
 import React, { useState } from "react";
-import { Heart, MessageCircle, Trash2, MoreHorizontal, Send, Loader2 } from "lucide-react";
+import { Heart, MessageCircle, Trash2, MoreHorizontal, Send, Loader2, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -11,6 +11,7 @@ import { useAdminStatus } from "@/hooks/useAdminStatus";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 interface FeedPostProps {
   post: {
@@ -24,7 +25,9 @@ interface FeedPostProps {
     created_at: string;
     profiles?: {
       username: string | null;
+      avatar_url?: string | null;
     };
+    is_admin_post?: boolean;
   };
   comments: Array<{
     id: string;
@@ -33,6 +36,7 @@ interface FeedPostProps {
     created_at: string;
     profiles?: {
       username: string | null;
+      avatar_url?: string | null;
     };
   }>;
   userLiked: boolean;
@@ -129,21 +133,41 @@ export const FeedPost = ({ post, comments, userLiked, onRefresh }: FeedPostProps
     }
   };
 
-  const username = post.profiles?.username || "Usuário";
-  const initials = username.slice(0, 2).toUpperCase();
-
+  // Get display name: username or email before @
+  const rawUsername = post.profiles?.username || "";
+  const displayName = rawUsername.includes("@") 
+    ? rawUsername.split("@")[0] 
+    : rawUsername || "Usuário";
+  const initials = displayName.slice(0, 2).toUpperCase();
+  const avatarUrl = post.profiles?.avatar_url;
   return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden">
+    <div className={cn(
+      "bg-card border rounded-xl overflow-hidden",
+      post.is_admin_post 
+        ? "border-2 border-accent ring-1 ring-accent/30" 
+        : "border-border"
+    )}>
       {/* Header */}
       <div className="flex items-center justify-between p-4">
         <div className="flex items-center gap-3">
           <Avatar className="w-10 h-10">
+            {avatarUrl ? (
+              <AvatarImage src={avatarUrl} alt={displayName} />
+            ) : null}
             <AvatarFallback className="bg-accent/20 text-accent">
               {initials}
             </AvatarFallback>
           </Avatar>
           <div>
-            <p className="font-medium text-foreground">{username}</p>
+            <div className="flex items-center gap-2">
+              <p className="font-medium text-foreground">{displayName}</p>
+              {post.is_admin_post && (
+                <Badge variant="outline" className="text-xs bg-accent/10 text-accent border-accent/30 gap-1">
+                  <Shield className="w-3 h-3" />
+                  Admin
+                </Badge>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">
               {formatDistanceToNow(new Date(post.created_at), {
                 addSuffix: true,
@@ -237,7 +261,12 @@ export const FeedPost = ({ post, comments, userLiked, onRefresh }: FeedPostProps
           {/* Comments List */}
           <div className="max-h-64 overflow-y-auto">
             {comments.map((comment) => {
-              const commentUsername = comment.profiles?.username || "Usuário";
+              const rawCommentUsername = comment.profiles?.username || "";
+              const commentDisplayName = rawCommentUsername.includes("@")
+                ? rawCommentUsername.split("@")[0]
+                : rawCommentUsername || "Usuário";
+              const commentInitials = commentDisplayName.slice(0, 2).toUpperCase();
+              const commentAvatarUrl = comment.profiles?.avatar_url;
               const canDelete = user?.id === comment.user_id || isAdmin;
 
               return (
@@ -246,13 +275,16 @@ export const FeedPost = ({ post, comments, userLiked, onRefresh }: FeedPostProps
                   className="flex items-start gap-3 p-3 hover:bg-secondary/30 transition-colors"
                 >
                   <Avatar className="w-8 h-8">
+                    {commentAvatarUrl ? (
+                      <AvatarImage src={commentAvatarUrl} alt={commentDisplayName} />
+                    ) : null}
                     <AvatarFallback className="text-xs bg-accent/20 text-accent">
-                      {commentUsername.slice(0, 2).toUpperCase()}
+                      {commentInitials}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium">{commentUsername}</p>
+                      <p className="text-sm font-medium">{commentDisplayName}</p>
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground">
                           {formatDistanceToNow(new Date(comment.created_at), {
