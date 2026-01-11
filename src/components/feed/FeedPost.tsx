@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
+import VideoPlayer from "@/components/ui/video-player";
 
 const REACTION_EMOJIS = ["🔥", "🚀", "👑", "👍🏻", "🚨"] as const;
 
@@ -245,14 +246,10 @@ export const FeedPost = ({ post, comments, userLiked, userReaction, onRefresh }:
             <img
               src={post.media_url}
               alt="Post"
-              className="w-full rounded-lg max-h-96 object-cover"
+              className="w-full rounded-xl max-h-96 object-cover"
             />
           ) : (
-            <video
-              src={post.media_url}
-              controls
-              className="w-full rounded-lg max-h-96"
-            />
+            <VideoPlayer src={post.media_url} />
           )}
         </div>
       )}
