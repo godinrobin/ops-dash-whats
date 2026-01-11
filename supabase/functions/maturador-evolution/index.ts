@@ -259,18 +259,9 @@ serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get('Authorization') ?? req.headers.get('authorization') ?? '';
-    const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
-
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: jwt ? { Authorization: `Bearer ${jwt}` } : {},
-        },
-      }
-    );
+    const authHeaderRaw = req.headers.get('Authorization') ?? req.headers.get('authorization') ?? '';
+    const hasBearer = /^bearer\s+/i.test(authHeaderRaw);
+    const jwt = hasBearer ? authHeaderRaw.replace(/^bearer\s+/i, '') : authHeaderRaw;
 
     // Verify user is authenticated
     if (!jwt) {
@@ -281,7 +272,19 @@ serve(async (req) => {
       });
     }
 
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(jwt);
+    const authHeader = hasBearer ? authHeaderRaw : `Bearer ${jwt}`;
+
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      {
+        global: {
+          headers: { Authorization: authHeader },
+        },
+      }
+    );
+
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
     if (authError || !user) {
       console.error('Auth error:', authError);
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
