@@ -10,6 +10,10 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 
+interface ReactionCounts {
+  [emoji: string]: number;
+}
+
 interface Post {
   id: string;
   user_id: string;
@@ -25,6 +29,7 @@ interface Post {
     username: string | null;
     avatar_url?: string | null;
   };
+  reactionCounts?: ReactionCounts;
 }
 
 interface Comment {
@@ -138,15 +143,40 @@ export const Feed = () => {
       setPosts(postsFinal);
       setComments(commentsFinal);
 
-      // Likes with reactions
-      const { data: likesData } = await (supabase as any)
+      // Fetch all reactions for posts to get counts per emoji
+      const { data: allReactionsData } = await (supabase as any)
+        .from("feed_likes")
+        .select("post_id, reaction")
+        .in("post_id", postIds);
+
+      // Group reactions by post_id and emoji
+      const reactionCountsByPost = new Map<string, ReactionCounts>();
+      (allReactionsData || []).forEach((r: any) => {
+        const emoji = r.reaction || "🔥";
+        if (!reactionCountsByPost.has(r.post_id)) {
+          reactionCountsByPost.set(r.post_id, {});
+        }
+        const counts = reactionCountsByPost.get(r.post_id)!;
+        counts[emoji] = (counts[emoji] || 0) + 1;
+      });
+
+      // Attach reaction counts to posts
+      const postsWithReactions = postsFinal.map((p: any) => ({
+        ...p,
+        reactionCounts: reactionCountsByPost.get(p.id) || {},
+      }));
+
+      setPosts(postsWithReactions);
+
+      // User's own likes
+      const { data: userLikesData } = await (supabase as any)
         .from("feed_likes")
         .select("post_id, reaction")
         .eq("user_id", user.id)
         .in("post_id", postIds);
 
       const likesMap = new Map<string, string>();
-      (likesData || []).forEach((l: any) => likesMap.set(l.post_id, l.reaction || "🔥"));
+      (userLikesData || []).forEach((l: any) => likesMap.set(l.post_id, l.reaction || "🔥"));
       setUserLikes(likesMap);
     } catch (error) {
       console.error("Error fetching feed:", error);
