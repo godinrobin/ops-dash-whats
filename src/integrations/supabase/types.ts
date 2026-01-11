@@ -2721,6 +2721,7 @@ export type Database = {
           icon_url: string | null
           id: string
           message: string
+          priority: number | null
           processed: boolean | null
           subscription_ids: string[]
           title: string
@@ -2731,6 +2732,7 @@ export type Database = {
           icon_url?: string | null
           id?: string
           message: string
+          priority?: number | null
           processed?: boolean | null
           subscription_ids: string[]
           title: string
@@ -2741,6 +2743,7 @@ export type Database = {
           icon_url?: string | null
           id?: string
           message?: string
+          priority?: number | null
           processed?: boolean | null
           subscription_ids?: string[]
           title?: string
