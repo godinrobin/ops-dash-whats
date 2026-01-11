@@ -70,17 +70,30 @@ export function useProxyValidator() {
       }
 
       if (data?.success && data?.validation) {
+        const ip = data.validation.ip;
+        const isRealIp = ip && ip !== 'unknown' && ip !== 'credentials_valid' && /^\d+\.\d+\.\d+\.\d+$/.test(ip);
+        const location = data.validation.location || 
+          [data.validation.city, data.validation.country].filter(Boolean).join(', ') || 
+          '';
+        
         const validationResult: ProxyValidationResult = {
           valid: true,
-          ip: data.validation.ip,
-          location: data.validation.location || `${data.validation.city || ''}, ${data.validation.country || ''}`.replace(/^, |, $/g, ''),
+          ip: isRealIp ? ip : (ip === 'credentials_valid' ? 'Credenciais válidas' : ip),
+          location: location,
           country: data.validation.country,
           city: data.validation.city,
           isp: data.validation.isp,
           latency_ms: data.validation.latency_ms
         };
         setResult(validationResult);
-        toast.success(`Proxy válida! IP: ${validationResult.ip}`);
+        
+        if (isRealIp) {
+          toast.success(`Proxy válida! IP: ${ip}${location ? ` (${location})` : ''}`);
+        } else if (ip === 'credentials_valid') {
+          toast.success('Proxy válida! Credenciais verificadas.');
+        } else {
+          toast.success('Proxy válida!');
+        }
         return validationResult;
       } else {
         const validationResult: ProxyValidationResult = {
