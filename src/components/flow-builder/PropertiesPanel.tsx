@@ -582,6 +582,21 @@ export const PropertiesPanel = ({
                     </p>
                   </div>
                 )}
+                
+                {/* Send as forwarded option */}
+                <div className="flex items-center gap-2 pt-2">
+                  <Checkbox
+                    id="sendAsForwarded"
+                    checked={(nodeData.sendAsForwarded as boolean) || false}
+                    onCheckedChange={(checked) => onUpdateNode(selectedNode.id, { sendAsForwarded: checked })}
+                  />
+                  <Label htmlFor="sendAsForwarded" className="text-sm cursor-pointer">
+                    Enviar como encaminhado
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground pl-6">
+                  O áudio aparecerá como "Encaminhado" no WhatsApp (estilo laranja)
+                </p>
               </div>
             )}
             

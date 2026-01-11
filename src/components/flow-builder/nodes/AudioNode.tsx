@@ -1,9 +1,9 @@
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { Mic, Radio } from 'lucide-react';
+import { Mic, Radio, Forward } from 'lucide-react';
 import { NodeAnalyticsWrapper } from '../NodeAnalyticsWrapper';
 
 export const AudioNode = ({ id, data }: NodeProps) => {
-  const nodeData = data as { mediaUrl?: string; showPresence?: boolean; presenceDelay?: number };
+  const nodeData = data as { mediaUrl?: string; showPresence?: boolean; presenceDelay?: number; sendAsForwarded?: boolean };
   const hasMedia = !!nodeData.mediaUrl;
 
   return (
@@ -19,11 +19,18 @@ export const AudioNode = ({ id, data }: NodeProps) => {
             <Mic className="h-3.5 w-3.5 text-white" />
           </div>
           <span className="font-medium text-sm">Áudio</span>
-          {nodeData.showPresence && (
-            <div className="flex items-center gap-1 ml-auto" title={`Gravando por ${nodeData.presenceDelay || 3}s`}>
-              <Radio className="h-3 w-3 text-orange-500" />
-            </div>
-          )}
+          <div className="flex items-center gap-1 ml-auto">
+            {nodeData.sendAsForwarded && (
+              <div className="flex items-center gap-1" title="Será enviado como encaminhado">
+                <Forward className="h-3 w-3 text-orange-400" />
+              </div>
+            )}
+            {nodeData.showPresence && (
+              <div className="flex items-center gap-1" title={`Gravando por ${nodeData.presenceDelay || 3}s`}>
+                <Radio className="h-3 w-3 text-orange-500" />
+              </div>
+            )}
+          </div>
         </div>
         {hasMedia ? (
           <div className="w-full">
