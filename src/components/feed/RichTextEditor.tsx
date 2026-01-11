@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useRef, useCallback, useEffect } from "react";
 import { Bold, Italic, Underline, Strikethrough, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -16,14 +16,24 @@ const COLORS = [
 
 export const RichTextEditor = ({ value, onChange, placeholder }: RichTextEditorProps) => {
   const editorRef = useRef<HTMLDivElement>(null);
-  const [showColorPicker, setShowColorPicker] = useState(false);
+  const isInternalChange = useRef(false);
 
-  const execCommand = useCallback((command: string, value?: string) => {
-    document.execCommand(command, false, value);
+  // Sync external value changes (like clearing after submit)
+  useEffect(() => {
+    if (editorRef.current && !isInternalChange.current) {
+      if (value === "" && editorRef.current.innerHTML !== "") {
+        editorRef.current.innerHTML = "";
+      }
+    }
+    isInternalChange.current = false;
+  }, [value]);
+
+  const execCommand = useCallback((command: string, cmdValue?: string) => {
+    document.execCommand(command, false, cmdValue);
     editorRef.current?.focus();
     
-    // Get the updated HTML content
     if (editorRef.current) {
+      isInternalChange.current = true;
       onChange(editorRef.current.innerHTML);
     }
   }, [onChange]);
@@ -34,11 +44,11 @@ export const RichTextEditor = ({ value, onChange, placeholder }: RichTextEditorP
   const handleStrikethrough = () => execCommand("strikeThrough");
   const handleColor = (color: string) => {
     execCommand("foreColor", color);
-    setShowColorPicker(false);
   };
 
   const handleInput = () => {
     if (editorRef.current) {
+      isInternalChange.current = true;
       onChange(editorRef.current.innerHTML);
     }
   };
@@ -51,7 +61,7 @@ export const RichTextEditor = ({ value, onChange, placeholder }: RichTextEditorP
   };
 
   return (
-    <div className="relative">
+    <div className="relative" dir="ltr">
       {/* Toolbar */}
       <div className="flex items-center gap-1 pb-2 border-b border-border/30 mb-2">
         <Button
@@ -91,7 +101,7 @@ export const RichTextEditor = ({ value, onChange, placeholder }: RichTextEditorP
           <Strikethrough className="w-4 h-4" />
         </Button>
         
-        <Popover open={showColorPicker} onOpenChange={setShowColorPicker}>
+        <Popover>
           <PopoverTrigger asChild>
             <Button
               type="button"
@@ -126,8 +136,9 @@ export const RichTextEditor = ({ value, onChange, placeholder }: RichTextEditorP
         onInput={handleInput}
         onPaste={handlePaste}
         data-placeholder={placeholder}
-        className="min-h-[80px] max-h-[200px] overflow-y-auto bg-transparent outline-none text-foreground text-left empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground"
-        dangerouslySetInnerHTML={{ __html: value }}
+        suppressContentEditableWarning
+        style={{ direction: "ltr", textAlign: "left", unicodeBidi: "plaintext" }}
+        className="min-h-[80px] max-h-[200px] overflow-y-auto bg-transparent outline-none text-foreground empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground"
       />
     </div>
   );
