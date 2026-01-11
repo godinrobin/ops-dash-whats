@@ -182,7 +182,7 @@ export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: 
         key={system.id}
         onClick={() => handleSystemClick(system)}
         className={cn(
-          "flex items-center gap-3 w-full px-3 py-2 text-sm rounded-lg transition-all duration-200",
+          "flex items-start gap-3 w-full px-3 py-2 text-sm rounded-lg transition-all duration-200",
           isActive 
             ? "bg-accent/20 text-accent border-l-2 border-accent" 
             : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
@@ -191,9 +191,9 @@ export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: 
         )}
         disabled={isComingSoon}
       >
-        <span className="flex-shrink-0">{system.icon}</span>
-        <span className="flex-1 text-left truncate">{system.title}</span>
-        {isLocked && !isComingSoon && <Lock className="w-3 h-3 text-accent" />}
+        <span className="flex-shrink-0 mt-0.5">{system.icon}</span>
+        <span className="flex-1 min-w-0 text-left whitespace-normal break-words leading-snug">{system.title}</span>
+        {isLocked && !isComingSoon && <Lock className="w-3 h-3 text-accent flex-shrink-0 mt-1" />}
         {isComingSoon && (
           <span className="text-[10px] px-1.5 py-0.5 bg-yellow-500/20 text-yellow-500 rounded-full font-medium">
             em breve
