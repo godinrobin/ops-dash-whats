@@ -278,16 +278,18 @@ export const FeedPost = ({ post, comments, userLiked, userReaction, onRefresh }:
             );
           })}
 
-          {/* Add reaction button (shows picker) */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowReactionPicker(!showReactionPicker)}
-            disabled={isLiking}
-            className="px-2 hover:bg-secondary/50"
-          >
-            <span className="text-lg">🔥</span>
-          </Button>
+          {/* Add reaction button (shows picker) - only show if user hasn't reacted */}
+          {!userReaction && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowReactionPicker(!showReactionPicker)}
+              disabled={isLiking}
+              className="px-2 hover:bg-secondary/50"
+            >
+              <span className="text-lg">🔥</span>
+            </Button>
+          )}
 
           <AnimatePresence>
             {showReactionPicker && (

@@ -118,7 +118,7 @@ export const CreatePostCard = ({ onPostCreated, isAdmin = false }: CreatePostCar
         <RichTextEditor
           value={content}
           onChange={setContent}
-          placeholder="O que você está pensando? ✨"
+          placeholder="Solte uma dica/depoimento, foda! 🔥"
         />
 
         {/* Media Preview */}
