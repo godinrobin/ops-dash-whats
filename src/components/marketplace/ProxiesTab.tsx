@@ -520,7 +520,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                 <li>✓ IP sem queda de alta qualidade</li>
                 <li>✓ Renovação disponível</li>
                 <li>✓ Reduz Bloqueio de Número</li>
-                <li>✓ Protocolo HTTP/HTTPS</li>
+                <li>✓ Protocolo SOCKS5</li>
               </ul>
 
               <div className="flex flex-col gap-4 pt-4 border-t border-border">
