@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Header } from "@/components/Header";
+import { SystemLayout } from "@/components/layout/SystemLayout";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -208,9 +208,7 @@ const GeradorPalavrasChaves = () => {
   ];
 
   return (
-    <>
-      <Header />
-      <div className="h-14 md:h-16" />
+    <SystemLayout>
       <div className="min-h-[calc(100vh-3.5rem)] md:min-h-[calc(100vh-4rem)] bg-background flex flex-col">
         <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full px-4">
           {/* Messages Area */}
@@ -336,7 +334,7 @@ const GeradorPalavrasChaves = () => {
           </div>
         </div>
       </div>
-    </>
+    </SystemLayout>
   );
 };
 

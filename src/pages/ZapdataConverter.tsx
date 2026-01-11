@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Header } from "@/components/Header";
+import { SystemLayout } from "@/components/layout/SystemLayout";
 import { Button } from "@/components/ui/button";
 import { Download, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -60,9 +60,7 @@ const ZapdataConverter = () => {
   };
 
   return (
-    <>
-      <Header />
-      <div className="h-14 md:h-16" />
+    <SystemLayout>
       <div className="min-h-screen bg-background">
         <div className="container mx-auto max-w-4xl px-4 py-12">
           {/* Hero Section */}
@@ -207,7 +205,7 @@ const ZapdataConverter = () => {
           </motion.div>
         </div>
       </div>
-    </>
+    </SystemLayout>
   );
 };
 

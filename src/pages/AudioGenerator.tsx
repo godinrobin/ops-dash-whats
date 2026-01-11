@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Header } from "@/components/Header";
+import { SystemLayout } from "@/components/layout/SystemLayout";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
@@ -245,9 +245,7 @@ const AudioGenerator = () => {
   };
 
   return (
-    <>
-      <Header />
-      <div className="h-14 md:h-16" />
+    <SystemLayout>
       <div className="min-h-screen bg-background p-6 md:p-10">
         <div className="container mx-auto max-w-3xl">
           <header className="text-center mb-8">
@@ -409,7 +407,7 @@ const AudioGenerator = () => {
           </Card>
         </div>
       </div>
-    </>
+    </SystemLayout>
   );
 };
 

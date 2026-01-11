@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, DragEvent } from "react";
-import { Header } from "@/components/Header";
+import { SystemLayout } from "@/components/layout/SystemLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -1246,8 +1246,8 @@ export default function VideoVariationGenerator() {
   const allCompleted = generatedVideos.length > 0 && pendingCount === 0 && pausedCount === 0;
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
+    <SystemLayout>
+      <div className="min-h-screen bg-background">
       <div className="h-14 md:h-16" />
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto space-y-8">
@@ -1968,5 +1968,6 @@ export default function VideoVariationGenerator() {
         </DialogContent>
       </Dialog>
     </div>
+    </SystemLayout>
   );
 }

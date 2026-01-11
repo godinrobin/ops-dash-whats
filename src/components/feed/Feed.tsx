@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Loader2, Lock, ChevronDown, ChevronUp, Check, X } from "lucide-react";
+import { Loader2, Lock, ChevronDown, ChevronUp, Check, X, Clock } from "lucide-react";
 import { CreatePostCard } from "./CreatePostCard";
 import { FeedPost } from "./FeedPost";
 import { useAuth } from "@/contexts/AuthContext";
@@ -42,6 +42,7 @@ export const Feed = () => {
   const { isAdmin } = useAdminStatus();
   const [posts, setPosts] = useState<Post[]>([]);
   const [pendingPosts, setPendingPosts] = useState<Post[]>([]);
+  const [myPendingPosts, setMyPendingPosts] = useState<Post[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
   const [userLikes, setUserLikes] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -98,17 +99,31 @@ export const Feed = () => {
   };
 
   const fetchPendingPosts = async () => {
-    if (!user || !isAdmin) return;
+    if (!user) return;
 
     try {
-      const { data, error } = await (supabase as any)
+      // Fetch all pending posts for admin
+      if (isAdmin) {
+        const { data, error } = await (supabase as any)
+          .from("feed_posts")
+          .select("*")
+          .eq("status", "pending")
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        setPendingPosts(data || []);
+      }
+
+      // Fetch user's own pending posts
+      const { data: myPending, error: myPendingError } = await (supabase as any)
         .from("feed_posts")
         .select("*")
         .eq("status", "pending")
+        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
-      setPendingPosts(data || []);
+      if (myPendingError) throw myPendingError;
+      setMyPendingPosts(myPending || []);
     } catch (error) {
       console.error("Error fetching pending posts:", error);
     }
@@ -121,10 +136,10 @@ export const Feed = () => {
   }, [user, accessLoading]);
 
   useEffect(() => {
-    if (isAdmin) {
+    if (user && !accessLoading) {
       fetchPendingPosts();
     }
-  }, [isAdmin]);
+  }, [user, isAdmin, accessLoading]);
 
   const handleApprove = async (postId: string) => {
     setApprovingId(postId);
@@ -286,7 +301,33 @@ export const Feed = () => {
         </div>
       )}
 
-      {posts.length === 0 ? (
+      {/* User's own pending posts */}
+      {!isAdmin && myPendingPosts.length > 0 && (
+        <div className="space-y-4">
+          {myPendingPosts.map((post) => (
+            <div key={post.id} className="relative">
+              <div className="absolute inset-0 bg-background/40 rounded-xl z-10 pointer-events-none" />
+              <div className="absolute top-3 right-3 z-20">
+                <span className="flex items-center gap-1.5 text-xs px-2.5 py-1 bg-amber-500/20 text-amber-500 rounded-full font-medium border border-amber-500/30">
+                  <Clock className="w-3 h-3" />
+                  Aguardando aprovação
+                </span>
+              </div>
+              <div className="opacity-70">
+                <FeedPost
+                  key={post.id}
+                  post={post}
+                  comments={[]}
+                  userLiked={false}
+                  onRefresh={() => { fetchPosts(); fetchPendingPosts(); }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {posts.length === 0 && myPendingPosts.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <p>Nenhuma postagem ainda. Seja o primeiro a compartilhar!</p>
         </div>

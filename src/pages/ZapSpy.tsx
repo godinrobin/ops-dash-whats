@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Header } from "@/components/Header";
+import { SystemLayout } from "@/components/layout/SystemLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { NeonButton } from "@/components/ui/neon-button";
@@ -400,9 +400,7 @@ const ZapSpy = () => {
   };
 
   return (
-    <>
-      <Header />
-      <div className="h-14 md:h-16" />
+    <SystemLayout>
       <div className="min-h-screen bg-background p-4 md:p-8">
         <div className="container mx-auto max-w-6xl">
           <header className="text-center mb-8">
@@ -838,7 +836,7 @@ const ZapSpy = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </SystemLayout>
   );
 };
 
