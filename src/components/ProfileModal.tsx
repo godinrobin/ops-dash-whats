@@ -33,20 +33,29 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Username state
+  const [username, setUsername] = useState("");
+  const [originalUsername, setOriginalUsername] = useState("");
+  const [savingUsername, setSavingUsername] = useState(false);
 
-  // Fetch current avatar on mount
+  // Fetch current profile on mount
   useEffect(() => {
     const fetchProfile = async () => {
       if (!user) return;
       
       const { data } = await supabase
         .from("profiles")
-        .select("avatar_url")
+        .select("avatar_url, username")
         .eq("id", user.id)
         .single();
       
       if (data?.avatar_url) {
         setAvatarUrl(data.avatar_url);
+      }
+      if (data?.username) {
+        setUsername(data.username);
+        setOriginalUsername(data.username);
       }
     };
 
@@ -125,6 +134,69 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
     }
   };
 
+  const handleSaveUsername = async () => {
+    if (!user || !username.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Nome inválido",
+        description: "Por favor, digite um nome de usuário",
+      });
+      return;
+    }
+
+    const trimmedUsername = username.trim();
+
+    // Don't save if unchanged
+    if (trimmedUsername === originalUsername) {
+      return;
+    }
+
+    setSavingUsername(true);
+
+    try {
+      // Check if username already exists (case-insensitive)
+      const { data: existing } = await supabase
+        .from("profiles")
+        .select("id")
+        .ilike("username", trimmedUsername)
+        .neq("id", user.id)
+        .maybeSingle();
+
+      if (existing) {
+        toast({
+          variant: "destructive",
+          title: "Nome já existe",
+          description: "Este nome de usuário já está em uso. Escolha outro.",
+        });
+        setSavingUsername(false);
+        return;
+      }
+
+      // Update username
+      const { error } = await supabase
+        .from("profiles")
+        .update({ username: trimmedUsername })
+        .eq("id", user.id);
+
+      if (error) throw error;
+
+      setOriginalUsername(trimmedUsername);
+      toast({
+        title: "Nome atualizado!",
+        description: "Seu nome de usuário foi salvo com sucesso",
+      });
+    } catch (error: any) {
+      console.error("Error updating username:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro ao salvar",
+        description: error.message || "Não foi possível salvar o nome de usuário",
+      });
+    } finally {
+      setSavingUsername(false);
+    }
+  };
+
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -181,7 +253,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
     }
   };
 
-  const displayName = user?.email?.split("@")[0] || "Usuário";
+  const displayName = username || user?.email?.split("@")[0] || "Usuário";
   const initials = displayName.slice(0, 2).toUpperCase();
 
   return (
@@ -230,10 +302,34 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
             </div>
 
             {/* User Info */}
-            <div className="space-y-3 p-4 rounded-lg bg-secondary/30 border border-border">
+            <div className="space-y-4 p-4 rounded-lg bg-secondary/30 border border-border">
               <div>
                 <Label className="text-muted-foreground text-sm">Email</Label>
                 <p className="font-medium">{user?.email}</p>
+              </div>
+              
+              {/* Username edit */}
+              <div className="space-y-2">
+                <Label htmlFor="username" className="text-muted-foreground text-sm">Nome de Usuário</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="username"
+                    type="text"
+                    placeholder="Digite seu nome de usuário"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    disabled={savingUsername}
+                    className="flex-1 focus-visible:ring-accent focus-visible:border-accent"
+                  />
+                  <Button
+                    onClick={handleSaveUsername}
+                    disabled={savingUsername || username.trim() === originalUsername}
+                    size="sm"
+                    className="bg-accent hover:bg-accent/90 text-accent-foreground"
+                  >
+                    {savingUsername ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar"}
+                  </Button>
+                </div>
               </div>
             </div>
 
