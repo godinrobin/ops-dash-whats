@@ -56,13 +56,9 @@ export const Feed = () => {
     if (!user) return;
 
     try {
-      // Fetch approved posts with profiles data
       const { data: postsData, error: postsError } = await (supabase as any)
         .from("feed_posts")
-        .select(`
-          *,
-          profiles:user_id (username, avatar_url)
-        `)
+        .select("*")
         .eq("status", "approved")
         .order("created_at", { ascending: false });
 
@@ -71,51 +67,81 @@ export const Feed = () => {
         throw postsError;
       }
 
-      // Check which posts are from admins
-      if (postsData && postsData.length > 0) {
-        const userIds = [...new Set(postsData.map((p: any) => p.user_id))];
-        
-        // Fetch admin roles for these users
-        const { data: adminRoles } = await (supabase as any)
-          .from("user_roles")
-          .select("user_id")
-          .in("user_id", userIds)
-          .eq("role", "admin");
-        
-        const adminUserIds = new Set((adminRoles || []).map((r: any) => r.user_id));
-        
-        // Mark admin posts
-        const postsWithAdminFlag = postsData.map((p: any) => ({
-          ...p,
-          is_admin_post: adminUserIds.has(p.user_id)
-        }));
-        
-        setPosts(postsWithAdminFlag);
-
-        const postIds = postsData.map((p: any) => p.id);
-
-        const { data: commentsData } = await (supabase as any)
-          .from("feed_comments")
-          .select(`
-            *,
-            profiles:user_id (username, avatar_url)
-          `)
-          .in("post_id", postIds)
-          .order("created_at", { ascending: true });
-
-        setComments(commentsData || []);
-
-        // Fetch user likes
-        const { data: likesData } = await (supabase as any)
-          .from("feed_likes")
-          .select("post_id")
-          .eq("user_id", user.id)
-          .in("post_id", postIds);
-
-        setUserLikes(new Set((likesData || []).map((l: any) => l.post_id)));
-      } else {
+      if (!postsData || postsData.length === 0) {
         setPosts([]);
+        setComments([]);
+        setUserLikes(new Set());
+        return;
       }
+
+      const postIds = postsData.map((p: any) => p.id);
+
+      // Comments
+      const { data: commentsData, error: commentsError } = await (supabase as any)
+        .from("feed_comments")
+        .select("*")
+        .in("post_id", postIds)
+        .order("created_at", { ascending: true });
+
+      if (commentsError) {
+        console.error("Error fetching comments:", commentsError);
+      }
+
+      const postsUserIds = [...new Set(postsData.map((p: any) => p.user_id))];
+      const commentUserIds = [...new Set((commentsData || []).map((c: any) => c.user_id))];
+      const allUserIds = [...new Set([...postsUserIds, ...commentUserIds])];
+
+      // Profiles (no FK relationship exists, so we attach manually)
+      const { data: profilesData, error: profilesError } = await (supabase as any)
+        .from("profiles")
+        .select("id, username, avatar_url")
+        .in("id", allUserIds);
+
+      if (profilesError) {
+        console.error("Error fetching profiles:", profilesError);
+      }
+
+      const profileById = new Map<string, { username: string | null; avatar_url?: string | null }>();
+      (profilesData || []).forEach((p: any) => {
+        profileById.set(p.id, { username: p.username, avatar_url: p.avatar_url });
+      });
+
+      // Determine which authors are admins
+      const adminUserIds = new Set<string>();
+      if (isAdmin) adminUserIds.add(user.id);
+
+      const { data: adminRoles, error: adminRolesError } = await (supabase as any)
+        .from("user_roles")
+        .select("user_id")
+        .in("user_id", postsUserIds)
+        .eq("role", "admin");
+
+      if (!adminRolesError) {
+        (adminRoles || []).forEach((r: any) => adminUserIds.add(r.user_id));
+      }
+
+      const postsFinal = postsData.map((p: any) => ({
+        ...p,
+        profiles: profileById.get(p.user_id),
+        is_admin_post: adminUserIds.has(p.user_id),
+      }));
+
+      const commentsFinal = (commentsData || []).map((c: any) => ({
+        ...c,
+        profiles: profileById.get(c.user_id),
+      }));
+
+      setPosts(postsFinal);
+      setComments(commentsFinal);
+
+      // Likes
+      const { data: likesData } = await (supabase as any)
+        .from("feed_likes")
+        .select("post_id")
+        .eq("user_id", user.id)
+        .in("post_id", postIds);
+
+      setUserLikes(new Set((likesData || []).map((l: any) => l.post_id)));
     } catch (error) {
       console.error("Error fetching feed:", error);
     } finally {
@@ -127,34 +153,54 @@ export const Feed = () => {
     if (!user) return;
 
     try {
+      let allPending: any[] = [];
+
       // Fetch all pending posts for admin
       if (isAdmin) {
         const { data, error } = await (supabase as any)
           .from("feed_posts")
-          .select(`
-            *,
-            profiles:user_id (username, avatar_url)
-          `)
+          .select("*")
           .eq("status", "pending")
           .order("created_at", { ascending: false });
 
         if (error) throw error;
         setPendingPosts(data || []);
+        allPending = allPending.concat(data || []);
       }
 
-      // Fetch user's own pending posts with profile data
+      // Fetch user's own pending posts
       const { data: myPending, error: myPendingError } = await (supabase as any)
         .from("feed_posts")
-        .select(`
-          *,
-          profiles:user_id (username, avatar_url)
-        `)
+        .select("*")
         .eq("status", "pending")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (myPendingError) throw myPendingError;
       setMyPendingPosts(myPending || []);
+      allPending = allPending.concat(myPending || []);
+
+      // Attach profiles (manual)
+      const pendingUserIds = [...new Set(allPending.map((p: any) => p.user_id))];
+      if (pendingUserIds.length > 0) {
+        const { data: profilesData } = await (supabase as any)
+          .from("profiles")
+          .select("id, username, avatar_url")
+          .in("id", pendingUserIds);
+
+        const profileById = new Map<string, any>();
+        (profilesData || []).forEach((p: any) => profileById.set(p.id, p));
+
+        if (isAdmin) {
+          setPendingPosts((prev) =>
+            prev.map((p: any) => ({ ...p, profiles: profileById.get(p.user_id) }))
+          );
+        }
+
+        setMyPendingPosts((prev) =>
+          prev.map((p: any) => ({ ...p, profiles: profileById.get(p.user_id) }))
+        );
+      }
     } catch (error) {
       console.error("Error fetching pending posts:", error);
     }
