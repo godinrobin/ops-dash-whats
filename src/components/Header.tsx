@@ -3,12 +3,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { LogOut, ArrowLeft, User, Shield, Settings, LayoutGrid, ShoppingBag, Megaphone, Zap } from "lucide-react";
+import { LogOut, ArrowLeft, User, Shield, LayoutGrid, ShoppingBag, Megaphone, Menu } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ProfileModal } from "./ProfileModal";
 import Dock from "@/components/ui/dock";
 import { AnimatedText } from "@/components/ui/animated-shiny-text";
 import { motion } from "framer-motion";
+import { useSidebar } from "@/components/ui/sidebar";
 
 export type AppMode = "sistemas" | "marketplace" | "ads";
 
@@ -23,6 +24,16 @@ export const Header = ({ mode, onModeChange }: HeaderProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [profileOpen, setProfileOpen] = useState(false);
+  
+  // Try to get sidebar context, but don't fail if not available
+  let sidebarContext: { toggleSidebar?: () => void } | null = null;
+  try {
+    sidebarContext = useSidebar();
+  } catch {
+    // Sidebar context not available
+  }
+  
+  const isOnHomePage = location.pathname === "/";
   
   const showBackButton = location.pathname !== "/" && location.pathname !== "/auth" && !location.pathname.startsWith("/ads");
   const isInAdsSection = location.pathname.startsWith("/ads");
@@ -54,6 +65,22 @@ export const Header = ({ mode, onModeChange }: HeaderProps) => {
       <header className="fixed top-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-b border-border z-50">
         <div className="container mx-auto px-4 h-14 md:h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
+            {/* Sidebar toggle - only on home page */}
+            {isOnHomePage && sidebarContext?.toggleSidebar && (
+              <motion.div
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={sidebarContext.toggleSidebar}
+                  className="shrink-0"
+                >
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </motion.div>
+            )}
             {showBackButton && (
               <motion.div
                 whileHover={{ scale: 1.1 }}
@@ -70,9 +97,6 @@ export const Header = ({ mode, onModeChange }: HeaderProps) => {
               </motion.div>
             )}
             <button onClick={() => navigate("/")} className="focus:outline-none flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent to-orange-500 flex items-center justify-center">
-                <Zap className="w-4 h-4 text-white" />
-              </div>
               <AnimatedText 
                 text="Zapdata" 
                 gradientColors="linear-gradient(90deg, hsl(var(--accent)), hsl(35 100% 60%), hsl(var(--accent)))"
