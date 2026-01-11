@@ -128,7 +128,6 @@ export default function InboxDashboard() {
       }
 
       // For instances without local proxy_string, fetch proxy info from UAZAPI directly
-      // This will show the UAZAPI internal proxy (São Paulo) or any proxy configured in UAZAPI
       const { data, error } = await supabase.functions.invoke('maturador-evolution', {
         body: { action: 'get-instance-proxy', instanceId: instance.id },
       });
@@ -144,16 +143,16 @@ export default function InboxDashboard() {
         return;
       }
 
-      // Extract proxy info from UAZAPI response
+      // UAZAPI doesn't expose external IPs directly
+      // We show the proxy status message
       const proxyInfo = data?.proxy || {};
-      const ip = proxyInfo.ip || 'Proxy interno UAZAPI';
-      const location = proxyInfo.location || (proxyInfo.enabled ? 'Configurada' : 'Proxy interno (São Paulo)');
-
+      const message = data?.message || 'Proxy configurado';
+      
       setInstanceProxyResults((prev) => ({
         ...prev,
         [instance.id]: {
-          ip,
-          location,
+          ip: data?.usingInternalProxy ? 'Proxy interno UAZAPI' : (data?.ip || 'Proxy customizado'),
+          location: data?.usingInternalProxy ? 'Brasil (São Paulo)' : (data?.location || message),
           error: proxyInfo.validation_error ? proxyInfo.last_test_error : undefined,
         },
       }));
@@ -1218,32 +1217,7 @@ export default function InboxDashboard() {
                             </PopoverContent>
                           </Popover>
                         </div>
-                        {/* Show proxy IP/location info if available */}
-                        {instance.proxy_string && instanceProxyResults[instance.id] && (
-                          <div className="flex items-center gap-1 text-xs">
-                            {instanceProxyResults[instance.id]?.error ? (
-                              <span className="text-red-500">{instanceProxyResults[instance.id].error}</span>
-                            ) : instanceProxyResults[instance.id]?.ip ? (
-                              <>
-                                <Wifi className="h-3 w-3 text-green-500" />
-                                <span className="text-green-500">
-                                  IP: {instanceProxyResults[instance.id].ip}
-                                </span>
-                                {instanceProxyResults[instance.id].location && (
-                                  <>
-                                    <MapPin className="h-3 w-3 ml-1 text-muted-foreground" />
-                                    <span className="text-muted-foreground">{instanceProxyResults[instance.id].location}</span>
-                                  </>
-                                )}
-                                {instanceProxyResults[instance.id].latency_ms && (
-                                  <span className="text-muted-foreground ml-1">
-                                    ({instanceProxyResults[instance.id].latency_ms}ms)
-                                  </span>
-                                )}
-                              </>
-                            ) : null}
-                          </div>
-                        )}
+                        {/* IP info is now only shown inside the popover - removed from card */}
                         <Badge variant="outline" className={`flex items-center gap-1 ${instance.status === 'connected' ? 'border-green-500 text-green-500' : ''}`}>
                           <div className={`w-2 h-2 rounded-full ${getStatusColor(instance.status)}`} />
                           {getStatusText(instance.status)}
