@@ -46,10 +46,10 @@ const HomePage = () => {
       <Header mode={mode} onModeChange={setMode} onSidebarToggle={() => setSidebarOpen(!sidebarOpen)} />
       <div className="h-14 md:h-16" />
       
-      <SystemsSidebar onRestrictedClick={handleRestrictedClick} isOpen={sidebarOpen} onToggle={() => setSidebarOpen(false)} />
+      <SystemsSidebar onRestrictedClick={handleRestrictedClick} isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
       
       {/* Main Content Area */}
-      <div className="lg:ml-64 min-h-screen bg-background">
+      <div className={`${sidebarOpen ? 'lg:ml-64' : ''} min-h-screen bg-background transition-all duration-300`}>
         <div className="container mx-auto max-w-2xl px-4 py-6">
           {/* Feed Header */}
           <div className="mb-6">

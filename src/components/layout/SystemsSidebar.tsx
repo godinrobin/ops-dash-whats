@@ -292,9 +292,19 @@ export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: 
       </AnimatePresence>
 
       {/* Desktop Sidebar */}
-      <div className="hidden lg:flex flex-col w-64 bg-background/95 backdrop-blur-sm border-r border-border/50 fixed left-0 top-14 bottom-0 z-40">
-        {sidebarContent}
-      </div>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ x: "-100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "-100%" }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            className="hidden lg:flex flex-col w-64 bg-background/95 backdrop-blur-sm border-r border-border/50 fixed left-0 top-14 bottom-0 z-40"
+          >
+            {sidebarContent}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 };
