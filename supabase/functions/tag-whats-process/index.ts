@@ -564,48 +564,77 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
       if (!alreadyHasLabel) {
         console.log("[TAG-WHATS] First time - applying label...");
 
-        // First, get or create the "Pago" label
-        let pagoLabelId = config.pago_label_id;
+        // First, get the "Pago" label id (config can get stale if labels are recreated)
+        const fetchPagoLabelIdByName = async (): Promise<string | null> => {
+          try {
+            const labelsResponse = await fetch(`${uazapiBaseUrl}/labels`, {
+              method: "GET",
+              headers: { token: uazapiToken },
+            });
 
-        if (!pagoLabelId) {
-          // Get all labels
-          const labelsResponse = await fetch(`${uazapiBaseUrl}/labels`, {
-            method: "GET",
-            headers: { "token": uazapiToken },
-          });
-
-          if (labelsResponse.ok) {
-            const labels = await labelsResponse.json();
-            const pagoLabel = labels.find((l: any) => 
-              l.name?.toLowerCase() === PAGO_LABEL_NAME.toLowerCase()
-            );
-            
-            if (pagoLabel) {
-              pagoLabelId = pagoLabel.labelid || pagoLabel.id;
-              
-              // Save to config
-              await supabase
-                .from("tag_whats_configs")
-                .update({ pago_label_id: pagoLabelId })
-                .eq("id", config.id);
+            if (!labelsResponse.ok) {
+              const t = await labelsResponse.text();
+              console.error("[TAG-WHATS] Failed to fetch labels:", labelsResponse.status, t);
+              return null;
             }
+
+            const labels = await labelsResponse.json();
+            const pagoLabel = Array.isArray(labels)
+              ? labels.find((l: any) => l?.name?.toLowerCase?.() === PAGO_LABEL_NAME.toLowerCase())
+              : null;
+
+            const id = pagoLabel?.labelid || pagoLabel?.id || null;
+            console.log("[TAG-WHATS] Pago label lookup:", {
+              found: !!id,
+              id,
+              labelsCount: Array.isArray(labels) ? labels.length : null,
+            });
+
+            return id;
+          } catch (e) {
+            console.error("[TAG-WHATS] Error fetching labels:", e);
+            return null;
+          }
+        };
+
+        let pagoLabelId: string | null = config.pago_label_id || null;
+
+        // If we have an id stored, validate it quickly; if invalid, refresh by name.
+        if (pagoLabelId) {
+          const freshId = await fetchPagoLabelIdByName();
+          if (freshId && freshId !== pagoLabelId) {
+            console.log("[TAG-WHATS] Stored pago_label_id differs from current label id. Updating config.", {
+              stored: pagoLabelId,
+              current: freshId,
+            });
+            pagoLabelId = freshId;
+            await supabase.from("tag_whats_configs").update({ pago_label_id: pagoLabelId }).eq("id", config.id);
+          }
+          if (!freshId) {
+            // Keep stored id and attempt apply; we'll handle stale id error on apply.
+            console.log("[TAG-WHATS] Could not validate label list; will try applying stored label id.");
+          }
+        } else {
+          pagoLabelId = await fetchPagoLabelIdByName();
+          if (pagoLabelId) {
+            await supabase.from("tag_whats_configs").update({ pago_label_id: pagoLabelId }).eq("id", config.id);
           }
         }
 
-        if (pagoLabelId) {
-          // Apply label to chat
+        const applyLabelOnce = async (labelId: string) => {
           const labelPayload = {
             number: phone,
-            add_labelid: pagoLabelId,
+            add_labelid: labelId,
           };
+
           console.log("[TAG-WHATS] Applying label with payload:", JSON.stringify(labelPayload));
           console.log("[TAG-WHATS] API URL:", `${uazapiBaseUrl}/chat/labels`);
-          
+
           const labelResponse = await fetch(`${uazapiBaseUrl}/chat/labels`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "token": uazapiToken,
+              token: uazapiToken,
             },
             body: JSON.stringify(labelPayload),
           });
@@ -614,12 +643,44 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
           console.log("[TAG-WHATS] Label API response status:", labelResponse.status);
           console.log("[TAG-WHATS] Label API response:", labelResponseText);
 
-          if (labelResponse.ok) {
+          return { ok: labelResponse.ok, status: labelResponse.status, text: labelResponseText };
+        };
+
+        if (pagoLabelId) {
+          // Try applying with current/stored id
+          const firstTry = await applyLabelOnce(pagoLabelId);
+
+          if (firstTry.ok) {
             labelApplied = true;
             console.log("[TAG-WHATS] Label applied successfully!");
           } else {
-            console.error("[TAG-WHATS] Failed to apply label. Status:", labelResponse.status, "Response:", labelResponseText);
-            errorMessage = `Failed to apply label: ${labelResponseText}`;
+            // If label id is stale, refresh by name and retry once
+            const looksLikeMissingLabel = firstTry.text?.toLowerCase?.().includes("label does not exist");
+
+            if (looksLikeMissingLabel) {
+              console.log("[TAG-WHATS] Label id seems stale. Refreshing by name and retrying...");
+              const refreshedId = await fetchPagoLabelIdByName();
+
+              if (refreshedId) {
+                pagoLabelId = refreshedId;
+                await supabase.from("tag_whats_configs").update({ pago_label_id: pagoLabelId }).eq("id", config.id);
+
+                const secondTry = await applyLabelOnce(pagoLabelId);
+                if (secondTry.ok) {
+                  labelApplied = true;
+                  console.log("[TAG-WHATS] Label applied successfully after refresh!");
+                } else {
+                  console.error("[TAG-WHATS] Failed to apply label after refresh.", secondTry.status, secondTry.text);
+                  errorMessage = `Failed to apply label: ${secondTry.text}`;
+                }
+              } else {
+                console.error("[TAG-WHATS] Could not find 'Pago' label by name even after refresh.");
+                errorMessage = "'Pago' label not found in provider label list (refresh failed)";
+              }
+            } else {
+              console.error("[TAG-WHATS] Failed to apply label.", firstTry.status, firstTry.text);
+              errorMessage = `Failed to apply label: ${firstTry.text}`;
+            }
           }
         } else {
           console.log("[TAG-WHATS] No 'Pago' label found. Please create it in WhatsApp Business first.");
