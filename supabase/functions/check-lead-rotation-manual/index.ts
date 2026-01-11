@@ -5,16 +5,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// São Paulo timezone offset: -03:00
-const getSaoPauloDate = (): string => {
-  const now = new Date();
-  // Convert to São Paulo time (UTC-3)
-  const saoPauloOffset = -3 * 60; // -3 hours in minutes
-  const utcOffset = now.getTimezoneOffset();
-  const saoPauloTime = new Date(now.getTime() + (utcOffset + saoPauloOffset) * 60000);
-  return saoPauloTime.toISOString().split('T')[0]; // YYYY-MM-DD
-};
-
 interface ManualCheckRequest {
   user_id: string;
 }
@@ -75,72 +65,156 @@ Deno.serve(async (req) => {
       );
     }
 
-    const today = getSaoPauloDate();
-    console.log(`[CHECK-LEAD-ROTATION-MANUAL] Today (São Paulo): ${today}, Limit: ${limit}`);
+    // 2. Get real lead counts from inbox_contacts for today (São Paulo timezone)
+    // Query directly from inbox_contacts grouped by instance_id
+    const { data: leadCounts, error: countsError } = await supabase.rpc('get_daily_leads_by_instance', {
+      p_user_id: user_id
+    });
 
-    // 2. Get all instances for this user
-    const { data: instances, error: instancesError } = await supabase
-      .from("maturador_instances")
-      .select("id, instance_name, phone_number, label")
-      .eq("user_id", user_id);
+    // If RPC doesn't exist, query directly
+    let instanceLeadCounts: Array<{ instance_id: string; lead_count: number; instance_name: string; phone_number: string }> = [];
+    
+    if (countsError) {
+      console.log("[CHECK-LEAD-ROTATION-MANUAL] RPC not available, querying directly");
+      
+      // Get today's leads count per instance from inbox_contacts
+      const { data: contacts, error: contactsError } = await supabase
+        .from("inbox_contacts")
+        .select("instance_id, created_at")
+        .eq("user_id", user_id)
+        .not("instance_id", "is", null);
 
-    if (instancesError || !instances || instances.length === 0) {
-      return new Response(
-        JSON.stringify({ message: "Nenhuma instância encontrada", checked: 0, notified: 0 }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      if (contactsError) {
+        console.error("[CHECK-LEAD-ROTATION-MANUAL] Error fetching contacts:", contactsError);
+        return new Response(
+          JSON.stringify({ error: "Erro ao buscar contatos" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Get today's date in São Paulo timezone
+      const now = new Date();
+      const saoPauloOffset = -3 * 60; // -3 hours in minutes
+      const utcOffset = now.getTimezoneOffset();
+      const saoPauloTime = new Date(now.getTime() + (utcOffset + saoPauloOffset) * 60000);
+      const today = saoPauloTime.toISOString().split('T')[0];
+
+      console.log(`[CHECK-LEAD-ROTATION-MANUAL] Today (São Paulo): ${today}, Limit: ${limit}`);
+
+      // Filter contacts created today and count by instance
+      const instanceCountMap = new Map<string, number>();
+      
+      for (const contact of contacts || []) {
+        if (!contact.instance_id) continue;
+        
+        // Convert contact's created_at to São Paulo date
+        const contactDate = new Date(contact.created_at);
+        const contactSaoPauloTime = new Date(contactDate.getTime() + (contactDate.getTimezoneOffset() + saoPauloOffset) * 60000);
+        const contactDateStr = contactSaoPauloTime.toISOString().split('T')[0];
+        
+        if (contactDateStr === today) {
+          const currentCount = instanceCountMap.get(contact.instance_id) || 0;
+          instanceCountMap.set(contact.instance_id, currentCount + 1);
+        }
+      }
+
+      // Get instance details
+      const instanceIds = Array.from(instanceCountMap.keys());
+      
+      if (instanceIds.length > 0) {
+        const { data: instances } = await supabase
+          .from("maturador_instances")
+          .select("id, instance_name, phone_number, label")
+          .in("id", instanceIds);
+
+        for (const [instanceId, count] of instanceCountMap.entries()) {
+          const instance = instances?.find(i => i.id === instanceId);
+          instanceLeadCounts.push({
+            instance_id: instanceId,
+            lead_count: count,
+            instance_name: instance?.label || instance?.phone_number || instance?.instance_name || instanceId.slice(0, 8),
+            phone_number: instance?.phone_number || ''
+          });
+        }
+      }
+    } else {
+      instanceLeadCounts = leadCounts || [];
     }
 
-    console.log(`[CHECK-LEAD-ROTATION-MANUAL] Found ${instances.length} instances`);
+    console.log(`[CHECK-LEAD-ROTATION-MANUAL] Found ${instanceLeadCounts.length} instances with leads today`);
 
-    // 3. Get today's counts for all user instances
-    const { data: todayCounts, error: countsError } = await supabase
+    // 3. Get today's notification status from lead_rotation_daily_counts
+    const now = new Date();
+    const saoPauloOffset = -3 * 60;
+    const utcOffset = now.getTimezoneOffset();
+    const saoPauloTime = new Date(now.getTime() + (utcOffset + saoPauloOffset) * 60000);
+    const today = saoPauloTime.toISOString().split('T')[0];
+
+    const { data: notificationStatuses } = await supabase
       .from("lead_rotation_daily_counts")
-      .select("*")
+      .select("instance_id, notification_sent")
       .eq("user_id", user_id)
       .eq("date", today);
 
-    if (countsError) {
-      console.error("[CHECK-LEAD-ROTATION-MANUAL] Error fetching counts:", countsError);
-    }
-
-    const countsMap = new Map(
-      (todayCounts || []).map(c => [c.instance_id, c])
+    const notifiedMap = new Map(
+      (notificationStatuses || []).map(s => [s.instance_id, s.notification_sent])
     );
 
     let notificationsQueued = 0;
     const instancesAboveLimit: string[] = [];
 
-    // 4. Check each instance
-    for (const instance of instances) {
-      const count = countsMap.get(instance.id);
-      const currentCount = count?.lead_count || 0;
-      const alreadyNotified = count?.notification_sent || false;
+    // 4. Check each instance with leads
+    for (const instance of instanceLeadCounts) {
+      const currentCount = instance.lead_count;
+      const alreadyNotified = notifiedMap.get(instance.instance_id) || false;
 
       console.log(`[CHECK-LEAD-ROTATION-MANUAL] Instance ${instance.instance_name}: count=${currentCount}, limit=${limit}, notified=${alreadyNotified}`);
 
       // If at or above limit and not already notified today
       if (currentCount >= limit && !alreadyNotified) {
-        const instanceDisplay = instance.label || instance.phone_number || instance.instance_name;
+        const instanceDisplay = instance.instance_name || instance.phone_number || instance.instance_id.slice(0, 8);
         instancesAboveLimit.push(instanceDisplay);
 
-        // Mark as notified
-        if (count) {
-          await supabase
+        // Upsert notification status
+        const { error: upsertError } = await supabase
+          .from("lead_rotation_daily_counts")
+          .upsert({
+            user_id,
+            instance_id: instance.instance_id,
+            date: today,
+            lead_count: currentCount,
+            notification_sent: true,
+          }, {
+            onConflict: 'user_id,instance_id,date'
+          });
+
+        if (upsertError) {
+          console.error("[CHECK-LEAD-ROTATION-MANUAL] Error upserting notification status:", upsertError);
+          // Try insert/update separately
+          const { data: existing } = await supabase
             .from("lead_rotation_daily_counts")
-            .update({ notification_sent: true })
-            .eq("id", count.id);
-        } else {
-          // Create record if doesn't exist (edge case)
-          await supabase
-            .from("lead_rotation_daily_counts")
-            .insert({
-              user_id,
-              instance_id: instance.id,
-              date: today,
-              lead_count: currentCount,
-              notification_sent: true,
-            });
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("instance_id", instance.instance_id)
+            .eq("date", today)
+            .maybeSingle();
+
+          if (existing) {
+            await supabase
+              .from("lead_rotation_daily_counts")
+              .update({ notification_sent: true, lead_count: currentCount })
+              .eq("id", existing.id);
+          } else {
+            await supabase
+              .from("lead_rotation_daily_counts")
+              .insert({
+                user_id,
+                instance_id: instance.instance_id,
+                date: today,
+                lead_count: currentCount,
+                notification_sent: true,
+              });
+          }
         }
 
         // Queue push notification
@@ -150,7 +224,7 @@ Deno.serve(async (req) => {
             user_id,
             subscription_ids: subscriptionIds,
             title: "🔄 Rotação de Leads",
-            message: `A instância ${instanceDisplay} atingiu o limite de ${limit} leads hoje!`,
+            message: `A instância ${instanceDisplay} atingiu o limite de ${limit} leads hoje! (${currentCount} leads)`,
             icon_url: "https://zapdata.com.br/favicon.png",
             priority: 10,
           });
@@ -161,14 +235,16 @@ Deno.serve(async (req) => {
 
     const message = notificationsQueued > 0 
       ? `${notificationsQueued} instância(s) acima do limite! Notificações enviadas.`
-      : "Nenhuma instância atingiu o limite ainda hoje.";
+      : instanceLeadCounts.length > 0 
+        ? `Nenhuma instância atingiu o limite de ${limit} leads ainda hoje.`
+        : "Nenhum lead registrado hoje.";
 
     console.log(`[CHECK-LEAD-ROTATION-MANUAL] Done. Notified: ${notificationsQueued}`);
 
     return new Response(
       JSON.stringify({ 
         message,
-        checked: instances.length,
+        checked: instanceLeadCounts.length,
         notified: notificationsQueued,
         instancesAboveLimit,
         limit,
