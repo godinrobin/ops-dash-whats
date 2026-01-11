@@ -173,7 +173,7 @@ export const CreatePostCard = ({ onPostCreated, isAdmin = false }: CreatePostCar
             onClick={handleSubmit}
             disabled={isSubmitting || (!content.trim() && !mediaFile)}
             size="sm"
-            className="gap-2"
+            className="gap-2 bg-emerald-500/80 hover:bg-emerald-500 text-white"
           >
             {isSubmitting ? (
               <Loader2 className="w-4 h-4 animate-spin" />
