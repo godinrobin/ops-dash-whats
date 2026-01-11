@@ -17,6 +17,7 @@ import { Moon, Sun, Camera, Loader2, Bell, Trash2, Plus, ExternalLink, Send } fr
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { testPushNotification } from "@/utils/pushNotifications";
 
 interface ProfileModalProps {
@@ -47,6 +48,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
   const [newSubscriptionId, setNewSubscriptionId] = useState("");
   const [savingPushSettings, setSavingPushSettings] = useState(false);
   const [testingPush, setTestingPush] = useState(false);
+  const [notifyOnSale, setNotifyOnSale] = useState(false);
 
   // Fetch current profile on mount
   useEffect(() => {
@@ -55,7 +57,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
       
       const { data } = await supabase
         .from("profiles")
-        .select("avatar_url, username, push_webhook_enabled, push_subscription_ids")
+        .select("avatar_url, username, push_webhook_enabled, push_subscription_ids, notify_on_sale")
         .eq("id", user.id)
         .single();
       
@@ -69,6 +71,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
       // Push settings
       setPushWebhookEnabled(data?.push_webhook_enabled || false);
       setPushSubscriptionIds(data?.push_subscription_ids || []);
+      setNotifyOnSale(data?.notify_on_sale || false);
     };
 
     if (open && user) {
@@ -232,6 +235,37 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
       });
     } catch (error: any) {
       console.error("Error toggling push:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: error.message || "Não foi possível alterar as configurações",
+      });
+    } finally {
+      setSavingPushSettings(false);
+    }
+  };
+
+  const handleToggleNotifyOnSale = async (checked: boolean) => {
+    if (!user) return;
+    setSavingPushSettings(true);
+    
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ notify_on_sale: checked })
+        .eq("id", user.id);
+      
+      if (error) throw error;
+      
+      setNotifyOnSale(checked);
+      toast({
+        title: checked ? "🔔 Notificações de vendas ativadas!" : "Notificações de vendas desativadas",
+        description: checked 
+          ? "Você receberá uma notificação toda vez que uma venda for identificada" 
+          : "Você não receberá mais notificações de vendas",
+      });
+    } catch (error: any) {
+      console.error("Error toggling notify on sale:", error);
       toast({
         variant: "destructive",
         title: "Erro",
@@ -593,8 +627,29 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
                           </div>
                         ))}
                       </div>
-                    </div>
+                  </div>
                   )}
+
+                  {/* Notify on Sale Checkbox */}
+                  <div className="flex items-center space-x-3 pt-2 border-t border-border/50">
+                    <Checkbox
+                      id="notify-on-sale"
+                      checked={notifyOnSale}
+                      onCheckedChange={handleToggleNotifyOnSale}
+                      disabled={savingPushSettings}
+                    />
+                    <div className="space-y-0.5">
+                      <Label 
+                        htmlFor="notify-on-sale" 
+                        className="text-sm font-medium cursor-pointer"
+                      >
+                        🔥 Notificar novas vendas
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Receba "Pix Pago no x1! 🔥" quando o Tag Whats Cloud detectar uma venda
+                      </p>
+                    </div>
+                  </div>
 
                   {/* Test Button */}
                   <Button

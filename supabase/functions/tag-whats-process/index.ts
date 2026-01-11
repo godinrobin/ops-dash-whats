@@ -860,6 +860,80 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
       error_message: errorMessage,
     });
 
+    // Send push notification for sales if enabled
+    if (isPixPayment && labelApplied) {
+      console.log("[TAG-WHATS] Sending sale notification...");
+      
+      try {
+        // Get all users who have notify_on_sale enabled AND have push enabled with subscription IDs
+        const { data: usersToNotify, error: usersError } = await supabase
+          .from("profiles")
+          .select("id, push_subscription_ids")
+          .eq("notify_on_sale", true)
+          .eq("push_webhook_enabled", true)
+          .not("push_subscription_ids", "is", null);
+
+        if (usersError) {
+          console.error("[TAG-WHATS] Error fetching users to notify:", usersError);
+        } else if (usersToNotify && usersToNotify.length > 0) {
+          console.log(`[TAG-WHATS] Found ${usersToNotify.length} users to notify about sale`);
+          
+          // Get OneSignal credentials
+          const ONESIGNAL_APP_ID = Deno.env.get("ONESIGNAL_APP_ID");
+          const ONESIGNAL_REST_API_KEY = Deno.env.get("ONESIGNAL_REST_API_KEY");
+          
+          if (ONESIGNAL_APP_ID && ONESIGNAL_REST_API_KEY) {
+            // Collect all subscription IDs from all users
+            const allSubscriptionIds: string[] = [];
+            for (const user of usersToNotify) {
+              const ids = user.push_subscription_ids || [];
+              if (Array.isArray(ids)) {
+                allSubscriptionIds.push(...ids);
+              }
+            }
+            
+            if (allSubscriptionIds.length > 0) {
+              console.log(`[TAG-WHATS] Sending push to ${allSubscriptionIds.length} device(s)`);
+              
+              const onesignalPayload = {
+                app_id: ONESIGNAL_APP_ID,
+                include_subscription_ids: allSubscriptionIds,
+                headings: { pt: "💰 Nova Venda!", en: "💰 New Sale!" },
+                contents: { pt: "Pix Pago no x1! 🔥", en: "Pix Paid on x1! 🔥" },
+                chrome_web_icon: "https://zapdata.com.br/favicon.png",
+                firefox_icon: "https://zapdata.com.br/favicon.png",
+                data: {
+                  event_type: "sale_notification",
+                  phone: phone,
+                  value: extractedValue,
+                  timestamp: new Date().toISOString(),
+                },
+              };
+              
+              const onesignalResponse = await fetch("https://onesignal.com/api/v1/notifications", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json; charset=utf-8",
+                  "Authorization": `Key ${ONESIGNAL_REST_API_KEY}`,
+                },
+                body: JSON.stringify(onesignalPayload),
+              });
+              
+              const osResult = await onesignalResponse.json();
+              console.log("[TAG-WHATS] Push notification result:", osResult);
+            }
+          } else {
+            console.log("[TAG-WHATS] OneSignal credentials not configured, skipping push");
+          }
+        } else {
+          console.log("[TAG-WHATS] No users have sale notifications enabled");
+        }
+      } catch (pushError) {
+        console.error("[TAG-WHATS] Error sending sale push notification:", pushError);
+        // Don't fail the main process for push notification errors
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
