@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/ProductCard";
 import { CreateProductModal } from "@/components/CreateProductModal";
-import { Header } from "@/components/Header";
+import { SystemLayout } from "@/components/layout/SystemLayout";
 import { getProducts } from "@/utils/storage";
 import { Product } from "@/types/product";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
@@ -31,9 +31,7 @@ const Index = () => {
   };
 
   return (
-    <>
-      <Header />
-      <div className="h-14 md:h-16" />
+    <SystemLayout>
       <div className="min-h-screen bg-background p-6 md:p-10">
         <div className="container mx-auto max-w-6xl">
           <header className="text-center mb-12">
@@ -90,7 +88,7 @@ const Index = () => {
           </footer>
         </div>
       </div>
-    </>
+    </SystemLayout>
   );
 };
 

@@ -6,7 +6,7 @@ import { MetricsCharts } from "@/components/MetricsCharts";
 import { MetricsTable } from "@/components/MetricsTable";
 import { ProductNavigation } from "@/components/ProductNavigation";
 import { CreateProductModal } from "@/components/CreateProductModal";
-import { Header } from "@/components/Header";
+import { SystemLayout } from "@/components/layout/SystemLayout";
 import { getProduct, getProducts } from "@/utils/storage";
 import { Product } from "@/types/product";
 import { ArrowLeft } from "lucide-react";
@@ -59,9 +59,7 @@ const ProductMetrics = () => {
   }
 
   return (
-    <>
-      <Header />
-      <div className="h-14 md:h-16" />
+    <SystemLayout>
       <div className="min-h-screen bg-background pb-24">
         <div className="container mx-auto max-w-7xl p-6 md:p-10">
           <header className="mb-8">
@@ -116,7 +114,7 @@ const ProductMetrics = () => {
           onProductCreated={handleProductCreated}
         />
       </div>
-    </>
+    </SystemLayout>
   );
 };
 
