@@ -1,10 +1,10 @@
 import React, { useState, useRef } from "react";
 import { Image, Video, Send, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { RichTextEditor } from "./RichTextEditor";
 
 interface CreatePostCardProps {
   onPostCreated: () => void;
@@ -50,8 +50,16 @@ export const CreatePostCard = ({ onPostCreated, isAdmin = false }: CreatePostCar
     }
   };
 
+  // Strip HTML tags for validation but keep HTML for storage
+  const getTextContent = (html: string) => {
+    const div = document.createElement("div");
+    div.innerHTML = html;
+    return div.textContent || div.innerText || "";
+  };
+
   const handleSubmit = async () => {
-    if (!user || (!content.trim() && !mediaFile)) return;
+    const textContent = getTextContent(content);
+    if (!user || (!textContent.trim() && !mediaFile)) return;
 
     setIsSubmitting(true);
 
@@ -107,11 +115,10 @@ export const CreatePostCard = ({ onPostCreated, isAdmin = false }: CreatePostCar
       <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-accent/5 via-primary/5 to-accent/5 blur-xl opacity-50 pointer-events-none" />
 
       <div className="relative z-10">
-        <Textarea
+        <RichTextEditor
           value={content}
-          onChange={(e) => setContent(e.target.value)}
+          onChange={setContent}
           placeholder="O que você está pensando? ✨"
-          className="min-h-[80px] bg-transparent border-none resize-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground"
         />
 
         {/* Media Preview */}
