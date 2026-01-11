@@ -80,13 +80,12 @@ serve(async (req: Request): Promise<Response> => {
 
     if (!targetUser) {
       console.log("User not found:", email);
-      // Don't reveal if user exists or not for security
       return new Response(
         JSON.stringify({ 
-          success: true,
-          message: "Se o email estiver cadastrado, você receberá as instruções de recuperação." 
+          success: false,
+          error: "Não existe usuário cadastrado com este email." 
         }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -125,9 +124,13 @@ serve(async (req: Request): Promise<Response> => {
               <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 500px; background: linear-gradient(145deg, #1a1a1a 0%, #0d0d0d 100%); border-radius: 16px; border: 1px solid #333; overflow: hidden;">
                 <tr>
                   <td style="padding: 40px 40px 20px 40px; text-align: center;">
-                    <div style="width: 64px; height: 64px; background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); border-radius: 16px; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
-                      <span style="color: white; font-size: 28px; font-weight: bold; line-height: 64px;">Z</span>
-                    </div>
+                    <table cellpadding="0" cellspacing="0" style="margin: 0 auto 20px;">
+                      <tr>
+                        <td style="width: 64px; height: 64px; background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); border-radius: 16px; text-align: center; vertical-align: middle;">
+                          <span style="color: white; font-size: 28px; font-weight: bold;">Z</span>
+                        </td>
+                      </tr>
+                    </table>
                     <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">
                       Recuperação de Senha
                     </h1>
@@ -195,7 +198,7 @@ serve(async (req: Request): Promise<Response> => {
     return new Response(
       JSON.stringify({ 
         success: true,
-        message: "Se o email estiver cadastrado, você receberá as instruções de recuperação."
+        message: "Email enviado com sucesso! Verifique sua caixa de entrada e também a pasta de spam."
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

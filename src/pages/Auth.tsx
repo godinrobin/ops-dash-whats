@@ -308,16 +308,32 @@ const Auth = () => {
 
       if (error) throw error;
 
+      // Check if the response indicates user not found
+      if (data && data.success === false && data.error) {
+        splashedToast.error("Usuário não encontrado", data.error);
+        return;
+      }
+
       splashedToast.success(
         "Email enviado!",
-        "Se o email estiver cadastrado, você receberá as instruções de recuperação."
+        data?.message || "Verifique sua caixa de entrada e também a pasta de spam."
       );
       setShowForgotPassword(false);
       setForgotPasswordEmail("");
     } catch (err: any) {
+      // Try to parse the error body for custom error messages
+      let errorMessage = "Não foi possível enviar o email. Tente novamente.";
+      try {
+        if (err?.context?.body) {
+          const body = JSON.parse(err.context.body);
+          if (body?.error) {
+            errorMessage = body.error;
+          }
+        }
+      } catch {}
       splashedToast.error(
         "Erro",
-        err?.message || "Não foi possível enviar o email. Tente novamente."
+        errorMessage
       );
     } finally {
       setSendingPasswordReset(false);
