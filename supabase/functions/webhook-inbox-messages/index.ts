@@ -1525,89 +1525,159 @@ serve(async (req) => {
               // Check for flows to trigger based on keywords
               console.log(`[UAZAPI-WEBHOOK] No active session, checking for flow triggers`);
               
-              const { data: flows } = await supabaseClient
-                .from('inbox_flows')
-                .select('*')
-                .eq('user_id', userId)
-                .eq('is_active', true)
-                .order('priority', { ascending: false });
+              // Check if this is an encrypted/undecryptable message
+              const isEncryptedMessage = (uazText || '').toLowerCase().includes('[undecryptable]') ||
+                (uazText || '').toLowerCase().includes('não foi possível descriptografar');
               
-              if (flows && flows.length > 0) {
-                for (const flow of flows) {
-                  const assignedInstances = flow.assigned_instances as string[] || [];
-                  if (assignedInstances.length > 0 && !assignedInstances.includes(instanceId)) {
-                    continue;
-                  }
+              if (isEncryptedMessage) {
+                console.log(`[UAZAPI-WEBHOOK] Detected encrypted/undecryptable message, triggering first assigned flow`);
+                
+                // Get all active flows assigned to this instance, ordered by most recently updated
+                const { data: assignedFlows } = await supabaseClient
+                  .from('inbox_flows')
+                  .select('*')
+                  .eq('user_id', userId)
+                  .eq('is_active', true)
+                  .order('updated_at', { ascending: false });
+                
+                // Find the first flow that is assigned to this instance
+                const flowToTrigger = assignedFlows?.find(f => {
+                  const instances = f.assigned_instances as string[] || [];
+                  return instances.includes(instanceId);
+                });
+                
+                if (flowToTrigger) {
+                  console.log(`[UAZAPI-WEBHOOK] Triggering flow "${flowToTrigger.name}" for encrypted message`);
                   
-                  let shouldTrigger = false;
+                  // Create session
+                  const { data: newSession } = await supabaseClient
+                    .from('inbox_flow_sessions')
+                    .insert({
+                      flow_id: flowToTrigger.id,
+                      contact_id: contact.id,
+                      instance_id: instanceId,
+                      user_id: userId,
+                      current_node_id: 'start-1',
+                      variables: { 
+                        nome: contact.name || '',
+                        telefone: phone,
+                        resposta: '',
+                        lastMessage: '[Mensagem criptografada]',
+                        contactName: contact.name || phone,
+                        ultima_mensagem: '[Mensagem criptografada]',
+                        _lastInboundMessageId: uazMessageIdNormalized || null,
+                        _encryptedMessage: true,
+                      },
+                      status: 'active',
+                    })
+                    .select()
+                    .single();
                   
-                  if (flow.trigger_type === 'all') {
-                    // Count messages to check if first
-                    const { count } = await supabaseClient
-                      .from('inbox_messages')
-                      .select('*', { count: 'exact', head: true })
-                      .eq('contact_id', contact.id)
-                      .eq('direction', 'inbound');
-                    
-                    if ((count || 0) <= 1) {
-                      shouldTrigger = true;
-                    }
-                  } else if (flow.trigger_type === 'keyword') {
-                    const keywords = flow.trigger_keywords as string[] || [];
-                    const lowerContent = (uazText || '').toLowerCase();
-                    for (const kw of keywords) {
-                      if (lowerContent.includes(kw.toLowerCase())) {
-                        shouldTrigger = true;
-                        break;
-                      }
-                    }
-                  }
-                  
-                  if (shouldTrigger) {
-                    console.log(`[UAZAPI-WEBHOOK] Triggering flow ${flow.name}`);
-                    
-                    // Create session
-                    const { data: newSession } = await supabaseClient
-                      .from('inbox_flow_sessions')
-                      .insert({
-                        flow_id: flow.id,
-                        contact_id: contact.id,
-                        instance_id: instanceId,
-                        user_id: userId,
-                        current_node_id: 'start-1',
-                        variables: { 
-                          nome: contact.name || '',
-                          telefone: phone,
-                          resposta: '',
-                          lastMessage: uazText || '',
-                          contactName: contact.name || phone,
-                          ultima_mensagem: uazText || '',
-                          _lastInboundMessageId: uazMessageIdNormalized || null,
+                  if (newSession) {
+                    try {
+                      const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+                      await fetch(processUrl, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
                         },
-                        status: 'active',
-                      })
-                      .select()
-                      .single();
+                        body: JSON.stringify({ sessionId: newSession.id }),
+                      });
+                      console.log(`[UAZAPI-WEBHOOK] Flow triggered for encrypted message, session ${newSession.id}`);
+                    } catch (e) {
+                      console.error('[UAZAPI-WEBHOOK] Error invoking flow for encrypted message:', e);
+                    }
+                  }
+                } else {
+                  console.log(`[UAZAPI-WEBHOOK] No flow assigned to instance ${instanceId} for encrypted message`);
+                }
+              } else {
+                // Normal flow trigger logic
+                const { data: flows } = await supabaseClient
+                  .from('inbox_flows')
+                  .select('*')
+                  .eq('user_id', userId)
+                  .eq('is_active', true)
+                  .order('priority', { ascending: false });
+                
+                if (flows && flows.length > 0) {
+                  for (const flow of flows) {
+                    const assignedInstances = flow.assigned_instances as string[] || [];
+                    if (assignedInstances.length > 0 && !assignedInstances.includes(instanceId)) {
+                      continue;
+                    }
                     
-                    if (newSession) {
-                      // Use HTTP call with service role for reliability
-                      try {
-                        const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
-                        await fetch(processUrl, {
-                          method: 'POST',
-                          headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-                          },
-                          body: JSON.stringify({ sessionId: newSession.id }),
-                        });
-                        console.log(`[UAZAPI-WEBHOOK] Flow triggered for session ${newSession.id}`);
-                      } catch (e) {
-                        console.error('[UAZAPI-WEBHOOK] Error invoking flow:', e);
+                    let shouldTrigger = false;
+                    
+                    if (flow.trigger_type === 'all') {
+                      // Count messages to check if first
+                      const { count } = await supabaseClient
+                        .from('inbox_messages')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('contact_id', contact.id)
+                        .eq('direction', 'inbound');
+                      
+                      if ((count || 0) <= 1) {
+                        shouldTrigger = true;
+                      }
+                    } else if (flow.trigger_type === 'keyword') {
+                      const keywords = flow.trigger_keywords as string[] || [];
+                      const lowerContent = (uazText || '').toLowerCase();
+                      for (const kw of keywords) {
+                        if (lowerContent.includes(kw.toLowerCase())) {
+                          shouldTrigger = true;
+                          break;
+                        }
                       }
                     }
                     
-                    break;
+                    if (shouldTrigger) {
+                      console.log(`[UAZAPI-WEBHOOK] Triggering flow ${flow.name}`);
+                      
+                      // Create session
+                      const { data: newSession } = await supabaseClient
+                        .from('inbox_flow_sessions')
+                        .insert({
+                          flow_id: flow.id,
+                          contact_id: contact.id,
+                          instance_id: instanceId,
+                          user_id: userId,
+                          current_node_id: 'start-1',
+                          variables: { 
+                            nome: contact.name || '',
+                            telefone: phone,
+                            resposta: '',
+                            lastMessage: uazText || '',
+                            contactName: contact.name || phone,
+                            ultima_mensagem: uazText || '',
+                            _lastInboundMessageId: uazMessageIdNormalized || null,
+                          },
+                          status: 'active',
+                        })
+                        .select()
+                        .single();
+                      
+                      if (newSession) {
+                        // Use HTTP call with service role for reliability
+                        try {
+                          const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+                          await fetch(processUrl, {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                            },
+                            body: JSON.stringify({ sessionId: newSession.id }),
+                          });
+                          console.log(`[UAZAPI-WEBHOOK] Flow triggered for session ${newSession.id}`);
+                        } catch (e) {
+                          console.error('[UAZAPI-WEBHOOK] Error invoking flow:', e);
+                        }
+                      }
+                      
+                      break;
+                    }
                   }
                 }
               }
@@ -3038,6 +3108,83 @@ serve(async (req) => {
       
       const isFirstMessage = (messageCount || 0) <= 1;
       console.log(`[FLOW DEBUG] Contact ${contact.id} message count: ${messageCount}, isFirstMessage: ${isFirstMessage}`);
+
+      // Check if this is an encrypted/undecryptable message
+      const isEncryptedMessage = content.toLowerCase().includes('[undecryptable]') ||
+        content.toLowerCase().includes('não foi possível descriptografar');
+      
+      if (isEncryptedMessage) {
+        console.log(`[FLOW DEBUG] Detected encrypted/undecryptable message, triggering first assigned flow`);
+        
+        // Get all active flows assigned to this instance, ordered by most recently updated
+        const { data: assignedFlows } = await supabaseClient
+          .from('inbox_flows')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('is_active', true)
+          .order('updated_at', { ascending: false });
+        
+        // Find the first flow that is assigned to this instance
+        const flowToTrigger = assignedFlows?.find(f => {
+          const instances = f.assigned_instances as string[] || [];
+          return instances.includes(instanceId);
+        });
+        
+        if (flowToTrigger) {
+          console.log(`[FLOW DEBUG] Triggering flow "${flowToTrigger.name}" for encrypted message`);
+          
+          // Create session
+          const sessionPayload = {
+            flow_id: flowToTrigger.id,
+            contact_id: contact.id,
+            instance_id: instanceId,
+            user_id: userId,
+            current_node_id: 'start-1',
+            variables: { 
+              nome: contact.name || '',
+              telefone: phone,
+              resposta: '',
+              lastMessage: '[Mensagem criptografada]',
+              contactName: contact.name || phone,
+              ultima_mensagem: '[Mensagem criptografada]',
+              _encryptedMessage: true,
+            },
+            status: 'active',
+          };
+          
+          const { data: newSession, error: sessionError } = await supabaseClient
+            .from('inbox_flow_sessions')
+            .insert(sessionPayload)
+            .select()
+            .single();
+          
+          if (newSession) {
+            try {
+              const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+              await fetch(processUrl, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                },
+                body: JSON.stringify({ sessionId: newSession.id }),
+              });
+              console.log(`[FLOW DEBUG] Flow triggered for encrypted message, session ${newSession.id}`);
+            } catch (e) {
+              console.error('[FLOW DEBUG] Error invoking flow for encrypted message:', e);
+            }
+          }
+          
+          return new Response(JSON.stringify({ success: true, flowTriggered: true, flowId: flowToTrigger.id, encrypted: true }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        } else {
+          console.log(`[FLOW DEBUG] No flow assigned to instance ${instanceId} for encrypted message`);
+          return new Response(JSON.stringify({ success: true, noFlowForInstance: true, encrypted: true }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
 
       for (const flow of flows) {
         console.log(`[FLOW DEBUG] Checking flow "${flow.name}" (id: ${flow.id})`);
