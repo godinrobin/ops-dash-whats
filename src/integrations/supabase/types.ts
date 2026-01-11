@@ -3876,6 +3876,26 @@ export type Database = {
       }
     }
     Functions: {
+      claim_push_notifications: {
+        Args: { batch_size?: number }
+        Returns: {
+          created_at: string
+          icon_url: string | null
+          id: string
+          message: string
+          priority: number | null
+          processed: boolean | null
+          subscription_ids: string[]
+          title: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "push_notification_queue"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       cleanup_old_data: { Args: never; Returns: undefined }
       cleanup_old_webhook_diagnostics: { Args: never; Returns: undefined }
       has_role: {

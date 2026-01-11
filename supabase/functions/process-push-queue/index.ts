@@ -26,65 +26,28 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Use UPDATE ... RETURNING to atomically claim notifications (prevents race conditions)
-    // This marks them as processed BEFORE we process them, so parallel calls won't pick the same ones
+    // Use atomic RPC to claim notifications (prevents race conditions with row-level locks)
     const { data: claimedNotifications, error: claimError } = await supabase
       .rpc('claim_push_notifications', { batch_size: 50 });
 
-    // If RPC doesn't exist, fallback to regular query but with immediate update
-    let pendingNotifications = claimedNotifications;
-    
     if (claimError) {
-      console.log("RPC not available, using fallback with immediate claim");
-      
-      // Get unprocessed notifications
-      const { data: fetchedNotifications, error: fetchError } = await supabase
-        .from("push_notification_queue")
-        .select("*")
-        .eq("processed", false)
-        .order("created_at", { ascending: true })
-        .limit(50);
-
-      if (fetchError) {
-        console.error("Error fetching queue:", fetchError);
-        throw fetchError;
-      }
-
-      if (!fetchedNotifications || fetchedNotifications.length === 0) {
-        return new Response(
-          JSON.stringify({ message: "No pending notifications", processed: 0 }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      // Immediately mark all fetched notifications as processed to prevent duplicates
-      const ids = fetchedNotifications.map(n => n.id);
-      const { error: markError } = await supabase
-        .from("push_notification_queue")
-        .update({ processed: true })
-        .in("id", ids);
-
-      if (markError) {
-        console.error("Error marking as processed:", markError);
-        // Continue anyway, might cause duplicates but better than failing
-      }
-
-      pendingNotifications = fetchedNotifications;
+      console.error("Error claiming notifications:", claimError);
+      throw claimError;
     }
 
-    if (!pendingNotifications || pendingNotifications.length === 0) {
+    if (!claimedNotifications || claimedNotifications.length === 0) {
       return new Response(
         JSON.stringify({ message: "No pending notifications", processed: 0 }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`Processing ${pendingNotifications.length} notifications`);
+    console.log(`Processing ${claimedNotifications.length} notifications (atomically claimed)`);
 
     let successCount = 0;
     let failCount = 0;
 
-    for (const notification of pendingNotifications) {
+    for (const notification of claimedNotifications) {
       try {
         const subscriptionIds = notification.subscription_ids;
         
@@ -133,7 +96,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         message: "Queue processed",
-        total: pendingNotifications.length,
+        total: claimedNotifications.length,
         success: successCount,
         failed: failCount
       }),
