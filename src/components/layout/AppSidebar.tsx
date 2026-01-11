@@ -190,7 +190,7 @@ export const AppSidebar = ({ isOpen, onClose, onOpenRestrictedModal }: AppSideba
         <h2 className="text-lg font-bold text-foreground">Sistemas</h2>
       </div>
       
-      <div className="flex-1 overflow-y-auto py-2">
+      <div className="flex-1 overflow-y-auto py-2 scrollbar-sidebar">
         {sidebarGroups.map((group) => (
           <CollapsibleSection key={group.title} title={group.title} defaultOpen={group.defaultOpen}>
             <div className="space-y-0.5 px-2">

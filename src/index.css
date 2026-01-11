@@ -160,3 +160,27 @@ All colors MUST be HSL.
     z-index: 1;
   }
 }
+
+/* Custom scrollbar for sidebar */
+.scrollbar-sidebar {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(25 95% 53%) hsl(0 0% 0%);
+}
+
+.scrollbar-sidebar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollbar-sidebar::-webkit-scrollbar-track {
+  background: hsl(0 0% 0%);
+  border-radius: 4px;
+}
+
+.scrollbar-sidebar::-webkit-scrollbar-thumb {
+  background: hsl(25 95% 53%);
+  border-radius: 4px;
+}
+
+.scrollbar-sidebar::-webkit-scrollbar-thumb:hover {
+  background: hsl(25 95% 45%);
+}
