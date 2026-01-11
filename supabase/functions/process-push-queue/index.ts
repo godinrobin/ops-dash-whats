@@ -67,7 +67,8 @@ Deno.serve(async (req) => {
         // Determine if this is a high priority notification
         const isHighPriority = notification.priority >= 10;
 
-        // Send push notification via OneSignal with priority settings
+        // Send push notification via OneSignal
+        // Note: For web push, priority options are limited compared to mobile
         const oneSignalPayload: Record<string, unknown> = {
           app_id: oneSignalAppId,
           include_subscription_ids: subscriptionIds,
@@ -75,13 +76,11 @@ Deno.serve(async (req) => {
           contents: { en: notification.message },
           chrome_web_icon: notification.icon_url || "https://zapdata.com.br/favicon.png",
           firefox_icon: notification.icon_url || "https://zapdata.com.br/favicon.png",
-          // Priority settings for urgent notifications (like instance disconnect)
-          priority: isHighPriority ? 10 : 5, // 10 = highest priority
-          // iOS settings for urgent notifications
-          ios_interruption_level: isHighPriority ? "time-sensitive" : "active",
-          // TTL - time to live (urgent notifications should be delivered quickly or not at all)
+          // Priority: 10 = high priority (wake device), 5 = normal
+          priority: isHighPriority ? 10 : 5,
+          // TTL - time to live in seconds
           ttl: isHighPriority ? 300 : 86400, // 5 minutes for urgent, 24 hours for normal
-          // Require interaction for important notifications
+          // Require user interaction for important notifications (keeps notification visible)
           require_interaction: isHighPriority,
         };
 
