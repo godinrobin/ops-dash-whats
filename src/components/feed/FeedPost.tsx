@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Heart, MessageCircle, Trash2, MoreHorizontal, Send, Loader2, Shield } from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
+import { MessageCircle, Trash2, MoreHorizontal, Send, Loader2, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -12,6 +12,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { motion, AnimatePresence } from "framer-motion";
+
+const REACTION_EMOJIS = ["🔥", "🚀", "👑", "👍🏻", "🚨"] as const;
 
 interface FeedPostProps {
   post: {
@@ -40,37 +43,62 @@ interface FeedPostProps {
     };
   }>;
   userLiked: boolean;
+  userReaction?: string | null;
   onRefresh: () => void;
 }
 
-export const FeedPost = ({ post, comments, userLiked, onRefresh }: FeedPostProps) => {
+export const FeedPost = ({ post, comments, userLiked, userReaction, onRefresh }: FeedPostProps) => {
   const { user } = useAuth();
   const { isAdmin } = useAdminStatus();
   const [showComments, setShowComments] = useState(false);
   const [newComment, setNewComment] = useState("");
   const [isLiking, setIsLiking] = useState(false);
   const [isCommenting, setIsCommenting] = useState(false);
+  const [showReactionPicker, setShowReactionPicker] = useState(false);
+  const reactionRef = useRef<HTMLDivElement>(null);
 
-  const handleLike = async () => {
+  // Close reaction picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (reactionRef.current && !reactionRef.current.contains(event.target as Node)) {
+        setShowReactionPicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleReaction = async (emoji: string) => {
     if (!user || isLiking) return;
 
     setIsLiking(true);
+    setShowReactionPicker(false);
     try {
-      if (userLiked) {
+      if (userLiked && userReaction === emoji) {
+        // Remove reaction if same emoji clicked
         await (supabase as any)
           .from("feed_likes")
           .delete()
           .eq("post_id", post.id)
           .eq("user_id", user.id);
+      } else if (userLiked) {
+        // Update to new emoji
+        await (supabase as any)
+          .from("feed_likes")
+          .update({ reaction: emoji })
+          .eq("post_id", post.id)
+          .eq("user_id", user.id);
       } else {
+        // Add new reaction
         await (supabase as any).from("feed_likes").insert({
           post_id: post.id,
           user_id: user.id,
+          reaction: emoji,
         });
       }
       onRefresh();
     } catch (error) {
-      console.error("Error toggling like:", error);
+      console.error("Error toggling reaction:", error);
     } finally {
       setIsLiking(false);
     }
@@ -226,21 +254,50 @@ export const FeedPost = ({ post, comments, userLiked, onRefresh }: FeedPostProps
 
       {/* Actions */}
       <div className="flex items-center gap-4 px-4 py-3 border-t border-border/50">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleLike}
-          disabled={isLiking}
-          className={cn(
-            "gap-2",
-            userLiked && "text-red-500 hover:text-red-600"
-          )}
-        >
-          <Heart
-            className={cn("w-5 h-5", userLiked && "fill-current")}
-          />
-          <span>{post.likes_count}</span>
-        </Button>
+        <div className="relative" ref={reactionRef}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowReactionPicker(!showReactionPicker)}
+            disabled={isLiking}
+            className={cn(
+              "gap-2",
+              userLiked && "text-accent"
+            )}
+          >
+            <span className="text-lg">
+              {userLiked && userReaction ? userReaction : "🔥"}
+            </span>
+            <span>{post.likes_count}</span>
+          </Button>
+
+          <AnimatePresence>
+            {showReactionPicker && (
+              <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 10, scale: 0.9 }}
+                transition={{ duration: 0.15 }}
+                className="absolute bottom-full left-0 mb-2 bg-card border border-border rounded-xl shadow-lg p-2 z-50"
+              >
+                <div className="flex flex-col gap-1">
+                  {REACTION_EMOJIS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      onClick={() => handleReaction(emoji)}
+                      className={cn(
+                        "text-2xl p-2 hover:bg-secondary/50 rounded-lg transition-all hover:scale-110",
+                        userReaction === emoji && "bg-accent/20"
+                      )}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         <Button
           variant="ghost"
