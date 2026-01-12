@@ -520,6 +520,26 @@ serve(async (req) => {
       console.log(`Created new contact: ${phone} (${contactName || 'no name'})`);
       imported++;
 
+      // Check lead rotation limit (fire and forget - don't block sync flow)
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        fetch(`${supabaseUrl}/functions/v1/check-lead-rotation`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          },
+          body: JSON.stringify({
+            user_id: user.id,
+            instance_id: instanceId,
+            instance_name: instance.label || instance.instance_name,
+            phone_number: instance.phone_number,
+          }),
+        }).catch(err => console.log('[LEAD-ROTATION] Fire and forget call failed:', err));
+      } catch (rotationErr) {
+        console.log('[LEAD-ROTATION] Error calling check-lead-rotation:', rotationErr);
+      }
+
       // Fetch messages for this chat and extract pushName from them
       if (newContact) {
         try {
