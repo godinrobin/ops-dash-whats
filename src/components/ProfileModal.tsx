@@ -16,7 +16,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Moon, Sun, Camera, Loader2, Bell, Trash2, Plus, ExternalLink, Send, Search, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Switch } from "@/components/ui/switch";
+import { ColoredSwitch } from "@/components/ui/colored-switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { testPushNotification } from "@/utils/pushNotifications";
 
@@ -583,7 +583,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6">
+          <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
             {/* Avatar Upload */}
             <div className="flex flex-col items-center gap-3">
               <div className="relative">
@@ -687,7 +687,7 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
                   <Bell className="h-5 w-5 text-accent" />
                   <h3 className="font-semibold text-sm">Notificações Push</h3>
                 </div>
-                <Switch
+                <ColoredSwitch
                   checked={pushWebhookEnabled}
                   onCheckedChange={handleTogglePushEnabled}
                   disabled={savingPushSettings}
