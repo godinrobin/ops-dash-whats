@@ -567,18 +567,41 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
         // First, get the "Pago" label id (config can get stale if labels are recreated)
         const fetchPagoLabelIdByName = async (): Promise<string | null> => {
           try {
+            console.log("[TAG-WHATS] Fetching labels from:", `${uazapiBaseUrl}/labels`);
+            
             const labelsResponse = await fetch(`${uazapiBaseUrl}/labels`, {
               method: "GET",
               headers: { token: uazapiToken },
             });
 
+            const responseText = await labelsResponse.text();
+            console.log("[TAG-WHATS] Labels API response status:", labelsResponse.status);
+            console.log("[TAG-WHATS] Labels API raw response:", responseText.substring(0, 500));
+
             if (!labelsResponse.ok) {
-              const t = await labelsResponse.text();
-              console.error("[TAG-WHATS] Failed to fetch labels:", labelsResponse.status, t);
+              console.error("[TAG-WHATS] Failed to fetch labels:", labelsResponse.status, responseText);
               return null;
             }
 
-            const labels = await labelsResponse.json();
+            let labels: any;
+            try {
+              labels = JSON.parse(responseText);
+            } catch (parseError) {
+              console.error("[TAG-WHATS] Failed to parse labels response as JSON:", parseError);
+              return null;
+            }
+
+            // Log all available labels for debugging
+            if (Array.isArray(labels) && labels.length > 0) {
+              console.log("[TAG-WHATS] Available labels:", labels.map((l: any) => ({
+                id: l?.labelid || l?.id,
+                name: l?.name,
+                color: l?.color
+              })));
+            } else {
+              console.log("[TAG-WHATS] No labels returned from API. Labels response type:", typeof labels, "isArray:", Array.isArray(labels));
+            }
+
             const pagoLabel = Array.isArray(labels)
               ? labels.find((l: any) => l?.name?.toLowerCase?.() === PAGO_LABEL_NAME.toLowerCase())
               : null;
@@ -588,11 +611,49 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
               found: !!id,
               id,
               labelsCount: Array.isArray(labels) ? labels.length : null,
+              pagoLabelFound: !!pagoLabel,
             });
 
             return id;
           } catch (e) {
             console.error("[TAG-WHATS] Error fetching labels:", e);
+            return null;
+          }
+        };
+
+        // Function to create the "Pago" label if it doesn't exist
+        const createPagoLabel = async (): Promise<string | null> => {
+          try {
+            console.log("[TAG-WHATS] Attempting to create 'Pago' label...");
+            
+            const createResponse = await fetch(`${uazapiBaseUrl}/label/edit`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                token: uazapiToken,
+              },
+              body: JSON.stringify({
+                name: PAGO_LABEL_NAME,
+                color: 6, // Green color for "Pago"
+              }),
+            });
+            
+            const createText = await createResponse.text();
+            console.log("[TAG-WHATS] Create label response:", createResponse.status, createText);
+            
+            if (createResponse.ok) {
+              // Wait a bit for sync and fetch the new label ID
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              const newId = await fetchPagoLabelIdByName();
+              if (newId) {
+                console.log("[TAG-WHATS] Successfully created 'Pago' label with ID:", newId);
+                return newId;
+              }
+            }
+            
+            return null;
+          } catch (e) {
+            console.error("[TAG-WHATS] Error creating label:", e);
             return null;
           }
         };
@@ -659,7 +720,13 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
 
             if (looksLikeMissingLabel) {
               console.log("[TAG-WHATS] Label id seems stale. Refreshing by name and retrying...");
-              const refreshedId = await fetchPagoLabelIdByName();
+              let refreshedId = await fetchPagoLabelIdByName();
+
+              // If still not found, try to create the label
+              if (!refreshedId) {
+                console.log("[TAG-WHATS] Label not found in list, attempting to create it...");
+                refreshedId = await createPagoLabel();
+              }
 
               if (refreshedId) {
                 pagoLabelId = refreshedId;
@@ -668,14 +735,14 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
                 const secondTry = await applyLabelOnce(pagoLabelId);
                 if (secondTry.ok) {
                   labelApplied = true;
-                  console.log("[TAG-WHATS] Label applied successfully after refresh!");
+                  console.log("[TAG-WHATS] Label applied successfully after refresh/create!");
                 } else {
-                  console.error("[TAG-WHATS] Failed to apply label after refresh.", secondTry.status, secondTry.text);
+                  console.error("[TAG-WHATS] Failed to apply label after refresh/create.", secondTry.status, secondTry.text);
                   errorMessage = `Failed to apply label: ${secondTry.text}`;
                 }
               } else {
-                console.error("[TAG-WHATS] Could not find 'Pago' label by name even after refresh.");
-                errorMessage = "'Pago' label not found in provider label list (refresh failed)";
+                console.error("[TAG-WHATS] Could not find or create 'Pago' label.");
+                errorMessage = "'Pago' label not found and could not be created automatically";
               }
             } else {
               console.error("[TAG-WHATS] Failed to apply label.", firstTry.status, firstTry.text);
@@ -683,8 +750,31 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
             }
           }
         } else {
-          console.log("[TAG-WHATS] No 'Pago' label found. Please create it in WhatsApp Business first.");
-          errorMessage = "No 'Pago' label configured - create it in WhatsApp Business";
+          // No label ID stored - try to find or create
+          console.log("[TAG-WHATS] No 'Pago' label ID stored. Attempting to find or create...");
+          
+          let newLabelId = await fetchPagoLabelIdByName();
+          if (!newLabelId) {
+            console.log("[TAG-WHATS] Label not found, attempting to create...");
+            newLabelId = await createPagoLabel();
+          }
+          
+          if (newLabelId) {
+            pagoLabelId = newLabelId;
+            await supabase.from("tag_whats_configs").update({ pago_label_id: pagoLabelId }).eq("id", config.id);
+            
+            const applyResult = await applyLabelOnce(pagoLabelId);
+            if (applyResult.ok) {
+              labelApplied = true;
+              console.log("[TAG-WHATS] Label applied successfully after find/create!");
+            } else {
+              console.error("[TAG-WHATS] Failed to apply label after find/create:", applyResult.text);
+              errorMessage = `Failed to apply label: ${applyResult.text}`;
+            }
+          } else {
+            console.log("[TAG-WHATS] Could not find or create 'Pago' label. Manual creation required.");
+            errorMessage = "No 'Pago' label configured - create it in WhatsApp Business";
+          }
         }
       } // Close !alreadyHasLabel
     } // Close isPixPayment
