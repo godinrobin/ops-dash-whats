@@ -1088,33 +1088,63 @@ serve(async (req) => {
             .single();
           
           if (contactError) {
-            console.error('[UAZAPI-WEBHOOK] Error creating contact:', contactError);
-            return new Response(JSON.stringify({ success: false, error: 'Failed to create contact' }), {
-              status: 500,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-          }
-          contact = newContact;
-          console.log(`[UAZAPI-WEBHOOK] Created new contact: ${contact.id} for instance ${instanceId}`);
-          
-          // Check lead rotation limit (fire and forget - don't block main flow)
-          try {
-            const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-            fetch(`${supabaseUrl}/functions/v1/check-lead-rotation`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-              },
-              body: JSON.stringify({
-                user_id: instance.user_id,
-                instance_id: instanceId,
-                instance_name: instance.label || instance.instance_name,
-                phone_number: instance.phone_number,
-              }),
-            }).catch(err => console.log('[LEAD-ROTATION] Fire and forget call failed:', err));
-          } catch (rotationErr) {
-            console.log('[LEAD-ROTATION] Error calling check-lead-rotation:', rotationErr);
+            // Check if it's a duplicate key error - if so, contact already exists (race condition)
+            if (contactError.code === '23505') {
+              console.log('[UAZAPI-WEBHOOK] Contact already exists (race condition), fetching existing');
+              const { data: existingContact } = await supabaseClient
+                .from('inbox_contacts')
+                .select('*')
+                .eq('phone', phone)
+                .eq('user_id', userId)
+                .eq('instance_id', instanceId)
+                .maybeSingle();
+              
+              if (existingContact) {
+                contact = existingContact;
+              } else {
+                console.error('[UAZAPI-WEBHOOK] Error creating contact and could not find existing:', contactError);
+                return new Response(JSON.stringify({ success: false, error: 'Failed to create contact' }), {
+                  status: 500,
+                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                });
+              }
+            } else {
+              console.error('[UAZAPI-WEBHOOK] Error creating contact:', contactError);
+              return new Response(JSON.stringify({ success: false, error: 'Failed to create contact' }), {
+                status: 500,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              });
+            }
+          } else {
+            contact = newContact;
+            console.log(`[UAZAPI-WEBHOOK] Created new contact: ${contact.id} for instance ${instanceId}`);
+            
+            // Check lead rotation limit (fire and forget - don't block main flow)
+            try {
+              const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+              const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+              console.log(`[LEAD-ROTATION] Calling check-lead-rotation for instance ${instanceId}`);
+              fetch(`${supabaseUrl}/functions/v1/check-lead-rotation`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${serviceRoleKey}`,
+                },
+                body: JSON.stringify({
+                  user_id: instance.user_id,
+                  instance_id: instanceId,
+                  instance_name: instance.label || instance.instance_name,
+                  phone_number: instance.phone_number,
+                }),
+              }).then(res => {
+                console.log(`[LEAD-ROTATION] Response status: ${res.status}`);
+                return res.text();
+              }).then(text => {
+                console.log(`[LEAD-ROTATION] Response: ${text.substring(0, 200)}`);
+              }).catch(err => console.log('[LEAD-ROTATION] Fire and forget call failed:', err));
+            } catch (rotationErr) {
+              console.log('[LEAD-ROTATION] Error calling check-lead-rotation:', rotationErr);
+            }
           }
         }
         
@@ -2453,11 +2483,13 @@ serve(async (req) => {
           // Check lead rotation limit (fire and forget - don't block main flow)
           try {
             const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+            const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+            console.log(`[LEAD-ROTATION] Calling check-lead-rotation for instance ${instanceId}`);
             fetch(`${supabaseUrl}/functions/v1/check-lead-rotation`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                'Authorization': `Bearer ${serviceRoleKey}`,
               },
               body: JSON.stringify({
                 user_id: userId,
@@ -2465,6 +2497,11 @@ serve(async (req) => {
                 instance_name: instance?.label || instance?.instance_name,
                 phone_number: instance?.phone_number,
               }),
+            }).then(res => {
+              console.log(`[LEAD-ROTATION] Response status: ${res.status}`);
+              return res.text();
+            }).then(text => {
+              console.log(`[LEAD-ROTATION] Response: ${text.substring(0, 200)}`);
             }).catch(err => console.log('[LEAD-ROTATION] Fire and forget call failed:', err));
           } catch (rotationErr) {
             console.log('[LEAD-ROTATION] Error calling check-lead-rotation:', rotationErr);
