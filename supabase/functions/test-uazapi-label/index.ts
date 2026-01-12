@@ -16,9 +16,9 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const { instanceName, phone } = await req.json();
+    const { instanceName, phone, createIfMissing = true } = await req.json();
     
-    console.log("[TEST-LABEL] Starting test for:", { instanceName, phone });
+    console.log("[TEST-LABEL] Starting test for:", { instanceName, phone, createIfMissing });
 
     // Get instance
     const { data: instance, error: instanceError } = await supabase
@@ -54,20 +54,73 @@ serve(async (req) => {
     let pagoLabel = null;
     try {
       labels = JSON.parse(labelsText);
-      pagoLabel = labels.find((l: any) => 
-        l.name?.toLowerCase() === "pago"
-      );
+      if (Array.isArray(labels)) {
+        pagoLabel = labels.find((l: any) => 
+          l.name?.toLowerCase() === "pago"
+        );
+      }
     } catch (e) {
-      console.log("[TEST-LABEL] Failed to parse labels");
+      console.log("[TEST-LABEL] Failed to parse labels:", e);
     }
 
+    console.log("[TEST-LABEL] All labels:", labels);
     console.log("[TEST-LABEL] Pago label found:", pagoLabel);
+
+    // Step 2: If no Pago label and createIfMissing is true, try to create it
+    let createdLabel = null;
+    if (!pagoLabel && createIfMissing) {
+      console.log("[TEST-LABEL] Attempting to create 'Pago' label...");
+      
+      const createResponse = await fetch(`${uazapiBaseUrl}/label/edit`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "token": uazapiToken,
+        },
+        body: JSON.stringify({
+          name: "Pago",
+          color: 6, // Green color
+        }),
+      });
+
+      const createText = await createResponse.text();
+      console.log("[TEST-LABEL] Create label response status:", createResponse.status);
+      console.log("[TEST-LABEL] Create label response:", createText);
+      createdLabel = { status: createResponse.status, response: createText };
+
+      if (createResponse.ok) {
+        // Wait for sync and fetch again
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        const refetchResponse = await fetch(`${uazapiBaseUrl}/labels`, {
+          method: "GET",
+          headers: { "token": uazapiToken },
+        });
+
+        const refetchText = await refetchResponse.text();
+        console.log("[TEST-LABEL] Refetch labels:", refetchText);
+
+        try {
+          const refetchLabels = JSON.parse(refetchText);
+          if (Array.isArray(refetchLabels)) {
+            labels = refetchLabels;
+            pagoLabel = refetchLabels.find((l: any) => 
+              l.name?.toLowerCase() === "pago"
+            );
+            console.log("[TEST-LABEL] Pago label after create:", pagoLabel);
+          }
+        } catch (e) {
+          console.log("[TEST-LABEL] Failed to parse refetch labels:", e);
+        }
+      }
+    }
 
     if (!pagoLabel) {
       return new Response(JSON.stringify({ 
         success: false, 
-        error: "Label 'Pago' not found",
-        availableLabels: labels.map((l: any) => ({ id: l.labelid || l.id, name: l.name }))
+        error: "Label 'Pago' not found and could not be created",
+        availableLabels: Array.isArray(labels) ? labels.map((l: any) => ({ id: l.labelid || l.id, name: l.name })) : [],
+        createdLabel,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -76,7 +129,7 @@ serve(async (req) => {
     const pagoLabelId = pagoLabel.labelid || pagoLabel.id;
     console.log("[TEST-LABEL] Pago label ID:", pagoLabelId);
 
-    // Step 2: Apply label to chat
+    // Step 3: Apply label to chat
     console.log("[TEST-LABEL] Applying label to phone:", phone);
     const labelPayload = {
       number: phone,
@@ -97,13 +150,23 @@ serve(async (req) => {
     console.log("[TEST-LABEL] Apply label response status:", applyResponse.status);
     console.log("[TEST-LABEL] Apply label response:", applyText);
 
+    // Update config with new label id if it was created
+    if (pagoLabelId) {
+      await supabase
+        .from("tag_whats_configs")
+        .update({ pago_label_id: pagoLabelId })
+        .eq("instance_id", instance.id);
+    }
+
     return new Response(JSON.stringify({
       success: applyResponse.ok,
-      labelsFound: labels.length,
+      labelsFound: Array.isArray(labels) ? labels.length : 0,
+      allLabels: Array.isArray(labels) ? labels.map((l: any) => ({ id: l.labelid || l.id, name: l.name })) : [],
       pagoLabel: pagoLabel,
       pagoLabelId: pagoLabelId,
       applyStatus: applyResponse.status,
       applyResponse: applyText,
+      createdLabel,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
