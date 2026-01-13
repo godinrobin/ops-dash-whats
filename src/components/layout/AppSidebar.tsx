@@ -77,6 +77,7 @@ const sidebarGroups: SidebarGroup[] = [
       { path: "/criador-funil", icon: <MessageSquare className="w-4 h-4" />, label: "Funil", restricted: true },
       { path: "/gerador-criativos", icon: <Image className="w-4 h-4" />, label: "Criativos Imagem", restricted: true },
       { path: "/gerador-variacoes-video", icon: <Video className="w-4 h-4" />, label: "Criativos Vídeo", restricted: true },
+      { path: "/criador-entregavel", icon: <Smartphone className="w-4 h-4" />, label: "Entregável em App", restricted: true },
       { path: "/gerador-audio", icon: <Mic className="w-4 h-4" />, label: "Áudio", restricted: true },
       { path: "/transcricao-audio", icon: <FileText className="w-4 h-4" />, label: "Transcrição", restricted: true },
       { path: "/analisador-criativos", icon: <Microscope className="w-4 h-4" />, label: "Analisador", restricted: true },
