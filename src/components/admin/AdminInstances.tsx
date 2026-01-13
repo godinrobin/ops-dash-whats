@@ -39,6 +39,8 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
   const [syncing, setSyncing] = useState<string | null>(null);
   const [syncingAll, setSyncingAll] = useState(false);
   const [deletingOld, setDeletingOld] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
+  const [deleteProgress, setDeleteProgress] = useState<{ current: number; total: number } | null>(null);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -47,6 +49,11 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
   const [minConversations, setMinConversations] = useState<string>('');
   const [sortBy, setSortBy] = useState<'conversations' | 'recent'>('conversations');
   const [rankingPeriod, setRankingPeriod] = useState<'3' | '7' | '15' | '30'>('7');
+
+  // All disconnected instances
+  const allDisconnectedInstances = useMemo(() => {
+    return instances.filter(inst => inst.status === 'disconnected');
+  }, [instances]);
 
   // Calculate instances disconnected for more than 7 days
   const oldDisconnectedInstances = useMemo(() => {
@@ -127,6 +134,76 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
       toast.error(error.message || 'Erro ao excluir instâncias');
     } finally {
       setDeletingOld(false);
+    }
+  };
+
+  // Delete all disconnected instances with delay to respect UAZAPI timeout
+  const deleteAllDisconnectedInstances = async () => {
+    if (allDisconnectedInstances.length === 0) {
+      toast.info('Não há instâncias desconectadas');
+      return;
+    }
+
+    setDeletingAll(true);
+    setDeleteProgress({ current: 0, total: allDisconnectedInstances.length });
+    
+    let successCount = 0;
+    let failCount = 0;
+    const DELAY_MS = 500; // 500ms delay between deletions to respect UAZAPI timeout
+
+    try {
+      for (let i = 0; i < allDisconnectedInstances.length; i++) {
+        const inst = allDisconnectedInstances[i];
+        setDeleteProgress({ current: i + 1, total: allDisconnectedInstances.length });
+
+        try {
+          // Try to delete from UAZAPI first if connected
+          if (inst.phone_number) {
+            try {
+              await supabase.functions.invoke('maturador-evolution', {
+                body: { 
+                  action: 'delete-instance', 
+                  instanceId: inst.id 
+                },
+              });
+            } catch (apiError) {
+              // Ignore API errors, continue with DB deletion
+              console.log(`[deleteAll] API delete failed for ${inst.id}, continuing with DB delete`);
+            }
+          }
+
+          // Delete from database
+          const { error } = await supabase
+            .from('maturador_instances')
+            .delete()
+            .eq('id', inst.id);
+
+          if (error) throw error;
+          successCount++;
+        } catch (err) {
+          console.error(`Error deleting instance ${inst.id}:`, err);
+          failCount++;
+        }
+
+        // Add delay between deletions to respect UAZAPI rate limits
+        if (i < allDisconnectedInstances.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+        }
+      }
+
+      if (failCount === 0) {
+        toast.success(`${successCount} instância(s) excluída(s) com sucesso!`);
+      } else {
+        toast.warning(`${successCount} excluída(s), ${failCount} falha(s)`);
+      }
+      
+      onRefresh();
+    } catch (error: any) {
+      console.error('Error in bulk delete:', error);
+      toast.error(error.message || 'Erro ao excluir instâncias');
+    } finally {
+      setDeletingAll(false);
+      setDeleteProgress(null);
     }
   };
 
@@ -261,23 +338,63 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
                 )}
               </Button>
               
+              {/* Delete all disconnected immediately */}
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button 
                     variant="destructive" 
+                    disabled={deletingAll || allDisconnectedInstances.length === 0}
+                  >
+                    {deletingAll ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        {deleteProgress && `${deleteProgress.current}/${deleteProgress.total}`}
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Excluir TODAS ({allDisconnectedInstances.length})
+                      </>
+                    )}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Excluir TODAS as instâncias desconectadas?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Esta ação irá excluir permanentemente <strong>{allDisconnectedInstances.length}</strong> instância(s) 
+                      desconectadas. A exclusão será feita com delay de 500ms entre cada uma para respeitar 
+                      o timeout da UAZAPI. Esta ação não pode ser desfeita.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={deleteAllDisconnectedInstances}>
+                      Excluir {allDisconnectedInstances.length} instância(s)
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              {/* Delete old disconnected (+7 days) */}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button 
+                    variant="outline" 
                     disabled={deletingOld || oldDisconnectedInstances.length === 0}
+                    className="border-destructive/50 text-destructive hover:bg-destructive/10"
                   >
                     {deletingOld ? (
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
                     ) : (
                       <Trash2 className="h-4 w-4 mr-2" />
                     )}
-                    Excluir Desconectadas +7d ({oldDisconnectedInstances.length})
+                    +7d ({oldDisconnectedInstances.length})
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Excluir instâncias desconectadas?</AlertDialogTitle>
+                    <AlertDialogTitle>Excluir instâncias desconectadas +7 dias?</AlertDialogTitle>
                     <AlertDialogDescription>
                       Esta ação irá excluir permanentemente <strong>{oldDisconnectedInstances.length}</strong> instância(s) 
                       que estão desconectadas há mais de 7 dias. Esta ação não pode ser desfeita.
