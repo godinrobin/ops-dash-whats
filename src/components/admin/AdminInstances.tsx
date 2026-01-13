@@ -157,19 +157,19 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
         setDeleteProgress({ current: i + 1, total: allDisconnectedInstances.length });
 
         try {
-          // Try to delete from UAZAPI first if connected
-          if (inst.phone_number) {
-            try {
-              await supabase.functions.invoke('maturador-evolution', {
-                body: { 
-                  action: 'delete-instance', 
-                  instanceId: inst.id 
-                },
-              });
-            } catch (apiError) {
-              // Ignore API errors, continue with DB deletion
-              console.log(`[deleteAll] API delete failed for ${inst.id}, continuing with DB delete`);
-            }
+          // Try to delete from UAZAPI first
+          try {
+            await supabase.functions.invoke('maturador-evolution', {
+              body: { 
+                action: 'admin-delete-instance', 
+                instanceId: inst.id,
+                instanceName: inst.instance_name
+              },
+            });
+            console.log(`[deleteAll] Deleted ${inst.instance_name} from UAZAPI`);
+          } catch (apiError) {
+            // Ignore API errors, continue with DB deletion
+            console.log(`[deleteAll] API delete failed for ${inst.instance_name}, continuing with DB delete`);
           }
 
           // Delete from database
