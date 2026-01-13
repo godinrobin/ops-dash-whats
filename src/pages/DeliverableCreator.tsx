@@ -8,12 +8,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, Eye, Plus, FileCode, Calendar, Pencil, Check, X, ArrowLeft } from "lucide-react";
+import { Trash2, Eye, Plus, FileCode, Calendar, Pencil, Check, X, ArrowLeft, Zap } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
+import { useDeliverablePromptLimit } from "@/hooks/useDeliverablePromptLimit";
+import { Progress } from "@/components/ui/progress";
 
 export interface DeliverableConfig {
   niche: string;
@@ -55,6 +57,14 @@ interface SavedDeliverable {
 
 const DeliverableCreator = () => {
   const { user } = useAuth();
+  const { 
+    promptsUsed, 
+    remainingPrompts, 
+    dailyLimit, 
+    hasReachedLimit, 
+    incrementPrompt 
+  } = useDeliverablePromptLimit(user?.id);
+  
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [step, setStep] = useState<ConversationStep>("template_selection");
   const [config, setConfig] = useState<DeliverableConfig>({
@@ -376,6 +386,18 @@ const DeliverableCreator = () => {
   };
 
   const startGeneration = async (finalConfig: DeliverableConfig) => {
+    // Check prompt limit before generating
+    if (hasReachedLimit) {
+      toast.error("Você atingiu o limite diário de 30 prompts. Tente novamente amanhã!");
+      return;
+    }
+    
+    const canProceed = await incrementPrompt();
+    if (!canProceed) {
+      toast.error("Limite de prompts atingido para hoje!");
+      return;
+    }
+    
     setStep("generating");
     setIsGenerating(true);
     
@@ -448,6 +470,18 @@ ${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as se
   };
 
   const generateWithEdit = async (editRequest: string) => {
+    // Check prompt limit before editing
+    if (hasReachedLimit) {
+      toast.error("Você atingiu o limite diário de 30 prompts. Tente novamente amanhã!");
+      return;
+    }
+    
+    const canProceed = await incrementPrompt();
+    if (!canProceed) {
+      toast.error("Limite de prompts atingido para hoje!");
+      return;
+    }
+    
     setIsGenerating(true);
     
     try {
@@ -749,11 +783,28 @@ ${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as se
                 Novo
               </Button>
             </div>
-            {currentDeliverableId && (
-              <Badge variant="outline" className="text-xs">
-                Salvo automaticamente
-              </Badge>
-            )}
+            
+            {/* Prompt Counter */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Zap className={`w-4 h-4 ${hasReachedLimit ? 'text-destructive' : 'text-accent'}`} />
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground">
+                    {promptsUsed}/{dailyLimit} prompts
+                  </span>
+                  <Progress 
+                    value={(promptsUsed / dailyLimit) * 100} 
+                    className="h-1.5 w-20"
+                  />
+                </div>
+              </div>
+              
+              {currentDeliverableId && (
+                <Badge variant="outline" className="text-xs">
+                  Salvo
+                </Badge>
+              )}
+            </div>
           </div>
           <div className="flex-1 min-h-0 overflow-hidden">
             <DeliverableChatPanel
