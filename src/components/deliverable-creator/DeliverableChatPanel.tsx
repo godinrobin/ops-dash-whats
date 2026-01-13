@@ -106,6 +106,8 @@ export const DeliverableChatPanel = ({
         return "Digite a cor secundária...";
       case "ask_audience":
         return "Descreva seu público-alvo...";
+      case "ask_product_details":
+        return "Conte mais sobre o produto/curso...";
       case "ask_videos":
         return "Responda sim ou não...";
       case "ask_video_links":
