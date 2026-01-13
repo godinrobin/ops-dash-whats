@@ -8,11 +8,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, Eye, Plus, FileCode, Calendar } from "lucide-react";
+import { Trash2, Eye, Plus, FileCode, Calendar, Pencil, Check, X } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
+import { Input } from "@/components/ui/input";
 
 export interface DeliverableConfig {
   niche: string;
@@ -68,6 +69,8 @@ const DeliverableCreator = () => {
   const [savedDeliverables, setSavedDeliverables] = useState<SavedDeliverable[]>([]);
   const [currentDeliverableId, setCurrentDeliverableId] = useState<string | null>(null);
   const [showSavedList, setShowSavedList] = useState(true);
+  const [editingNameId, setEditingNameId] = useState<string | null>(null);
+  const [editingNameValue, setEditingNameValue] = useState("");
 
   // Fetch saved deliverables on mount
   useEffect(() => {
@@ -167,6 +170,37 @@ const DeliverableCreator = () => {
     if (currentDeliverableId === id) {
       resetToNewDeliverable();
     }
+  };
+
+  const updateDeliverableName = async (id: string, newName: string) => {
+    if (!newName.trim()) {
+      toast.error("Nome não pode estar vazio");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("saved_deliverables")
+      .update({ name: newName.trim() })
+      .eq("id", id);
+    
+    if (error) {
+      toast.error("Erro ao atualizar nome");
+      return;
+    }
+    
+    toast.success("Nome atualizado");
+    setEditingNameId(null);
+    await fetchSavedDeliverables();
+  };
+
+  const startEditingName = (deliverable: SavedDeliverable) => {
+    setEditingNameId(deliverable.id);
+    setEditingNameValue(deliverable.name);
+  };
+
+  const cancelEditingName = () => {
+    setEditingNameId(null);
+    setEditingNameValue("");
   };
 
   const loadDeliverable = (deliverable: SavedDeliverable) => {
@@ -579,8 +613,52 @@ const DeliverableCreator = () => {
                     >
                       <Card className="hover:border-accent transition-all group">
                         <CardHeader className="pb-2">
-                          <CardTitle className="text-base flex items-center justify-between">
-                            <span className="truncate">{deliverable.name}</span>
+                          <CardTitle className="text-base flex items-center justify-between gap-2">
+                            {editingNameId === deliverable.id ? (
+                              <div className="flex items-center gap-1 flex-1">
+                                <Input
+                                  value={editingNameValue}
+                                  onChange={(e) => setEditingNameValue(e.target.value)}
+                                  className="h-7 text-sm"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      updateDeliverableName(deliverable.id, editingNameValue);
+                                    } else if (e.key === "Escape") {
+                                      cancelEditingName();
+                                    }
+                                  }}
+                                />
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6 text-green-500 hover:text-green-600"
+                                  onClick={() => updateDeliverableName(deliverable.id, editingNameValue)}
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6 text-muted-foreground"
+                                  onClick={cancelEditingName}
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <>
+                                <span className="truncate flex-1">{deliverable.name}</span>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={() => startEditingName(deliverable)}
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </Button>
+                              </>
+                            )}
                           </CardTitle>
                           <div className="flex items-center gap-1 text-xs text-muted-foreground">
                             <Calendar className="w-3 h-3" />
