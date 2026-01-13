@@ -59,6 +59,7 @@ import WhatsAppEditor from "./pages/WhatsAppEditor";
 import WhatsAppEditorAddNumber from "./pages/WhatsAppEditorAddNumber";
 import NotifyAdminPage from "./pages/NotifyAdminPage";
 import NotifyAdminAddNumber from "./pages/NotifyAdminAddNumber";
+import DeliverableCreator from "./pages/DeliverableCreator";
 
 const queryClient = new QueryClient();
 
@@ -127,6 +128,7 @@ const AppRoutes = () => {
         <Route path="/disparazap/fluxos/novo" element={<MemberRoute featureName="DisparaZap"><FlowEditorPage /></MemberRoute>} />
         <Route path="/disparazap/fluxos/:id" element={<MemberRoute featureName="DisparaZap"><FlowEditorPage /></MemberRoute>} />
         <Route path="/clonador" element={<MemberRoute featureName="Clonador de Entregável"><SiteCloner /></MemberRoute>} />
+        <Route path="/criador-entregavel" element={<MemberRoute featureName="Criador de Entregável em App"><DeliverableCreator /></MemberRoute>} />
         <Route path="/whatsapp-editor" element={<MemberRoute featureName="Edição de WhatsApp"><WhatsAppEditor /></MemberRoute>} />
         <Route path="/whatsapp-editor/add-number" element={<MemberRoute featureName="Edição de WhatsApp"><WhatsAppEditorAddNumber /></MemberRoute>} />
         
