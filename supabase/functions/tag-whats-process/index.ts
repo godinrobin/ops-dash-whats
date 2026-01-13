@@ -1011,49 +1011,53 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
       error_message: errorMessage,
     });
 
-    // Send push notification for sales if enabled - using push_notification_queue for consistency
+    // Send push notification for sales if enabled - ONLY to the instance owner
     if (isPixPayment && labelApplied) {
-      console.log("[TAG-WHATS] Queueing sale notification...");
+      console.log("[TAG-WHATS] Queueing sale notification for instance owner...");
       
       try {
-        // Get all users who have notify_on_sale enabled AND have push enabled with subscription IDs
-        const { data: usersToNotify, error: usersError } = await supabase
+        // FIXED: Only notify the instance owner (instance.user_id), not all users
+        const { data: ownerProfile, error: ownerError } = await supabase
           .from("profiles")
-          .select("id, push_subscription_ids")
-          .eq("notify_on_sale", true)
-          .eq("push_webhook_enabled", true)
-          .not("push_subscription_ids", "is", null);
+          .select("id, push_subscription_ids, notify_on_sale, push_webhook_enabled")
+          .eq("id", instance.user_id)
+          .single();
 
-        if (usersError) {
-          console.error("[TAG-WHATS] Error fetching users to notify:", usersError);
-        } else if (usersToNotify && usersToNotify.length > 0) {
-          console.log(`[TAG-WHATS] Found ${usersToNotify.length} users to notify about sale`);
+        if (ownerError) {
+          console.error("[TAG-WHATS] Error fetching instance owner profile:", ownerError);
+        } else if (ownerProfile) {
+          console.log(`[TAG-WHATS] Owner profile found:`, {
+            user_id: ownerProfile.id,
+            notify_on_sale: ownerProfile.notify_on_sale,
+            push_enabled: ownerProfile.push_webhook_enabled,
+            has_subscriptions: !!(ownerProfile.push_subscription_ids?.length)
+          });
           
-          // Insert notifications into queue for each user (realtime will trigger immediate processing)
-          const notificationsToInsert = usersToNotify
-            .filter(user => user.push_subscription_ids && Array.isArray(user.push_subscription_ids) && user.push_subscription_ids.length > 0)
-            .map(user => ({
-              user_id: user.id,
-              subscription_ids: user.push_subscription_ids,
-              title: "💰 Nova Venda!",
-              message: extractedValue ? `Pix Pago! Valor: R$ ${extractedValue} 🔥` : "Pix Pago no x1! 🔥",
-              icon_url: "https://zapdata.com.br/favicon.png",
-              priority: 8, // High priority (below disconnect=10)
-            }));
-          
-          if (notificationsToInsert.length > 0) {
+          // Check if owner has sale notifications enabled
+          if (ownerProfile.notify_on_sale && 
+              ownerProfile.push_webhook_enabled && 
+              ownerProfile.push_subscription_ids && 
+              Array.isArray(ownerProfile.push_subscription_ids) && 
+              ownerProfile.push_subscription_ids.length > 0) {
+            
             const { error: insertError } = await supabase
               .from("push_notification_queue")
-              .insert(notificationsToInsert);
+              .insert({
+                user_id: ownerProfile.id,
+                subscription_ids: ownerProfile.push_subscription_ids,
+                title: "💰 Nova Venda!",
+                message: extractedValue ? `Pix Pago! Valor: R$ ${extractedValue.toFixed(2)} 🔥` : "Pix Pago no x1! 🔥",
+                icon_url: "https://zapdata.com.br/favicon.png",
+              });
             
             if (insertError) {
-              console.error("[TAG-WHATS] Error inserting sale notifications to queue:", insertError);
+              console.error("[TAG-WHATS] Error inserting sale notification to queue:", insertError);
             } else {
-              console.log(`[TAG-WHATS] Queued ${notificationsToInsert.length} sale notification(s) - will be processed via realtime`);
+              console.log(`[TAG-WHATS] Sale notification queued for instance owner ${ownerProfile.id}`);
             }
+          } else {
+            console.log("[TAG-WHATS] Instance owner does not have sale notifications enabled or no subscription IDs");
           }
-        } else {
-          console.log("[TAG-WHATS] No users have sale notifications enabled");
         }
       } catch (pushError) {
         console.error("[TAG-WHATS] Error queueing sale push notification:", pushError);
