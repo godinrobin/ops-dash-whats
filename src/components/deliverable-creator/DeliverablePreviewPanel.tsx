@@ -4,8 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Smartphone,
-  Tablet,
-  Monitor,
   Download,
   Code,
   RefreshCw,
@@ -22,13 +20,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import JSZip from "jszip";
 import { DeliverableConfig } from "@/pages/DeliverableCreator";
 
-type Viewport = "mobile" | "tablet" | "desktop";
-
-const viewportSizes: Record<Viewport, { width: number; label: string }> = {
-  mobile: { width: 375, label: "Mobile" },
-  tablet: { width: 768, label: "Tablet" },
-  desktop: { width: 1024, label: "Desktop" },
-};
+// Fixed mobile viewport
+const MOBILE_WIDTH = 375;
+const MOBILE_HEIGHT = 667;
 
 interface DeliverablePreviewPanelProps {
   html: string;
@@ -41,10 +35,8 @@ export const DeliverablePreviewPanel = ({
   isGenerating,
   config,
 }: DeliverablePreviewPanelProps) => {
-  const [viewport, setViewport] = useState<Viewport>("mobile");
   const [showCode, setShowCode] = useState(false);
   const [iframeKey, setIframeKey] = useState(0);
-
   const handleDownloadZip = async () => {
     if (!html) return;
 
@@ -104,24 +96,13 @@ Gerado com ❤️ pelo Criador de Entregáveis
     <div className="flex flex-col h-full min-h-0">
       {/* Toolbar */}
       <div className="p-3 border-b border-border bg-background flex items-center justify-between gap-2 flex-wrap flex-shrink-0 z-10">
-        {/* Viewport toggles */}
-        <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-1">
-          {(Object.keys(viewportSizes) as Viewport[]).map((vp) => (
-            <Button
-              key={vp}
-              variant={viewport === vp ? "default" : "ghost"}
-              size="sm"
-              className="h-8 px-3"
-              onClick={() => setViewport(vp)}
-            >
-              {vp === "mobile" && <Smartphone className="w-4 h-4" />}
-              {vp === "tablet" && <Tablet className="w-4 h-4" />}
-              {vp === "desktop" && <Monitor className="w-4 h-4" />}
-              <span className="ml-1.5 hidden sm:inline text-xs">
-                {viewportSizes[vp].label}
-              </span>
-            </Button>
-          ))}
+        {/* Mobile indicator */}
+        <div className="flex items-center gap-2 bg-secondary/50 rounded-lg px-3 py-1.5">
+          <Smartphone className="w-4 h-4" />
+          <span className="text-xs font-medium">Mobile</span>
+          <Badge variant="outline" className="text-xs">
+            {MOBILE_WIDTH}x{MOBILE_HEIGHT}
+          </Badge>
         </div>
 
         {/* Actions */}
@@ -193,17 +174,15 @@ Gerado com ❤️ pelo Criador de Entregáveis
               exit={{ opacity: 0, scale: 0.95 }}
               className="relative bg-white rounded-lg shadow-2xl overflow-hidden"
               style={{
-                width: viewportSizes[viewport].width,
-                height: viewport === "mobile" ? 667 : viewport === "tablet" ? 1024 : 768,
+                width: MOBILE_WIDTH,
+                height: MOBILE_HEIGHT,
                 maxHeight: "calc(100% - 20px)",
               }}
             >
-              {/* Device frame for mobile */}
-              {viewport === "mobile" && (
-                <div className="absolute top-0 left-0 right-0 h-6 bg-black rounded-t-lg flex items-center justify-center z-10">
-                  <div className="w-20 h-4 bg-black rounded-b-xl" />
-                </div>
-              )}
+              {/* Device frame */}
+              <div className="absolute top-0 left-0 right-0 h-6 bg-black rounded-t-lg flex items-center justify-center z-10">
+                <div className="w-20 h-4 bg-black rounded-b-xl" />
+              </div>
               
               <iframe
                 key={iframeKey}
@@ -211,7 +190,7 @@ Gerado com ❤️ pelo Criador de Entregáveis
                 title="Preview"
                 className="w-full h-full border-0 bg-white"
                 style={{
-                  paddingTop: viewport === "mobile" ? 24 : 0,
+                  paddingTop: 24,
                 }}
                 sandbox="allow-scripts"
                 referrerPolicy="no-referrer"
