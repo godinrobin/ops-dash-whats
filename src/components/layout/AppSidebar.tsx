@@ -74,13 +74,13 @@ const sidebarGroups: SidebarGroup[] = [
     title: "Criação de Oferta",
     defaultOpen: true,
     items: [
-      { path: "/criador-funil", icon: <MessageSquare className="w-4 h-4" />, label: "Funil", restricted: true },
-      { path: "/gerador-criativos", icon: <Image className="w-4 h-4" />, label: "Criativos Imagem", restricted: true },
-      { path: "/gerador-variacoes-video", icon: <Video className="w-4 h-4" />, label: "Criativos Vídeo", restricted: true },
+      { path: "/criador-funil", icon: <MessageSquare className="w-4 h-4" />, label: "Gerador de Funil X1", shortLabel: "Funil X1", restricted: true },
+      { path: "/gerador-criativos", icon: <Image className="w-4 h-4" />, label: "Gerador de Criativos em Imagem", shortLabel: "Criativos Imagem", restricted: true },
+      { path: "/gerador-variacoes-video", icon: <Video className="w-4 h-4" />, label: "Gerador de Múltiplos Criativos em Vídeo", shortLabel: "Criativos Vídeo", restricted: true },
       { path: "/criador-entregavel", icon: <Smartphone className="w-4 h-4" />, label: "Entregável em App", restricted: true },
-      { path: "/gerador-audio", icon: <Mic className="w-4 h-4" />, label: "Áudio", restricted: true },
+      { path: "/gerador-audio", icon: <Mic className="w-4 h-4" />, label: "Gerador de Áudio", shortLabel: "Áudio", restricted: true },
       { path: "/transcricao-audio", icon: <FileText className="w-4 h-4" />, label: "Transcrição", restricted: true },
-      { path: "/analisador-criativos", icon: <Microscope className="w-4 h-4" />, label: "Analisador", restricted: true },
+      { path: "/analisador-criativos", icon: <Microscope className="w-4 h-4" />, label: "Analisador de Criativos", shortLabel: "Analisador", restricted: true },
     ],
   },
   {
