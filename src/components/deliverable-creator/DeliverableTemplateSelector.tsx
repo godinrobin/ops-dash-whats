@@ -50,7 +50,7 @@ export const DeliverableTemplateSelector = ({ onSelect }: DeliverableTemplateSel
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {templates.map((template, index) => (
             <motion.div
               key={template.id}
@@ -84,36 +84,28 @@ export const DeliverableTemplateSelector = ({ onSelect }: DeliverableTemplateSel
                             e.stopPropagation();
                             setPreviewImage(template.image);
                           }}
-                          className="absolute top-3 left-3 p-2 bg-background/90 backdrop-blur-sm rounded-full shadow-lg hover:bg-background transition-colors z-10"
+                          className="absolute top-2 left-2 p-1.5 bg-background/90 backdrop-blur-sm rounded-full shadow-lg hover:bg-background transition-colors z-10"
                           title="Ver imagem completa"
                         >
-                          <Eye className="w-4 h-4 text-foreground" />
+                          <Eye className="w-3.5 h-3.5 text-foreground" />
                         </motion.button>
                       )}
                     </AnimatePresence>
                   </div>
                   {template.badge && (
-                    <Badge className="absolute top-3 right-3 bg-accent text-accent-foreground">
+                    <Badge className="absolute top-2 right-2 bg-accent text-accent-foreground text-xs px-1.5 py-0.5">
                       {template.badge}
                     </Badge>
                   )}
                 </CardHeader>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Smartphone className="w-5 h-5 text-accent" />
-                    <CardTitle className="text-lg">{template.name}</CardTitle>
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Smartphone className="w-4 h-4 text-accent" />
+                    <CardTitle className="text-sm">{template.name}</CardTitle>
                   </div>
-                  <CardDescription className="mb-4">
+                  <CardDescription className="text-xs line-clamp-2">
                     {template.description}
                   </CardDescription>
-                  <div className="space-y-1.5">
-                    {template.features.map((feature, i) => (
-                      <div key={i} className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Check className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
-                        <span>{feature}</span>
-                      </div>
-                    ))}
-                  </div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -128,16 +120,16 @@ export const DeliverableTemplateSelector = ({ onSelect }: DeliverableTemplateSel
             <Card className="opacity-50 cursor-not-allowed overflow-hidden">
               <CardHeader className="p-0">
                 <div className="aspect-[3/4] bg-muted flex items-center justify-center">
-                  <div className="text-center p-6">
-                    <Smartphone className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
-                    <p className="text-muted-foreground font-medium">Mais modelos em breve</p>
+                  <div className="text-center p-4">
+                    <Smartphone className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
+                    <p className="text-muted-foreground text-xs font-medium">Em breve</p>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="p-4">
-                <CardTitle className="text-lg text-muted-foreground">Em breve</CardTitle>
-                <CardDescription>
-                  Novos modelos de entregáveis serão adicionados
+              <CardContent className="p-3">
+                <CardTitle className="text-sm text-muted-foreground">Mais modelos</CardTitle>
+                <CardDescription className="text-xs">
+                  Novos modelos em breve
                 </CardDescription>
               </CardContent>
             </Card>
