@@ -6,6 +6,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { 
   BarChart3, 
   Phone, 
+  Smartphone,
   Target, 
   Search, 
   Puzzle, 
@@ -80,6 +81,7 @@ const systemGroups: SystemGroup[] = [
       { id: "funil", path: "/criador-funil", title: "Gerador de Funil de X1", icon: <MessageSquare className="w-4 h-4" />, restricted: true },
       { id: "criativos-imagem", path: "/gerador-criativos", title: "Gerador de Criativos em Imagem", icon: <Image className="w-4 h-4" />, restricted: true },
       { id: "criativos-video", path: "/gerador-variacoes-video", title: "Gerador de Múltiplos Criativos em Vídeo", icon: <Video className="w-4 h-4" />, restricted: true },
+      { id: "entregavel-app", path: "/criador-entregavel", title: "Criador de Entregável em App", icon: <Smartphone className="w-4 h-4" />, restricted: true },
       { id: "audio", path: "/gerador-audio", title: "Gerador de Áudio", icon: <Mic className="w-4 h-4" />, restricted: true },
       { id: "transcricao", path: "/transcricao-audio", title: "Transcrição", icon: <FileText className="w-4 h-4" />, restricted: true },
       { id: "analisador", path: "/analisador-criativos", title: "Analisador de Criativos", icon: <Microscope className="w-4 h-4" />, restricted: true },
