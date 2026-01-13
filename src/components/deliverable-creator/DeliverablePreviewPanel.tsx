@@ -7,7 +7,6 @@ import {
   Download,
   Code,
   RefreshCw,
-  Loader2,
   Eye,
 } from "lucide-react";
 import {
@@ -19,6 +18,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import JSZip from "jszip";
 import { DeliverableConfig } from "@/pages/DeliverableCreator";
+import { AILoader } from "@/components/ui/ai-loader";
 
 // Fixed mobile viewport
 const MOBILE_WIDTH = 375;
@@ -163,8 +163,7 @@ Gerado com ❤️ pelo Criador de Entregáveis
               exit={{ opacity: 0 }}
               className="text-center"
             >
-              <Loader2 className="w-12 h-12 text-accent animate-spin mx-auto mb-4" />
-              <p className="text-muted-foreground">Gerando seu app...</p>
+              <AILoader size={140} text="Gerando" />
             </motion.div>
           ) : (
             <motion.div
@@ -188,7 +187,7 @@ Gerado com ❤️ pelo Criador de Entregáveis
                 key={iframeKey}
                 srcDoc={html}
                 title="Preview"
-                className="w-full h-full border-0 bg-white"
+                className={`w-full h-full border-0 bg-white transition-all duration-300 ${isGenerating ? "blur-md" : ""}`}
                 style={{
                   paddingTop: 24,
                 }}
@@ -197,11 +196,8 @@ Gerado com ❤️ pelo Criador de Entregáveis
               />
 
               {isGenerating && (
-                <div className="absolute inset-0 bg-background/50 flex items-center justify-center">
-                  <Badge variant="secondary" className="gap-2">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    Atualizando...
-                  </Badge>
+                <div className="absolute inset-0 bg-background/70 backdrop-blur-sm flex items-center justify-center z-20">
+                  <AILoader size={120} text="Gerando" />
                 </div>
               )}
             </motion.div>

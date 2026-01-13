@@ -130,29 +130,6 @@ export const DeliverableTemplateSelector = ({ onSelect }: DeliverableTemplateSel
             </motion.div>
           ))}
 
-          {/* Coming Soon Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            <Card className="opacity-50 cursor-not-allowed overflow-hidden">
-              <CardHeader className="p-0">
-                <div className="aspect-[3/4] bg-muted flex items-center justify-center">
-                  <div className="text-center p-4">
-                    <Smartphone className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
-                    <p className="text-muted-foreground text-xs font-medium">Em breve</p>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="p-3">
-                <CardTitle className="text-sm text-muted-foreground">Mais modelos</CardTitle>
-                <CardDescription className="text-xs">
-                  Novos modelos em breve
-                </CardDescription>
-              </CardContent>
-            </Card>
-          </motion.div>
         </div>
       </div>
 
