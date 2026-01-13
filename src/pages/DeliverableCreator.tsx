@@ -16,6 +16,7 @@ export interface DeliverableConfig {
 export type ChatMessage = {
   role: "user" | "assistant" | "system";
   content: string;
+  imageUrl?: string;
 };
 
 export type ConversationStep = 
@@ -55,8 +56,8 @@ const DeliverableCreator = () => {
     ]);
   };
 
-  const handleUserMessage = async (message: string) => {
-    const userMsg: ChatMessage = { role: "user", content: message };
+  const handleUserMessage = async (message: string, imageUrl?: string) => {
+    const userMsg: ChatMessage = { role: "user", content: message, imageUrl };
     setMessages((prev) => [...prev, userMsg]);
 
     switch (step) {
