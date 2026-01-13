@@ -29,6 +29,13 @@ export interface DeliverableConfig {
   videoLinks: string[];
   numberOfLessons?: number;
   includePdfSection?: boolean;
+  // PIX configuration
+  includePix?: boolean;
+  pixName?: string;
+  pixKey?: string;
+  pixBank?: string;
+  // Additional observations
+  additionalObservations?: string;
 }
 
 export type ChatMessage = {
@@ -48,6 +55,11 @@ export type ConversationStep =
   | "ask_video_links"
   | "ask_num_lessons"
   | "ask_pdf_section"
+  | "ask_pix"
+  | "ask_pix_name"
+  | "ask_pix_key"
+  | "ask_pix_bank"
+  | "ask_observations"
   | "generating"
   | "editing";
 
@@ -255,6 +267,11 @@ const DeliverableCreator = () => {
       videoLinks: [],
       numberOfLessons: undefined,
       includePdfSection: false,
+      includePix: false,
+      pixName: undefined,
+      pixKey: undefined,
+      pixBank: undefined,
+      additionalObservations: undefined,
     });
     setMessages([]);
     setGeneratedHtml("");
@@ -402,7 +419,17 @@ const DeliverableCreator = () => {
             ]);
           }, 300);
         } else {
-          startGeneration({ ...config, includeVideos: false });
+          // Go to PIX question instead of generating
+          setStep("ask_pix");
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `Ok, sem vídeos! 📝\n\n💳 Você deseja **adicionar sua chave PIX** no final do site?\n\nIsso permite que seus clientes copiem sua chave facilmente, aumentando a conversão.\n\nResponda **sim** ou **não**.`,
+              },
+            ]);
+          }, 300);
         }
         break;
 
@@ -421,7 +448,17 @@ const DeliverableCreator = () => {
               ]);
             }, 300);
           } else {
-            startGeneration(config);
+            // Go to PIX question
+            setStep("ask_pix");
+            setTimeout(() => {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: "assistant",
+                  content: `Links adicionados! ✅\n\n💳 Você deseja **adicionar sua chave PIX** no final do site?\n\nIsso permite que seus clientes copiem sua chave facilmente, aumentando a conversão.\n\nResponda **sim** ou **não**.`,
+                },
+              ]);
+            }, 300);
           }
         } else {
           setConfig((prev) => ({
@@ -443,7 +480,97 @@ const DeliverableCreator = () => {
       case "ask_pdf_section":
         const wantsPdf = message.toLowerCase().includes("sim") || message.toLowerCase().includes("yes");
         setConfig((prev) => ({ ...prev, includePdfSection: wantsPdf }));
-        startGeneration({ ...config, includePdfSection: wantsPdf });
+        // Move to PIX question
+        setStep("ask_pix");
+        setTimeout(() => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `${wantsPdf ? "Perfeito, vou incluir seção de materiais! 📄" : "Ok, sem materiais PDF."}\n\n💳 Você deseja **adicionar sua chave PIX** no final do site?\n\nIsso permite que seus clientes copiem sua chave facilmente, aumentando a conversão.\n\nResponda **sim** ou **não**.`,
+            },
+          ]);
+        }, 300);
+        break;
+
+      case "ask_pix":
+        const wantsPix = message.toLowerCase().includes("sim") || message.toLowerCase().includes("yes");
+        setConfig((prev) => ({ ...prev, includePix: wantsPix }));
+        
+        if (wantsPix) {
+          setStep("ask_pix_name");
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `Ótimo! 🏦\n\nQual é o **nome que aparece no banco** quando fazem um PIX pra você?\n\nExemplo: Maria Silva, João Santos`,
+              },
+            ]);
+          }, 300);
+        } else {
+          // Skip to observations
+          setStep("ask_observations");
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `Ok, sem PIX! 👍\n\n📝 Alguma **observação adicional** que eu deva levar em consideração para criar o site?\n\nPode ser estilo, funcionalidades específicas, textos que devem aparecer, etc.\n\nSe não tiver, digite **não** ou **gerar**.`,
+              },
+            ]);
+          }, 300);
+        }
+        break;
+
+      case "ask_pix_name":
+        setConfig((prev) => ({ ...prev, pixName: message }));
+        setStep("ask_pix_key");
+        setTimeout(() => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `Nome registrado: **${message}** ✅\n\nAgora, qual é a sua **chave PIX**?\n\nPode ser CPF, email, telefone ou chave aleatória.`,
+            },
+          ]);
+        }, 300);
+        break;
+
+      case "ask_pix_key":
+        setConfig((prev) => ({ ...prev, pixKey: message }));
+        setStep("ask_pix_bank");
+        setTimeout(() => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `Chave registrada! 🔑\n\nQual é o **banco** dessa chave PIX?\n\nExemplo: Nubank, Inter, Itaú, Bradesco, etc.`,
+            },
+          ]);
+        }, 300);
+        break;
+
+      case "ask_pix_bank":
+        setConfig((prev) => ({ ...prev, pixBank: message }));
+        setStep("ask_observations");
+        setTimeout(() => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `PIX configurado: **${message}** 🏦\n\n📝 Alguma **observação adicional** que eu deva levar em consideração para criar o site?\n\nPode ser estilo, funcionalidades específicas, textos que devem aparecer, etc.\n\nSe não tiver, digite **não** ou **gerar**.`,
+            },
+          ]);
+        }, 300);
+        break;
+
+      case "ask_observations":
+        const hasObservations = !["não", "nao", "no", "gerar", "nenhuma", "nenhum"].includes(message.toLowerCase().trim());
+        if (hasObservations) {
+          setConfig((prev) => ({ ...prev, additionalObservations: message }));
+        }
+        startGeneration({ ...config, additionalObservations: hasObservations ? message : undefined });
         break;
 
       case "editing":
