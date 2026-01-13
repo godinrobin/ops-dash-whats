@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { GlowingCard } from "@/components/ui/glowing-card";
 import { Trash2, Eye, Plus, FileCode, Calendar, Pencil, Check, X, ArrowLeft, Zap } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -723,85 +724,87 @@ ${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as se
                       exit={{ opacity: 0, scale: 0.9 }}
                       transition={{ delay: index * 0.05 }}
                     >
-                      <Card className="hover:border-accent transition-all group">
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-base flex items-center justify-between gap-2">
-                            {editingNameId === deliverable.id ? (
-                              <div className="flex items-center gap-1 flex-1">
-                                <Input
-                                  value={editingNameValue}
-                                  onChange={(e) => setEditingNameValue(e.target.value)}
-                                  className="h-7 text-sm"
-                                  autoFocus
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      updateDeliverableName(deliverable.id, editingNameValue);
-                                    } else if (e.key === "Escape") {
-                                      cancelEditingName();
-                                    }
-                                  }}
-                                />
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-6 w-6 text-green-500 hover:text-green-600"
-                                  onClick={() => updateDeliverableName(deliverable.id, editingNameValue)}
-                                >
-                                  <Check className="w-3.5 h-3.5" />
-                                </Button>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-6 w-6 text-muted-foreground"
-                                  onClick={cancelEditingName}
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <>
-                                <span className="truncate flex-1">{deliverable.name}</span>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  onClick={() => startEditingName(deliverable)}
-                                >
-                                  <Pencil className="w-3 h-3" />
-                                </Button>
-                              </>
-                            )}
-                          </CardTitle>
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Calendar className="w-3 h-3" />
-                            {format(new Date(deliverable.updated_at), "dd MMM yyyy, HH:mm", { locale: ptBR })}
-                          </div>
-                        </CardHeader>
-                        <CardContent className="pt-2">
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-                            <span className="truncate">Nicho: {deliverable.config.niche || "Não definido"}</span>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
-                              className="flex-1"
-                              onClick={() => loadDeliverable(deliverable)}
-                            >
-                              <Eye className="w-3.5 h-3.5 mr-1" />
-                              Abrir
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              variant="ghost"
-                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                              onClick={() => deleteDeliverable(deliverable.id)}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
+                      <GlowingCard>
+                        <Card className="border-0 bg-transparent">
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-base flex items-center justify-between gap-2">
+                              {editingNameId === deliverable.id ? (
+                                <div className="flex items-center gap-1 flex-1">
+                                  <Input
+                                    value={editingNameValue}
+                                    onChange={(e) => setEditingNameValue(e.target.value)}
+                                    className="h-7 text-sm"
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        updateDeliverableName(deliverable.id, editingNameValue);
+                                      } else if (e.key === "Escape") {
+                                        cancelEditingName();
+                                      }
+                                    }}
+                                  />
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-6 w-6 text-green-500 hover:text-green-600"
+                                    onClick={() => updateDeliverableName(deliverable.id, editingNameValue)}
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-6 w-6 text-muted-foreground"
+                                    onClick={cancelEditingName}
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <>
+                                  <span className="truncate flex-1">{deliverable.name}</span>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={() => startEditingName(deliverable)}
+                                  >
+                                    <Pencil className="w-3 h-3" />
+                                  </Button>
+                                </>
+                              )}
+                            </CardTitle>
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Calendar className="w-3 h-3" />
+                              {format(new Date(deliverable.updated_at), "dd MMM yyyy, HH:mm", { locale: ptBR })}
+                            </div>
+                          </CardHeader>
+                          <CardContent className="pt-2">
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+                              <span className="truncate">Nicho: {deliverable.config.niche || "Não definido"}</span>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className="flex-1"
+                                onClick={() => loadDeliverable(deliverable)}
+                              >
+                                <Eye className="w-3.5 h-3.5 mr-1" />
+                                Abrir
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="ghost"
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => deleteDeliverable(deliverable.id)}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </GlowingCard>
                     </motion.div>
                   ))}
                 </AnimatePresence>
