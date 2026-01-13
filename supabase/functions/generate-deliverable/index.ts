@@ -16,6 +16,8 @@ REGRAS OBRIGATÓRIAS:
 6. Use gradientes, sombras, animações suaves
 7. Imagens de placeholder: use https://picsum.photos/LARGURA/ALTURA
 
+=== MODELO: APP DE CURSO (template_id: app-course) ===
+
 ESTRUTURA DO SITE:
 - Header com foto de perfil, nome do curso e instrutor
 - Banner principal com imagem de boas-vindas
@@ -59,9 +61,71 @@ CONTEÚDO DAS PÁGINAS (NÃO DEIXE VAZIO):
 - **Artigos**: Crie 3-4 cards de artigos com título, resumo e data sobre o nicho do usuário.
 - **Config**: Seções para perfil, notificações, suporte, sobre, sair.
 
+=== MODELO: CURSO COM VIDEO AULAS (template_id: video-course) ===
+
+Quando o usuário escolher este modelo, siga EXATAMENTE esta estrutura:
+
+1. HEADER SIMPLES
+   - Fundo branco/claro
+   - Ícone circular decorativo (ex: chapéu de formatura, símbolo relacionado ao nicho)
+   - Fundo do ícone em tom rosa/cor principal claro
+
+2. TÍTULO DO CURSO
+   - Título grande e impactante centralizado (fonte bold, cor escura)
+   - Subtítulo em itálico na cor principal (ex: "Aprenda do Zero!")
+   - Descrição curta abaixo
+
+3. GRID DE AULAS - MUITO IMPORTANTE
+   Crie cards de aulas com este formato:
+   
+   \`\`\`html
+   <div class="lesson-card">
+     <div class="lesson-thumbnail">
+       <span class="lesson-number">01</span>
+       <img src="THUMBNAIL_URL" alt="Aula 1">
+       <div class="play-button">▶</div>
+     </div>
+     <div class="lesson-info">
+       <span class="lesson-label">AULA 01</span>
+       <h3>Título da Aula</h3>
+     </div>
+   </div>
+   \`\`\`
+   
+   ESTILOS DO CARD:
+   - Thumbnail com aspect-ratio 16:9
+   - Badge numérico (01, 02, 03...) no canto superior esquerdo
+   - Badge circular com fundo da cor principal e texto branco
+   - Botão de play centralizado sobre o thumbnail (círculo branco semi-transparente)
+   - Label "AULA XX" em caixa alta, cor principal
+   - Título da aula abaixo em preto/escuro
+   
+   Para YouTube: use https://img.youtube.com/vi/VIDEO_ID/hqdefault.jpg como thumbnail
+   Para Vturb: use placeholder ou imagem fornecida
+   
+   GRID: 1 coluna no mobile, pode expandir em telas maiores
+
+4. SEÇÃO DE MATERIAIS (opcional)
+   Se o usuário quiser:
+   - Título com emoji 📄 ou 📚
+   - Cards simples para downloads de PDF
+   - Link ou botão para cada material
+
+5. NAVEGAÇÃO INFERIOR (estilo app)
+   - Ícones para: Início, Aulas, Materiais, Perfil
+   - Estilo fixo no bottom
+   - Indicador visual da aba ativa
+
+CORES:
+- Use a cor principal para elementos de destaque (labels, badges, botões)
+- Fundo geral branco ou muito claro
+- Thumbnails com cantos arredondados (border-radius: 12px ou similar)
+- Sombras suaves nos cards
+
+=== REGRAS PARA VÍDEOS ===
+
 Se o usuário pedir para adicionar vídeo aulas:
-- Crie seções de módulos expansíveis
-- Para links do YouTube, use iframe embed
+- Para links do YouTube, use iframe embed: <iframe src="https://www.youtube.com/embed/VIDEO_ID" ...></iframe>
 - Para códigos Vturb, use o formato: <div id="vid_CODIGO"></div><script src="https://scripts.converteai.net/ID/players/CODIGO.js"></script>
 
 SEMPRE siga as cores e nicho especificados pelo usuário. Todos os textos devem ser relevantes ao nicho.`;
@@ -82,16 +146,24 @@ serve(async (req) => {
     // Build context from config if provided
     let contextMessage = "";
     if (config) {
+      const templateInfo = config.templateId === "video-course" 
+        ? "Use o MODELO: CURSO COM VIDEO AULAS conforme descrito no system prompt." 
+        : "Use o MODELO: APP DE CURSO conforme descrito no system prompt.";
+      
       contextMessage = `
 CONFIGURAÇÕES DO USUÁRIO:
+- Template: ${config.templateId || "app-course"}
+- ${templateInfo}
 - Nicho: ${config.niche || "Não especificado"}
 - Cor Principal: ${config.primaryColor || "#E91E63"}
 - Cor Secundária: ${config.secondaryColor || "#FCE4EC"}
 - Público Alvo: ${config.targetAudience || "Não especificado"}
 - Incluir Vídeo Aulas: ${config.includeVideos ? "Sim" : "Não"}
+- Número de Aulas: ${config.numberOfLessons || "Não especificado"}
 ${config.videoLinks?.length > 0 ? `- Links de Vídeos: ${config.videoLinks.join(", ")}` : ""}
+${config.includePdfSection ? "- Incluir seção de materiais PDF: Sim" : ""}
 
-Gere o HTML completo do app seguindo essas especificações.`;
+Gere o HTML completo seguindo EXATAMENTE o modelo indicado e essas especificações.`;
     }
 
     const allMessages = [

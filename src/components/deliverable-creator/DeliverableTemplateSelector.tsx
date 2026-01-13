@@ -2,8 +2,9 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Smartphone, Check, Eye, X } from "lucide-react";
+import { Smartphone, Video, Check, Eye, X } from "lucide-react";
 import deliverableAppPreview from "@/assets/deliverable-model-app.png";
+import cursoVideoaulasPreview from "@/assets/curso-videoaulas-preview.png";
 
 interface Template {
   id: string;
@@ -12,6 +13,7 @@ interface Template {
   image: string;
   features: string[];
   badge?: string;
+  icon?: typeof Smartphone;
 }
 
 const templates: Template[] = [
@@ -29,6 +31,23 @@ const templates: Template[] = [
       "Navegação estilo app",
     ],
     badge: "Popular",
+    icon: Smartphone,
+  },
+  {
+    id: "video-course",
+    name: "Curso com Video Aulas",
+    description: "Site com grid de aulas em vídeo, thumbnails e seção de materiais PDF",
+    image: cursoVideoaulasPreview,
+    features: [
+      "Grid de vídeo aulas",
+      "Thumbnails automáticos",
+      "Numeração de aulas",
+      "Seção de materiais PDF",
+      "Design responsivo",
+      "Player integrado",
+    ],
+    badge: "Novo",
+    icon: Video,
   },
 ];
 
@@ -100,7 +119,7 @@ export const DeliverableTemplateSelector = ({ onSelect }: DeliverableTemplateSel
                 </CardHeader>
                 <CardContent className="p-3">
                   <div className="flex items-center gap-1.5 mb-1">
-                    <Smartphone className="w-4 h-4 text-accent" />
+                    {template.icon ? <template.icon className="w-4 h-4 text-accent" /> : <Smartphone className="w-4 h-4 text-accent" />}
                     <CardTitle className="text-sm">{template.name}</CardTitle>
                   </div>
                   <CardDescription className="text-xs line-clamp-2">

@@ -18,6 +18,7 @@ import { useDeliverablePromptLimit } from "@/hooks/useDeliverablePromptLimit";
 import { Progress } from "@/components/ui/progress";
 
 export interface DeliverableConfig {
+  templateId: string;
   niche: string;
   primaryColor: string;
   secondaryColor: string;
@@ -25,6 +26,8 @@ export interface DeliverableConfig {
   productDetails: string;
   includeVideos: boolean;
   videoLinks: string[];
+  numberOfLessons?: number;
+  includePdfSection?: boolean;
 }
 
 export type ChatMessage = {
@@ -42,6 +45,8 @@ export type ConversationStep =
   | "ask_product_details"
   | "ask_videos"
   | "ask_video_links"
+  | "ask_num_lessons"
+  | "ask_pdf_section"
   | "generating"
   | "editing";
 
@@ -68,6 +73,7 @@ const DeliverableCreator = () => {
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [step, setStep] = useState<ConversationStep>("template_selection");
   const [config, setConfig] = useState<DeliverableConfig>({
+    templateId: "",
     niche: "",
     primaryColor: "#E91E63",
     secondaryColor: "#FCE4EC",
@@ -75,6 +81,8 @@ const DeliverableCreator = () => {
     productDetails: "",
     includeVideos: false,
     videoLinks: [],
+    numberOfLessons: undefined,
+    includePdfSection: false,
   });
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [generatedHtml, setGeneratedHtml] = useState<string>("");
@@ -236,6 +244,7 @@ const DeliverableCreator = () => {
     setSelectedTemplate(null);
     setStep("template_selection");
     setConfig({
+      templateId: "",
       niche: "",
       primaryColor: "#E91E63",
       secondaryColor: "#FCE4EC",
@@ -243,6 +252,8 @@ const DeliverableCreator = () => {
       productDetails: "",
       includeVideos: false,
       videoLinks: [],
+      numberOfLessons: undefined,
+      includePdfSection: false,
     });
     setMessages([]);
     setGeneratedHtml("");
@@ -251,12 +262,18 @@ const DeliverableCreator = () => {
 
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplate(templateId);
+    setConfig(prev => ({ ...prev, templateId }));
     setStep("ask_niche");
     setShowSavedList(false);
+    
+    const templateMessage = templateId === "video-course"
+      ? "Ótima escolha! 🎥 Vamos criar um site com grid de video aulas.\n\nMe conte: **qual é o nicho** do seu curso?\n\nExemplo: Crochê para Bebês, Confeitaria, Maquiagem, etc."
+      : "Ótima escolha! 🎉 Agora me conte: **qual é o nicho** que você quer trabalhar?\n\nExemplo: Artesanato em Resina, Confeitaria, Crochê, Maquiagem, etc.";
+    
     setMessages([
       {
         role: "assistant",
-        content: "Ótima escolha! 🎉 Agora me conte: **qual é o nicho** que você quer trabalhar?\n\nExemplo: Artesanato em Resina, Confeitaria, Crochê, Maquiagem, etc.",
+        content: templateMessage,
       },
     ]);
   };
@@ -326,13 +343,43 @@ const DeliverableCreator = () => {
 
       case "ask_product_details":
         setConfig((prev) => ({ ...prev, productDetails: message }));
-        setStep("ask_videos");
+        
+        // For video-course template, ask about number of lessons first
+        if (selectedTemplate === "video-course") {
+          setStep("ask_num_lessons");
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `Ótimas informações! 📝\n\n**Quantas aulas** terá seu curso?\n\nDigite um número (ex: 10, 15, 30)`,
+              },
+            ]);
+          }, 300);
+        } else {
+          setStep("ask_videos");
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `Ótimas informações! 📝\n\nVocê deseja **incluir vídeo aulas** no seu entregável?\n\nResponda **sim** ou **não**.`,
+              },
+            ]);
+          }, 300);
+        }
+        break;
+
+      case "ask_num_lessons":
+        const numLessons = parseInt(message) || 10;
+        setConfig((prev) => ({ ...prev, numberOfLessons: numLessons, includeVideos: true }));
+        setStep("ask_video_links");
         setTimeout(() => {
           setMessages((prev) => [
             ...prev,
             {
               role: "assistant",
-              content: `Ótimas informações! 📝\n\nVocê deseja **incluir vídeo aulas** no seu entregável?\n\nResponda **sim** ou **não**.`,
+              content: `Perfeito! **${numLessons} aulas** 🎬\n\nAgora adicione os links dos vídeos para cada aula. Você pode enviar:\n- Links do YouTube\n- Códigos do Vturb\n\nEnvie um link por mensagem. Quando terminar, digite **pronto** ou **gerar**.`,
             },
           ]);
         }, 300);
@@ -360,7 +407,21 @@ const DeliverableCreator = () => {
 
       case "ask_video_links":
         if (message.toLowerCase() === "pronto" || message.toLowerCase() === "gerar") {
-          startGeneration(config);
+          // For video-course template, ask about PDF section
+          if (selectedTemplate === "video-course") {
+            setStep("ask_pdf_section");
+            setTimeout(() => {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: "assistant",
+                  content: `Links adicionados! ✅\n\nVocê deseja incluir uma **seção de materiais PDF** (apostilas, ebooks, etc.)?\n\nResponda **sim** ou **não**.`,
+                },
+              ]);
+            }, 300);
+          } else {
+            startGeneration(config);
+          }
         } else {
           setConfig((prev) => ({
             ...prev,
@@ -371,11 +432,17 @@ const DeliverableCreator = () => {
               ...prev,
               {
                 role: "assistant",
-                content: `Link adicionado! ✅ (${config.videoLinks.length + 1} vídeo${config.videoLinks.length > 0 ? "s" : ""})\n\nEnvie mais links ou digite **pronto** para gerar o site.`,
+                content: `Link adicionado! ✅ (${config.videoLinks.length + 1} vídeo${config.videoLinks.length > 0 ? "s" : ""})\n\nEnvie mais links ou digite **pronto** para continuar.`,
               },
             ]);
           }, 300);
         }
+        break;
+
+      case "ask_pdf_section":
+        const wantsPdf = message.toLowerCase().includes("sim") || message.toLowerCase().includes("yes");
+        setConfig((prev) => ({ ...prev, includePdfSection: wantsPdf }));
+        startGeneration({ ...config, includePdfSection: wantsPdf });
         break;
 
       case "editing":
