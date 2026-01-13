@@ -25,7 +25,7 @@ export const DeliverableChatPanel = ({
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      scrollRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
     }
   }, [messages]);
 
@@ -121,8 +121,8 @@ export const DeliverableChatPanel = ({
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-4" ref={scrollRef}>
-        <div className="space-y-4">
+      <ScrollArea className="flex-1 p-4">
+        <div className="space-y-4" ref={scrollRef}>
           <AnimatePresence mode="popLayout">
             {messages.map((message, index) => renderMessage(message, index))}
           </AnimatePresence>
