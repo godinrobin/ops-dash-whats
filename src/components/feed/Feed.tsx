@@ -44,6 +44,24 @@ interface Comment {
   };
 }
 
+interface CommentReply {
+  id: string;
+  comment_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  profiles?: {
+    username: string | null;
+    avatar_url?: string | null;
+  };
+}
+
+interface CommentReaction {
+  comment_id: string;
+  user_id: string;
+  reaction: string;
+}
+
 export const Feed = () => {
   const { user } = useAuth();
   const { isFullMember, loading: accessLoading } = useAccessLevel();
@@ -52,6 +70,8 @@ export const Feed = () => {
   const [pendingPosts, setPendingPosts] = useState<Post[]>([]);
   const [myPendingPosts, setMyPendingPosts] = useState<Post[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
+  const [commentReplies, setCommentReplies] = useState<CommentReply[]>([]);
+  const [commentReactions, setCommentReactions] = useState<CommentReaction[]>([]);
   const [userLikes, setUserLikes] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [pendingExpanded, setPendingExpanded] = useState(true);
@@ -92,10 +112,33 @@ export const Feed = () => {
         console.error("Error fetching comments:", commentsError);
       }
 
-      // Collect all unique user IDs
+      const commentIds = (commentsData || []).map((c: any) => c.id);
+
+      // Fetch comment replies and reactions in parallel
+      const [repliesResult, reactionsResult] = await Promise.all([
+        commentIds.length > 0 
+          ? supabase
+              .from("feed_comment_replies")
+              .select("*")
+              .in("comment_id", commentIds)
+              .order("created_at", { ascending: true })
+          : { data: [], error: null },
+        commentIds.length > 0 
+          ? supabase
+              .from("feed_comment_reactions")
+              .select("*")
+              .in("comment_id", commentIds)
+          : { data: [], error: null },
+      ]);
+
+      const repliesData = repliesResult.data || [];
+      const reactionsData = reactionsResult.data || [];
+
+      // Collect all unique user IDs (posts, comments, replies)
       const postsUserIds = [...new Set(postsData.map((p: any) => p.user_id))];
       const commentUserIds = [...new Set((commentsData || []).map((c: any) => c.user_id))];
-      const allUserIds = [...new Set([...postsUserIds, ...commentUserIds])];
+      const replyUserIds = [...new Set(repliesData.map((r: any) => r.user_id))];
+      const allUserIds = [...new Set([...postsUserIds, ...commentUserIds, ...replyUserIds])];
 
       // Fetch profiles for all users
       const { data: profilesData, error: profilesError } = await supabase
@@ -140,8 +183,16 @@ export const Feed = () => {
         profiles: profileById.get(c.user_id) || { username: null, avatar_url: null },
       }));
 
+      // Attach profiles to replies
+      const repliesFinal = repliesData.map((r: any) => ({
+        ...r,
+        profiles: profileById.get(r.user_id) || { username: null, avatar_url: null },
+      }));
+
       setPosts(postsFinal);
       setComments(commentsFinal);
+      setCommentReplies(repliesFinal);
+      setCommentReactions(reactionsData);
 
       // Fetch all reactions for posts to get counts per emoji
       const { data: allReactionsData } = await (supabase as any)
@@ -434,6 +485,8 @@ export const Feed = () => {
                   key={post.id}
                   post={post}
                   comments={[]}
+                  commentReplies={[]}
+                  commentReactions={[]}
                   userLiked={false}
                   onRefresh={() => { fetchPosts(); fetchPendingPosts(); }}
                 />
@@ -453,6 +506,8 @@ export const Feed = () => {
             key={post.id}
             post={post}
             comments={comments.filter((c) => c.post_id === post.id)}
+            commentReplies={commentReplies}
+            commentReactions={commentReactions}
             userLiked={userLikes.has(post.id)}
             userReaction={userLikes.get(post.id)}
             onRefresh={fetchPosts}

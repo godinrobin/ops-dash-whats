@@ -14,11 +14,30 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
 import VideoPlayer from "@/components/ui/video-player";
+import { CommentItem } from "./CommentItem";
 
 const REACTION_EMOJIS = ["🔥", "🚀", "👑", "👍🏻", "🚨"] as const;
 
 interface ReactionCounts {
   [emoji: string]: number;
+}
+
+interface CommentReply {
+  id: string;
+  comment_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  profiles?: {
+    username: string | null;
+    avatar_url?: string | null;
+  };
+}
+
+interface CommentReaction {
+  comment_id: string;
+  user_id: string;
+  reaction: string;
 }
 
 interface FeedPostProps {
@@ -48,12 +67,14 @@ interface FeedPostProps {
       avatar_url?: string | null;
     };
   }>;
+  commentReplies: CommentReply[];
+  commentReactions: CommentReaction[];
   userLiked: boolean;
   userReaction?: string | null;
   onRefresh: () => void;
 }
 
-export const FeedPost = ({ post, comments, userLiked, userReaction, onRefresh }: FeedPostProps) => {
+export const FeedPost = ({ post, comments, commentReplies, commentReactions, userLiked, userReaction, onRefresh }: FeedPostProps) => {
   const { user } = useAuth();
   const { isAdmin } = useAdminStatus();
   const [showComments, setShowComments] = useState(false);
@@ -337,54 +358,31 @@ export const FeedPost = ({ post, comments, userLiked, userReaction, onRefresh }:
       {showComments && (
         <div className="border-t border-border/50 bg-secondary/20">
           {/* Comments List */}
-          <div className="max-h-64 overflow-y-auto">
+          <div className="max-h-80 overflow-y-auto">
             {comments.map((comment) => {
-              const profileCommentUsername = comment.profiles?.username || "";
-              const commentDisplayName = profileCommentUsername || "Usuário";
-              const commentInitials = commentDisplayName.slice(0, 2).toUpperCase();
-              const commentAvatarUrl = comment.profiles?.avatar_url || null;
-              const canDelete = user?.id === comment.user_id || isAdmin;
+              // Get replies for this comment
+              const replies = commentReplies.filter((r) => r.comment_id === comment.id);
+              
+              // Calculate reaction counts for this comment
+              const reactionsForComment = commentReactions.filter((r) => r.comment_id === comment.id);
+              const reactionCounts: { [emoji: string]: number } = {};
+              reactionsForComment.forEach((r) => {
+                reactionCounts[r.reaction] = (reactionCounts[r.reaction] || 0) + 1;
+              });
+              
+              // Get user's reaction for this comment
+              const userCommentReaction = reactionsForComment.find((r) => r.user_id === user?.id)?.reaction || null;
 
               return (
-                <div
+                <CommentItem
                   key={comment.id}
-                  className="flex items-start gap-3 p-3 hover:bg-secondary/30 transition-colors"
-                >
-                  <Avatar className="w-8 h-8">
-                    {commentAvatarUrl ? (
-                      <AvatarImage src={commentAvatarUrl} alt={commentDisplayName} />
-                    ) : null}
-                    <AvatarFallback className="text-xs bg-accent/20 text-accent">
-                      {commentInitials}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium">{commentDisplayName}</p>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">
-                          {formatDistanceToNow(new Date(comment.created_at), {
-                            addSuffix: true,
-                            locale: ptBR,
-                          })}
-                        </span>
-                        {canDelete && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="w-6 h-6 text-muted-foreground hover:text-destructive"
-                            onClick={() => handleDeleteComment(comment.id)}
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                      {comment.content}
-                    </p>
-                  </div>
-                </div>
+                  comment={comment}
+                  replies={replies}
+                  reactionCounts={reactionCounts}
+                  userReaction={userCommentReaction}
+                  onDelete={handleDeleteComment}
+                  onRefresh={onRefresh}
+                />
               );
             })}
 
