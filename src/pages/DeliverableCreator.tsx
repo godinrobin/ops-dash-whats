@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, Eye, Plus, FileCode, Calendar, Pencil, Check, X } from "lucide-react";
+import { Trash2, Eye, Plus, FileCode, Calendar, Pencil, Check, X, ArrowLeft } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -729,15 +729,26 @@ ${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as se
         {/* Chat Panel - Left */}
         <div className="w-1/2 border-r border-border flex flex-col min-h-0">
           <div className="p-2 border-b border-border flex items-center justify-between flex-shrink-0">
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={resetToNewDeliverable}
-              className="text-muted-foreground"
-            >
-              <Plus className="w-4 h-4 mr-1" />
-              Novo Entregável
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={resetToNewDeliverable}
+                className="text-muted-foreground"
+              >
+                <ArrowLeft className="w-4 h-4 mr-1" />
+                Voltar
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={resetToNewDeliverable}
+                className="text-muted-foreground"
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                Novo
+              </Button>
+            </div>
             {currentDeliverableId && (
               <Badge variant="outline" className="text-xs">
                 Salvo automaticamente
