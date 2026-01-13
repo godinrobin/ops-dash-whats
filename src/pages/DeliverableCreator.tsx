@@ -1,8 +1,18 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { SystemLayout } from "@/components/layout/SystemLayout";
 import { DeliverableChatPanel } from "@/components/deliverable-creator/DeliverableChatPanel";
 import { DeliverablePreviewPanel } from "@/components/deliverable-creator/DeliverablePreviewPanel";
 import { DeliverableTemplateSelector } from "@/components/deliverable-creator/DeliverableTemplateSelector";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Trash2, Eye, Plus, FileCode, Calendar } from "lucide-react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { toast } from "sonner";
+import { motion, AnimatePresence } from "framer-motion";
 
 export interface DeliverableConfig {
   niche: string;
@@ -30,7 +40,18 @@ export type ConversationStep =
   | "generating"
   | "editing";
 
+interface SavedDeliverable {
+  id: string;
+  name: string;
+  template_id: string;
+  config: DeliverableConfig;
+  html_content: string;
+  created_at: string;
+  updated_at: string;
+}
+
 const DeliverableCreator = () => {
+  const { user } = useAuth();
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [step, setStep] = useState<ConversationStep>("template_selection");
   const [config, setConfig] = useState<DeliverableConfig>({
@@ -44,10 +65,146 @@ const DeliverableCreator = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [generatedHtml, setGeneratedHtml] = useState<string>("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [savedDeliverables, setSavedDeliverables] = useState<SavedDeliverable[]>([]);
+  const [currentDeliverableId, setCurrentDeliverableId] = useState<string | null>(null);
+  const [showSavedList, setShowSavedList] = useState(true);
+
+  // Fetch saved deliverables on mount
+  useEffect(() => {
+    if (user) {
+      fetchSavedDeliverables();
+    }
+  }, [user]);
+
+  const fetchSavedDeliverables = async () => {
+    if (!user) return;
+    
+    const { data, error } = await supabase
+      .from("saved_deliverables")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false });
+    
+    if (error) {
+      console.error("Error fetching deliverables:", error);
+      return;
+    }
+    
+    // Map the data to our local type
+    const mappedData: SavedDeliverable[] = (data || []).map((item) => ({
+      id: item.id,
+      name: item.name,
+      template_id: item.template_id,
+      config: item.config as unknown as DeliverableConfig,
+      html_content: item.html_content,
+      created_at: item.created_at,
+      updated_at: item.updated_at,
+    }));
+    
+    setSavedDeliverables(mappedData);
+  };
+
+  const saveDeliverable = async (html: string) => {
+    if (!user || !html) return;
+    
+    const deliverableName = config.niche ? `Entregável - ${config.niche}` : `Entregável ${new Date().toLocaleDateString("pt-BR")}`;
+    
+    if (currentDeliverableId) {
+      // Update existing
+      const { error } = await supabase
+        .from("saved_deliverables")
+        .update({
+          config: JSON.parse(JSON.stringify(config)),
+          html_content: html,
+          name: deliverableName,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", currentDeliverableId);
+      
+      if (error) {
+        console.error("Error updating deliverable:", error);
+        return;
+      }
+    } else {
+      // Create new
+      const { data, error } = await supabase
+        .from("saved_deliverables")
+        .insert({
+          user_id: user.id,
+          name: deliverableName,
+          template_id: selectedTemplate || "app-course",
+          config: JSON.parse(JSON.stringify(config)),
+          html_content: html,
+        })
+        .select()
+        .single();
+      
+      if (error) {
+        console.error("Error saving deliverable:", error);
+        return;
+      }
+      
+      setCurrentDeliverableId(data.id);
+    }
+    
+    await fetchSavedDeliverables();
+  };
+
+  const deleteDeliverable = async (id: string) => {
+    const { error } = await supabase
+      .from("saved_deliverables")
+      .delete()
+      .eq("id", id);
+    
+    if (error) {
+      toast.error("Erro ao deletar entregável");
+      return;
+    }
+    
+    toast.success("Entregável deletado");
+    await fetchSavedDeliverables();
+    
+    if (currentDeliverableId === id) {
+      resetToNewDeliverable();
+    }
+  };
+
+  const loadDeliverable = (deliverable: SavedDeliverable) => {
+    setCurrentDeliverableId(deliverable.id);
+    setSelectedTemplate(deliverable.template_id);
+    setConfig(deliverable.config);
+    setGeneratedHtml(deliverable.html_content);
+    setStep("editing");
+    setShowSavedList(false);
+    setMessages([
+      {
+        role: "assistant",
+        content: `✅ Entregável "${deliverable.name}" carregado!\n\nVocê pode continuar editando. Digite o que deseja modificar.`,
+      },
+    ]);
+  };
+
+  const resetToNewDeliverable = () => {
+    setCurrentDeliverableId(null);
+    setSelectedTemplate(null);
+    setStep("template_selection");
+    setConfig({
+      niche: "",
+      primaryColor: "#E91E63",
+      secondaryColor: "#FCE4EC",
+      targetAudience: "",
+      includeVideos: false,
+      videoLinks: [],
+    });
+    setMessages([]);
+    setGeneratedHtml("");
+    setShowSavedList(true);
+  };
 
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplate(templateId);
     setStep("ask_niche");
+    setShowSavedList(false);
     setMessages([
       {
         role: "assistant",
@@ -69,7 +226,7 @@ const DeliverableCreator = () => {
             ...prev,
             {
               role: "assistant",
-              content: `Perfeito! **${message}** é um ótimo nicho! 💪\n\nAgora escolha a **cor principal** do seu app. Você pode digitar:\n- Um nome de cor (ex: rosa, azul, verde)\n- Ou um código hexadecimal (ex: #E91E63)`,
+              content: `Perfeito! **${message}** é um ótimo nicho! 💪\n\nAgora escolha a **cor principal** do seu site. Você pode digitar:\n- Um nome de cor (ex: rosa, azul, verde)\n- Ou um código hexadecimal (ex: #E91E63)`,
             },
           ]);
         }, 300);
@@ -152,7 +309,7 @@ const DeliverableCreator = () => {
               ...prev,
               {
                 role: "assistant",
-                content: `Link adicionado! ✅ (${config.videoLinks.length + 1} vídeo${config.videoLinks.length > 0 ? "s" : ""})\n\nEnvie mais links ou digite **pronto** para gerar o app.`,
+                content: `Link adicionado! ✅ (${config.videoLinks.length + 1} vídeo${config.videoLinks.length > 0 ? "s" : ""})\n\nEnvie mais links ou digite **pronto** para gerar o site.`,
               },
             ]);
           }, 300);
@@ -174,7 +331,7 @@ const DeliverableCreator = () => {
       ...prev,
       {
         role: "assistant",
-        content: `🚀 **Gerando seu app...**\n\n📋 Nicho: ${finalConfig.niche}\n🎨 Cores: ${finalConfig.primaryColor} / ${finalConfig.secondaryColor}\n👥 Público: ${finalConfig.targetAudience}\n🎥 Vídeos: ${finalConfig.includeVideos ? finalConfig.videoLinks.length + " vídeo(s)" : "Não"}\n\nAguarde enquanto crio seu entregável...`,
+        content: `🚀 **Gerando seu site...**\n\n📋 Nicho: ${finalConfig.niche}\n🎨 Cores: ${finalConfig.primaryColor} / ${finalConfig.secondaryColor}\n👥 Público: ${finalConfig.targetAudience}\n🎥 Vídeos: ${finalConfig.includeVideos ? finalConfig.videoLinks.length + " vídeo(s)" : "Não"}\n\nAguarde enquanto crio seu entregável...`,
       },
     ]);
 
@@ -191,7 +348,7 @@ const DeliverableCreator = () => {
             messages: [
               {
                 role: "user",
-                content: `Gere o HTML completo do app para o nicho "${finalConfig.niche}" com as cores ${finalConfig.primaryColor} (principal) e ${finalConfig.secondaryColor} (secundária). O público-alvo é: ${finalConfig.targetAudience}. ${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as seguintes vídeo aulas: ${finalConfig.videoLinks.join(", ")}` : "Não incluir vídeo aulas."}`,
+                content: `Gere o HTML completo do site para o nicho "${finalConfig.niche}" com as cores ${finalConfig.primaryColor} (principal) e ${finalConfig.secondaryColor} (secundária). O público-alvo é: ${finalConfig.targetAudience}. ${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as seguintes vídeo aulas: ${finalConfig.videoLinks.join(", ")}` : "Não incluir vídeo aulas."}`,
               },
             ],
             config: finalConfig,
@@ -203,14 +360,20 @@ const DeliverableCreator = () => {
         throw new Error("Erro ao gerar entregável");
       }
 
-      await processStream(response);
+      const html = await processStream(response);
+      
+      // Auto-save after generation
+      if (html) {
+        await saveDeliverable(html);
+        toast.success("Entregável salvo automaticamente!");
+      }
       
       setStep("editing");
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: `✅ **App gerado com sucesso!**\n\nVeja o preview à direita. Você pode:\n- Pedir modificações (ex: "mude a cor do botão", "adicione mais seções")\n- Fazer o download do ZIP quando estiver satisfeito`,
+          content: `✅ **Site gerado e salvo com sucesso!**\n\nVeja o preview à direita. Você pode:\n- Pedir modificações (ex: "mude a cor do botão", "adicione mais seções")\n- Fazer o download do ZIP quando estiver satisfeito`,
         },
       ]);
     } catch (error) {
@@ -219,7 +382,7 @@ const DeliverableCreator = () => {
         ...prev,
         {
           role: "assistant",
-          content: `❌ Ocorreu um erro ao gerar o app. Por favor, tente novamente.`,
+          content: `❌ Ocorreu um erro ao gerar o site. Por favor, tente novamente.`,
         },
       ]);
       setStep("editing");
@@ -260,13 +423,18 @@ const DeliverableCreator = () => {
         throw new Error("Erro ao modificar");
       }
 
-      await processStream(response);
+      const html = await processStream(response);
+      
+      // Auto-save after edit
+      if (html) {
+        await saveDeliverable(html);
+      }
       
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: `✅ Modificação aplicada! Veja o resultado no preview.`,
+          content: `✅ Modificação aplicada e salva! Veja o resultado no preview.`,
         },
       ]);
     } catch (error) {
@@ -283,13 +451,14 @@ const DeliverableCreator = () => {
     }
   };
 
-  const processStream = async (response: Response) => {
+  const processStream = async (response: Response): Promise<string> => {
     const reader = response.body?.getReader();
-    if (!reader) return;
+    if (!reader) return "";
 
     const decoder = new TextDecoder();
     let buffer = "";
     let htmlContent = "";
+    let finalHtml = "";
 
     while (true) {
       const { done, value } = await reader.read();
@@ -318,8 +487,10 @@ const DeliverableCreator = () => {
             const htmlMatch = htmlContent.match(/```html\n?([\s\S]*?)```/) || 
                              htmlContent.match(/```\n?([\s\S]*?)```/);
             if (htmlMatch) {
+              finalHtml = htmlMatch[1];
               setGeneratedHtml(htmlMatch[1]);
             } else if (htmlContent.includes("<!DOCTYPE") || htmlContent.includes("<html")) {
+              finalHtml = htmlContent;
               setGeneratedHtml(htmlContent);
             }
           }
@@ -333,10 +504,14 @@ const DeliverableCreator = () => {
     const finalMatch = htmlContent.match(/```html\n?([\s\S]*?)```/) || 
                        htmlContent.match(/```\n?([\s\S]*?)```/);
     if (finalMatch) {
+      finalHtml = finalMatch[1];
       setGeneratedHtml(finalMatch[1]);
     } else if (htmlContent.includes("<!DOCTYPE") || htmlContent.includes("<html")) {
+      finalHtml = htmlContent;
       setGeneratedHtml(htmlContent);
     }
+
+    return finalHtml;
   };
 
   const parseColor = (input: string): string => {
@@ -378,8 +553,71 @@ const DeliverableCreator = () => {
   if (step === "template_selection") {
     return (
       <SystemLayout>
-        <div className="container py-8 max-w-5xl mx-auto">
+        <div className="container py-8 max-w-6xl mx-auto">
           <DeliverableTemplateSelector onSelect={handleTemplateSelect} />
+          
+          {/* Saved Deliverables Section */}
+          {savedDeliverables.length > 0 && showSavedList && (
+            <div className="mt-12">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold flex items-center gap-2">
+                  <FileCode className="w-5 h-5 text-accent" />
+                  Seus Entregáveis Salvos
+                </h3>
+                <Badge variant="outline">{savedDeliverables.length} salvos</Badge>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <AnimatePresence>
+                  {savedDeliverables.map((deliverable, index) => (
+                    <motion.div
+                      key={deliverable.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      transition={{ delay: index * 0.05 }}
+                    >
+                      <Card className="hover:border-accent transition-all group">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-base flex items-center justify-between">
+                            <span className="truncate">{deliverable.name}</span>
+                          </CardTitle>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Calendar className="w-3 h-3" />
+                            {format(new Date(deliverable.updated_at), "dd MMM yyyy, HH:mm", { locale: ptBR })}
+                          </div>
+                        </CardHeader>
+                        <CardContent className="pt-2">
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+                            <span className="truncate">Nicho: {deliverable.config.niche || "Não definido"}</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="flex-1"
+                              onClick={() => loadDeliverable(deliverable)}
+                            >
+                              <Eye className="w-3.5 h-3.5 mr-1" />
+                              Abrir
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => deleteDeliverable(deliverable.id)}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+            </div>
+          )}
         </div>
       </SystemLayout>
     );
@@ -390,6 +628,22 @@ const DeliverableCreator = () => {
       <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
         {/* Chat Panel - Left */}
         <div className="w-1/2 border-r border-border flex flex-col">
+          <div className="p-2 border-b border-border flex items-center justify-between">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={resetToNewDeliverable}
+              className="text-muted-foreground"
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              Novo Entregável
+            </Button>
+            {currentDeliverableId && (
+              <Badge variant="outline" className="text-xs">
+                Salvo automaticamente
+              </Badge>
+            )}
+          </div>
           <DeliverableChatPanel
             messages={messages}
             onSendMessage={handleUserMessage}

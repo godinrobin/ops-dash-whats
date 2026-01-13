@@ -2874,6 +2874,42 @@ export type Database = {
         }
         Relationships: []
       }
+      saved_deliverables: {
+        Row: {
+          config: Json
+          created_at: string
+          html_content: string
+          id: string
+          name: string
+          template_id: string
+          thumbnail_url: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          config: Json
+          created_at?: string
+          html_content: string
+          id?: string
+          name: string
+          template_id: string
+          thumbnail_url?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          html_content?: string
+          id?: string
+          name?: string
+          template_id?: string
+          thumbnail_url?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       saved_funnels: {
         Row: {
           config: Json
