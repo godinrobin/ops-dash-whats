@@ -2092,6 +2092,115 @@ Regras:
         break;
       }
 
+      case 'admin-delete-instance': {
+        // Admin action to delete any user's instance from UAZAPI
+        const { instanceId, instanceName } = params;
+        if (!instanceId && !instanceName) {
+          return new Response(JSON.stringify({ error: 'instanceId ou instanceName é obrigatório' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Check if user is admin
+        const { data: adminRole } = await supabaseClient
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id)
+          .eq('role', 'admin')
+          .single();
+
+        if (!adminRole) {
+          return new Response(JSON.stringify({ error: 'Acesso negado - apenas admins' }), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Get instance by ID or name (without user filter for admin)
+        let inst;
+        if (instanceId) {
+          const { data } = await supabaseClient
+            .from('maturador_instances')
+            .select('id, instance_name, api_provider, uazapi_token')
+            .eq('id', instanceId)
+            .single();
+          inst = data;
+        } else {
+          const { data } = await supabaseClient
+            .from('maturador_instances')
+            .select('id, instance_name, api_provider, uazapi_token')
+            .eq('instance_name', instanceName)
+            .single();
+          inst = data;
+        }
+
+        if (!inst) {
+          console.log(`[ADMIN-DELETE] Instance not found: ${instanceId || instanceName}`);
+          return new Response(JSON.stringify({ deleted: true, note: 'Instance not found in database' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        console.log(`[ADMIN-DELETE] Deleting instance: ${inst.instance_name} (${inst.id}), provider: ${inst.api_provider}`);
+
+        // Try to delete from UAZAPI
+        try {
+          if (inst.api_provider === 'uazapi' && inst.uazapi_token) {
+            const config = await getInstanceApiConfig(supabaseClient, inst.id);
+            console.log(`[ADMIN-DELETE] Deleting from UazAPI: ${inst.instance_name}`);
+            
+            let deleted = false;
+            
+            // Method 1: DELETE /instance with token header
+            try {
+              result = await callWhatsAppApi(config, '/instance', 'DELETE', undefined, false, inst.uazapi_token);
+              deleted = true;
+              console.log('[ADMIN-DELETE] Deleted via DELETE /instance');
+            } catch (e1: any) {
+              console.log('[ADMIN-DELETE] DELETE /instance failed:', e1.message);
+            }
+            
+            // Method 2: DELETE /instance/delete
+            if (!deleted) {
+              try {
+                result = await callWhatsAppApi(config, '/instance/delete', 'DELETE', undefined, false, inst.uazapi_token);
+                deleted = true;
+                console.log('[ADMIN-DELETE] Deleted via /instance/delete');
+              } catch (e2: any) {
+                console.log('[ADMIN-DELETE] /instance/delete failed:', e2.message);
+              }
+            }
+            
+            // Method 3: POST /instance/delete
+            if (!deleted) {
+              try {
+                result = await callWhatsAppApi(config, '/instance/delete', 'POST', undefined, false, inst.uazapi_token);
+                deleted = true;
+                console.log('[ADMIN-DELETE] Deleted via POST /instance/delete');
+              } catch (e3: any) {
+                console.log('[ADMIN-DELETE] POST /instance/delete failed:', e3.message);
+              }
+            }
+            
+            if (!deleted) {
+              console.log(`[ADMIN-DELETE] Could not delete from UazAPI API`);
+              result = { deleted: false, note: 'Could not delete from UazAPI API' };
+            } else {
+              result = { deleted: true, source: 'uazapi' };
+            }
+          } else {
+            console.log(`[ADMIN-DELETE] Instance ${inst.instance_name} is not UazAPI or has no token`);
+            result = { deleted: true, note: 'Not a UazAPI instance or no token' };
+          }
+        } catch (error: any) {
+          console.log(`[ADMIN-DELETE] API error: ${error.message}`);
+          result = { deleted: false, error: error.message };
+        }
+
+        break;
+      }
+
       case 'send-message': {
         const { instanceName, number, text, conversationId, fromInstanceId, toInstanceId } = params;
         if (!instanceName || !number || !text) {
