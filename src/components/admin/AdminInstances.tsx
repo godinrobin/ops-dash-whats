@@ -219,9 +219,11 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
       if (error) throw error;
 
       if (data.orphanedFound === 0) {
-        toast.info('Nenhuma instância órfã encontrada na UAZAPI');
-      } else if (data.status === 'started') {
-        toast.success(`Limpeza iniciada: ${data.orphanedFound} instâncias órfãs serão excluídas em segundo plano`);
+        toast.info(`Nenhuma instância órfã desconectada encontrada na UAZAPI`);
+      } else if (data.status === 'partial') {
+        toast.success(`${data.deleted} excluída(s), ${data.remaining} restante(s). Clique novamente.`);
+      } else if (data.status === 'done') {
+        toast.success(`${data.deleted} instância(s) órfã(s) excluída(s) da UAZAPI!`);
       } else if (data.failed === 0) {
         toast.success(`${data.deleted} instância(s) órfã(s) excluída(s) da UAZAPI!`);
       } else {

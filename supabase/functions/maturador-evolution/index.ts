@@ -2289,12 +2289,22 @@ Regras:
         
         console.log(`[ADMIN-CLEANUP] Found ${dbInstanceNames.size} instances in database`);
 
-        // Find orphaned instances (in UAZAPI but not in DB)
+        // Find orphaned instances (in UAZAPI but not in DB) - ONLY disconnected ones!
         const orphanedInstances: any[] = [];
+        let skippedConnected = 0;
+        
         for (const uazInst of uazapiInstances) {
           // Extract instance identifier - UAZAPI can use different fields
           const instName = uazInst.name || uazInst.instanceName || uazInst.instance_name;
           const instToken = uazInst.token || uazInst.instanceToken;
+          const instStatus = uazInst.status || uazInst.connectionStatus || '';
+          
+          // CRITICAL: Skip connected instances - NEVER delete them!
+          if (instStatus === 'connected' || instStatus === 'open' || instStatus === 'CONNECTED') {
+            console.log(`[ADMIN-CLEANUP] Skipping connected instance: ${instName} (status: ${instStatus})`);
+            skippedConnected++;
+            continue;
+          }
           
           // Check if instance exists in DB by name or token
           const existsInDb = dbInstanceNames.has(instName) || (instToken && dbTokens.has(instToken));
@@ -2303,12 +2313,13 @@ Regras:
             orphanedInstances.push({
               name: instName,
               token: instToken,
+              status: instStatus,
               original: uazInst
             });
           }
         }
 
-        console.log(`[ADMIN-CLEANUP] Found ${orphanedInstances.length} orphaned instances to delete`);
+        console.log(`[ADMIN-CLEANUP] Found ${orphanedInstances.length} orphaned DISCONNECTED instances to delete (skipped ${skippedConnected} connected)`);
 
         // Delete orphaned instances in small batches to avoid function timeout
         const maxDeletes = typeof params?.maxDeletes === 'number' ? params.maxDeletes : 30;
