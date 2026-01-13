@@ -3,12 +3,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, Bot, User, Loader2 } from "lucide-react";
+import { Send, Bot, User, Loader2, ImagePlus, X } from "lucide-react";
 import { ChatMessage, ConversationStep } from "@/pages/DeliverableCreator";
 
 interface DeliverableChatPanelProps {
   messages: ChatMessage[];
-  onSendMessage: (message: string) => void;
+  onSendMessage: (message: string, imageUrl?: string) => void;
   isGenerating: boolean;
   step: ConversationStep;
 }
@@ -20,8 +20,10 @@ export const DeliverableChatPanel = ({
   step,
 }: DeliverableChatPanelProps) => {
   const [input, setInput] = useState("");
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -37,10 +39,35 @@ export const DeliverableChatPanel = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isGenerating) return;
+    if ((!input.trim() && !imagePreview) || isGenerating) return;
     
-    onSendMessage(input.trim());
+    onSendMessage(input.trim(), imagePreview || undefined);
     setInput("");
+    setImagePreview(null);
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setImagePreview(event.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const removeImage = () => {
+    setImagePreview(null);
   };
 
   const getPlaceholder = () => {
@@ -90,6 +117,14 @@ export const DeliverableChatPanel = ({
               : "bg-secondary/50"
           }`}
         >
+          {/* Show image if present */}
+          {message.imageUrl && (
+            <img 
+              src={message.imageUrl} 
+              alt="Uploaded" 
+              className="max-w-full h-auto rounded-lg mb-2 max-h-48 object-contain"
+            />
+          )}
           <div 
             className="text-sm whitespace-pre-wrap prose prose-sm dark:prose-invert max-w-none"
             dangerouslySetInnerHTML={{ 
@@ -149,9 +184,49 @@ export const DeliverableChatPanel = ({
         </div>
       </ScrollArea>
 
+      {/* Image Preview */}
+      {imagePreview && (
+        <div className="px-4 pb-2">
+          <div className="relative inline-block">
+            <img 
+              src={imagePreview} 
+              alt="Preview" 
+              className="h-20 w-auto rounded-lg border border-border"
+            />
+            <button
+              onClick={removeImage}
+              className="absolute -top-2 -right-2 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center hover:bg-destructive/90"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Input */}
       <form onSubmit={handleSubmit} className="p-4 border-t border-border bg-background">
         <div className="flex gap-2">
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleImageSelect}
+            className="hidden"
+          />
+          
+          {/* Image upload button */}
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isGenerating || step === "generating"}
+            title="Enviar imagem de referência"
+          >
+            <ImagePlus className="w-4 h-4" />
+          </Button>
+
           <Input
             ref={inputRef}
             value={input}
@@ -163,7 +238,7 @@ export const DeliverableChatPanel = ({
           <Button
             type="submit"
             size="icon"
-            disabled={!input.trim() || isGenerating || step === "generating"}
+            disabled={(!input.trim() && !imagePreview) || isGenerating || step === "generating"}
           >
             <Send className="w-4 h-4" />
           </Button>

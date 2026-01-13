@@ -209,11 +209,12 @@ Gerado com ❤️ pelo Criador de Entregáveis
                 key={iframeKey}
                 srcDoc={html}
                 title="Preview"
-                className="w-full h-full border-0"
+                className="w-full h-full border-0 bg-white"
                 style={{
                   paddingTop: viewport === "mobile" ? 24 : 0,
                 }}
-                sandbox="allow-scripts allow-same-origin"
+                sandbox="allow-scripts"
+                referrerPolicy="no-referrer"
               />
 
               {isGenerating && (
