@@ -386,18 +386,7 @@ const DeliverableCreator = () => {
   };
 
   const startGeneration = async (finalConfig: DeliverableConfig) => {
-    // Check prompt limit before generating
-    if (hasReachedLimit) {
-      toast.error("Você atingiu o limite diário de 30 prompts. Tente novamente amanhã!");
-      return;
-    }
-    
-    const canProceed = await incrementPrompt();
-    if (!canProceed) {
-      toast.error("Limite de prompts atingido para hoje!");
-      return;
-    }
-    
+    // First generation is free - no prompt counting
     setStep("generating");
     setIsGenerating(true);
     
