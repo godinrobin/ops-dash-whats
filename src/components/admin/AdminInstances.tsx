@@ -40,6 +40,7 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
   const [syncingAll, setSyncingAll] = useState(false);
   const [deletingOld, setDeletingOld] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
+  const [cleaningOrphaned, setCleaningOrphaned] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState<{ current: number; total: number } | null>(null);
 
   // Filters
@@ -204,6 +205,33 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
     } finally {
       setDeletingAll(false);
       setDeleteProgress(null);
+    }
+  };
+
+  // Cleanup orphaned instances from UAZAPI (instances deleted from DB but still in UAZAPI)
+  const cleanupOrphanedInstances = async () => {
+    setCleaningOrphaned(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('maturador-evolution', {
+        body: { action: 'admin-cleanup-orphaned-instances' },
+      });
+
+      if (error) throw error;
+
+      if (data.orphanedFound === 0) {
+        toast.info('Nenhuma instância órfã encontrada na UAZAPI');
+      } else if (data.failed === 0) {
+        toast.success(`${data.deleted} instância(s) órfã(s) excluída(s) da UAZAPI!`);
+      } else {
+        toast.warning(`${data.deleted} excluída(s), ${data.failed} falha(s)`);
+      }
+      
+      console.log('[Cleanup Result]', data);
+    } catch (error: any) {
+      console.error('Error cleaning orphaned instances:', error);
+      toast.error(error.message || 'Erro ao limpar instâncias órfãs');
+    } finally {
+      setCleaningOrphaned(false);
     }
   };
 
@@ -404,6 +432,40 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
                     <AlertDialogAction onClick={deleteOldDisconnectedInstances}>
                       Excluir {oldDisconnectedInstances.length} instância(s)
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              {/* Cleanup orphaned instances from UAZAPI */}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    disabled={cleaningOrphaned}
+                    className="border-orange-500/50 text-orange-600 hover:bg-orange-500/10"
+                  >
+                    {cleaningOrphaned ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <Trash2 className="h-4 w-4 mr-2" />
+                    )}
+                    Limpar Órfãs UAZAPI
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Limpar instâncias órfãs da UAZAPI?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Esta ação irá buscar todas as instâncias na UAZAPI que foram excluídas do banco de dados
+                      mas ainda existem na API, e irá excluí-las. Use isto para corrigir instâncias que 
+                      foram apagadas anteriormente sem serem removidas da UAZAPI.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={cleanupOrphanedInstances}>
+                      Limpar Órfãs
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
