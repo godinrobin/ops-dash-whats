@@ -220,6 +220,8 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
 
       if (data.orphanedFound === 0) {
         toast.info('Nenhuma instância órfã encontrada na UAZAPI');
+      } else if (data.status === 'started') {
+        toast.success(`Limpeza iniciada: ${data.orphanedFound} instâncias órfãs serão excluídas em segundo plano`);
       } else if (data.failed === 0) {
         toast.success(`${data.deleted} instância(s) órfã(s) excluída(s) da UAZAPI!`);
       } else {

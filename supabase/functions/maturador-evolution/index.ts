@@ -2288,69 +2288,93 @@ Regras:
 
         console.log(`[ADMIN-CLEANUP] Found ${orphanedInstances.length} orphaned instances to delete`);
 
-        // Delete orphaned instances with delay
-        const DELAY_MS = 500;
-        let deletedCount = 0;
-        let failedCount = 0;
-        const errors: string[] = [];
+        // If there are orphaned instances, start background deletion and return immediately
+        if (orphanedInstances.length > 0) {
+          // Start background task for deletion
+          const backgroundCleanup = async () => {
+            const DELAY_MS = 500;
+            let deletedCount = 0;
+            let failedCount = 0;
 
-        for (let i = 0; i < orphanedInstances.length; i++) {
-          const orphan = orphanedInstances[i];
-          console.log(`[ADMIN-CLEANUP] Deleting orphaned instance ${i + 1}/${orphanedInstances.length}: ${orphan.name}`);
-          
-          try {
-            // Try to delete using the instance token if available
-            if (orphan.token) {
-              try {
-                await callWhatsAppApi(config, '/instance', 'DELETE', undefined, false, orphan.token);
-                deletedCount++;
-                console.log(`[ADMIN-CLEANUP] Deleted ${orphan.name} via DELETE /instance`);
-                continue;
-              } catch (e: any) {
-                console.log(`[ADMIN-CLEANUP] DELETE /instance failed for ${orphan.name}: ${e.message}`);
-              }
+            for (let i = 0; i < orphanedInstances.length; i++) {
+              const orphan = orphanedInstances[i];
+              console.log(`[ADMIN-CLEANUP] Deleting orphaned instance ${i + 1}/${orphanedInstances.length}: ${orphan.name}`);
               
               try {
-                await callWhatsAppApi(config, '/instance/delete', 'DELETE', undefined, false, orphan.token);
-                deletedCount++;
-                console.log(`[ADMIN-CLEANUP] Deleted ${orphan.name} via /instance/delete`);
-                continue;
-              } catch (e: any) {
-                console.log(`[ADMIN-CLEANUP] /instance/delete failed for ${orphan.name}: ${e.message}`);
+                // Try to delete using the instance token if available
+                if (orphan.token) {
+                  try {
+                    await callWhatsAppApi(config, '/instance', 'DELETE', undefined, false, orphan.token);
+                    deletedCount++;
+                    console.log(`[ADMIN-CLEANUP] Deleted ${orphan.name} via DELETE /instance`);
+                    continue;
+                  } catch (e: any) {
+                    console.log(`[ADMIN-CLEANUP] DELETE /instance failed for ${orphan.name}: ${e.message}`);
+                  }
+                  
+                  try {
+                    await callWhatsAppApi(config, '/instance/delete', 'DELETE', undefined, false, orphan.token);
+                    deletedCount++;
+                    console.log(`[ADMIN-CLEANUP] Deleted ${orphan.name} via /instance/delete`);
+                    continue;
+                  } catch (e: any) {
+                    console.log(`[ADMIN-CLEANUP] /instance/delete failed for ${orphan.name}: ${e.message}`);
+                  }
+                }
+                
+                // Fallback: try admin endpoint with instance name
+                try {
+                  await callWhatsAppApi(config, '/admin/deleteInstance', 'POST', { instanceName: orphan.name }, true);
+                  deletedCount++;
+                  console.log(`[ADMIN-CLEANUP] Deleted ${orphan.name} via admin endpoint`);
+                } catch (e: any) {
+                  console.log(`[ADMIN-CLEANUP] Admin delete failed for ${orphan.name}: ${e.message}`);
+                  failedCount++;
+                }
+              } catch (error: any) {
+                failedCount++;
+              }
+
+              // Add delay between deletions
+              if (i < orphanedInstances.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, DELAY_MS));
               }
             }
-            
-            // Fallback: try admin endpoint with instance name
-            try {
-              await callWhatsAppApi(config, '/admin/deleteInstance', 'POST', { instanceName: orphan.name }, true);
-              deletedCount++;
-              console.log(`[ADMIN-CLEANUP] Deleted ${orphan.name} via admin endpoint`);
-            } catch (e: any) {
-              console.log(`[ADMIN-CLEANUP] Admin delete failed for ${orphan.name}: ${e.message}`);
-              failedCount++;
-              errors.push(`${orphan.name}: ${e.message}`);
-            }
-          } catch (error: any) {
-            failedCount++;
-            errors.push(`${orphan.name}: ${error.message}`);
+
+            console.log(`[ADMIN-CLEANUP] Background cleanup complete: ${deletedCount} deleted, ${failedCount} failed`);
+          };
+
+          // Use EdgeRuntime.waitUntil for background processing
+          // @ts-ignore - EdgeRuntime is available in Deno Deploy
+          if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
+            // @ts-ignore
+            EdgeRuntime.waitUntil(backgroundCleanup());
+          } else {
+            // Fallback: just start the task (it may get cut off)
+            backgroundCleanup().catch(e => console.error('[ADMIN-CLEANUP] Background error:', e));
           }
 
-          // Add delay between deletions
-          if (i < orphanedInstances.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, DELAY_MS));
-          }
+          // Return immediately with the count of orphaned instances found
+          return new Response(JSON.stringify({
+            status: 'started',
+            message: `Iniciando exclusão de ${orphanedInstances.length} instâncias órfãs em segundo plano`,
+            totalInUazapi: uazapiInstances.length,
+            totalInDatabase: dbInstanceNames.size,
+            orphanedFound: orphanedInstances.length
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
         }
 
         result = {
           totalInUazapi: uazapiInstances.length,
           totalInDatabase: dbInstanceNames.size,
-          orphanedFound: orphanedInstances.length,
-          deleted: deletedCount,
-          failed: failedCount,
-          errors: errors.length > 0 ? errors : undefined
+          orphanedFound: 0,
+          deleted: 0,
+          failed: 0
         };
 
-        console.log('[ADMIN-CLEANUP] Cleanup complete:', result);
+        console.log('[ADMIN-CLEANUP] No orphaned instances found');
         break;
       }
 
