@@ -128,6 +128,34 @@ Se o usuário pedir para adicionar vídeo aulas:
 - Para links do YouTube, use iframe embed: <iframe src="https://www.youtube.com/embed/VIDEO_ID" ...></iframe>
 - Para códigos Vturb, use o formato: <div id="vid_CODIGO"></div><script src="https://scripts.converteai.net/ID/players/CODIGO.js"></script>
 
+=== SEÇÃO DE PIX (quando configurada) ===
+
+Se o usuário configurar PIX, adicione uma seção elegante no final do site:
+- Card com fundo suave (gradiente ou cor secundária)
+- Ícone de PIX ou cifrão
+- Título: "Apoie nosso trabalho" ou "Pagamento via PIX"
+- Nome do titular em destaque
+- Chave PIX em um campo copiável com botão "Copiar"
+- Nome do banco abaixo
+- JavaScript para copiar: onclick="navigator.clipboard.writeText('CHAVE_PIX'); alert('Chave PIX copiada!');"
+- Estilo clean e confiável
+
+Exemplo de estrutura:
+\`\`\`html
+<div class="pix-section">
+  <div class="pix-card">
+    <div class="pix-icon">💳</div>
+    <h3>Pagamento via PIX</h3>
+    <p class="pix-name">Nome do Titular</p>
+    <div class="pix-key-container">
+      <input type="text" readonly value="CHAVE_PIX" id="pixKey">
+      <button onclick="navigator.clipboard.writeText(document.getElementById('pixKey').value); this.textContent='Copiado!'; setTimeout(() => this.textContent='Copiar', 2000);">Copiar</button>
+    </div>
+    <p class="pix-bank">Banco: Nome do Banco</p>
+  </div>
+</div>
+\`\`\`
+
 SEMPRE siga as cores e nicho especificados pelo usuário. Todos os textos devem ser relevantes ao nicho.`;
 
 serve(async (req) => {
@@ -162,6 +190,16 @@ CONFIGURAÇÕES DO USUÁRIO:
 - Número de Aulas: ${config.numberOfLessons || "Não especificado"}
 ${config.videoLinks?.length > 0 ? `- Links de Vídeos: ${config.videoLinks.join(", ")}` : ""}
 ${config.includePdfSection ? "- Incluir seção de materiais PDF: Sim" : ""}
+${config.includePix ? `
+- INCLUIR SEÇÃO DE PIX: Sim
+- Nome do Titular PIX: ${config.pixName || "Não especificado"}
+- Chave PIX: ${config.pixKey || "Não especificada"}
+- Banco: ${config.pixBank || "Não especificado"}
+` : ""}
+${config.additionalObservations ? `
+- OBSERVAÇÕES ADICIONAIS DO USUÁRIO (IMPORTANTE, LEVE EM CONSIDERAÇÃO):
+${config.additionalObservations}
+` : ""}
 
 Gere o HTML completo seguindo EXATAMENTE o modelo indicado e essas especificações.`;
     }
