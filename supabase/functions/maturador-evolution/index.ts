@@ -2201,6 +2201,159 @@ Regras:
         break;
       }
 
+      case 'admin-cleanup-orphaned-instances': {
+        // Admin action to delete instances from UAZAPI that don't exist in the database
+        // Check if user is admin
+        const { data: adminRole } = await supabaseClient
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id)
+          .eq('role', 'admin')
+          .single();
+
+        if (!adminRole) {
+          return new Response(JSON.stringify({ error: 'Acesso negado - apenas admins' }), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        console.log('[ADMIN-CLEANUP] Starting orphaned instances cleanup...');
+
+        // Get global UAZAPI config
+        const config = await getGlobalApiConfig(supabaseClient);
+        
+        if (config.provider !== 'uazapi') {
+          return new Response(JSON.stringify({ error: 'Cleanup only works with UazAPI provider' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // List all instances from UAZAPI using admin endpoint
+        let uazapiInstances: any[] = [];
+        try {
+          const listPath = config.uazapiConfig?.listInstancesPath || '/instance/all';
+          const listMethod = config.uazapiConfig?.listInstancesMethod || 'GET';
+          
+          console.log(`[ADMIN-CLEANUP] Fetching instances from UAZAPI: ${listMethod} ${listPath}`);
+          const instances = await callWhatsAppApi(config, listPath, listMethod, undefined, true);
+          
+          // Handle different response formats
+          if (Array.isArray(instances)) {
+            uazapiInstances = instances;
+          } else if (instances?.instances) {
+            uazapiInstances = instances.instances;
+          } else if (instances?.data) {
+            uazapiInstances = instances.data;
+          }
+          
+          console.log(`[ADMIN-CLEANUP] Found ${uazapiInstances.length} instances in UAZAPI`);
+        } catch (error: any) {
+          console.error('[ADMIN-CLEANUP] Failed to list UAZAPI instances:', error.message);
+          return new Response(JSON.stringify({ error: `Failed to list UAZAPI instances: ${error.message}` }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Get all instance names from our database
+        const { data: dbInstances } = await supabaseClient
+          .from('maturador_instances')
+          .select('instance_name, uazapi_token');
+        
+        const dbInstanceNames = new Set((dbInstances || []).map(i => i.instance_name));
+        const dbTokens = new Set((dbInstances || []).map(i => i.uazapi_token).filter(Boolean));
+        
+        console.log(`[ADMIN-CLEANUP] Found ${dbInstanceNames.size} instances in database`);
+
+        // Find orphaned instances (in UAZAPI but not in DB)
+        const orphanedInstances: any[] = [];
+        for (const uazInst of uazapiInstances) {
+          // Extract instance identifier - UAZAPI can use different fields
+          const instName = uazInst.name || uazInst.instanceName || uazInst.instance_name;
+          const instToken = uazInst.token || uazInst.instanceToken;
+          
+          // Check if instance exists in DB by name or token
+          const existsInDb = dbInstanceNames.has(instName) || (instToken && dbTokens.has(instToken));
+          
+          if (!existsInDb) {
+            orphanedInstances.push({
+              name: instName,
+              token: instToken,
+              original: uazInst
+            });
+          }
+        }
+
+        console.log(`[ADMIN-CLEANUP] Found ${orphanedInstances.length} orphaned instances to delete`);
+
+        // Delete orphaned instances with delay
+        const DELAY_MS = 500;
+        let deletedCount = 0;
+        let failedCount = 0;
+        const errors: string[] = [];
+
+        for (let i = 0; i < orphanedInstances.length; i++) {
+          const orphan = orphanedInstances[i];
+          console.log(`[ADMIN-CLEANUP] Deleting orphaned instance ${i + 1}/${orphanedInstances.length}: ${orphan.name}`);
+          
+          try {
+            // Try to delete using the instance token if available
+            if (orphan.token) {
+              try {
+                await callWhatsAppApi(config, '/instance', 'DELETE', undefined, false, orphan.token);
+                deletedCount++;
+                console.log(`[ADMIN-CLEANUP] Deleted ${orphan.name} via DELETE /instance`);
+                continue;
+              } catch (e: any) {
+                console.log(`[ADMIN-CLEANUP] DELETE /instance failed for ${orphan.name}: ${e.message}`);
+              }
+              
+              try {
+                await callWhatsAppApi(config, '/instance/delete', 'DELETE', undefined, false, orphan.token);
+                deletedCount++;
+                console.log(`[ADMIN-CLEANUP] Deleted ${orphan.name} via /instance/delete`);
+                continue;
+              } catch (e: any) {
+                console.log(`[ADMIN-CLEANUP] /instance/delete failed for ${orphan.name}: ${e.message}`);
+              }
+            }
+            
+            // Fallback: try admin endpoint with instance name
+            try {
+              await callWhatsAppApi(config, '/admin/deleteInstance', 'POST', { instanceName: orphan.name }, true);
+              deletedCount++;
+              console.log(`[ADMIN-CLEANUP] Deleted ${orphan.name} via admin endpoint`);
+            } catch (e: any) {
+              console.log(`[ADMIN-CLEANUP] Admin delete failed for ${orphan.name}: ${e.message}`);
+              failedCount++;
+              errors.push(`${orphan.name}: ${e.message}`);
+            }
+          } catch (error: any) {
+            failedCount++;
+            errors.push(`${orphan.name}: ${error.message}`);
+          }
+
+          // Add delay between deletions
+          if (i < orphanedInstances.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+          }
+        }
+
+        result = {
+          totalInUazapi: uazapiInstances.length,
+          totalInDatabase: dbInstanceNames.size,
+          orphanedFound: orphanedInstances.length,
+          deleted: deletedCount,
+          failed: failedCount,
+          errors: errors.length > 0 ? errors : undefined
+        };
+
+        console.log('[ADMIN-CLEANUP] Cleanup complete:', result);
+        break;
+      }
+
       case 'send-message': {
         const { instanceName, number, text, conversationId, fromInstanceId, toInstanceId } = params;
         if (!instanceName || !number || !text) {
