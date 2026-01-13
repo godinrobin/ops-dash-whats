@@ -139,9 +139,9 @@ export const DeliverableChatPanel = ({
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       {/* Header */}
-      <div className="p-4 border-b border-border bg-background">
+      <div className="p-4 border-b border-border bg-background flex-shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center">
             <Bot className="w-4 h-4 text-accent" />
@@ -156,8 +156,8 @@ export const DeliverableChatPanel = ({
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-4">
-        <div className="space-y-4" ref={scrollRef}>
+      <ScrollArea className="flex-1 min-h-0">
+        <div className="space-y-4 p-4" ref={scrollRef}>
           <AnimatePresence mode="popLayout">
             {messages.map((message, index) => renderMessage(message, index))}
           </AnimatePresence>
@@ -204,7 +204,7 @@ export const DeliverableChatPanel = ({
       )}
 
       {/* Input */}
-      <form onSubmit={handleSubmit} className="p-4 border-t border-border bg-background">
+      <form onSubmit={handleSubmit} className="p-4 border-t border-border bg-background flex-shrink-0">
         <div className="flex gap-2">
           {/* Hidden file input */}
           <input

@@ -625,10 +625,10 @@ const DeliverableCreator = () => {
 
   return (
     <SystemLayout>
-      <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
+      <div className="flex h-[calc(100vh-3.5rem)] md:h-[calc(100vh-4rem)] overflow-hidden">
         {/* Chat Panel - Left */}
-        <div className="w-1/2 border-r border-border flex flex-col">
-          <div className="p-2 border-b border-border flex items-center justify-between">
+        <div className="w-1/2 border-r border-border flex flex-col min-h-0">
+          <div className="p-2 border-b border-border flex items-center justify-between flex-shrink-0">
             <Button 
               variant="ghost" 
               size="sm" 
@@ -644,16 +644,18 @@ const DeliverableCreator = () => {
               </Badge>
             )}
           </div>
-          <DeliverableChatPanel
-            messages={messages}
-            onSendMessage={handleUserMessage}
-            isGenerating={isGenerating}
-            step={step}
-          />
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <DeliverableChatPanel
+              messages={messages}
+              onSendMessage={handleUserMessage}
+              isGenerating={isGenerating}
+              step={step}
+            />
+          </div>
         </div>
 
         {/* Preview Panel - Right */}
-        <div className="w-1/2 flex flex-col bg-muted/30">
+        <div className="w-1/2 flex flex-col min-h-0 bg-muted/30">
           <DeliverablePreviewPanel
             html={generatedHtml}
             isGenerating={isGenerating}

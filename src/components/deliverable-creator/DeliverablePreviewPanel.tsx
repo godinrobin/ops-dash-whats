@@ -101,9 +101,9 @@ Gerado com ❤️ pelo Criador de Entregáveis
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       {/* Toolbar */}
-      <div className="p-3 border-b border-border bg-background flex items-center justify-between gap-2 flex-wrap">
+      <div className="p-3 border-b border-border bg-background flex items-center justify-between gap-2 flex-wrap flex-shrink-0 z-10">
         {/* Viewport toggles */}
         <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-1">
           {(Object.keys(viewportSizes) as Viewport[]).map((vp) => (
@@ -156,7 +156,7 @@ Gerado com ❤️ pelo Criador de Entregáveis
       </div>
 
       {/* Preview Area */}
-      <div className="flex-1 overflow-hidden flex items-center justify-center p-4 bg-[#1a1a1a]">
+      <div className="flex-1 min-h-0 overflow-auto flex items-center justify-center p-4 bg-[#1a1a1a]">
         <AnimatePresence mode="wait">
           {!html && !isGenerating ? (
             <motion.div
