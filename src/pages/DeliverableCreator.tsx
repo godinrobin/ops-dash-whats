@@ -20,6 +20,7 @@ export interface DeliverableConfig {
   primaryColor: string;
   secondaryColor: string;
   targetAudience: string;
+  productDetails: string;
   includeVideos: boolean;
   videoLinks: string[];
 }
@@ -36,6 +37,7 @@ export type ConversationStep =
   | "ask_primary_color"
   | "ask_secondary_color"
   | "ask_audience"
+  | "ask_product_details"
   | "ask_videos"
   | "ask_video_links"
   | "generating"
@@ -60,6 +62,7 @@ const DeliverableCreator = () => {
     primaryColor: "#E91E63",
     secondaryColor: "#FCE4EC",
     targetAudience: "",
+    productDetails: "",
     includeVideos: false,
     videoLinks: [],
   });
@@ -227,6 +230,7 @@ const DeliverableCreator = () => {
       primaryColor: "#E91E63",
       secondaryColor: "#FCE4EC",
       targetAudience: "",
+      productDetails: "",
       includeVideos: false,
       videoLinks: [],
     });
@@ -298,13 +302,27 @@ const DeliverableCreator = () => {
 
       case "ask_audience":
         setConfig((prev) => ({ ...prev, targetAudience: message }));
+        setStep("ask_product_details");
+        setTimeout(() => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `Perfeito! 👥\n\nAgora me conte mais sobre o seu **produto/curso**:\n\n- O que ele ensina?\n- Quais os principais benefícios?\n- Qual o diferencial?\n\nQuanto mais detalhes, melhor será o site gerado!`,
+            },
+          ]);
+        }, 300);
+        break;
+
+      case "ask_product_details":
+        setConfig((prev) => ({ ...prev, productDetails: message }));
         setStep("ask_videos");
         setTimeout(() => {
           setMessages((prev) => [
             ...prev,
             {
               role: "assistant",
-              content: `Entendido! 👥\n\nVocê deseja **incluir vídeo aulas** no seu entregável?\n\nResponda **sim** ou **não**.`,
+              content: `Ótimas informações! 📝\n\nVocê deseja **incluir vídeo aulas** no seu entregável?\n\nResponda **sim** ou **não**.`,
             },
           ]);
         }, 300);
@@ -382,7 +400,11 @@ const DeliverableCreator = () => {
             messages: [
               {
                 role: "user",
-                content: `Gere o HTML completo do site para o nicho "${finalConfig.niche}" com as cores ${finalConfig.primaryColor} (principal) e ${finalConfig.secondaryColor} (secundária). O público-alvo é: ${finalConfig.targetAudience}. ${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as seguintes vídeo aulas: ${finalConfig.videoLinks.join(", ")}` : "Não incluir vídeo aulas."}`,
+                content: `Gere o HTML completo do site para o nicho "${finalConfig.niche}" com as cores ${finalConfig.primaryColor} (principal) e ${finalConfig.secondaryColor} (secundária). O público-alvo é: ${finalConfig.targetAudience}. 
+
+Detalhes do produto/curso: ${finalConfig.productDetails || "Não informado"}
+
+${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as seguintes vídeo aulas: ${finalConfig.videoLinks.join(", ")}` : "Não incluir vídeo aulas."}`,
               },
             ],
             config: finalConfig,
