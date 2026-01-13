@@ -2117,8 +2117,31 @@ Regras:
           });
         }
 
+        // Helper: resolve UazAPI instance token by name via admin list endpoint
+        const resolveUazapiTokenByName = async (name: string): Promise<string | null> => {
+          try {
+            const globalConfig = await getGlobalApiConfig(supabaseClient);
+            if (globalConfig.provider !== 'uazapi') return null;
+
+            const listPath = globalConfig.uazapiConfig?.listInstancesPath || '/instance/all';
+            const listMethod = globalConfig.uazapiConfig?.listInstancesMethod || 'GET';
+            const instances = await callWhatsAppApi(globalConfig, listPath, listMethod, undefined, true);
+
+            const list: any[] = Array.isArray(instances)
+              ? instances
+              : (instances?.instances || instances?.data || []);
+
+            const found = list.find((i) => (i?.name || i?.instanceName || i?.instance_name) === name);
+            const token = found?.token || found?.instanceToken;
+            return typeof token === 'string' && token ? token : null;
+          } catch (e: any) {
+            console.log('[ADMIN-DELETE] Failed to resolve token by name:', e?.message);
+            return null;
+          }
+        };
+
         // Get instance by ID or name (without user filter for admin)
-        let inst;
+        let inst: any = null;
         if (instanceId) {
           const { data } = await supabaseClient
             .from('maturador_instances')
@@ -2135,63 +2158,62 @@ Regras:
           inst = data;
         }
 
+        // If the instance no longer exists in the database, we can still delete it from UazAPI using the admin list
         if (!inst) {
-          console.log(`[ADMIN-DELETE] Instance not found: ${instanceId || instanceName}`);
-          return new Response(JSON.stringify({ deleted: true, note: 'Instance not found in database' }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
+          if (!instanceName) {
+            return new Response(JSON.stringify({ deleted: false, error: 'instanceName é obrigatório quando a instância não existe no banco' }), {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          console.log(`[ADMIN-DELETE] Instance not found in DB, trying UazAPI delete by name: ${instanceName}`);
+          const token = await resolveUazapiTokenByName(instanceName);
+          if (!token) {
+            return new Response(JSON.stringify({ deleted: false, error: 'Instância não encontrada na UAZAPI (por nome)' }), {
+              status: 404,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          const globalConfig = await getGlobalApiConfig(supabaseClient);
+          if (globalConfig.provider !== 'uazapi') {
+            return new Response(JSON.stringify({ deleted: false, error: 'Provider não é UAZAPI' }), {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          try {
+            await callWhatsAppApi(globalConfig, '/instance', 'DELETE', undefined, false, token);
+            return new Response(JSON.stringify({ deleted: true, source: 'uazapi', resolvedFrom: 'admin-list' }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          } catch (e: any) {
+            return new Response(JSON.stringify({ deleted: false, error: e?.message || 'Falha ao deletar na UAZAPI' }), {
+              status: 500,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
         }
 
         console.log(`[ADMIN-DELETE] Deleting instance: ${inst.instance_name} (${inst.id}), provider: ${inst.api_provider}`);
 
-        // Try to delete from UAZAPI
+        // Delete from UazAPI (prefer instance token from DB; fallback to admin list token)
         try {
-          if (inst.api_provider === 'uazapi' && inst.uazapi_token) {
+          if (inst.api_provider === 'uazapi') {
             const config = await getInstanceApiConfig(supabaseClient, inst.id);
-            console.log(`[ADMIN-DELETE] Deleting from UazAPI: ${inst.instance_name}`);
-            
-            let deleted = false;
-            
-            // Method 1: DELETE /instance with token header
-            try {
-              result = await callWhatsAppApi(config, '/instance', 'DELETE', undefined, false, inst.uazapi_token);
-              deleted = true;
-              console.log('[ADMIN-DELETE] Deleted via DELETE /instance');
-            } catch (e1: any) {
-              console.log('[ADMIN-DELETE] DELETE /instance failed:', e1.message);
+            const token = inst.uazapi_token || (await resolveUazapiTokenByName(inst.instance_name));
+
+            if (!token) {
+              result = { deleted: false, error: 'Token da instância não encontrado (DB nem UAZAPI)' };
+              break;
             }
-            
-            // Method 2: DELETE /instance/delete
-            if (!deleted) {
-              try {
-                result = await callWhatsAppApi(config, '/instance/delete', 'DELETE', undefined, false, inst.uazapi_token);
-                deleted = true;
-                console.log('[ADMIN-DELETE] Deleted via /instance/delete');
-              } catch (e2: any) {
-                console.log('[ADMIN-DELETE] /instance/delete failed:', e2.message);
-              }
-            }
-            
-            // Method 3: POST /instance/delete
-            if (!deleted) {
-              try {
-                result = await callWhatsAppApi(config, '/instance/delete', 'POST', undefined, false, inst.uazapi_token);
-                deleted = true;
-                console.log('[ADMIN-DELETE] Deleted via POST /instance/delete');
-              } catch (e3: any) {
-                console.log('[ADMIN-DELETE] POST /instance/delete failed:', e3.message);
-              }
-            }
-            
-            if (!deleted) {
-              console.log(`[ADMIN-DELETE] Could not delete from UazAPI API`);
-              result = { deleted: false, note: 'Could not delete from UazAPI API' };
-            } else {
-              result = { deleted: true, source: 'uazapi' };
-            }
+
+            await callWhatsAppApi(config, '/instance', 'DELETE', undefined, false, token);
+            result = { deleted: true, source: 'uazapi' };
           } else {
-            console.log(`[ADMIN-DELETE] Instance ${inst.instance_name} is not UazAPI or has no token`);
-            result = { deleted: true, note: 'Not a UazAPI instance or no token' };
+            result = { deleted: true, note: 'Not a UAZAPI instance' };
           }
         } catch (error: any) {
           console.log(`[ADMIN-DELETE] API error: ${error.message}`);
@@ -2288,94 +2310,57 @@ Regras:
 
         console.log(`[ADMIN-CLEANUP] Found ${orphanedInstances.length} orphaned instances to delete`);
 
-        // If there are orphaned instances, start background deletion and return immediately
-        if (orphanedInstances.length > 0) {
-          // Start background task for deletion
-          const backgroundCleanup = async () => {
-            const DELAY_MS = 500;
-            let deletedCount = 0;
-            let failedCount = 0;
+        // Delete orphaned instances in small batches to avoid function timeout
+        const maxDeletes = typeof params?.maxDeletes === 'number' ? params.maxDeletes : 30;
+        const DELAY_MS = 500;
 
-            for (let i = 0; i < orphanedInstances.length; i++) {
-              const orphan = orphanedInstances[i];
-              console.log(`[ADMIN-CLEANUP] Deleting orphaned instance ${i + 1}/${orphanedInstances.length}: ${orphan.name}`);
-              
-              try {
-                // Try to delete using the instance token if available
-                if (orphan.token) {
-                  try {
-                    await callWhatsAppApi(config, '/instance', 'DELETE', undefined, false, orphan.token);
-                    deletedCount++;
-                    console.log(`[ADMIN-CLEANUP] Deleted ${orphan.name} via DELETE /instance`);
-                    continue;
-                  } catch (e: any) {
-                    console.log(`[ADMIN-CLEANUP] DELETE /instance failed for ${orphan.name}: ${e.message}`);
-                  }
-                  
-                  try {
-                    await callWhatsAppApi(config, '/instance/delete', 'DELETE', undefined, false, orphan.token);
-                    deletedCount++;
-                    console.log(`[ADMIN-CLEANUP] Deleted ${orphan.name} via /instance/delete`);
-                    continue;
-                  } catch (e: any) {
-                    console.log(`[ADMIN-CLEANUP] /instance/delete failed for ${orphan.name}: ${e.message}`);
-                  }
-                }
-                
-                // Fallback: try admin endpoint with instance name
-                try {
-                  await callWhatsAppApi(config, '/admin/deleteInstance', 'POST', { instanceName: orphan.name }, true);
-                  deletedCount++;
-                  console.log(`[ADMIN-CLEANUP] Deleted ${orphan.name} via admin endpoint`);
-                } catch (e: any) {
-                  console.log(`[ADMIN-CLEANUP] Admin delete failed for ${orphan.name}: ${e.message}`);
-                  failedCount++;
-                }
-              } catch (error: any) {
-                failedCount++;
-              }
+        const toDelete = orphanedInstances.slice(0, maxDeletes);
+        let deletedCount = 0;
+        let failedCount = 0;
+        const errors: string[] = [];
 
-              // Add delay between deletions
-              if (i < orphanedInstances.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, DELAY_MS));
-              }
-            }
+        for (let i = 0; i < toDelete.length; i++) {
+          const orphan = toDelete[i];
+          console.log(`[ADMIN-CLEANUP] Deleting orphaned instance ${i + 1}/${toDelete.length}: ${orphan.name}`);
 
-            console.log(`[ADMIN-CLEANUP] Background cleanup complete: ${deletedCount} deleted, ${failedCount} failed`);
-          };
-
-          // Use EdgeRuntime.waitUntil for background processing
-          // @ts-ignore - EdgeRuntime is available in Deno Deploy
-          if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
-            // @ts-ignore
-            EdgeRuntime.waitUntil(backgroundCleanup());
+          if (!orphan.token) {
+            failedCount++;
+            errors.push(`${orphan.name}: token ausente (lista /instance/all não retornou token)`);
           } else {
-            // Fallback: just start the task (it may get cut off)
-            backgroundCleanup().catch(e => console.error('[ADMIN-CLEANUP] Background error:', e));
+            try {
+              await callWhatsAppApi(config, '/instance', 'DELETE', undefined, false, orphan.token);
+              deletedCount++;
+              console.log(`[ADMIN-CLEANUP] Deleted ${orphan.name} via DELETE /instance`);
+            } catch (e: any) {
+              failedCount++;
+              errors.push(`${orphan.name}: ${e?.message || 'erro ao deletar'}`);
+              console.log(`[ADMIN-CLEANUP] Failed to delete ${orphan.name}:`, e?.message);
+            }
           }
 
-          // Return immediately with the count of orphaned instances found
-          return new Response(JSON.stringify({
-            status: 'started',
-            message: `Iniciando exclusão de ${orphanedInstances.length} instâncias órfãs em segundo plano`,
-            totalInUazapi: uazapiInstances.length,
-            totalInDatabase: dbInstanceNames.size,
-            orphanedFound: orphanedInstances.length
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
+          if (i < toDelete.length - 1) {
+            await new Promise((resolve) => setTimeout(resolve, DELAY_MS));
+          }
         }
 
-        result = {
-          totalInUazapi: uazapiInstances.length,
-          totalInDatabase: dbInstanceNames.size,
-          orphanedFound: 0,
-          deleted: 0,
-          failed: 0
-        };
+        const remaining = Math.max(0, orphanedInstances.length - toDelete.length);
 
-        console.log('[ADMIN-CLEANUP] No orphaned instances found');
-        break;
+        return new Response(
+          JSON.stringify({
+            status: remaining > 0 ? 'partial' : 'done',
+            totalInUazapi: uazapiInstances.length,
+            totalInDatabase: dbInstanceNames.size,
+            orphanedFound: orphanedInstances.length,
+            processed: toDelete.length,
+            deleted: deletedCount,
+            failed: failedCount,
+            remaining,
+            errors: errors.length ? errors.slice(0, 10) : undefined,
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
       }
 
       case 'send-message': {

@@ -213,7 +213,7 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
     setCleaningOrphaned(true);
     try {
       const { data, error } = await supabase.functions.invoke('maturador-evolution', {
-        body: { action: 'admin-cleanup-orphaned-instances' },
+        body: { action: 'admin-cleanup-orphaned-instances', maxDeletes: 30 },
       });
 
       if (error) throw error;
