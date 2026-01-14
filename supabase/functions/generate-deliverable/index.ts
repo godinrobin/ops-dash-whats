@@ -199,8 +199,8 @@ Se o usuário configurar PIX, adicione uma seção elegante no final do site:
 - Nome do titular em destaque
 - Chave PIX em um campo copiável com botão "Copiar"
 - Nome do banco abaixo
-- JavaScript para copiar: onclick="navigator.clipboard.writeText('CHAVE_PIX'); alert('Chave PIX copiada!');"
 - Estilo clean e confiável
+- Use o código de copiar COM FALLBACK para funcionar em iframes
 
 Exemplo de estrutura:
 \`\`\`html
@@ -211,7 +211,30 @@ Exemplo de estrutura:
     <p class="pix-name">Nome do Titular</p>
     <div class="pix-key-container">
       <input type="text" readonly value="CHAVE_PIX" id="pixKey">
-      <button onclick="navigator.clipboard.writeText(document.getElementById('pixKey').value); this.textContent='Copiado!'; setTimeout(() => this.textContent='Copiar', 2000);">Copiar</button>
+      <button onclick="
+        var pixValue = document.getElementById('pixKey').value;
+        var btn = this;
+        try {
+          navigator.clipboard.writeText(pixValue).then(function() {
+            btn.textContent = 'Copiado!';
+            setTimeout(function() { btn.textContent = 'Copiar'; }, 2000);
+          }).catch(function() {
+            var input = document.getElementById('pixKey');
+            input.select();
+            input.setSelectionRange(0, 99999);
+            document.execCommand('copy');
+            btn.textContent = 'Copiado!';
+            setTimeout(function() { btn.textContent = 'Copiar'; }, 2000);
+          });
+        } catch(e) {
+          var input = document.getElementById('pixKey');
+          input.select();
+          input.setSelectionRange(0, 99999);
+          document.execCommand('copy');
+          btn.textContent = 'Copiado!';
+          setTimeout(function() { btn.textContent = 'Copiar'; }, 2000);
+        }
+      ">Copiar</button>
     </div>
     <p class="pix-bank">Banco: Nome do Banco</p>
   </div>
@@ -244,12 +267,21 @@ serve(async (req) => {
       }
       
       contextMessage = `
-CONFIGURAÇÕES DO USUÁRIO:
+CONFIGURAÇÕES DO USUÁRIO (OBRIGATÓRIAS - SIGA EXATAMENTE):
+
 - Template: ${config.templateId || "app-course"}
 - ${templateInfo}
 - Nicho/Tema: ${config.niche || "Não especificado"}
-- Cor Principal: ${config.primaryColor || "#E91E63"}
-- Cor Secundária: ${config.secondaryColor || "#FCE4EC"}
+
+🎨 **CORES (OBRIGATÓRIAS - USE EXATAMENTE ESTAS CORES, NÃO INVENTE OUTRAS)**:
+- COR PRINCIPAL: ${config.primaryColor || "#E91E63"} - Use esta cor para: botões, títulos, badges, elementos de destaque, gradientes primários
+- COR SECUNDÁRIA: ${config.secondaryColor || "#FCE4EC"} - Use esta cor para: fundos, cards, elementos complementares, versões claras
+
+⚠️ REGRA DE CORES: NÃO use rosa, roxo, magenta ou qualquer outra cor que NÃO seja as cores especificadas acima. 
+Se a cor principal for "amarelo claro", use tons de amarelo (#FFEB3B, #FFF59D, #FFFDE7).
+Se a cor secundária for "marrom escuro", use tons de marrom (#5D4037, #795548, #3E2723).
+NUNCA substitua as cores do usuário por cores padrão do template!
+
 - Público Alvo: ${config.targetAudience || "Não especificado"}
 ${config.templateId === "devotional-app" ? `
 - Número de Devocionais: ${config.numberOfLessons || 30}
@@ -269,6 +301,8 @@ ${config.additionalObservations ? `
 - OBSERVAÇÕES ADICIONAIS DO USUÁRIO (IMPORTANTE, LEVE EM CONSIDERAÇÃO):
 ${config.additionalObservations}
 ` : ""}
+
+🔴 LEMBRETE FINAL: Use EXATAMENTE as cores ${config.primaryColor} e ${config.secondaryColor} escolhidas pelo usuário. Não use cores padrão do template!
 
 Gere o HTML completo seguindo EXATAMENTE o modelo indicado e essas especificações.`;
     }

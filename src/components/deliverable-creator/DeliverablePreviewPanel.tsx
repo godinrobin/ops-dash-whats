@@ -191,7 +191,8 @@ Gerado com ❤️ pelo Criador de Entregáveis
                 style={{
                   paddingTop: 24,
                 }}
-                sandbox="allow-scripts"
+                sandbox="allow-scripts allow-same-origin"
+                allow="clipboard-write"
                 referrerPolicy="no-referrer"
               />
 
