@@ -2,9 +2,10 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Smartphone, Video, Check, Eye, X } from "lucide-react";
+import { Smartphone, Video, Eye, X, BookOpen } from "lucide-react";
 import deliverableAppPreview from "@/assets/deliverable-model-app.png";
 import cursoVideoaulasPreview from "@/assets/curso-videoaulas-preview.png";
+import devocionalAppPreview from "@/assets/devocional-app-preview.png";
 
 interface Template {
   id: string;
@@ -46,8 +47,23 @@ const templates: Template[] = [
       "Design responsivo",
       "Player integrado",
     ],
-    badge: "Novo",
     icon: Video,
+  },
+  {
+    id: "devotional-app",
+    name: "App Devocional",
+    description: "App de devocionais com estudos, reflexões, materiais e contribuição",
+    image: devocionalAppPreview,
+    features: [
+      "Versículo em destaque",
+      "Lista de devocionais",
+      "Reflexões e orações",
+      "Materiais em PDF",
+      "Seção de contribuição",
+      "Design espiritual",
+    ],
+    badge: "Novo",
+    icon: BookOpen,
   },
 ];
 
@@ -69,7 +85,7 @@ export const DeliverableTemplateSelector = ({ onSelect }: DeliverableTemplateSel
           </p>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
           {templates.map((template, index) => (
             <motion.div
               key={template.id}
@@ -84,8 +100,8 @@ export const DeliverableTemplateSelector = ({ onSelect }: DeliverableTemplateSel
                 onClick={() => onSelect(template.id)}
               >
                 <CardHeader className="p-0 relative">
-                  {/* Image container that fills and crops */}
-                  <div className="aspect-[3/4] overflow-hidden bg-gradient-to-b from-muted/50 to-muted relative">
+                  {/* Image container - smaller aspect ratio */}
+                  <div className="aspect-[4/5] overflow-hidden bg-gradient-to-b from-muted/50 to-muted relative">
                     <img
                       src={template.image}
                       alt={template.name}
@@ -103,26 +119,26 @@ export const DeliverableTemplateSelector = ({ onSelect }: DeliverableTemplateSel
                             e.stopPropagation();
                             setPreviewImage(template.image);
                           }}
-                          className="absolute top-2 left-2 p-1.5 bg-background/90 backdrop-blur-sm rounded-full shadow-lg hover:bg-background transition-colors z-10"
+                          className="absolute top-1.5 left-1.5 p-1 bg-background/90 backdrop-blur-sm rounded-full shadow-lg hover:bg-background transition-colors z-10"
                           title="Ver imagem completa"
                         >
-                          <Eye className="w-3.5 h-3.5 text-foreground" />
+                          <Eye className="w-3 h-3 text-foreground" />
                         </motion.button>
                       )}
                     </AnimatePresence>
                   </div>
                   {template.badge && (
-                    <Badge className="absolute top-2 right-2 bg-accent text-accent-foreground text-xs px-1.5 py-0.5">
+                    <Badge className="absolute top-1.5 right-1.5 bg-accent text-accent-foreground text-[10px] px-1 py-0.5">
                       {template.badge}
                     </Badge>
                   )}
                 </CardHeader>
-                <CardContent className="p-3">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    {template.icon ? <template.icon className="w-4 h-4 text-accent" /> : <Smartphone className="w-4 h-4 text-accent" />}
-                    <CardTitle className="text-sm">{template.name}</CardTitle>
+                <CardContent className="p-2">
+                  <div className="flex items-center gap-1 mb-0.5">
+                    {template.icon ? <template.icon className="w-3 h-3 text-accent" /> : <Smartphone className="w-3 h-3 text-accent" />}
+                    <CardTitle className="text-xs">{template.name}</CardTitle>
                   </div>
-                  <CardDescription className="text-xs line-clamp-2">
+                  <CardDescription className="text-[10px] line-clamp-2">
                     {template.description}
                   </CardDescription>
                 </CardContent>

@@ -36,6 +36,8 @@ export interface DeliverableConfig {
   pixBank?: string;
   // Additional observations
   additionalObservations?: string;
+  // Devotional specific
+  includeContributionSection?: boolean;
 }
 
 export type ChatMessage = {
@@ -61,7 +63,10 @@ export type ConversationStep =
   | "ask_pix_bank"
   | "ask_observations"
   | "generating"
-  | "editing";
+  | "editing"
+  // Devotional specific
+  | "ask_num_devotionals"
+  | "ask_contribution_section";
 
 interface SavedDeliverable {
   id: string;
@@ -284,9 +289,13 @@ const DeliverableCreator = () => {
     setStep("ask_niche");
     setShowSavedList(false);
     
-    const templateMessage = templateId === "video-course"
-      ? "Ótima escolha! 🎥 Vamos criar um site com grid de video aulas.\n\nMe conte: **qual é o nicho** do seu curso?\n\nExemplo: Crochê para Bebês, Confeitaria, Maquiagem, etc."
-      : "Ótima escolha! 🎉 Agora me conte: **qual é o nicho** que você quer trabalhar?\n\nExemplo: Artesanato em Resina, Confeitaria, Crochê, Maquiagem, etc.";
+    let templateMessage = "Ótima escolha! 🎉 Agora me conte: **qual é o nicho** que você quer trabalhar?\n\nExemplo: Artesanato em Resina, Confeitaria, Crochê, Maquiagem, etc.";
+    
+    if (templateId === "video-course") {
+      templateMessage = "Ótima escolha! 🎥 Vamos criar um site com grid de video aulas.\n\nMe conte: **qual é o nicho** do seu curso?\n\nExemplo: Crochê para Bebês, Confeitaria, Maquiagem, etc.";
+    } else if (templateId === "devotional-app") {
+      templateMessage = "Ótima escolha! 📖✨ Vamos criar um app devocional.\n\nMe conte: **qual é o tema** do seu devocional?\n\nExemplo: Salmos, Provérbios, Mulheres da Bíblia, 30 Dias de Fé, etc.";
+    }
     
     setMessages([
       {
@@ -374,6 +383,18 @@ const DeliverableCreator = () => {
               },
             ]);
           }, 300);
+        } else if (selectedTemplate === "devotional-app") {
+          // Devotional app flow
+          setStep("ask_num_devotionals");
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `Ótimas informações! 📝\n\n**Quantos devocionais/dias** terá seu app?\n\nDigite um número (ex: 30, 60, 90)`,
+              },
+            ]);
+          }, 300);
         } else {
           setStep("ask_videos");
           setTimeout(() => {
@@ -386,6 +407,37 @@ const DeliverableCreator = () => {
             ]);
           }, 300);
         }
+        break;
+
+      case "ask_num_devotionals":
+        const numDevotionals = parseInt(message) || 30;
+        setConfig((prev) => ({ ...prev, numberOfLessons: numDevotionals }));
+        setStep("ask_pdf_section");
+        setTimeout(() => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `Perfeito! **${numDevotionals} devocionais** 📖\n\nVocê deseja incluir uma **seção de materiais PDF** (estudos, guias de oração, etc.)?\n\nResponda **sim** ou **não**.`,
+            },
+          ]);
+        }, 300);
+        break;
+
+      case "ask_contribution_section":
+        const wantsContribution = message.toLowerCase().includes("sim") || message.toLowerCase().includes("yes");
+        setConfig((prev) => ({ ...prev, includeContributionSection: wantsContribution }));
+        // Move to PIX question
+        setStep("ask_pix");
+        setTimeout(() => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `${wantsContribution ? "Perfeito, vou incluir seção de contribuição! 🙏" : "Ok, sem seção de contribuição."}\n\n💳 Você deseja **adicionar sua chave PIX** no final do site?\n\nIsso permite que seus apoiadores copiem sua chave facilmente.\n\nResponda **sim** ou **não**.`,
+            },
+          ]);
+        }, 300);
         break;
 
       case "ask_num_lessons":
@@ -480,17 +532,32 @@ const DeliverableCreator = () => {
       case "ask_pdf_section":
         const wantsPdf = message.toLowerCase().includes("sim") || message.toLowerCase().includes("yes");
         setConfig((prev) => ({ ...prev, includePdfSection: wantsPdf }));
-        // Move to PIX question
-        setStep("ask_pix");
-        setTimeout(() => {
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "assistant",
-              content: `${wantsPdf ? "Perfeito, vou incluir seção de materiais! 📄" : "Ok, sem materiais PDF."}\n\n💳 Você deseja **adicionar sua chave PIX** no final do site?\n\nIsso permite que seus clientes copiem sua chave facilmente, aumentando a conversão.\n\nResponda **sim** ou **não**.`,
-            },
-          ]);
-        }, 300);
+        
+        // For devotional app, ask about contribution section
+        if (selectedTemplate === "devotional-app") {
+          setStep("ask_contribution_section");
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `${wantsPdf ? "Perfeito, vou incluir seção de materiais! 📄" : "Ok, sem materiais PDF."}\n\n🙏 Você deseja incluir uma **seção de contribuição/doação** no app?\n\nIsso permite que as pessoas apoiem o ministério.\n\nResponda **sim** ou **não**.`,
+              },
+            ]);
+          }, 300);
+        } else {
+          // Move to PIX question
+          setStep("ask_pix");
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `${wantsPdf ? "Perfeito, vou incluir seção de materiais! 📄" : "Ok, sem materiais PDF."}\n\n💳 Você deseja **adicionar sua chave PIX** no final do site?\n\nIsso permite que seus clientes copiem sua chave facilmente, aumentando a conversão.\n\nResponda **sim** ou **não**.`,
+              },
+            ]);
+          }, 300);
+        }
         break;
 
       case "ask_pix":
