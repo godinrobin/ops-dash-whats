@@ -2,10 +2,11 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Smartphone, Video, Eye, X, BookOpen } from "lucide-react";
+import { Smartphone, Video, Eye, X, BookOpen, Lock } from "lucide-react";
 import deliverableAppPreview from "@/assets/deliverable-model-app.png";
 import cursoVideoaulasPreview from "@/assets/curso-videoaulas-preview.png";
 import devocionalAppPreview from "@/assets/devocional-app-preview.png";
+import protectedAppPreview from "@/assets/protected-app-preview.png";
 
 interface Template {
   id: string;
@@ -62,8 +63,23 @@ const templates: Template[] = [
       "Seção de contribuição",
       "Design espiritual",
     ],
-    badge: "Novo",
     icon: BookOpen,
+  },
+  {
+    id: "protected-app",
+    name: "App com Acesso Protegido",
+    description: "App com tela de boas-vindas, countdown e proteção por senha",
+    image: protectedAppPreview,
+    features: [
+      "Tela de boas-vindas",
+      "Contagem regressiva",
+      "Proteção por senha",
+      "Menu com abas",
+      "Navegação estilo app",
+      "Design elegante",
+    ],
+    badge: "Novo",
+    icon: Lock,
   },
 ];
 

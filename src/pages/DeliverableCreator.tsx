@@ -38,6 +38,12 @@ export interface DeliverableConfig {
   additionalObservations?: string;
   // Devotional specific
   includeContributionSection?: boolean;
+  // Protected app specific
+  includeCountdown?: boolean;
+  countdownMinutes?: number;
+  includePasswordProtection?: boolean;
+  accessPassword?: string;
+  menuTabs?: string[];
 }
 
 export type ChatMessage = {
@@ -66,7 +72,13 @@ export type ConversationStep =
   | "editing"
   // Devotional specific
   | "ask_num_devotionals"
-  | "ask_contribution_section";
+  | "ask_contribution_section"
+  // Protected app specific
+  | "ask_countdown"
+  | "ask_countdown_time"
+  | "ask_password"
+  | "ask_password_value"
+  | "ask_menu_tabs";
 
 interface SavedDeliverable {
   id: string;
@@ -295,6 +307,8 @@ const DeliverableCreator = () => {
       templateMessage = "Ótima escolha! 🎥 Vamos criar um site com grid de video aulas.\n\nMe conte: **qual é o nicho** do seu curso?\n\nExemplo: Crochê para Bebês, Confeitaria, Maquiagem, etc.";
     } else if (templateId === "devotional-app") {
       templateMessage = "Ótima escolha! 📖✨ Vamos criar um app devocional.\n\nMe conte: **qual é o tema** do seu devocional?\n\nExemplo: Salmos, Provérbios, Mulheres da Bíblia, 30 Dias de Fé, etc.";
+    } else if (templateId === "protected-app") {
+      templateMessage = "Ótima escolha! 🔐 Vamos criar um app com acesso protegido.\n\nMe conte: **qual é o nicho/tema** do seu conteúdo?\n\nExemplo: Bolos Caseiros, Maquiagem, Curso de Inglês, Receitas Fitness, etc.";
     }
     
     setMessages([
@@ -395,6 +409,18 @@ const DeliverableCreator = () => {
               },
             ]);
           }, 300);
+        } else if (selectedTemplate === "protected-app") {
+          // Protected app flow - ask about countdown
+          setStep("ask_countdown");
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `Ótimas informações! 📝\n\n⏱️ Você deseja adicionar uma **contagem regressiva** antes do conteúdo?\n\nIsso cria urgência e exclusividade!\n\nResponda **sim** ou **não**.`,
+              },
+            ]);
+          }, 300);
         } else {
           setStep("ask_videos");
           setTimeout(() => {
@@ -440,7 +466,111 @@ const DeliverableCreator = () => {
         }, 300);
         break;
 
-      case "ask_num_lessons":
+      // Protected app specific steps
+      case "ask_countdown":
+        const wantsCountdown = message.toLowerCase().includes("sim") || message.toLowerCase().includes("yes");
+        setConfig((prev) => ({ ...prev, includeCountdown: wantsCountdown }));
+        
+        if (wantsCountdown) {
+          setStep("ask_countdown_time");
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `Ótimo! ⏱️\n\n**Quantos minutos** de contagem regressiva?\n\nDigite um número (ex: 1, 3, 5, 10)`,
+              },
+            ]);
+          }, 300);
+        } else {
+          // Skip to password question
+          setStep("ask_password");
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `Ok, sem countdown! ⏭️\n\n🔐 Você deseja **proteger o conteúdo com uma senha**?\n\nIsso cria exclusividade para seus clientes.\n\nResponda **sim** ou **não**.`,
+              },
+            ]);
+          }, 300);
+        }
+        break;
+
+      case "ask_countdown_time":
+        const countdownMinutes = parseInt(message) || 3;
+        setConfig((prev) => ({ ...prev, countdownMinutes }));
+        setStep("ask_password");
+        setTimeout(() => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `Countdown configurado: **${countdownMinutes} minutos** ⏱️\n\n🔐 Você deseja **proteger o conteúdo com uma senha**?\n\nIsso cria exclusividade para seus clientes.\n\nResponda **sim** ou **não**.`,
+            },
+          ]);
+        }, 300);
+        break;
+
+      case "ask_password":
+        const wantsPassword = message.toLowerCase().includes("sim") || message.toLowerCase().includes("yes");
+        setConfig((prev) => ({ ...prev, includePasswordProtection: wantsPassword }));
+        
+        if (wantsPassword) {
+          setStep("ask_password_value");
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `Perfeito! 🔑\n\nQual será a **senha de acesso**?\n\nExemplo: curso2024, vip123, exclusivo`,
+              },
+            ]);
+          }, 300);
+        } else {
+          // Skip to menu tabs
+          setStep("ask_menu_tabs");
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `Ok, sem proteção por senha! 🔓\n\n📱 Quais **abas** você quer no menu inferior do app?\n\nDigite separado por vírgula.\n\nExemplo: **Início, Receitas, Materiais, Sobre**`,
+              },
+            ]);
+          }, 300);
+        }
+        break;
+
+      case "ask_password_value":
+        setConfig((prev) => ({ ...prev, accessPassword: message }));
+        setStep("ask_menu_tabs");
+        setTimeout(() => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `Senha configurada: **${message}** 🔐\n\n📱 Quais **abas** você quer no menu inferior do app?\n\nDigite separado por vírgula.\n\nExemplo: **Início, Receitas, Materiais, Sobre**`,
+            },
+          ]);
+        }, 300);
+        break;
+
+      case "ask_menu_tabs":
+        const tabs = message.split(",").map(tab => tab.trim()).filter(tab => tab.length > 0);
+        setConfig((prev) => ({ ...prev, menuTabs: tabs.length > 0 ? tabs : ["Início", "Conteúdo", "Materiais", "Config"] }));
+        // Go to PIX question
+        setStep("ask_pix");
+        setTimeout(() => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `Abas configuradas: **${tabs.join(", ")}** 📱\n\n💳 Você deseja **adicionar sua chave PIX** no final do site?\n\nIsso permite que seus clientes copiem sua chave facilmente.\n\nResponda **sim** ou **não**.`,
+            },
+          ]);
+        }, 300);
+        break;
         const numLessons = parseInt(message) || 10;
         setConfig((prev) => ({ ...prev, numberOfLessons: numLessons, includeVideos: true }));
         setStep("ask_video_links");

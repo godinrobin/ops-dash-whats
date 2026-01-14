@@ -208,6 +208,122 @@ CORES:
 - Thumbnails com cantos arredondados (border-radius: 12px ou similar)
 - Sombras suaves nos cards
 
+=== MODELO: APP COM ACESSO PROTEGIDO (template_id: protected-app) ===
+
+Quando o usuário escolher este modelo, crie um app elegante com múltiplas telas navegáveis via JavaScript:
+
+**ESTRUTURA DE TELAS:**
+
+1. TELA 1 - BOAS-VINDAS (tela inicial, class="screen active" data-screen="welcome")
+   - Fundo com gradiente suave escuro (#1a1a2e -> #16213e ou tons escuros da cor secundária)
+   - Círculos decorativos com blur posicionados no fundo (efeito bokeh, position: absolute)
+   - Container centralizado (display: flex, flex-direction: column, align-items: center)
+   - Foto de perfil circular (150x150) com borda ring na cor principal
+   - Use placeholder: https://picsum.photos/150/150
+   - Título em duas linhas:
+     - Linha 1: texto claro/branco (ex: "Bolos Caseiros da")
+     - Linha 2: nome em cor principal com gradiente (ex: "Chef Ana Clara")
+   - Parágrafo de boas-vindas centralizado, texto claro com opacidade
+   - Frase decorativa com corações: "❤️ Feito com amor para você ❤️" na cor principal
+   - Botão CTA grande com gradiente (cor principal -> tom âmbar/laranja), border-radius grande
+   - Texto do botão: "Acessar Conteúdo"
+   - O botão deve chamar função JavaScript para ir para próxima tela
+
+2. TELA 2 - CONTAGEM REGRESSIVA (class="screen" data-screen="countdown")
+   - Mesmo fundo escuro
+   - Ícone de relógio ou loading animado
+   - Título: "Preparando seu conteúdo..."
+   - Timer visual com caixas para minutos e segundos
+   - Cada número em card com fundo semi-transparente, texto grande
+   - Separador ":" entre minutos e segundos
+   - Texto motivacional abaixo (ex: "Seu conteúdo exclusivo será liberado em breve!")
+   - JavaScript: countdown que decrementa a cada segundo e ao zerar vai para próxima tela
+
+3. TELA 3 - INSERIR SENHA (class="screen" data-screen="password")
+   - Fundo escuro consistente
+   - Ícone de cadeado grande (🔒 ou SVG)
+   - Título: "Área Exclusiva" 
+   - Subtítulo: "Insira a senha fornecida para acessar o conteúdo"
+   - Input de senha (type="password") com estilo elegante
+   - Botão "Acessar Conteúdo"
+   - Div para mensagem de erro (display: none por padrão)
+   - JavaScript: validar senha, mostrar erro com shake animation se incorreta
+
+4. TELA 4 - CONTEÚDO PRINCIPAL (class="screen" data-screen="content")
+   - Fundo claro (branco ou cor secundária clara)
+   - Header com foto pequena e título
+   - Área de conteúdo que muda conforme aba
+   - Cada aba em uma div com data-page (ex: data-page="home", data-page="receitas")
+   - Menu inferior fixo com ícones e labels
+   - Indicador visual da aba ativa
+
+**JAVASCRIPT OBRIGATÓRIO:**
+\`\`\`javascript
+<script>
+  const PASSWORD = 'SENHA_AQUI';
+  let countdownSeconds = MINUTOS * 60;
+  const hasCountdown = INCLUIR_COUNTDOWN;
+  const hasPassword = INCLUIR_PASSWORD;
+
+  function showScreen(name) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    const el = document.querySelector('[data-screen="' + name + '"]');
+    if (el) el.classList.add('active');
+  }
+
+  function startCountdown() {
+    showScreen('countdown');
+    const interval = setInterval(() => {
+      countdownSeconds--;
+      const m = Math.floor(countdownSeconds / 60);
+      const s = countdownSeconds % 60;
+      document.getElementById('timer-min').textContent = m.toString().padStart(2,'0');
+      document.getElementById('timer-sec').textContent = s.toString().padStart(2,'0');
+      if (countdownSeconds <= 0) {
+        clearInterval(interval);
+        showScreen(hasPassword ? 'password' : 'content');
+      }
+    }, 1000);
+  }
+
+  function checkPassword() {
+    const input = document.getElementById('pwd-input').value;
+    if (input === PASSWORD) {
+      showScreen('content');
+    } else {
+      document.getElementById('pwd-error').style.display = 'block';
+      document.getElementById('pwd-input').classList.add('shake');
+      setTimeout(() => document.getElementById('pwd-input').classList.remove('shake'), 500);
+    }
+  }
+
+  function showPage(name) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelector('[data-page="' + name + '"]').classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelector('[data-nav="' + name + '"]').classList.add('active');
+  }
+
+  document.getElementById('start-btn').onclick = () => {
+    if (hasCountdown) startCountdown();
+    else if (hasPassword) showScreen('password');
+    else showScreen('content');
+  };
+</script>
+\`\`\`
+
+**CSS OBRIGATÓRIO:**
+\`\`\`css
+.screen { display: none; min-height: 100vh; }
+.screen.active { display: flex; flex-direction: column; }
+.page { display: none; }
+.page.active { display: block; }
+@keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-10px)} 75%{transform:translateX(10px)} }
+.shake { animation: shake 0.5s; }
+.blur-circle { position: absolute; border-radius: 50%; filter: blur(60px); opacity: 0.3; }
+.bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-around; padding: 12px; background: rgba(255,255,255,0.95); border-top: 1px solid rgba(0,0,0,0.1); }
+\`\`\`
+
 === REGRAS PARA VÍDEOS ===
 
 Se o usuário pedir para adicionar vídeo aulas:
@@ -288,6 +404,8 @@ serve(async (req) => {
         templateInfo = "Use o MODELO: CURSO COM VIDEO AULAS conforme descrito no system prompt.";
       } else if (config.templateId === "devotional-app") {
         templateInfo = "Use o MODELO: APP DEVOCIONAL conforme descrito no system prompt.";
+      } else if (config.templateId === "protected-app") {
+        templateInfo = "Use o MODELO: APP COM ACESSO PROTEGIDO conforme descrito no system prompt.";
       }
       
       contextMessage = `
@@ -310,6 +428,12 @@ NUNCA substitua as cores do usuário por cores padrão do template!
 ${config.templateId === "devotional-app" ? `
 - Número de Devocionais: ${config.numberOfLessons || 30}
 - Incluir Seção de Contribuição: ${config.includeContributionSection ? "Sim" : "Não"}
+` : ""}
+${config.templateId === "protected-app" ? `
+- Incluir Contagem Regressiva: ${config.includeCountdown ? "Sim, " + (config.countdownMinutes || 3) + " minutos" : "Não"}
+- Proteção por Senha: ${config.includePasswordProtection ? "Sim" : "Não"}
+${config.includePasswordProtection ? `- Senha de Acesso: ${config.accessPassword}` : ""}
+- Abas do Menu: ${config.menuTabs?.join(", ") || "Início, Conteúdo, Materiais, Config"}
 ` : ""}
 - Incluir Vídeo Aulas: ${config.includeVideos ? "Sim" : "Não"}
 - Número de Aulas: ${config.numberOfLessons || "Não especificado"}
