@@ -118,27 +118,90 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
     }
 
     setDeletingOld(true);
+    setDeleteProgress({ current: 0, total: oldDisconnectedInstances.length });
+    
+    let deletedCount = 0;
+    let skippedCount = 0;
+    let failedCount = 0;
+    const DELAY_MS = 500;
+
     try {
-      const instanceIds = oldDisconnectedInstances.map(inst => inst.id);
+      for (let i = 0; i < oldDisconnectedInstances.length; i++) {
+        const inst = oldDisconnectedInstances[i];
+        setDeleteProgress({ current: i + 1, total: oldDisconnectedInstances.length });
+
+        try {
+          // CRITICAL: First verify the REAL status from the API before deleting
+          const { data: statusData, error: statusError } = await supabase.functions.invoke('maturador-evolution', {
+            body: { action: 'status', instanceId: inst.id },
+          });
+
+          // Check if the instance is actually connected in the API
+          const realStatus = statusData?.state?.state || statusData?.connectionStatus || statusData?.status;
+          const isReallyConnected = realStatus === 'connected' || realStatus === 'open' || realStatus === 'CONNECTED';
+
+          if (isReallyConnected) {
+            // Instance is connected in API - update DB status instead of deleting
+            console.log(`[deleteOld] Instance ${inst.instance_name} is actually CONNECTED in API, updating DB status`);
+            await supabase
+              .from('maturador_instances')
+              .update({ status: 'connected', disconnected_at: null })
+              .eq('id', inst.id);
+            skippedCount++;
+            continue;
+          }
+
+          // Only delete if truly disconnected
+          try {
+            await supabase.functions.invoke('maturador-evolution', {
+              body: { 
+                action: 'admin-delete-instance', 
+                instanceId: inst.id,
+                instanceName: inst.instance_name
+              },
+            });
+            console.log(`[deleteOld] Deleted ${inst.instance_name} from UAZAPI`);
+          } catch (apiError) {
+            console.log(`[deleteOld] API delete failed for ${inst.instance_name}, continuing with DB delete`);
+          }
+
+          const { error } = await supabase
+            .from('maturador_instances')
+            .delete()
+            .eq('id', inst.id);
+
+          if (error) throw error;
+          deletedCount++;
+        } catch (err) {
+          console.error(`Error processing instance ${inst.id}:`, err);
+          failedCount++;
+        }
+
+        if (i < oldDisconnectedInstances.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+        }
+      }
+
+      if (skippedCount > 0) {
+        toast.success(`${deletedCount} excluída(s), ${skippedCount} corrigida(s) (ainda conectadas)${failedCount > 0 ? `, ${failedCount} falha(s)` : ''}`);
+      } else if (failedCount === 0) {
+        toast.success(`${deletedCount} instância(s) excluída(s) com sucesso!`);
+      } else {
+        toast.warning(`${deletedCount} excluída(s), ${failedCount} falha(s)`);
+      }
       
-      const { error } = await supabase
-        .from('maturador_instances')
-        .delete()
-        .in('id', instanceIds);
-
-      if (error) throw error;
-
-      toast.success(`${instanceIds.length} instância(s) excluída(s) com sucesso!`);
       onRefresh();
     } catch (error: any) {
       console.error('Error deleting old instances:', error);
       toast.error(error.message || 'Erro ao excluir instâncias');
     } finally {
       setDeletingOld(false);
+      setDeleteProgress(null);
     }
   };
 
   // Delete all disconnected instances with delay to respect UAZAPI timeout
+  // CRITICAL: Now verifies REAL status from API before deleting to prevent accidental deletion of connected instances
   const deleteAllDisconnectedInstances = async () => {
     if (allDisconnectedInstances.length === 0) {
       toast.info('Não há instâncias desconectadas');
@@ -148,7 +211,8 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
     setDeletingAll(true);
     setDeleteProgress({ current: 0, total: allDisconnectedInstances.length });
     
-    let successCount = 0;
+    let deletedCount = 0;
+    let skippedCount = 0;
     let failCount = 0;
     const DELAY_MS = 500; // 500ms delay between deletions to respect UAZAPI timeout
 
@@ -158,7 +222,27 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
         setDeleteProgress({ current: i + 1, total: allDisconnectedInstances.length });
 
         try {
-          // Try to delete from UAZAPI first
+          // CRITICAL: First verify the REAL status from the API before deleting
+          const { data: statusData, error: statusError } = await supabase.functions.invoke('maturador-evolution', {
+            body: { action: 'status', instanceId: inst.id },
+          });
+
+          // Check if the instance is actually connected in the API
+          const realStatus = statusData?.state?.state || statusData?.connectionStatus || statusData?.status;
+          const isReallyConnected = realStatus === 'connected' || realStatus === 'open' || realStatus === 'CONNECTED';
+
+          if (isReallyConnected) {
+            // Instance is connected in API - update DB status instead of deleting
+            console.log(`[deleteAll] Instance ${inst.instance_name} is actually CONNECTED in API, updating DB status`);
+            await supabase
+              .from('maturador_instances')
+              .update({ status: 'connected', disconnected_at: null })
+              .eq('id', inst.id);
+            skippedCount++;
+            continue;
+          }
+
+          // Only delete if truly disconnected
           try {
             await supabase.functions.invoke('maturador-evolution', {
               body: { 
@@ -180,9 +264,9 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
             .eq('id', inst.id);
 
           if (error) throw error;
-          successCount++;
+          deletedCount++;
         } catch (err) {
-          console.error(`Error deleting instance ${inst.id}:`, err);
+          console.error(`Error processing instance ${inst.id}:`, err);
           failCount++;
         }
 
@@ -192,10 +276,12 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
         }
       }
 
-      if (failCount === 0) {
-        toast.success(`${successCount} instância(s) excluída(s) com sucesso!`);
+      if (skippedCount > 0) {
+        toast.success(`${deletedCount} excluída(s), ${skippedCount} corrigida(s) (ainda conectadas)${failCount > 0 ? `, ${failCount} falha(s)` : ''}`);
+      } else if (failCount === 0) {
+        toast.success(`${deletedCount} instância(s) excluída(s) com sucesso!`);
       } else {
-        toast.warning(`${successCount} excluída(s), ${failCount} falha(s)`);
+        toast.warning(`${deletedCount} excluída(s), ${failCount} falha(s)`);
       }
       
       onRefresh();
