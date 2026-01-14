@@ -179,21 +179,41 @@ serve(async (req: Request): Promise<Response> => {
       </html>
     `;
 
+    // Use a verified domain if available, otherwise fallback to resend.dev (testing only)
+    // Note: resend.dev only delivers to the email of the Resend account owner
+    const fromEmail = "ZapData <no-reply@zapdata.co>";
+    
+    const emailPayload = {
+      from: fromEmail,
+      to: [email],
+      subject: "Sua nova senha - ZapData",
+      html: emailHtml,
+    };
+    
+    console.log("Sending email with payload:", JSON.stringify({ ...emailPayload, html: "[HTML CONTENT]" }));
+    
     const emailResponse = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${resendApiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        from: "ZapData <noreply@resend.dev>",
-        to: [email],
-        subject: "Sua nova senha - ZapData",
-        html: emailHtml,
-      }),
+      body: JSON.stringify(emailPayload),
     });
 
-    console.log("Email sent, status:", emailResponse.status);
+    const emailResult = await emailResponse.json();
+    console.log("Email API response status:", emailResponse.status, "result:", JSON.stringify(emailResult));
+
+    if (!emailResponse.ok) {
+      console.error("Failed to send email:", emailResult);
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          error: `Erro ao enviar email: ${emailResult.message || emailResult.error || 'Erro desconhecido'}`
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     return new Response(
       JSON.stringify({ 
