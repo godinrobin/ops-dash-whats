@@ -503,10 +503,39 @@ serve(async (req) => {
       }
 
       // Get instance for sending messages - including api_provider and token
+      // Priority: session.instance_id > contact.instance_id > flow.assigned_instances[0]
+      let instanceId = session.instance_id || contact?.instance_id;
+      
+      // If no instance_id found, try to get from flow's assigned instances
+      if (!instanceId && flow.assigned_instances && Array.isArray(flow.assigned_instances) && flow.assigned_instances.length > 0) {
+        instanceId = flow.assigned_instances[0];
+        console.log(`[${runId}] No instance_id in session/contact, using first assigned instance: ${instanceId}`);
+        
+        // Update session with this instance_id for future processing
+        await supabaseClient
+          .from('inbox_flow_sessions')
+          .update({ instance_id: instanceId })
+          .eq('id', sessionId);
+      }
+      
+      if (!instanceId) {
+        console.error(`[${runId}] No instance_id found for session ${sessionId} (session: ${session.instance_id}, contact: ${contact?.instance_id}, flow assigned: ${JSON.stringify(flow.assigned_instances)})`);
+        await releaseLock();
+        return new Response(JSON.stringify({ 
+          error: 'No instance configured for this flow session',
+          sessionInstanceId: session.instance_id,
+          contactInstanceId: contact?.instance_id,
+          flowAssignedInstances: flow.assigned_instances
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
       const { data: instance } = await supabaseClient
         .from('maturador_instances')
-        .select('instance_name, api_provider, uazapi_token, evolution_api_key, evolution_base_url')
-        .eq('id', session.instance_id)
+        .select('id, instance_name, api_provider, uazapi_token, evolution_api_key, evolution_base_url')
+        .eq('id', instanceId)
         .single();
 
       const instanceName = instance?.instance_name;
@@ -528,15 +557,24 @@ serve(async (req) => {
       }
 
       if (!instanceName) {
-        console.error(`[${runId}] Instance not found for session ${sessionId}`);
+        console.error(`[${runId}] Instance record not found for id ${instanceId}`);
         await releaseLock();
         return new Response(JSON.stringify({ 
-          error: 'Instance not found',
-          instanceId: session.instance_id 
+          error: 'Instance not found in database',
+          instanceId: instanceId 
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
+      }
+      
+      // Also update contact's instance_id if it was null (so future messages work correctly)
+      if (!contact?.instance_id && instance?.id) {
+        await supabaseClient
+          .from('inbox_contacts')
+          .update({ instance_id: instance.id })
+          .eq('id', contact.id);
+        console.log(`[${runId}] Updated contact ${contact.id} with instance_id ${instance.id}`);
       }
 
       // Validate UazAPI configuration
