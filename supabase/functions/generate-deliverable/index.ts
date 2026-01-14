@@ -324,6 +324,131 @@ Quando o usuário escolher este modelo, crie um app elegante com múltiplas tela
 .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-around; padding: 12px; background: rgba(255,255,255,0.95); border-top: 1px solid rgba(0,0,0,0.1); }
 \`\`\`
 
+=== MODELO: BIBLIOTECA DE PDFs (template_id: pdf-library) ===
+
+Quando o usuário escolher este modelo, crie um site elegante para exibição de materiais/PDFs em grid:
+
+**ESTRUTURA:**
+
+1. HEADER
+   - Fundo com cor principal (gradiente opcional)
+   - Logo/imagem centralizada (max-height: 150px)
+   - Use placeholder: https://picsum.photos/200/150
+   - Padding generoso, bordas arredondadas opcionais
+
+2. MARQUEE ANIMADO (se configurado)
+   - Barra horizontal com cor de destaque/secundária
+   - Texto repetido rolando infinitamente
+   - Símbolo separador entre repetições (• ou ●)
+   
+   \`\`\`html
+   <div class="marquee-container">
+     <div class="marquee-content">
+       <span>TEXTO_DO_USUARIO • TEXTO_DO_USUARIO • TEXTO_DO_USUARIO • TEXTO_DO_USUARIO • </span>
+       <span>TEXTO_DO_USUARIO • TEXTO_DO_USUARIO • TEXTO_DO_USUARIO • TEXTO_DO_USUARIO • </span>
+     </div>
+   </div>
+   \`\`\`
+
+   \`\`\`css
+   .marquee-container {
+     overflow: hidden;
+     white-space: nowrap;
+     background: COR_PRINCIPAL;
+     padding: 10px 0;
+   }
+   .marquee-content {
+     display: inline-block;
+     animation: marquee 25s linear infinite;
+   }
+   .marquee-content span {
+     color: white;
+     font-weight: 600;
+     font-size: 14px;
+     text-transform: uppercase;
+     letter-spacing: 1px;
+   }
+   @keyframes marquee {
+     0% { transform: translateX(0); }
+     100% { transform: translateX(-50%); }
+   }
+   \`\`\`
+
+3. BARRA DE CONTATO (opcional)
+   - Link de WhatsApp centralizado
+   - Ícone + texto clicável
+   - Fundo suave
+
+4. GRID DE CARDS DE PDF
+   - Container com padding lateral (16-24px)
+   - Grid responsivo: repeat(auto-fill, minmax(150px, 1fr))
+   - Gap: 16px
+
+   \`\`\`html
+   <div class="pdf-grid">
+     <a href="#" class="pdf-card">
+       <img src="https://picsum.photos/300/400?random=1" alt="Material 1">
+       <h3>Título do Material</h3>
+     </a>
+     <!-- mais cards... -->
+   </div>
+   \`\`\`
+
+   \`\`\`css
+   .pdf-grid {
+     display: grid;
+     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+     gap: 16px;
+     padding: 20px;
+     max-width: 600px;
+     margin: 0 auto;
+   }
+   .pdf-card {
+     background: white;
+     border-radius: 16px;
+     overflow: hidden;
+     box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+     transition: all 0.3s ease;
+     text-decoration: none;
+     display: block;
+   }
+   .pdf-card:hover {
+     transform: scale(1.05);
+     box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+   }
+   .pdf-card img {
+     width: 100%;
+     aspect-ratio: 3/4;
+     object-fit: cover;
+   }
+   .pdf-card h3 {
+     padding: 12px;
+     text-align: center;
+     font-size: 14px;
+     font-weight: 600;
+     color: COR_TEXTO;
+     margin: 0;
+   }
+   \`\`\`
+
+5. ESTILO DOS CARDS
+   - Imagem de capa com aspect-ratio: 3/4
+   - Cantos arredondados (border-radius: 16px)
+   - Sombra suave
+   - Hover: scale(1.05) + sombra maior
+   - Título centralizado abaixo
+
+6. CARDS "EM BREVE" (opcional)
+   - Alguns cards podem ter overlay escuro
+   - Badge "Em breve" centralizado
+   - Pointer-events: none para desabilitar clique
+
+CORES:
+- Use a cor principal no header, marquee e elementos de destaque
+- Fundo geral branco ou cor secundária muito clara
+- Cards com fundo branco
+- Texto escuro para contraste
+
 === REGRAS PARA VÍDEOS ===
 
 Se o usuário pedir para adicionar vídeo aulas:
@@ -406,6 +531,8 @@ serve(async (req) => {
         templateInfo = "Use o MODELO: APP DEVOCIONAL conforme descrito no system prompt.";
       } else if (config.templateId === "protected-app") {
         templateInfo = "Use o MODELO: APP COM ACESSO PROTEGIDO conforme descrito no system prompt.";
+      } else if (config.templateId === "pdf-library") {
+        templateInfo = "Use o MODELO: BIBLIOTECA DE PDFs conforme descrito no system prompt.";
       }
       
       contextMessage = `
@@ -434,6 +561,11 @@ ${config.templateId === "protected-app" ? `
 - Proteção por Senha: ${config.includePasswordProtection ? "Sim" : "Não"}
 ${config.includePasswordProtection ? `- Senha de Acesso: ${config.accessPassword}` : ""}
 - Abas do Menu: ${config.menuTabs?.join(", ") || "Início, Conteúdo, Materiais, Config"}
+` : ""}
+${config.templateId === "pdf-library" ? `
+- Número de Cards/PDFs: ${config.numberOfPdfs || 12}
+- Incluir Marquee Animado: ${config.includeMarquee ? "Sim" : "Não"}
+${config.includeMarquee ? `- Texto do Marquee: "${config.marqueeText || "Conteúdo exclusivo •"}"` : ""}
 ` : ""}
 - Incluir Vídeo Aulas: ${config.includeVideos ? "Sim" : "Não"}
 - Número de Aulas: ${config.numberOfLessons || "Não especificado"}
