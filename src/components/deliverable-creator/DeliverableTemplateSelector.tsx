@@ -2,12 +2,13 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Smartphone, Video, Eye, X, BookOpen, Lock, FileText } from "lucide-react";
+import { Smartphone, Video, Eye, X, BookOpen, Lock, FileText, LayoutGrid } from "lucide-react";
 import deliverableAppPreview from "@/assets/deliverable-model-app.png";
 import cursoVideoaulasPreview from "@/assets/curso-videoaulas-preview.png";
 import devocionalAppPreview from "@/assets/devocional-app-preview.png";
 import protectedAppPreview from "@/assets/protected-app-preview.png";
 import pdfLibraryPreview from "@/assets/pdf-library-preview.png";
+import superAppPreview from "@/assets/super-app-preview.png";
 
 interface Template {
   id: string;
@@ -20,6 +21,22 @@ interface Template {
 }
 
 const templates: Template[] = [
+  {
+    id: "super-app",
+    name: "Super App de Conteúdo",
+    description: "App completo com aulas, ferramentas, quiz, desafios e muito mais",
+    image: superAppPreview,
+    features: [
+      "13+ páginas funcionais",
+      "Calculadoras interativas",
+      "Quiz e desafios",
+      "Sistema de favoritos",
+      "Agenda de pedidos",
+      "Vídeo aulas embedadas",
+    ],
+    badge: "Premium",
+    icon: LayoutGrid,
+  },
   {
     id: "app-course",
     name: "App de Curso",
@@ -79,7 +96,6 @@ const templates: Template[] = [
       "Navegação estilo app",
       "Design elegante",
     ],
-    badge: "Novo",
     icon: Lock,
   },
   {
@@ -95,7 +111,6 @@ const templates: Template[] = [
       "Hover effects",
       "Fácil organização",
     ],
-    badge: "Novo",
     icon: FileText,
   },
 ];
