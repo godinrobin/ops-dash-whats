@@ -318,11 +318,13 @@ serve(async (req) => {
       let healed = 0;
       for (const expiredSession of expiredTimeoutSessions) {
         try {
-          // Verify session is still at a waitInput node
+          // Verify session is still at a node that supports timeout
           const flowNodes = (expiredSession.flow?.nodes || []) as Array<{ id: string; type: string }>;
           const currentNode = flowNodes.find(n => n.id === expiredSession.current_node_id);
           
-          if (currentNode?.type === 'waitInput' || currentNode?.type === 'menu') {
+          // Include paymentIdentifier in timeout healing - it also waits for user input/payment
+          const timeoutableNodeTypes = ['waitInput', 'menu', 'paymentIdentifier'];
+          if (currentNode && timeoutableNodeTypes.includes(currentNode.type)) {
             console.log(`[process-delay-queue] Healing expired timeout for session ${expiredSession.id} (node: ${currentNode.type})`);
             
             const { error: healError } = await supabase.functions.invoke("process-inbox-flow", {
