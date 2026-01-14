@@ -16,6 +16,68 @@ REGRAS OBRIGATÓRIAS:
 6. Use gradientes, sombras, animações suaves
 7. Imagens de placeholder: use https://picsum.photos/LARGURA/ALTURA
 
+=== MODELO: APP DEVOCIONAL (template_id: devotional-app) ===
+
+Quando o usuário escolher este modelo, crie um app de devocionais espiritual com esta estrutura:
+
+1. HERO/HEADER
+   - Fundo com gradiente suave (tons âmbar/dourado/bege)
+   - Ícone circular com símbolo espiritual (livro aberto, coração, cruz estilizada)
+   - Título do devocional grande e elegante (fonte serif)
+   - Subtítulo com estrelas decorativas
+
+2. CARD DE VERSÍCULO EM DESTAQUE
+   - Card com efeito glass-morphism (fundo semi-transparente)
+   - Ícone de coração ao lado
+   - Texto do versículo em itálico
+   - Referência bíblica em cor âmbar/dourada
+   - Decorações sutis (folhas, estrelas)
+
+3. BARRA DE BUSCA
+   - Input com ícone de lupa
+   - Placeholder: "Buscar por título ou tema..."
+   - Bordas arredondadas, sombra suave
+
+4. LISTA DE DEVOCIONAIS
+   - Título da seção com emoji ✨
+   - Cards com:
+     - Emoji/ícone à esquerda
+     - Título do devocional (ex: "Salmos 1-30")
+     - Barra de progresso
+     - Seta de navegação
+   - Ao clicar, mostrar página do devocional
+
+5. PÁGINA DO DEVOCIONAL (navegação inline)
+   - Título do dia
+   - Card do versículo principal
+   - Seção "Reflexão" com texto
+   - Seção "Para Refletir" com pergunta
+   - Seção "Oração" com texto
+   - Botão "Concluir Devocional"
+
+6. SEÇÃO DE MATERIAIS (opcional)
+   - Cards para PDFs com emoji 📄
+   - Título e descrição
+   - Botão de download
+
+7. SEÇÃO DE CONTRIBUIÇÃO (opcional)
+   - Card elegante com fundo gradiente
+   - Título: "Apoie nosso ministério" ou similar
+   - Valores pré-definidos (R$ 10, R$ 25, R$ 50)
+   - Opção de valor customizado
+   - Botão de confirmar
+
+PALETA DE CORES:
+- Principal: tons âmbar/dourado (#F59E0B, #D97706)
+- Fundo: bege/cream claro (#FEF3C7, #FFFBEB)
+- Texto: marrom escuro (#78350F, #451A03)
+- Acentos: verde suave para CTAs (#059669)
+
+ANIMAÇÕES:
+- fade-in-up nos cards
+- glow-pulse no versículo destaque
+- float suave em elementos decorativos
+
 === MODELO: APP DE CURSO (template_id: app-course) ===
 
 ESTRUTURA DO SITE:
@@ -174,18 +236,25 @@ serve(async (req) => {
     // Build context from config if provided
     let contextMessage = "";
     if (config) {
-      const templateInfo = config.templateId === "video-course" 
-        ? "Use o MODELO: CURSO COM VIDEO AULAS conforme descrito no system prompt." 
-        : "Use o MODELO: APP DE CURSO conforme descrito no system prompt.";
+      let templateInfo = "Use o MODELO: APP DE CURSO conforme descrito no system prompt.";
+      if (config.templateId === "video-course") {
+        templateInfo = "Use o MODELO: CURSO COM VIDEO AULAS conforme descrito no system prompt.";
+      } else if (config.templateId === "devotional-app") {
+        templateInfo = "Use o MODELO: APP DEVOCIONAL conforme descrito no system prompt.";
+      }
       
       contextMessage = `
 CONFIGURAÇÕES DO USUÁRIO:
 - Template: ${config.templateId || "app-course"}
 - ${templateInfo}
-- Nicho: ${config.niche || "Não especificado"}
+- Nicho/Tema: ${config.niche || "Não especificado"}
 - Cor Principal: ${config.primaryColor || "#E91E63"}
 - Cor Secundária: ${config.secondaryColor || "#FCE4EC"}
 - Público Alvo: ${config.targetAudience || "Não especificado"}
+${config.templateId === "devotional-app" ? `
+- Número de Devocionais: ${config.numberOfLessons || 30}
+- Incluir Seção de Contribuição: ${config.includeContributionSection ? "Sim" : "Não"}
+` : ""}
 - Incluir Vídeo Aulas: ${config.includeVideos ? "Sim" : "Não"}
 - Número de Aulas: ${config.numberOfLessons || "Não especificado"}
 ${config.videoLinks?.length > 0 ? `- Links de Vídeos: ${config.videoLinks.join(", ")}` : ""}
