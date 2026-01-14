@@ -576,6 +576,9 @@ serve(async (req) => {
           .eq('id', contact.id);
         console.log(`[${runId}] Updated contact ${contact.id} with instance_id ${instance.id}`);
       }
+      
+      // IMPORTANT: Use this resolved instance ID throughout the flow instead of session.instance_id
+      const effectiveInstanceId = instance.id;
 
       // Validate UazAPI configuration
       if (apiProvider === 'uazapi' && (!uazapiBaseUrl || !instanceUazapiToken)) {
@@ -875,7 +878,7 @@ serve(async (req) => {
               
               // Save message with correct status based on send result
               const messageStatus = sendResult.ok ? 'sent' : 'failed';
-              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, message, 'text', flow.id, undefined, sendResult.remoteMessageId, messageStatus, currentReplyDbId);
+              await saveOutboundMessage(supabaseClient, contact.id, effectiveInstanceId, session.user_id, message, 'text', flow.id, undefined, sendResult.remoteMessageId, messageStatus, currentReplyDbId);
               
               if (!sendResult.ok) {
                 await handleSendFailure(currentNodeId, sendResult.errorDetails || 'Unknown error');
@@ -1053,7 +1056,7 @@ Regras RIGOROSAS:
               
               // Save message with correct status based on send result
               const aiMessageStatus = aiSendResult.ok ? 'sent' : 'failed';
-              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, aiVariedMessage, 'text', flow.id, undefined, aiSendResult.remoteMessageId, aiMessageStatus, currentAiReplyDbId);
+              await saveOutboundMessage(supabaseClient, contact.id, effectiveInstanceId, session.user_id, aiVariedMessage, 'text', flow.id, undefined, aiSendResult.remoteMessageId, aiMessageStatus, currentAiReplyDbId);
               
               if (!aiSendResult.ok) {
                 await handleSendFailure(currentNodeId, aiSendResult.errorDetails || 'Unknown error');
@@ -1182,7 +1185,7 @@ Regras RIGOROSAS:
               
               // Save message with correct status based on send result
               const mediaStatus = mediaSendResult.ok ? 'sent' : 'failed';
-              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, caption || '', currentNode.type, flow.id, mediaUrl, mediaSendResult.remoteMessageId, mediaStatus, currentMediaReplyDbId);
+              await saveOutboundMessage(supabaseClient, contact.id, effectiveInstanceId, session.user_id, caption || '', currentNode.type, flow.id, mediaUrl, mediaSendResult.remoteMessageId, mediaStatus, currentMediaReplyDbId);
               
               if (!mediaSendResult.ok) {
                 await handleSendFailure(currentNodeId, mediaSendResult.errorDetails || 'Unknown error');
@@ -1578,7 +1581,7 @@ Regras RIGOROSAS:
               incrementMessageCounter();
               
               const menuStatus = menuSendResult.ok ? 'sent' : 'failed';
-              await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, fullMenuMessage, 'text', flow.id, undefined, menuSendResult.remoteMessageId, menuStatus, menuReplyDbId);
+              await saveOutboundMessage(supabaseClient, contact.id, effectiveInstanceId, session.user_id, fullMenuMessage, 'text', flow.id, undefined, menuSendResult.remoteMessageId, menuStatus, menuReplyDbId);
               
               if (!menuSendResult.ok) {
                 await handleSendFailure(currentNodeId, menuSendResult.errorDetails || 'Unknown error');
@@ -1684,7 +1687,7 @@ Regras RIGOROSAS:
                 incrementMessageCounter();
                 
                 const transferStatus = transferSendResult.ok ? 'sent' : 'failed';
-                await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, transferMessage, 'text', flow.id, undefined, transferSendResult.remoteMessageId, transferStatus, transferReplyDbId);
+                await saveOutboundMessage(supabaseClient, contact.id, effectiveInstanceId, session.user_id, transferMessage, 'text', flow.id, undefined, transferSendResult.remoteMessageId, transferStatus, transferReplyDbId);
                 
                 if (!transferSendResult.ok) {
                   await handleSendFailure(currentNodeId, transferSendResult.errorDetails || 'Unknown error');
@@ -1983,7 +1986,7 @@ Regras RIGOROSAS:
               .from('inbox_messages')
               .select('*')
               .eq('contact_id', contact.id)
-              .eq('instance_id', session.instance_id)
+              .eq('instance_id', effectiveInstanceId)
               .eq('direction', 'inbound')
               .in('message_type', attemptMessageTypes)
               .gt('created_at', sinceIso)
@@ -2483,7 +2486,7 @@ Regras RIGOROSAS:
                 
                 if (pixResponse.ok) {
                   processedActions.push(`Sent PIX key (${pixType})`);
-                  await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, `[Chave PIX: ${pixType}]`, 'text', flow.id);
+                  await saveOutboundMessage(supabaseClient, contact.id, effectiveInstanceId, session.user_id, `[Chave PIX: ${pixType}]`, 'text', flow.id);
                 } else {
                   console.error(`[${runId}] PIX button error:`, pixResult);
                   processedActions.push(`PIX button error: ${JSON.stringify(pixResult)}`);
@@ -2557,7 +2560,7 @@ Regras RIGOROSAS:
                 if (chargeResponse.ok && (chargeResult.status === 'PENDING' || chargeResult.messageid || chargeResult.success !== false)) {
                   const formattedAmount = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(chargeAmount);
                   processedActions.push(`Sent native charge: ${formattedAmount} - ${chargeItemName}`);
-                  await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, `[Cobrança: ${formattedAmount} - ${chargeItemName}]`, 'text', flow.id);
+                  await saveOutboundMessage(supabaseClient, contact.id, effectiveInstanceId, session.user_id, `[Cobrança: ${formattedAmount} - ${chargeItemName}]`, 'text', flow.id);
                 } else {
                   console.error(`[${runId}] Charge error:`, chargeResult);
                   processedActions.push(`Charge error: ${chargeResult.error || chargeResult.message || 'unknown error'}`);
@@ -2789,7 +2792,7 @@ Regras RIGOROSAS:
                 if (interactiveResponse.ok) {
                   const interactiveTypeLabel = interactionType === 'poll' ? 'Enquete' : interactionType === 'list' ? 'Menu Lista' : 'Botões';
                   processedActions.push(`Sent interactive block (${interactiveTypeLabel})`);
-                  await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, `[${interactiveTypeLabel}] ${interactiveText}`, 'text', flow.id);
+                  await saveOutboundMessage(supabaseClient, contact.id, effectiveInstanceId, session.user_id, `[${interactiveTypeLabel}] ${interactiveText}`, 'text', flow.id);
                   
                   // Mark as sent for idempotency
                   sentNodeIds.push(currentNodeId);
@@ -2806,7 +2809,7 @@ Regras RIGOROSAS:
               const fallbackMessage = `${interactiveText}\n\n${interactiveChoices.map((c, i) => `${i + 1}. ${c.split('|')[0]}`).join('\n')}`;
               const fallbackResult = await sendMessage(effectiveBaseUrl, effectiveApiKey, instanceName, phone, fallbackMessage, 'text', undefined, undefined, apiProvider, instanceUazapiToken, 0, shouldSendAsReply());
               if (fallbackResult.ok) {
-                await saveOutboundMessage(supabaseClient, contact.id, session.instance_id, session.user_id, fallbackMessage, 'text', flow.id);
+                await saveOutboundMessage(supabaseClient, contact.id, effectiveInstanceId, session.user_id, fallbackMessage, 'text', flow.id);
                 sentNodeIds.push(currentNodeId);
                 processedActions.push('Sent interactive block as text (fallback)');
               } else {
