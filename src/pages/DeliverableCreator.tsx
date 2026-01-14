@@ -48,6 +48,21 @@ export interface DeliverableConfig {
   includeMarquee?: boolean;
   marqueeText?: string;
   numberOfPdfs?: number;
+  // Super App specific
+  productName?: string;
+  trialPeriod?: string;
+  includeVideoLessons?: boolean;
+  includePricingCalculator?: boolean;
+  includeLabelGenerator?: boolean;
+  includeYieldCalculator?: boolean;
+  includeFlavorsGuide?: boolean;
+  includeExpirationGuide?: boolean;
+  includeQuiz?: boolean;
+  includeChallenges?: boolean;
+  includeFavorites?: boolean;
+  includeScheduler?: boolean;
+  includeSuppliersPage?: boolean;
+  superAppFeatures?: string[];
 }
 
 export type ChatMessage = {
@@ -86,7 +101,11 @@ export type ConversationStep =
   // PDF Library specific
   | "ask_marquee"
   | "ask_marquee_text"
-  | "ask_num_pdfs";
+  | "ask_num_pdfs"
+  // Super App specific
+  | "ask_product_name"
+  | "ask_trial_period"
+  | "ask_super_app_features";
 
 interface SavedDeliverable {
   id: string;
@@ -319,6 +338,8 @@ const DeliverableCreator = () => {
       templateMessage = "Ótima escolha! 🔐 Vamos criar um app com acesso protegido.\n\nMe conte: **qual é o nicho/tema** do seu conteúdo?\n\nExemplo: Bolos Caseiros, Maquiagem, Curso de Inglês, Receitas Fitness, etc.";
     } else if (templateId === "pdf-library") {
       templateMessage = "Ótima escolha! 📚 Vamos criar uma biblioteca de PDFs elegante.\n\nMe conte: **qual é o tema/nicho** da sua biblioteca?\n\nExemplo: Receitas de Confeitaria, Marketing Digital, Devocionais, Artesanato, etc.";
+    } else if (templateId === "super-app") {
+      templateMessage = "Excelente escolha! 🚀✨ Vamos criar um **Super App de Conteúdo** completo com múltiplas páginas e funcionalidades!\n\nMe conte: **qual é o nicho** do seu super app?\n\nExemplo: Confeitaria, Fitness, Artesanato, Maquiagem, etc.";
     }
     
     setMessages([
@@ -440,6 +461,18 @@ const DeliverableCreator = () => {
               {
                 role: "assistant",
                 content: `Ótimas informações! 📝\n\n📚 **Quantos materiais/PDFs** sua biblioteca terá?\n\nDigite um número (ex: 6, 12, 20)`,
+              },
+            ]);
+          }, 300);
+        } else if (selectedTemplate === "super-app") {
+          // Super App flow - ask about product name
+          setStep("ask_product_name");
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `Ótimas informações! 📝\n\n🏷️ Qual é o **nome do seu produto principal**?\n\nExemplo: Mini Bolo Vulcão, Brigadeiro Gourmet, Crochê para Bebês, etc.`,
               },
             ]);
           }, 300);
@@ -655,6 +688,91 @@ const DeliverableCreator = () => {
         }, 300);
         break;
 
+      // Super App specific steps
+      case "ask_product_name":
+        setConfig((prev) => ({ ...prev, productName: message }));
+        setStep("ask_trial_period");
+        setTimeout(() => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `Produto: **${message}** ✅\n\n⏱️ Deseja adicionar um **período de teste** com timer?\n\nDigite uma das opções:\n- **24h** (24 horas)\n- **48h** (48 horas)\n- **7d** (7 dias)\n- **sem** (sem limite)`,
+            },
+          ]);
+        }, 300);
+        break;
+
+      case "ask_trial_period":
+        const trialPeriod = message.toLowerCase().includes("sem") ? "" : message.trim();
+        setConfig((prev) => ({ ...prev, trialPeriod }));
+        setStep("ask_super_app_features");
+        setTimeout(() => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `${trialPeriod ? `Período: **${trialPeriod}** ⏱️` : "Sem limite de tempo! ✅"}\n\n📱 Quais **funcionalidades** deseja incluir no seu Super App?\n\nDigite os números separados por vírgula:\n\n1️⃣ Vídeo Aulas\n2️⃣ Ebooks/PDFs\n3️⃣ Calculadora de Precificação\n4️⃣ Gerador de Etiquetas\n5️⃣ Calculadora de Rendimento\n6️⃣ Catálogo de Produtos/Sabores\n7️⃣ Guia de Validade\n8️⃣ Quiz Interativo\n9️⃣ Desafios Semanais\n🔟 Sistema de Favoritos\n1️⃣1️⃣ Agenda de Pedidos\n1️⃣2️⃣ Materiais & Fornecedores\n\nExemplo: **1, 2, 3, 8, 10** ou digite **todos** para incluir tudo!`,
+            },
+          ]);
+        }, 300);
+        break;
+
+      case "ask_super_app_features":
+        const featuresMap: Record<string, string> = {
+          "1": "videoLessons",
+          "2": "ebooks",
+          "3": "pricingCalculator",
+          "4": "labelGenerator",
+          "5": "yieldCalculator",
+          "6": "flavorsGuide",
+          "7": "expirationGuide",
+          "8": "quiz",
+          "9": "challenges",
+          "10": "favorites",
+          "11": "scheduler",
+          "12": "suppliers",
+        };
+        
+        let selectedFeatures: string[] = [];
+        if (message.toLowerCase().includes("todos") || message.toLowerCase().includes("tudo")) {
+          selectedFeatures = Object.values(featuresMap);
+        } else {
+          const numbers = message.match(/\d+/g) || [];
+          selectedFeatures = numbers.map(n => featuresMap[n]).filter(Boolean);
+        }
+        
+        setConfig((prev) => ({
+          ...prev,
+          superAppFeatures: selectedFeatures,
+          includeVideoLessons: selectedFeatures.includes("videoLessons"),
+          includePdfSection: selectedFeatures.includes("ebooks"),
+          includePricingCalculator: selectedFeatures.includes("pricingCalculator"),
+          includeLabelGenerator: selectedFeatures.includes("labelGenerator"),
+          includeYieldCalculator: selectedFeatures.includes("yieldCalculator"),
+          includeFlavorsGuide: selectedFeatures.includes("flavorsGuide"),
+          includeExpirationGuide: selectedFeatures.includes("expirationGuide"),
+          includeQuiz: selectedFeatures.includes("quiz"),
+          includeChallenges: selectedFeatures.includes("challenges"),
+          includeFavorites: selectedFeatures.includes("favorites"),
+          includeScheduler: selectedFeatures.includes("scheduler"),
+          includeSuppliersPage: selectedFeatures.includes("suppliers"),
+        }));
+        
+        // Go to PIX question
+        setStep("ask_pix");
+        setTimeout(() => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `Funcionalidades selecionadas: **${selectedFeatures.length}** 🎉\n\n💳 Você deseja **adicionar sua chave PIX** no app?\n\nResponda **sim** ou **não**.`,
+            },
+          ]);
+        }, 300);
+        break;
+
+      case "ask_num_lessons":
         const numLessons = parseInt(message) || 10;
         setConfig((prev) => ({ ...prev, numberOfLessons: numLessons, includeVideos: true }));
         setStep("ask_video_links");

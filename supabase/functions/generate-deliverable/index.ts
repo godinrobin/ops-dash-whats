@@ -449,6 +449,424 @@ CORES:
 - Cards com fundo branco
 - Texto escuro para contraste
 
+=== MODELO: SUPER APP DE CONTEÚDO (template_id: super-app) ===
+
+Este é o modelo mais completo e avançado. Gera um aplicativo web com múltiplas páginas navegáveis via JavaScript, similar a um app nativo.
+
+**ESTRUTURA GLOBAL DO HTML:**
+
+\`\`\`html
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>NOME_DO_APP</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>/* CSS AQUI */</style>
+</head>
+<body>
+  <!-- Barra Superior com Timer -->
+  <header class="trial-bar">
+    <span>⏱️ Período de teste: <strong id="trialTimer">23h 59min</strong> restantes</span>
+  </header>
+
+  <!-- Conteúdo Principal (múltiplas páginas) -->
+  <main id="app-content">
+    <section data-page="home" class="page active"><!-- HOME --></section>
+    <section data-page="aulas" class="page"><!-- AULAS --></section>
+    <section data-page="ebooks" class="page"><!-- EBOOKS --></section>
+    <section data-page="calculadora" class="page"><!-- CALCULADORA --></section>
+    <section data-page="etiquetas" class="page"><!-- ETIQUETAS --></section>
+    <section data-page="rendimento" class="page"><!-- RENDIMENTO --></section>
+    <section data-page="catalogo" class="page"><!-- CATÁLOGO --></section>
+    <section data-page="validade" class="page"><!-- VALIDADE --></section>
+    <section data-page="quiz" class="page"><!-- QUIZ --></section>
+    <section data-page="desafios" class="page"><!-- DESAFIOS --></section>
+    <section data-page="favoritos" class="page"><!-- FAVORITOS --></section>
+    <section data-page="agenda" class="page"><!-- AGENDA --></section>
+    <section data-page="materiais" class="page"><!-- MATERIAIS --></section>
+    <section data-page="config" class="page"><!-- CONFIG --></section>
+  </main>
+
+  <!-- Menu Inferior Fixo -->
+  <nav class="bottom-nav">
+    <button data-nav="materiais" onclick="showPage('materiais')">📦 Materiais</button>
+    <button data-nav="home" class="active" onclick="showPage('home')">🏠 Início</button>
+    <button data-nav="config" onclick="showPage('config')">⚙️ Config</button>
+  </nav>
+
+  <script>/* JAVASCRIPT AQUI */</script>
+</body>
+</html>
+\`\`\`
+
+**CSS GLOBAL OBRIGATÓRIO:**
+
+\`\`\`css
+:root {
+  --primary: COR_PRINCIPAL;
+  --primary-light: COR_SECUNDARIA;
+  --gradient: linear-gradient(135deg, COR_SECUNDARIA 0%, white 100%);
+  --text-dark: #1f2937;
+  --text-muted: #6b7280;
+  --shadow: 0 4px 15px rgba(0,0,0,0.08);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: #f9fafb;
+  min-height: 100vh;
+  padding-bottom: 80px;
+  padding-top: 45px;
+}
+
+.trial-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--primary-light);
+  text-align: center;
+  padding: 10px;
+  font-size: 14px;
+  z-index: 100;
+  color: var(--text-dark);
+}
+.trial-bar strong { color: var(--primary); }
+
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  display: flex;
+  justify-content: space-around;
+  padding: 12px 16px;
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.1);
+  z-index: 100;
+}
+.bottom-nav button {
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 8px 16px;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+.bottom-nav button.active {
+  background: var(--primary-light);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.page { display: none; padding: 16px; }
+.page.active { display: block; }
+
+.card {
+  background: white;
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+  border: none;
+  padding: 14px 24px;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  font-size: 16px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.back-btn {
+  background: var(--primary-light);
+  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 18px;
+}
+.page-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-dark);
+}
+
+.menu-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+.menu-item {
+  background: white;
+  border-radius: 16px;
+  padding: 20px 16px;
+  text-align: left;
+  cursor: pointer;
+  border: none;
+  box-shadow: var(--shadow);
+  transition: transform 0.2s;
+}
+.menu-item:hover { transform: translateY(-2px); }
+.menu-item-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--primary-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  margin-bottom: 12px;
+}
+.menu-item-title {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text-dark);
+}
+.menu-item-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+\`\`\`
+
+**PÁGINAS A GERAR (baseado nas funcionalidades selecionadas):**
+
+**1. HOME (sempre incluir)**
+- Header com gradiente usando cor secundária
+- Foto de perfil circular centralizada (use https://picsum.photos/120/120)
+- Nome do curso/app em destaque
+- Subtítulo com cor principal
+- Card de boas-vindas com emoji
+- Botão "Grupo WhatsApp" (restrito/bloqueado)
+- Título de seção "Menu Principal"
+- Grid de menu com cards para cada funcionalidade ativa
+- Título de seção "Ferramentas" (se houver calculadoras)
+- Título de seção "Extras" (se houver quiz/desafios)
+
+**2. AULAS (se includeVideoLessons)**
+- Lista de aulas numeradas
+- Cada aula com: número, título, iframe YouTube placeholder
+- Botão favoritar (coração) em cada aula
+
+**3. EBOOKS (se includePdfSection)**
+- Cards para cada ebook/PDF
+- Ícone colorido, título, descrição
+- Botão "Abrir"
+
+**4. CALCULADORA DE PRECIFICAÇÃO (se includePricingCalculator)**
+\`\`\`html
+<div class="card">
+  <h3>💰 Calcule seu Preço</h3>
+  <form id="pricingForm">
+    <div class="form-group">
+      <label>Custo dos Ingredientes (R$)</label>
+      <input type="number" id="ingredientCost" placeholder="0.00" step="0.01">
+    </div>
+    <div class="form-group">
+      <label>Rendimento (unidades)</label>
+      <input type="number" id="yieldUnits" placeholder="1">
+    </div>
+    <div class="form-group">
+      <label>Tempo Gasto (horas)</label>
+      <input type="number" id="timeSpent" placeholder="1" step="0.5">
+    </div>
+    <div class="form-group">
+      <label>Custos Operacionais (R$)</label>
+      <input type="number" id="operationalCost" placeholder="0.00" step="0.01">
+    </div>
+    <button type="submit" class="btn-primary">Calcular</button>
+  </form>
+  <div id="pricingResults" class="results-box" style="display:none;">
+    <div class="result-item"><span>Custo por Unidade:</span><strong id="costPerUnit">R$ 0,00</strong></div>
+    <div class="result-item"><span>Preço Sugerido:</span><strong id="suggestedPrice">R$ 0,00</strong></div>
+    <div class="result-item success"><span>Lucro por Unidade:</span><strong id="profit">R$ 0,00</strong></div>
+  </div>
+</div>
+\`\`\`
+
+**5. GERADOR DE ETIQUETAS (se includeLabelGenerator)**
+- Campos: Sabor, Validade, Alérgenos, Peso
+- Preview visual da etiqueta
+- Estilo de etiqueta clean
+
+**6. CALCULADORA DE RENDIMENTO (se includeYieldCalculator)**
+- Input: Rendimento original da receita
+- Input: Quantidade desejada
+- Exibe fator multiplicador
+- Card de dica
+
+**7. CATÁLOGO (se includeFlavorsGuide)**
+- Filtros: Todos, Fácil, Médio, Avançado
+- Cards de produtos/sabores
+- Badge de dificuldade
+- Botão favoritar
+
+**8. VALIDADE (se includeExpirationGuide)**
+- Tabela com colunas: Produto, Ambiente, Geladeira, Freezer
+- Seção de boas práticas
+- Card de atenção/dica
+
+**9. QUIZ (se includeQuiz)**
+- Pergunta X de Y
+- 4 opções de resposta (cards clicáveis)
+- Feedback visual de acerto/erro
+- Pontuação final
+- Botão reiniciar
+
+**10. DESAFIOS (se includeChallenges)**
+- Card com pontos totais acumulados
+- Lista de desafios semanais
+- Cada desafio: título, descrição, pontos, checkbox
+- Progresso salvo em localStorage
+
+**11. FAVORITOS (se includeFavorites)**
+- Lista de itens favoritados (localStorage)
+- Estado vazio com ícone e instrução
+- Botão remover de cada item
+
+**12. AGENDA (se includeScheduler)**
+- Botão "+ Novo Pedido"
+- Lista de pedidos (localStorage)
+- Cada pedido: cliente, data, quantidade, valor, status
+- Botão deletar
+
+**13. MATERIAIS & FORNECEDORES (se includeSuppliersPage)**
+- Grid de cards com materiais/fornecedores
+- Ícone, nome, descrição
+- Badge "Em breve" se não disponível
+
+**14. CONFIG**
+- Card perfil com avatar e nome
+- Opções: Notificações, Suporte, Sobre, Sair
+- Versão do app
+
+**JAVASCRIPT OBRIGATÓRIO:**
+
+\`\`\`javascript
+// Navegação entre páginas
+function showPage(pageName) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const page = document.querySelector('[data-page="' + pageName + '"]');
+  if (page) page.classList.add('active');
+  window.scrollTo(0, 0);
+  
+  // Atualiza nav ativa
+  document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
+  const navBtn = document.querySelector('[data-nav="' + pageName + '"]');
+  if (navBtn) navBtn.classList.add('active');
+}
+
+// Sistema de favoritos
+function toggleFavorite(itemId, itemName) {
+  let favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
+  const index = favorites.findIndex(f => f.id === itemId);
+  if (index > -1) {
+    favorites.splice(index, 1);
+  } else {
+    favorites.push({ id: itemId, name: itemName, addedAt: Date.now() });
+  }
+  localStorage.setItem('favorites', JSON.stringify(favorites));
+  updateFavoriteButtons();
+  renderFavorites();
+}
+
+function updateFavoriteButtons() {
+  const favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
+  document.querySelectorAll('.fav-btn').forEach(btn => {
+    const itemId = btn.dataset.itemId;
+    const isFav = favorites.some(f => f.id === itemId);
+    btn.textContent = isFav ? '❤️' : '🤍';
+  });
+}
+
+function renderFavorites() {
+  const favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
+  const container = document.getElementById('favoritesList');
+  if (!container) return;
+  
+  if (favorites.length === 0) {
+    container.innerHTML = '<div class="empty-state"><span class="empty-icon">💝</span><p>Nenhum favorito ainda</p><small>Toque no coração para adicionar</small></div>';
+    return;
+  }
+  
+  container.innerHTML = favorites.map(f => 
+    '<div class="fav-item card"><span>' + f.name + '</span><button onclick="toggleFavorite(\\''+f.id+'\\', \\''+f.name+'\\')">🗑️</button></div>'
+  ).join('');
+}
+
+// Timer de período de teste
+function startTrialTimer(hours) {
+  if (!hours) return;
+  let totalSeconds = hours * 60 * 60;
+  const timerEl = document.getElementById('trialTimer');
+  if (!timerEl) return;
+  
+  setInterval(() => {
+    totalSeconds--;
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    timerEl.textContent = h + 'h ' + m + 'min';
+    if (totalSeconds <= 0) timerEl.textContent = 'Expirado';
+  }, 1000);
+}
+
+// Inicialização
+document.addEventListener('DOMContentLoaded', function() {
+  updateFavoriteButtons();
+  renderFavorites();
+  startTrialTimer(TRIAL_HOURS);
+});
+\`\`\`
+
+**CALCULADORA DE PRECIFICAÇÃO - JavaScript:**
+\`\`\`javascript
+document.getElementById('pricingForm')?.addEventListener('submit', function(e) {
+  e.preventDefault();
+  const ingredientCost = parseFloat(document.getElementById('ingredientCost').value) || 0;
+  const yieldUnits = parseFloat(document.getElementById('yieldUnits').value) || 1;
+  const timeSpent = parseFloat(document.getElementById('timeSpent').value) || 0;
+  const operationalCost = parseFloat(document.getElementById('operationalCost').value) || 0;
+  
+  const hourlyRate = 30;
+  const laborCost = timeSpent * hourlyRate;
+  const totalCost = ingredientCost + operationalCost + laborCost;
+  const costPerUnit = totalCost / yieldUnits;
+  const suggestedPrice = costPerUnit * 2.5;
+  const profit = suggestedPrice - costPerUnit;
+  
+  document.getElementById('costPerUnit').textContent = 'R$ ' + costPerUnit.toFixed(2).replace('.', ',');
+  document.getElementById('suggestedPrice').textContent = 'R$ ' + suggestedPrice.toFixed(2).replace('.', ',');
+  document.getElementById('profit').textContent = 'R$ ' + profit.toFixed(2).replace('.', ',');
+  document.getElementById('pricingResults').style.display = 'block';
+});
+\`\`\`
+
+IMPORTANTE: Gere APENAS as páginas que o usuário selecionou nas funcionalidades. Adapte o menu da HOME para mostrar apenas os itens correspondentes às funcionalidades ativas.
+
 === REGRAS PARA VÍDEOS ===
 
 Se o usuário pedir para adicionar vídeo aulas:
@@ -533,6 +951,8 @@ serve(async (req) => {
         templateInfo = "Use o MODELO: APP COM ACESSO PROTEGIDO conforme descrito no system prompt.";
       } else if (config.templateId === "pdf-library") {
         templateInfo = "Use o MODELO: BIBLIOTECA DE PDFs conforme descrito no system prompt.";
+      } else if (config.templateId === "super-app") {
+        templateInfo = "Use o MODELO: SUPER APP DE CONTEÚDO conforme descrito no system prompt.";
       }
       
       contextMessage = `
@@ -566,6 +986,23 @@ ${config.templateId === "pdf-library" ? `
 - Número de Cards/PDFs: ${config.numberOfPdfs || 12}
 - Incluir Marquee Animado: ${config.includeMarquee ? "Sim" : "Não"}
 ${config.includeMarquee ? `- Texto do Marquee: "${config.marqueeText || "Conteúdo exclusivo •"}"` : ""}
+` : ""}
+${config.templateId === "super-app" ? `
+- Nome do Produto: ${config.productName || config.niche || "Produto"}
+- Período de Teste: ${config.trialPeriod || "24h"}
+- FUNCIONALIDADES SELECIONADAS (gere APENAS estas páginas além da Home):
+  - Vídeo Aulas: ${config.includeVideoLessons ? "SIM - Gerar página de aulas" : "NÃO"}
+  - Ebooks/PDFs: ${config.includePdfSection ? "SIM - Gerar página de ebooks" : "NÃO"}
+  - Calculadora de Precificação: ${config.includePricingCalculator ? "SIM - Gerar calculadora funcional" : "NÃO"}
+  - Gerador de Etiquetas: ${config.includeLabelGenerator ? "SIM - Gerar página de etiquetas" : "NÃO"}
+  - Calculadora de Rendimento: ${config.includeYieldCalculator ? "SIM - Gerar calculadora de rendimento" : "NÃO"}
+  - Catálogo de Produtos: ${config.includeFlavorsGuide ? "SIM - Gerar catálogo com filtros" : "NÃO"}
+  - Guia de Validade: ${config.includeExpirationGuide ? "SIM - Gerar tabela de validade" : "NÃO"}
+  - Quiz Interativo: ${config.includeQuiz ? "SIM - Gerar quiz com perguntas" : "NÃO"}
+  - Desafios Semanais: ${config.includeChallenges ? "SIM - Gerar sistema de desafios" : "NÃO"}
+  - Sistema de Favoritos: ${config.includeFavorites ? "SIM - Gerar página de favoritos" : "NÃO"}
+  - Agenda de Pedidos: ${config.includeScheduler ? "SIM - Gerar agenda com localStorage" : "NÃO"}
+  - Materiais & Fornecedores: ${config.includeSuppliersPage ? "SIM - Gerar página de materiais" : "NÃO"}
 ` : ""}
 - Incluir Vídeo Aulas: ${config.includeVideos ? "Sim" : "Não"}
 - Número de Aulas: ${config.numberOfLessons || "Não especificado"}
