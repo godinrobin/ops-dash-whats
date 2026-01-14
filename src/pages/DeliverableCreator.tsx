@@ -44,6 +44,10 @@ export interface DeliverableConfig {
   includePasswordProtection?: boolean;
   accessPassword?: string;
   menuTabs?: string[];
+  // PDF Library specific
+  includeMarquee?: boolean;
+  marqueeText?: string;
+  numberOfPdfs?: number;
 }
 
 export type ChatMessage = {
@@ -78,7 +82,11 @@ export type ConversationStep =
   | "ask_countdown_time"
   | "ask_password"
   | "ask_password_value"
-  | "ask_menu_tabs";
+  | "ask_menu_tabs"
+  // PDF Library specific
+  | "ask_marquee"
+  | "ask_marquee_text"
+  | "ask_num_pdfs";
 
 interface SavedDeliverable {
   id: string;
@@ -309,6 +317,8 @@ const DeliverableCreator = () => {
       templateMessage = "Ótima escolha! 📖✨ Vamos criar um app devocional.\n\nMe conte: **qual é o tema** do seu devocional?\n\nExemplo: Salmos, Provérbios, Mulheres da Bíblia, 30 Dias de Fé, etc.";
     } else if (templateId === "protected-app") {
       templateMessage = "Ótima escolha! 🔐 Vamos criar um app com acesso protegido.\n\nMe conte: **qual é o nicho/tema** do seu conteúdo?\n\nExemplo: Bolos Caseiros, Maquiagem, Curso de Inglês, Receitas Fitness, etc.";
+    } else if (templateId === "pdf-library") {
+      templateMessage = "Ótima escolha! 📚 Vamos criar uma biblioteca de PDFs elegante.\n\nMe conte: **qual é o tema/nicho** da sua biblioteca?\n\nExemplo: Receitas de Confeitaria, Marketing Digital, Devocionais, Artesanato, etc.";
     }
     
     setMessages([
@@ -418,6 +428,18 @@ const DeliverableCreator = () => {
               {
                 role: "assistant",
                 content: `Ótimas informações! 📝\n\n⏱️ Você deseja adicionar uma **contagem regressiva** antes do conteúdo?\n\nIsso cria urgência e exclusividade!\n\nResponda **sim** ou **não**.`,
+              },
+            ]);
+          }, 300);
+        } else if (selectedTemplate === "pdf-library") {
+          // PDF Library flow - ask about number of PDFs
+          setStep("ask_num_pdfs");
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `Ótimas informações! 📝\n\n📚 **Quantos materiais/PDFs** sua biblioteca terá?\n\nDigite um número (ex: 6, 12, 20)`,
               },
             ]);
           }, 300);
@@ -567,10 +589,72 @@ const DeliverableCreator = () => {
             {
               role: "assistant",
               content: `Abas configuradas: **${tabs.join(", ")}** 📱\n\n💳 Você deseja **adicionar sua chave PIX** no final do site?\n\nIsso permite que seus clientes copiem sua chave facilmente.\n\nResponda **sim** ou **não**.`,
+          },
+        ]);
+      }, 300);
+      break;
+
+      // PDF Library specific steps
+      case "ask_num_pdfs":
+        const numPdfs = parseInt(message) || 12;
+        setConfig((prev) => ({ ...prev, numberOfPdfs: numPdfs }));
+        setStep("ask_marquee");
+        setTimeout(() => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `Perfeito! **${numPdfs} materiais** 📚\n\n✨ Você deseja adicionar uma **barra animada (marquee)** com texto rolando?\n\nIsso destaca uma frase ou chamada no topo do site.\n\nResponda **sim** ou **não**.`,
             },
           ]);
         }, 300);
         break;
+
+      case "ask_marquee":
+        const wantsMarquee = message.toLowerCase().includes("sim") || message.toLowerCase().includes("yes");
+        setConfig((prev) => ({ ...prev, includeMarquee: wantsMarquee }));
+        
+        if (wantsMarquee) {
+          setStep("ask_marquee_text");
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `Ótimo! 📢\n\nQual **texto** deve aparecer na barra animada?\n\nExemplo: "As melhores receitas • Conteúdo exclusivo •" ou "Materiais premium • Acesso vitalício •"`,
+              },
+            ]);
+          }, 300);
+        } else {
+          // Go to PIX question
+          setStep("ask_pix");
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `Ok, sem marquee! ⏭️\n\n💳 Você deseja **adicionar sua chave PIX** no final do site?\n\nResponda **sim** ou **não**.`,
+              },
+            ]);
+          }, 300);
+        }
+        break;
+
+      case "ask_marquee_text":
+        setConfig((prev) => ({ ...prev, marqueeText: message }));
+        // Go to PIX question
+        setStep("ask_pix");
+        setTimeout(() => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `Texto configurado: **"${message}"** 📢\n\n💳 Você deseja **adicionar sua chave PIX** no final do site?\n\nResponda **sim** ou **não**.`,
+            },
+          ]);
+        }, 300);
+        break;
+
         const numLessons = parseInt(message) || 10;
         setConfig((prev) => ({ ...prev, numberOfLessons: numLessons, includeVideos: true }));
         setStep("ask_video_links");

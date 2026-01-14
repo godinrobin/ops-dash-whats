@@ -2,11 +2,12 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Smartphone, Video, Eye, X, BookOpen, Lock } from "lucide-react";
+import { Smartphone, Video, Eye, X, BookOpen, Lock, FileText } from "lucide-react";
 import deliverableAppPreview from "@/assets/deliverable-model-app.png";
 import cursoVideoaulasPreview from "@/assets/curso-videoaulas-preview.png";
 import devocionalAppPreview from "@/assets/devocional-app-preview.png";
 import protectedAppPreview from "@/assets/protected-app-preview.png";
+import pdfLibraryPreview from "@/assets/pdf-library-preview.png";
 
 interface Template {
   id: string;
@@ -81,6 +82,22 @@ const templates: Template[] = [
     badge: "Novo",
     icon: Lock,
   },
+  {
+    id: "pdf-library",
+    name: "Biblioteca de PDFs",
+    description: "Site para exibir coleção de PDFs/materiais com capas atrativas em grid",
+    image: pdfLibraryPreview,
+    features: [
+      "Grid de cards com capas",
+      "Marquee animado",
+      "Links diretos para PDFs",
+      "Design responsivo",
+      "Hover effects",
+      "Fácil organização",
+    ],
+    badge: "Novo",
+    icon: FileText,
+  },
 ];
 
 interface DeliverableTemplateSelectorProps {
@@ -116,8 +133,8 @@ export const DeliverableTemplateSelector = ({ onSelect }: DeliverableTemplateSel
                 onClick={() => onSelect(template.id)}
               >
                 <CardHeader className="p-0 relative">
-                  {/* Image container - smaller aspect ratio */}
-                  <div className="aspect-[4/5] overflow-hidden bg-gradient-to-b from-muted/50 to-muted relative">
+                  {/* Image container - square with rounded corners */}
+                  <div className="aspect-square overflow-hidden bg-gradient-to-b from-muted/50 to-muted relative rounded-lg m-1.5">
                     <img
                       src={template.image}
                       alt={template.name}
