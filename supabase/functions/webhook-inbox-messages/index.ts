@@ -3117,8 +3117,56 @@ serve(async (req) => {
         const staleThreshold = 86400000; // 24 hours in ms
         
         if (hasPendingDelay) {
-          console.log(`Skipping flow trigger - session has pending delay, not stale`);
-          return new Response(JSON.stringify({ success: true, skipped: true, reason: 'session_has_pending_delay' }), {
+          // User sent a message while waiting for delay - cancel the delay and continue flow!
+          console.log(`[DELAY_INTERRUPT] User sent message while session ${anyActiveSession.id} has pending delay - canceling delay and continuing flow`);
+          
+          // Cancel any pending delay job
+          await supabaseClient
+            .from('inbox_flow_delay_jobs')
+            .update({ 
+              status: 'done',
+              updated_at: new Date().toISOString()
+            })
+            .eq('session_id', anyActiveSession.id)
+            .eq('status', 'scheduled');
+          
+          // Clear the pending delay from session variables and update lastMessage
+          const updatedVars = { ...sessionVars };
+          delete updatedVars._pendingDelay;
+          updatedVars.lastMessage = content;
+          updatedVars.ultima_mensagem = content;
+          
+          await supabaseClient
+            .from('inbox_flow_sessions')
+            .update({ 
+              variables: updatedVars,
+              last_interaction: new Date().toISOString()
+            })
+            .eq('id', anyActiveSession.id);
+          
+          // Process the flow to continue from the delay node
+          try {
+            const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+            const processResponse = await fetch(processUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+              },
+              body: JSON.stringify({ sessionId: anyActiveSession.id, resumeFromDelay: true }),
+            });
+            
+            if (!processResponse.ok) {
+              const errorText = await processResponse.text();
+              console.error('[DELAY_INTERRUPT] Error continuing flow:', errorText);
+            } else {
+              console.log('[DELAY_INTERRUPT] Flow continued successfully after delay interrupt');
+            }
+          } catch (flowError) {
+            console.error('[DELAY_INTERRUPT] Error calling process-inbox-flow:', flowError);
+          }
+          
+          return new Response(JSON.stringify({ success: true, delayInterrupted: true }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         } else if (sessionAge < staleThreshold) {
