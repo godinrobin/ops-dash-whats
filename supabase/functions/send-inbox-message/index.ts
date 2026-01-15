@@ -96,30 +96,35 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
-        },
-      }
-    );
-
-    // Also create a service role client for updating messages
+    // Create admin client for database operations
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Verify user is authenticated
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
-    if (authError || !user) {
+    // Get the JWT token from Authorization header
+    const jwtAuthHeader = req.headers.get('Authorization');
+    if (!jwtAuthHeader || !jwtAuthHeader.startsWith('Bearer ')) {
+      console.error('[AUTH] Missing or invalid Authorization header');
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    const token = jwtAuthHeader.replace('Bearer ', '');
+    
+    // Verify the token directly using getUser with token
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    if (authError || !user) {
+      console.error('[AUTH] Token verification failed:', authError?.message);
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
+    console.log('[AUTH] User authenticated:', user.id);
 
     const { contactId, instanceName, phone, content, messageType = 'text', mediaUrl, messageId, remoteJid } = await req.json();
     
