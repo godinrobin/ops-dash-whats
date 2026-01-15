@@ -96,12 +96,6 @@ serve(async (req) => {
   }
 
   try {
-    // Create admin client for database operations
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
-
     // Get the JWT token from Authorization header
     const jwtAuthHeader = req.headers.get('Authorization');
     if (!jwtAuthHeader || !jwtAuthHeader.startsWith('Bearer ')) {
@@ -112,18 +106,50 @@ serve(async (req) => {
       });
     }
 
-    const token = jwtAuthHeader.replace('Bearer ', '');
-    
-    // Verify the token directly using getUser with token
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-    if (authError || !user) {
-      console.error('[AUTH] Token verification failed:', authError?.message);
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
+    const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      console.error('[AUTH] Missing backend env vars');
+      return new Response(JSON.stringify({ error: 'Server misconfigured' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Validate JWT via direct call (avoids relying on server-side session state)
+    const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      method: 'GET',
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: jwtAuthHeader,
+      },
+    });
+
+    if (!userRes.ok) {
+      const errText = await userRes.text().catch(() => '');
+      console.error('[AUTH] JWT validation failed:', userRes.status, errText);
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    
+
+    const user = await userRes.json() as { id?: string };
+    if (!user?.id) {
+      console.error('[AUTH] JWT validation failed: missing user id');
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Admin client for database writes/reads (bypasses RLS)
+    const supabaseAdmin = createClient(
+      SUPABASE_URL,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
     console.log('[AUTH] User authenticated:', user.id);
 
     const { contactId, instanceName, phone, content, messageType = 'text', mediaUrl, messageId, remoteJid } = await req.json();
