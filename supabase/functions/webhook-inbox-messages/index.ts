@@ -3117,22 +3117,13 @@ serve(async (req) => {
         const staleThreshold = 86400000; // 24 hours in ms
         
         if (hasPendingDelay) {
-          // User sent a message while waiting for delay - cancel the delay and continue flow!
-          console.log(`[DELAY_INTERRUPT] User sent message while session ${anyActiveSession.id} has pending delay - canceling delay and continuing flow`);
+          // User sent a message while waiting for delay - DON'T interrupt the delay!
+          // The delay node should complete its scheduled cycle - user messages during delays shouldn't cancel them
+          // This prevents the issue where every user message was resetting/re-scheduling the delay
+          console.log(`[DELAY_PENDING] User sent message while session ${anyActiveSession.id} has pending delay - NOT interrupting, delay will continue as scheduled`);
           
-          // Cancel any pending delay job
-          await supabaseClient
-            .from('inbox_flow_delay_jobs')
-            .update({ 
-              status: 'done',
-              updated_at: new Date().toISOString()
-            })
-            .eq('session_id', anyActiveSession.id)
-            .eq('status', 'scheduled');
-          
-          // Clear the pending delay from session variables and update lastMessage
+          // Just update lastMessage but DON'T clear the pending delay or cancel the job
           const updatedVars = { ...sessionVars };
-          delete updatedVars._pendingDelay;
           updatedVars.lastMessage = content;
           updatedVars.ultima_mensagem = content;
           
@@ -3144,29 +3135,8 @@ serve(async (req) => {
             })
             .eq('id', anyActiveSession.id);
           
-          // Process the flow to continue from the delay node
-          try {
-            const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
-            const processResponse = await fetch(processUrl, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-              },
-              body: JSON.stringify({ sessionId: anyActiveSession.id, resumeFromDelay: true }),
-            });
-            
-            if (!processResponse.ok) {
-              const errorText = await processResponse.text();
-              console.error('[DELAY_INTERRUPT] Error continuing flow:', errorText);
-            } else {
-              console.log('[DELAY_INTERRUPT] Flow continued successfully after delay interrupt');
-            }
-          } catch (flowError) {
-            console.error('[DELAY_INTERRUPT] Error calling process-inbox-flow:', flowError);
-          }
-          
-          return new Response(JSON.stringify({ success: true, delayInterrupted: true }), {
+          // Return success without interrupting the flow - delay will continue as scheduled by pg_cron
+          return new Response(JSON.stringify({ success: true, delayPending: true, reason: 'delay_continues' }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         } else if (sessionAge < staleThreshold) {
@@ -3204,18 +3174,6 @@ serve(async (req) => {
         .eq('is_active', true)
         .order('priority', { ascending: false });
 
-      console.log(`[FLOW DEBUG] Found ${flows?.length || 0} active flows for user ${userId}`);
-      if (flowsError) {
-        console.error('[FLOW DEBUG] Error fetching flows:', flowsError);
-      }
-
-      if (!flows || flows.length === 0) {
-        console.log('[FLOW DEBUG] No active flows found, message saved without flow trigger');
-        return new Response(JSON.stringify({ success: true, noActiveFlows: true }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
       if (!content || content.trim() === '') {
         console.log('[FLOW DEBUG] Message has no text content (type=' + messageType + '), skipping keyword flow trigger');
         console.log('[FLOW DEBUG] Note: Media messages (audio, image, video) without text won\'t trigger keyword-based flows');
@@ -3223,6 +3181,7 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+
 
       // Count total messages from this contact to determine if this is first message
       const { count: messageCount } = await supabaseClient
@@ -3309,6 +3268,13 @@ serve(async (req) => {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
+      }
+
+      if (flowsError || !flows) {
+        console.error('[FLOW DEBUG] Error fetching flows or no flows found:', flowsError);
+        return new Response(JSON.stringify({ success: true, noFlows: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
       for (const flow of flows) {
