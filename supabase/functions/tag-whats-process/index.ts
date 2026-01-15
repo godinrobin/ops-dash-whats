@@ -100,68 +100,11 @@ async function extractPdfText(base64Data: string): Promise<string> {
   }
 }
 
-// Alternative: Use pdfjs-dist for actual text extraction
+// PDF analysis is now done directly with GPT-4 Vision (no text extraction needed)
+// This function is kept for backwards compatibility but just returns a message
 async function extractPdfTextWithPdfJs(base64Data: string): Promise<string> {
-  try {
-    console.log("[TAG-WHATS] Attempting PDF text extraction with alternative method...");
-    
-    // Use Lovable AI (Gemini) which supports PDFs natively
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
-    
-    if (!lovableApiKey) {
-      console.log("[TAG-WHATS] No LOVABLE_API_KEY, falling back to basic extraction");
-      return await extractPdfText(base64Data);
-    }
-    
-    // Gemini 2.5 Flash supports PDF documents natively
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${lovableApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          {
-            role: "system",
-            content: "Você é um extrator de texto de documentos PDF. Extraia TODO o texto visível do documento PDF fornecido, mantendo a estrutura original o máximo possível. Retorne apenas o texto extraído, sem comentários adicionais."
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Extraia todo o texto deste documento PDF:"
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:application/pdf;base64,${base64Data}`
-                }
-              }
-            ]
-          }
-        ],
-      }),
-    });
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[TAG-WHATS] Lovable AI extraction error:", errorText);
-      return await extractPdfText(base64Data);
-    }
-    
-    const result = await response.json();
-    const extractedText = result.choices?.[0]?.message?.content || "";
-    
-    console.log("[TAG-WHATS] Extracted text from PDF (preview):", extractedText.substring(0, 500));
-    
-    return extractedText;
-  } catch (error) {
-    console.error("[TAG-WHATS] PDF text extraction with Lovable AI failed:", error);
-    return await extractPdfText(base64Data);
-  }
+  // PDFs are now analyzed visually with GPT-4 Vision, no text extraction needed
+  return "PDF will be analyzed visually with GPT-4 Vision";
 }
 
 serve(async (req) => {
@@ -411,117 +354,71 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
 
     let aiContent = "";
     
-    if (isPdf) {
-      // For PDFs: Extract text first, then analyze with GPT
-      console.log("[TAG-WHATS] PDF detected - extracting text first...");
-      
-      const extractedText = await extractPdfTextWithPdfJs(mediaBase64);
-      console.log("[TAG-WHATS] PDF text extracted, length:", extractedText.length);
-      
-      // Now analyze the extracted text with GPT
-      const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${openaiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [
-            { role: "system", content: systemPrompt },
-            {
-              role: "user",
-              content: `Analise o seguinte texto extraído de um documento PDF e determine se é um comprovante de pagamento PIX:\n\n---\n${extractedText}\n---`,
-            },
-          ],
-          max_tokens: 200,
-        }),
-      });
+    // Use GPT-4 Vision for BOTH images and PDFs
+    // OpenAI GPT-4 Vision supports PDFs when sent as base64 data URL
+    const mediaDataUrl = `data:${mediaMimetype};base64,${mediaBase64}`;
+    const mediaTypeLabel = isPdf ? "PDF" : "imagem";
+    
+    console.log(`[TAG-WHATS] Sending ${mediaTypeLabel} to OpenAI Vision for analysis. Data URL length:`, mediaDataUrl.length);
 
-      if (!openaiResponse.ok) {
-        const errorText = await openaiResponse.text();
-        console.error("[TAG-WHATS] OpenAI error (PDF text analysis):", errorText);
-        
-        await supabase.from("tag_whats_logs").insert({
-          user_id: instance.user_id,
-          config_id: config.id,
-          instance_id: instance.id,
-          contact_phone: phone,
-          message_type: messageType,
-          is_pix_payment: false,
-          label_applied: false,
-          error_message: `OpenAI error: ${errorText.substring(0, 200)}`,
-        });
-        
-        return new Response(JSON.stringify({ success: false, error: "OpenAI error" }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const aiResult = await openaiResponse.json();
-      aiContent = aiResult.choices?.[0]?.message?.content || "";
-      
-    } else {
-      // For images: Use GPT-4 Vision directly
-      const imageDataUrl = `data:${mediaMimetype};base64,${mediaBase64}`;
-      console.log("[TAG-WHATS] Sending image to OpenAI for analysis. Data URL length:", imageDataUrl.length);
-
-      const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${openaiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [
-            { role: "system", content: systemPrompt },
-            {
-              role: "user",
-              content: [
-                {
-                  type: "image_url",
-                  image_url: {
-                    url: imageDataUrl,
-                    detail: "low",
-                  },
+    const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${openaiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: [
+              {
+                type: "image_url",
+                image_url: {
+                  url: mediaDataUrl,
+                  detail: "high", // Use high detail for better text reading in receipts
                 },
-                {
-                  type: "text",
-                  text: "Analise esta imagem e determine se é um comprovante de pagamento PIX.",
-                },
-              ],
-            },
-          ],
-          max_tokens: 200,
-        }),
+              },
+              {
+                type: "text",
+                text: isPdf 
+                  ? "Este é um documento PDF. Analise visualmente se é um comprovante de pagamento PIX."
+                  : "Analise esta imagem e determine se é um comprovante de pagamento PIX.",
+              },
+            ],
+          },
+        ],
+        max_tokens: 300,
+      }),
+    });
+
+    if (!openaiResponse.ok) {
+      const errorText = await openaiResponse.text();
+      console.error("[TAG-WHATS] OpenAI Vision error:", errorText);
+      
+      await supabase.from("tag_whats_logs").insert({
+        user_id: instance.user_id,
+        config_id: config.id,
+        instance_id: instance.id,
+        contact_phone: phone,
+        message_type: messageType,
+        is_pix_payment: false,
+        label_applied: false,
+        error_message: `OpenAI Vision error: ${errorText.substring(0, 200)}`,
       });
-
-      if (!openaiResponse.ok) {
-        const errorText = await openaiResponse.text();
-        console.error("[TAG-WHATS] OpenAI error:", errorText);
-        
-        await supabase.from("tag_whats_logs").insert({
-          user_id: instance.user_id,
-          config_id: config.id,
-          instance_id: instance.id,
-          contact_phone: phone,
-          message_type: messageType,
-          is_pix_payment: false,
-          label_applied: false,
-          error_message: `OpenAI error: ${errorText.substring(0, 200)}`,
-        });
-        
-        return new Response(JSON.stringify({ success: false, error: "OpenAI error" }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const aiResult = await openaiResponse.json();
-      aiContent = aiResult.choices?.[0]?.message?.content || "";
+      
+      return new Response(JSON.stringify({ success: false, error: "OpenAI Vision error" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
+
+    const aiResult = await openaiResponse.json();
+    aiContent = aiResult.choices?.[0]?.message?.content || "";
+    console.log("[TAG-WHATS] OpenAI Vision response:", aiContent);
+    
     
     console.log("[TAG-WHATS] AI response:", aiContent);
 
