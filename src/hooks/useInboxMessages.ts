@@ -68,6 +68,7 @@ export const useInboxMessages = (contactId: string | null) => {
 
       // Deduplicate visually by normalized remote_message_id (and keep the best status)
       const byKey = new Map<string, any>();
+      const recentContentMap = new Map<string, { msg: any; timestamp: number }>();
 
       for (const msg of data || []) {
         const normalizedRemoteId = normalizeRemoteMessageId((msg as any).remote_message_id);
@@ -76,17 +77,42 @@ export const useInboxMessages = (contactId: string | null) => {
 
         if (!existing) {
           byKey.set(key, msg);
-          continue;
+        } else {
+          const existingRank = statusRank((existing as any).status);
+          const nextRank = statusRank((msg as any).status);
+          const existingCreated = new Date((existing as any).created_at).getTime();
+          const nextCreated = new Date((msg as any).created_at).getTime();
+
+          // Keep the higher status; if tie, keep the newest created_at
+          if (nextRank > existingRank || (nextRank === existingRank && nextCreated > existingCreated)) {
+            byKey.set(key, msg);
+          }
         }
-
-        const existingRank = statusRank((existing as any).status);
-        const nextRank = statusRank((msg as any).status);
-        const existingCreated = new Date((existing as any).created_at).getTime();
-        const nextCreated = new Date((msg as any).created_at).getTime();
-
-        // Keep the higher status; if tie, keep the newest created_at
-        if (nextRank > existingRank || (nextRank === existingRank && nextCreated > existingCreated)) {
-          byKey.set(key, msg);
+        
+        // === CONTENT-BASED DEDUPLICATION ===
+        // For outbound flow messages, also dedupe by content within 60 seconds
+        if (msg.direction === 'outbound' && msg.is_from_flow && msg.content) {
+          const contentKey = `content:${msg.content}`;
+          const msgTimestamp = new Date(msg.created_at).getTime();
+          const existingContent = recentContentMap.get(contentKey);
+          
+          if (existingContent) {
+            const timeDiff = Math.abs(msgTimestamp - existingContent.timestamp);
+            // If same content within 60 seconds, keep only the first one
+            if (timeDiff < 60000) {
+              // Remove the duplicate from byKey (keep the earlier one)
+              if (msgTimestamp > existingContent.timestamp) {
+                byKey.delete(key);
+              } else {
+                const existingNorm = normalizeRemoteMessageId(existingContent.msg.remote_message_id);
+                const existingKey = existingNorm || existingContent.msg.id;
+                byKey.delete(existingKey);
+                recentContentMap.set(contentKey, { msg, timestamp: msgTimestamp });
+              }
+              continue;
+            }
+          }
+          recentContentMap.set(contentKey, { msg, timestamp: msgTimestamp });
         }
       }
 
