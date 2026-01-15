@@ -455,6 +455,66 @@ serve(async (req) => {
       console.log("[process-delay-queue] No expired timeouts need healing");
     }
     
+    // === STALE LOCK HEALING: Find sessions stuck with processing=true for too long ===
+    // This catches cases where process-inbox-flow crashed or timed out without releasing the lock
+    console.log("[process-delay-queue] Checking for stale processing locks that need healing...");
+    
+    const STALE_LOCK_THRESHOLD_MS = 120_000; // 2 minutes - locks older than this are considered stuck
+    const staleLockCutoff = new Date(Date.now() - STALE_LOCK_THRESHOLD_MS).toISOString();
+    
+    const { data: staleLockSessions, error: staleLockError } = await supabase
+      .from("inbox_flow_sessions")
+      .select("id, current_node_id, processing_started_at")
+      .eq("status", "active")
+      .eq("processing", true)
+      .lt("processing_started_at", staleLockCutoff)
+      .limit(20);
+    
+    if (staleLockError) {
+      console.error("[process-delay-queue] Error fetching stale lock sessions:", staleLockError);
+    } else if (staleLockSessions && staleLockSessions.length > 0) {
+      console.log(`[process-delay-queue] Found ${staleLockSessions.length} sessions with stale locks`);
+      
+      let staleLockHealed = 0;
+      for (const staleSession of staleLockSessions) {
+        try {
+          const lockAgeMs = Date.now() - new Date(staleSession.processing_started_at || 0).getTime();
+          console.log(`[process-delay-queue] Healing stale lock for session ${staleSession.id} (lock age: ${Math.round(lockAgeMs / 1000)}s, node: ${staleSession.current_node_id})`);
+          
+          // First, forcibly release the lock
+          await supabase
+            .from("inbox_flow_sessions")
+            .update({
+              processing: false,
+              processing_started_at: null,
+              last_interaction: new Date().toISOString(),
+            })
+            .eq("id", staleSession.id);
+          
+          // Then, invoke process-inbox-flow to resume
+          const { error: healError } = await supabase.functions.invoke("process-inbox-flow", {
+            body: {
+              sessionId: staleSession.id,
+              resumeFromDelay: true, // Use delay resume logic to pick up where it left off
+            },
+          });
+          
+          if (healError) {
+            console.error(`[process-delay-queue] Error resuming stale lock session ${staleSession.id}:`, healError);
+          } else {
+            staleLockHealed++;
+            console.log(`[process-delay-queue] Successfully healed stale lock for session ${staleSession.id}`);
+          }
+        } catch (staleHealErr) {
+          console.error(`[process-delay-queue] Unexpected error healing stale lock for session ${staleSession.id}:`, staleHealErr);
+        }
+      }
+      
+      console.log(`[process-delay-queue] Healed ${staleLockHealed}/${staleLockSessions.length} stale lock sessions`);
+    } else {
+      console.log("[process-delay-queue] No stale processing locks need healing");
+    }
+    
     return new Response(
       JSON.stringify({ 
         success: true, 
