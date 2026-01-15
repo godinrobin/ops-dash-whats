@@ -354,70 +354,149 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
 
     let aiContent = "";
     
-    // Use GPT-4 Vision for BOTH images and PDFs
-    // OpenAI GPT-4 Vision supports PDFs when sent as base64 data URL
     const mediaDataUrl = `data:${mediaMimetype};base64,${mediaBase64}`;
-    const mediaTypeLabel = isPdf ? "PDF" : "imagem";
     
-    console.log(`[TAG-WHATS] Sending ${mediaTypeLabel} to OpenAI Vision for analysis. Data URL length:`, mediaDataUrl.length);
-
-    const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${openaiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: [
-              {
-                type: "image_url",
-                image_url: {
-                  url: mediaDataUrl,
-                  detail: "high", // Use high detail for better text reading in receipts
+    if (isPdf) {
+      // For PDFs: Use Gemini which natively supports PDF analysis
+      // OpenAI Vision does NOT support PDFs, only images
+      console.log("[TAG-WHATS] Sending PDF to Gemini for analysis. Data URL length:", mediaDataUrl.length);
+      
+      const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+      
+      if (!lovableApiKey) {
+        console.error("[TAG-WHATS] No LOVABLE_API_KEY for PDF analysis");
+        
+        await supabase.from("tag_whats_logs").insert({
+          user_id: instance.user_id,
+          config_id: config.id,
+          instance_id: instance.id,
+          contact_phone: phone,
+          message_type: messageType,
+          is_pix_payment: false,
+          label_applied: false,
+          error_message: "No LOVABLE_API_KEY configured for PDF analysis",
+        });
+        
+        return new Response(JSON.stringify({ success: false, error: "No API key for PDF" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      
+      const geminiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${lovableApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: systemPrompt },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Analise este documento PDF e determine se é um comprovante de pagamento PIX válido."
                 },
-              },
-              {
-                type: "text",
-                text: isPdf 
-                  ? "Este é um documento PDF. Analise visualmente se é um comprovante de pagamento PIX."
-                  : "Analise esta imagem e determine se é um comprovante de pagamento PIX.",
-              },
-            ],
-          },
-        ],
-        max_tokens: 300,
-      }),
-    });
+                {
+                  type: "image_url",
+                  image_url: {
+                    url: mediaDataUrl
+                  }
+                }
+              ]
+            }
+          ],
+        }),
+      });
 
-    if (!openaiResponse.ok) {
-      const errorText = await openaiResponse.text();
-      console.error("[TAG-WHATS] OpenAI Vision error:", errorText);
+      if (!geminiResponse.ok) {
+        const errorText = await geminiResponse.text();
+        console.error("[TAG-WHATS] Gemini error for PDF:", errorText);
+        
+        await supabase.from("tag_whats_logs").insert({
+          user_id: instance.user_id,
+          config_id: config.id,
+          instance_id: instance.id,
+          contact_phone: phone,
+          message_type: messageType,
+          is_pix_payment: false,
+          label_applied: false,
+          error_message: `Gemini error: ${errorText.substring(0, 200)}`,
+        });
+        
+        return new Response(JSON.stringify({ success: false, error: "Gemini error" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const geminiResult = await geminiResponse.json();
+      aiContent = geminiResult.choices?.[0]?.message?.content || "";
+      console.log("[TAG-WHATS] Gemini PDF response:", aiContent);
       
-      await supabase.from("tag_whats_logs").insert({
-        user_id: instance.user_id,
-        config_id: config.id,
-        instance_id: instance.id,
-        contact_phone: phone,
-        message_type: messageType,
-        is_pix_payment: false,
-        label_applied: false,
-        error_message: `OpenAI Vision error: ${errorText.substring(0, 200)}`,
+    } else {
+      // For images: Use GPT-4 Vision
+      console.log("[TAG-WHATS] Sending image to OpenAI Vision for analysis. Data URL length:", mediaDataUrl.length);
+
+      const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${openaiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: systemPrompt },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "image_url",
+                  image_url: {
+                    url: mediaDataUrl,
+                    detail: "high",
+                  },
+                },
+                {
+                  type: "text",
+                  text: "Analise esta imagem e determine se é um comprovante de pagamento PIX.",
+                },
+              ],
+            },
+          ],
+          max_tokens: 300,
+        }),
       });
-      
-      return new Response(JSON.stringify({ success: false, error: "OpenAI Vision error" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+
+      if (!openaiResponse.ok) {
+        const errorText = await openaiResponse.text();
+        console.error("[TAG-WHATS] OpenAI Vision error:", errorText);
+        
+        await supabase.from("tag_whats_logs").insert({
+          user_id: instance.user_id,
+          config_id: config.id,
+          instance_id: instance.id,
+          contact_phone: phone,
+          message_type: messageType,
+          is_pix_payment: false,
+          label_applied: false,
+          error_message: `OpenAI Vision error: ${errorText.substring(0, 200)}`,
+        });
+        
+        return new Response(JSON.stringify({ success: false, error: "OpenAI Vision error" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const aiResult = await openaiResponse.json();
+      aiContent = aiResult.choices?.[0]?.message?.content || "";
+      console.log("[TAG-WHATS] OpenAI Vision response:", aiContent);
     }
-
-    const aiResult = await openaiResponse.json();
-    aiContent = aiResult.choices?.[0]?.message?.content || "";
-    console.log("[TAG-WHATS] OpenAI Vision response:", aiContent);
     
     
     console.log("[TAG-WHATS] AI response:", aiContent);
