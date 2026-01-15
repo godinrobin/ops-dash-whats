@@ -51,7 +51,7 @@ const linkifyContent = (html: string): string => {
       link.href = match[0];
       link.target = "_blank";
       link.rel = "noopener noreferrer";
-      link.className = "text-primary hover:underline break-all";
+      link.className = "text-orange-500 hover:underline break-all";
       link.textContent = match[0];
       fragment.appendChild(link);
       
@@ -331,7 +331,7 @@ export const FeedPost = ({ post, comments, commentReplies, commentReactions, use
       {post.content && (
         <div className="px-4 pb-3">
           <div 
-            className="text-foreground prose prose-invert prose-sm max-w-none [&_a]:text-primary [&_a]:hover:underline [&_a]:break-all"
+            className="text-foreground prose prose-invert prose-sm max-w-none [&_a]:text-orange-500 [&_a]:hover:underline [&_a]:break-all"
             dangerouslySetInnerHTML={{ __html: linkifyContent(post.content) }} 
           />
         </div>
