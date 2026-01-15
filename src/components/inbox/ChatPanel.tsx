@@ -96,6 +96,7 @@ const statusRank = (status: any): number => {
 
 const dedupeMessagesForUI = (messages: InboxMessage[]) => {
   const byKey = new Map<string, InboxMessage>();
+  const recentContentMap = new Map<string, { message: InboxMessage; timestamp: number }>();
 
   for (const m of messages) {
     const norm = normalizeRemoteMessageId((m as any).remote_message_id);
@@ -104,16 +105,41 @@ const dedupeMessagesForUI = (messages: InboxMessage[]) => {
 
     if (!existing) {
       byKey.set(key, m);
-      continue;
+    } else {
+      const existingRank = statusRank((existing as any).status);
+      const nextRank = statusRank((m as any).status);
+      const existingCreated = new Date(existing.created_at).getTime();
+      const nextCreated = new Date(m.created_at).getTime();
+
+      if (nextRank > existingRank || (nextRank === existingRank && nextCreated > existingCreated)) {
+        byKey.set(key, m);
+      }
     }
-
-    const existingRank = statusRank((existing as any).status);
-    const nextRank = statusRank((m as any).status);
-    const existingCreated = new Date(existing.created_at).getTime();
-    const nextCreated = new Date(m.created_at).getTime();
-
-    if (nextRank > existingRank || (nextRank === existingRank && nextCreated > existingCreated)) {
-      byKey.set(key, m);
+    
+    // === CONTENT-BASED DEDUPLICATION ===
+    // For outbound flow messages, also dedupe by content within 60 seconds
+    if (m.direction === 'outbound' && m.is_from_flow && m.content) {
+      const contentKey = `content:${m.content}`;
+      const msgTimestamp = new Date(m.created_at).getTime();
+      const existingContent = recentContentMap.get(contentKey);
+      
+      if (existingContent) {
+        const timeDiff = Math.abs(msgTimestamp - existingContent.timestamp);
+        // If same content within 60 seconds, keep only the first one
+        if (timeDiff < 60000) {
+          // Remove the duplicate from byKey (keep the earlier one)
+          if (msgTimestamp > existingContent.timestamp) {
+            byKey.delete(key);
+          } else {
+            const existingNorm = normalizeRemoteMessageId((existingContent.message as any).remote_message_id);
+            const existingKey = existingNorm || existingContent.message.id;
+            byKey.delete(existingKey);
+            recentContentMap.set(contentKey, { message: m, timestamp: msgTimestamp });
+          }
+          continue;
+        }
+      }
+      recentContentMap.set(contentKey, { message: m, timestamp: msgTimestamp });
     }
   }
 

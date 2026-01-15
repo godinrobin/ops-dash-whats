@@ -3158,6 +3158,48 @@ async function saveOutboundMessage(
     }
   }
 
+  // === CONTENT-BASED DEDUPLICATION ===
+  // Prevent saving duplicate messages with same content sent within 60 seconds
+  // This catches cases where flow is triggered multiple times rapidly
+  const sixtySecondsAgo = new Date(Date.now() - 60000).toISOString();
+  
+  // For text messages, check by content; for media, check by media_url
+  if (content && content.trim()) {
+    const { data: recentSameContent } = await supabaseClient
+      .from('inbox_messages')
+      .select('id, created_at')
+      .eq('contact_id', contactId)
+      .eq('direction', 'outbound')
+      .eq('content', content)
+      .eq('is_from_flow', true)
+      .gte('created_at', sixtySecondsAgo)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    if (recentSameContent) {
+      console.log(`[DEDUPE] Skipping duplicate message: same content sent ${Math.round((Date.now() - new Date(recentSameContent.created_at).getTime()) / 1000)}s ago`);
+      return;
+    }
+  } else if (mediaUrl) {
+    const { data: recentSameMedia } = await supabaseClient
+      .from('inbox_messages')
+      .select('id, created_at')
+      .eq('contact_id', contactId)
+      .eq('direction', 'outbound')
+      .eq('media_url', mediaUrl)
+      .eq('is_from_flow', true)
+      .gte('created_at', sixtySecondsAgo)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    if (recentSameMedia) {
+      console.log(`[DEDUPE] Skipping duplicate media message: same media_url sent ${Math.round((Date.now() - new Date(recentSameMedia.created_at).getTime()) / 1000)}s ago`);
+      return;
+    }
+  }
+
   const { error } = await supabaseClient
     .from('inbox_messages')
     .insert({
