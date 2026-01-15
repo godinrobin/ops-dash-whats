@@ -18,6 +18,72 @@ import { CommentItem } from "./CommentItem";
 
 const REACTION_EMOJIS = ["🔥", "🚀", "👑", "👍🏻", "🚨"] as const;
 
+// Function to convert URLs in text to clickable links
+const linkifyContent = (html: string): string => {
+  if (!html) return html;
+  
+  // Create a temporary element to parse HTML
+  const temp = document.createElement("div");
+  temp.innerHTML = html;
+  
+  // Function to process text nodes
+  const processTextNode = (node: Text) => {
+    const urlRegex = /(https?:\/\/[^\s<>"']+)/gi;
+    const text = node.textContent || "";
+    
+    if (!urlRegex.test(text)) return;
+    
+    // Reset regex lastIndex
+    urlRegex.lastIndex = 0;
+    
+    const fragment = document.createDocumentFragment();
+    let lastIndex = 0;
+    let match;
+    
+    while ((match = urlRegex.exec(text)) !== null) {
+      // Add text before the URL
+      if (match.index > lastIndex) {
+        fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+      }
+      
+      // Create the link
+      const link = document.createElement("a");
+      link.href = match[0];
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.className = "text-primary hover:underline break-all";
+      link.textContent = match[0];
+      fragment.appendChild(link);
+      
+      lastIndex = match.index + match[0].length;
+    }
+    
+    // Add remaining text
+    if (lastIndex < text.length) {
+      fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+    }
+    
+    node.parentNode?.replaceChild(fragment, node);
+  };
+  
+  // Walk through all text nodes
+  const walker = document.createTreeWalker(temp, NodeFilter.SHOW_TEXT, null);
+  const textNodes: Text[] = [];
+  
+  let currentNode = walker.nextNode();
+  while (currentNode) {
+    // Skip text nodes inside anchor tags
+    if (currentNode.parentElement?.tagName !== "A") {
+      textNodes.push(currentNode as Text);
+    }
+    currentNode = walker.nextNode();
+  }
+  
+  textNodes.forEach(processTextNode);
+  
+  return temp.innerHTML;
+};
+
 interface ReactionCounts {
   [emoji: string]: number;
 }
@@ -265,8 +331,8 @@ export const FeedPost = ({ post, comments, commentReplies, commentReactions, use
       {post.content && (
         <div className="px-4 pb-3">
           <div 
-            className="text-foreground prose prose-invert prose-sm max-w-none"
-            dangerouslySetInnerHTML={{ __html: post.content }} 
+            className="text-foreground prose prose-invert prose-sm max-w-none [&_a]:text-primary [&_a]:hover:underline [&_a]:break-all"
+            dangerouslySetInnerHTML={{ __html: linkifyContent(post.content) }} 
           />
         </div>
       )}
