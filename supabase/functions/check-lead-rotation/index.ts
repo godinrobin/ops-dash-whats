@@ -22,6 +22,64 @@ interface LeadRotationRequest {
   phone_number?: string;
 }
 
+/**
+ * Send push notification directly to OneSignal
+ */
+async function sendPushNotification(
+  subscriptionIds: string[],
+  title: string,
+  message: string,
+  iconUrl: string = "https://zapdata.com.br/favicon.png"
+): Promise<{ success: boolean; error?: string }> {
+  const oneSignalAppId = Deno.env.get("ONESIGNAL_APP_ID");
+  const oneSignalApiKey = Deno.env.get("ONESIGNAL_REST_API_KEY");
+
+  if (!oneSignalAppId || !oneSignalApiKey) {
+    console.error("[CHECK-LEAD-ROTATION] OneSignal credentials not configured");
+    return { success: false, error: "OneSignal not configured" };
+  }
+
+  if (!subscriptionIds || subscriptionIds.length === 0) {
+    console.log("[CHECK-LEAD-ROTATION] No subscription IDs to send to");
+    return { success: false, error: "No subscription IDs" };
+  }
+
+  try {
+    const payload = {
+      app_id: oneSignalAppId,
+      include_subscription_ids: subscriptionIds,
+      headings: { en: title, pt: title },
+      contents: { en: message, pt: message },
+      chrome_web_icon: iconUrl,
+      firefox_icon: iconUrl,
+    };
+
+    console.log(`[CHECK-LEAD-ROTATION] Sending push to ${subscriptionIds.length} devices: ${title}`);
+
+    const response = await fetch("https://onesignal.com/api/v1/notifications", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Basic ${oneSignalApiKey}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      console.error("[CHECK-LEAD-ROTATION] OneSignal error:", result);
+      return { success: false, error: JSON.stringify(result) };
+    }
+
+    console.log("[CHECK-LEAD-ROTATION] OneSignal success:", result);
+    return { success: true };
+  } catch (error) {
+    console.error("[CHECK-LEAD-ROTATION] Error sending push:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -125,9 +183,9 @@ Deno.serve(async (req) => {
 
     // 3. Check if we hit the limit and notification not already sent
     if (currentCount >= limit && !notificationAlreadySent) {
-      console.log(`[CHECK-LEAD-ROTATION] Limit reached! Sending notification...`);
+      console.log(`[CHECK-LEAD-ROTATION] Limit reached! Sending notification DIRECTLY to OneSignal...`);
 
-      // Mark as notified
+      // Mark as notified FIRST (to prevent duplicate sends)
       await supabase
         .from("lead_rotation_daily_counts")
         .update({ notification_sent: true })
@@ -138,27 +196,20 @@ Deno.serve(async (req) => {
       // Get instance details for the notification
       const instanceDisplay = instance_name || phone_number || instance_id.slice(0, 8);
 
-      // Queue push notification
-      const { error: queueError } = await supabase
-        .from("push_notification_queue")
-        .insert({
-          user_id,
-          subscription_ids: subscriptionIds,
-          title: "🔄 Rotação de Leads",
-          message: `A instância ${instanceDisplay} atingiu o limite de ${limit} leads hoje!`,
-          icon_url: "https://zapdata.com.br/favicon.png",
-          priority: 10,
-        });
+      // SEND DIRECTLY TO ONESIGNAL (no queue, instant delivery)
+      const pushResult = await sendPushNotification(
+        subscriptionIds,
+        "🔄 Rotação de Leads",
+        `A instância ${instanceDisplay} atingiu o limite de ${limit} leads hoje! (${currentCount} leads)`,
+        "https://zapdata.com.br/favicon.png"
+      );
 
-      if (queueError) {
-        console.error("[CHECK-LEAD-ROTATION] Error queuing notification:", queueError);
-        return new Response(
-          JSON.stringify({ error: "Failed to queue notification", details: queueError }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      if (!pushResult.success) {
+        console.error("[CHECK-LEAD-ROTATION] Failed to send push notification:", pushResult.error);
+        // Still return success since we marked as notified to prevent spam
       }
 
-      console.log(`[CHECK-LEAD-ROTATION] Notification queued successfully`);
+      console.log(`[CHECK-LEAD-ROTATION] Push notification sent: ${pushResult.success}`);
       
       return new Response(
         JSON.stringify({ 
@@ -166,6 +217,7 @@ Deno.serve(async (req) => {
           currentCount,
           limit,
           instanceDisplay,
+          pushSent: pushResult.success,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );

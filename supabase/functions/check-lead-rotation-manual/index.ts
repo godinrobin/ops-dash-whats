@@ -9,6 +9,64 @@ interface ManualCheckRequest {
   user_id: string;
 }
 
+/**
+ * Send push notification directly to OneSignal
+ */
+async function sendPushNotification(
+  subscriptionIds: string[],
+  title: string,
+  message: string,
+  iconUrl: string = "https://zapdata.com.br/favicon.png"
+): Promise<{ success: boolean; error?: string }> {
+  const oneSignalAppId = Deno.env.get("ONESIGNAL_APP_ID");
+  const oneSignalApiKey = Deno.env.get("ONESIGNAL_REST_API_KEY");
+
+  if (!oneSignalAppId || !oneSignalApiKey) {
+    console.error("[CHECK-LEAD-ROTATION-MANUAL] OneSignal credentials not configured");
+    return { success: false, error: "OneSignal not configured" };
+  }
+
+  if (!subscriptionIds || subscriptionIds.length === 0) {
+    console.log("[CHECK-LEAD-ROTATION-MANUAL] No subscription IDs to send to");
+    return { success: false, error: "No subscription IDs" };
+  }
+
+  try {
+    const payload = {
+      app_id: oneSignalAppId,
+      include_subscription_ids: subscriptionIds,
+      headings: { en: title, pt: title },
+      contents: { en: message, pt: message },
+      chrome_web_icon: iconUrl,
+      firefox_icon: iconUrl,
+    };
+
+    console.log(`[CHECK-LEAD-ROTATION-MANUAL] Sending push to ${subscriptionIds.length} devices: ${title}`);
+
+    const response = await fetch("https://onesignal.com/api/v1/notifications", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Basic ${oneSignalApiKey}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      console.error("[CHECK-LEAD-ROTATION-MANUAL] OneSignal error:", result);
+      return { success: false, error: JSON.stringify(result) };
+    }
+
+    console.log("[CHECK-LEAD-ROTATION-MANUAL] OneSignal success:", result);
+    return { success: true };
+  } catch (error) {
+    console.error("[CHECK-LEAD-ROTATION-MANUAL] Error sending push:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -150,10 +208,10 @@ Deno.serve(async (req) => {
     const saoPauloTime = new Date(now.getTime() + (utcOffset + saoPauloOffset) * 60000);
     const today = saoPauloTime.toISOString().split('T')[0];
 
-    let notificationsQueued = 0;
+    let notificationsSent = 0;
     const instancesAboveLimit: string[] = [];
 
-    // 4. Check each instance with leads - MANUAL CHECK ALWAYS SENDS NOTIFICATIONS
+    // 4. Check each instance with leads - MANUAL CHECK ALWAYS SENDS NOTIFICATIONS DIRECTLY
     for (const instance of instanceLeadCounts) {
       const currentCount = instance.lead_count;
       const instanceDisplay = instance.instance_name || instance.phone_number || instance.instance_id.slice(0, 8);
@@ -163,19 +221,17 @@ Deno.serve(async (req) => {
       if (currentCount >= limit) {
         instancesAboveLimit.push(`${instanceDisplay} (${currentCount})`);
 
-        // Queue push notification - always send on manual check
-        await supabase
-          .from("push_notification_queue")
-          .insert({
-            user_id,
-            subscription_ids: subscriptionIds,
-            title: "🔄 Rotação de Leads",
-            message: `A instância ${instanceDisplay} atingiu o limite de ${limit} leads hoje! (${currentCount} leads)`,
-            icon_url: "https://zapdata.com.br/favicon.png",
-            priority: 10,
-          });
+        // SEND DIRECTLY TO ONESIGNAL (no queue, instant delivery)
+        const pushResult = await sendPushNotification(
+          subscriptionIds,
+          "🔄 Rotação de Leads",
+          `A instância ${instanceDisplay} atingiu o limite de ${limit} leads hoje! (${currentCount} leads)`,
+          "https://zapdata.com.br/favicon.png"
+        );
 
-        notificationsQueued++;
+        if (pushResult.success) {
+          notificationsSent++;
+        }
 
         // Update the daily count record
         const { data: existing } = await supabase
@@ -207,21 +263,21 @@ Deno.serve(async (req) => {
 
     // Build message
     let message = "";
-    if (notificationsQueued > 0) {
-      message = `${notificationsQueued} instância(s) acima do limite! Notificações enviadas: ${instancesAboveLimit.join(", ")}`;
+    if (notificationsSent > 0) {
+      message = `${notificationsSent} instância(s) acima do limite! Notificações enviadas: ${instancesAboveLimit.join(", ")}`;
     } else if (instanceLeadCounts.length > 0) {
       message = `Nenhuma instância atingiu o limite de ${limit} leads ainda hoje.`;
     } else {
       message = "Nenhum lead registrado hoje.";
     }
 
-    console.log(`[CHECK-LEAD-ROTATION-MANUAL] Done. Notified: ${notificationsQueued}`);
+    console.log(`[CHECK-LEAD-ROTATION-MANUAL] Done. Notified: ${notificationsSent}`);
 
     return new Response(
       JSON.stringify({ 
         message,
         checked: instanceLeadCounts.length,
-        notified: notificationsQueued,
+        notified: notificationsSent,
         instancesAboveLimit,
         limit,
         date: today,
