@@ -295,6 +295,68 @@ serve(async (req) => {
     
     console.log(`[process-delay-queue] Completed: ${processed} processed, ${failed} failed`);
     
+    // === DELAY HEALING: Find active sessions with _pendingDelay.resumeAt already passed ===
+    // This catches cases where the delay job was completed but process-inbox-flow failed to continue
+    console.log("[process-delay-queue] Checking for expired _pendingDelay that need healing...");
+    
+    const delayHealingResult = await supabase
+      .from("inbox_flow_sessions")
+      .select("id, current_node_id, variables")
+      .eq("status", "active")
+      .limit(50);
+    
+    if (delayHealingResult.error) {
+      console.error("[process-delay-queue] Error fetching sessions for delay healing:", delayHealingResult.error);
+    } else if (delayHealingResult.data && delayHealingResult.data.length > 0) {
+      const nowMs = Date.now();
+      let delayHealed = 0;
+      
+      for (const session of delayHealingResult.data) {
+        try {
+          const vars = (session.variables || {}) as Record<string, unknown>;
+          const pendingDelay = vars._pendingDelay as { nodeId?: string; resumeAt?: number } | undefined;
+          
+          if (pendingDelay && pendingDelay.resumeAt && pendingDelay.resumeAt < nowMs) {
+            // Check if there's already a scheduled job for this session
+            const { data: existingJob } = await supabase
+              .from("inbox_flow_delay_jobs")
+              .select("session_id, status")
+              .eq("session_id", session.id)
+              .eq("status", "scheduled")
+              .maybeSingle();
+            
+            if (!existingJob) {
+              const expiredByMs = nowMs - pendingDelay.resumeAt;
+              console.log(`[process-delay-queue] Healing delay for session ${session.id} - expired ${expiredByMs}ms ago`);
+              
+              // Invoke process-inbox-flow to resume from delay
+              const { error: healError } = await supabase.functions.invoke("process-inbox-flow", {
+                body: {
+                  sessionId: session.id,
+                  resumeFromDelay: true,
+                },
+              });
+              
+              if (healError) {
+                console.error(`[process-delay-queue] Error healing delay for session ${session.id}:`, healError);
+              } else {
+                delayHealed++;
+                console.log(`[process-delay-queue] Successfully healed delay for session ${session.id}`);
+              }
+            }
+          }
+        } catch (delayHealErr) {
+          console.error(`[process-delay-queue] Unexpected error healing delay for session ${session.id}:`, delayHealErr);
+        }
+      }
+      
+      if (delayHealed > 0) {
+        console.log(`[process-delay-queue] Healed ${delayHealed} sessions with expired _pendingDelay`);
+      } else {
+        console.log("[process-delay-queue] No expired _pendingDelay sessions need healing");
+      }
+    }
+    
     // === TIMEOUT HEALING: Find sessions with expired timeout that still need processing ===
     // This catches cases where timeout job was marked 'done' but flow didn't continue
     console.log("[process-delay-queue] Checking for expired timeouts that need healing...");
