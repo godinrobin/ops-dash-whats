@@ -127,12 +127,38 @@ serve(async (req) => {
         const hasPaymentNoResponseDelay = sessionVars[paymentNoResponseDelayKey] !== undefined;
         
         console.log(`[process-delay-queue] Session ${job.session_id}: isTimeoutJob=${isTimeoutJob}, isWaitingForInput=${isWaitingForInput}, isDelayNode=${isDelayNode}, isPaymentIdentifier=${isPaymentIdentifier}, hasValidPendingDelay=${hasValidPendingDelay}, hasPendingDelayNotReady=${hasPendingDelayNotReady}, hasPaymentNoResponseDelay=${hasPaymentNoResponseDelay}, hasPauseScheduled=${hasPauseScheduled}, pauseReady=${pauseReady}, nodeType=${currentNode?.type}`);
-        
+
+        const rescheduleIfLocked = async (invokeResult: unknown) => {
+          const isLockedSkip =
+            !!invokeResult &&
+            typeof invokeResult === 'object' &&
+            (invokeResult as any).skipped === true &&
+            (invokeResult as any).reason === 'session_locked';
+
+          if (!isLockedSkip) return false;
+
+          const retryAt = new Date(Date.now() + 15_000).toISOString();
+          console.log(
+            `[process-delay-queue] Session ${job.session_id} still locked; rescheduling job to ${retryAt}`
+          );
+
+          await supabase
+            .from('inbox_flow_delay_jobs')
+            .update({
+              status: 'scheduled',
+              run_at: retryAt,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('session_id', job.session_id);
+
+          return true;
+        };
+
         // IMPORTANT: If there's a pending delay that hasn't expired yet, reschedule the job!
         if (hasPendingDelayNotReady) {
           const remainingMs = pendingDelay!.resumeAt - Date.now();
           console.log(`[process-delay-queue] Session ${job.session_id} has pending delay not ready yet, ${remainingMs}ms remaining. Rescheduling job.`);
-          
+
           await supabase
             .from("inbox_flow_delay_jobs")
             .update({ 
@@ -141,22 +167,22 @@ serve(async (req) => {
               updated_at: new Date().toISOString()
             })
             .eq("session_id", job.session_id);
-          
+
           console.log(`[process-delay-queue] Job rescheduled to ${new Date(pendingDelay!.resumeAt).toISOString()}`);
           continue; // Skip to next job
         }
-        
+
         // If this is a timeout job and session is still waiting for input, trigger timeout
         if (isTimeoutJob && isWaitingForInput) {
           console.log(`[process-delay-queue] Timeout expired for session ${job.session_id}, continuing flow`);
-          
+
           const { data: invokeResult, error: invokeError } = await supabase.functions.invoke("process-inbox-flow", {
             body: {
               sessionId: job.session_id,
               resumeFromTimeout: true,
             },
           });
-          
+
           if (invokeError) {
             console.error(`[process-delay-queue] Error invoking process-inbox-flow for timeout ${job.session_id}:`, invokeError);
             const newStatus = job.attempts >= 2 ? "failed" : "scheduled";
@@ -171,19 +197,23 @@ serve(async (req) => {
             failed++;
             continue;
           }
-          
+
+          if (await rescheduleIfLocked(invokeResult)) {
+            continue;
+          }
+
           console.log(`[process-delay-queue] Timeout job result for ${job.session_id}:`, invokeResult);
         } else if (isTimeoutJob && isPaymentIdentifier && hasPaymentNoResponseDelay) {
           // PaymentIdentifier "no response" timeout
           console.log(`[process-delay-queue] PaymentIdentifier no-response timeout for session ${job.session_id}`);
-          
+
           const { data: invokeResult, error: invokeError } = await supabase.functions.invoke("process-inbox-flow", {
             body: {
               sessionId: job.session_id,
               resumeFromTimeout: true,
             },
           });
-          
+
           if (invokeError) {
             console.error(`[process-delay-queue] Error invoking process-inbox-flow for paymentIdentifier timeout ${job.session_id}:`, invokeError);
             const newStatus = job.attempts >= 2 ? "failed" : "scheduled";
@@ -198,22 +228,26 @@ serve(async (req) => {
             failed++;
             continue;
           }
-          
+
+          if (await rescheduleIfLocked(invokeResult)) {
+            continue;
+          }
+
           console.log(`[process-delay-queue] PaymentIdentifier timeout job result for ${job.session_id}:`, invokeResult);
         } else if (pauseReady) {
           // This is a pause schedule job - resume flow after pause ended
           console.log(`[process-delay-queue] Pause schedule completed for session ${job.session_id}, resuming flow`);
-          
+
           const { data: invokeResult, error: invokeError } = await supabase.functions.invoke("process-inbox-flow", {
             body: {
               sessionId: job.session_id,
               resumeFromDelay: true, // Reuse delay resume logic
             },
           });
-          
+
           if (invokeError) {
             console.error(`[process-delay-queue] Error invoking process-inbox-flow for pause resume ${job.session_id}:`, invokeError);
-            
+
             const newStatus = job.attempts >= 2 ? "failed" : "scheduled";
             await supabase
               .from("inbox_flow_delay_jobs")
@@ -223,26 +257,30 @@ serve(async (req) => {
                 updated_at: new Date().toISOString()
               })
               .eq("session_id", job.session_id);
-            
+
             failed++;
             continue;
           }
-          
+
+          if (await rescheduleIfLocked(invokeResult)) {
+            continue;
+          }
+
           console.log(`[process-delay-queue] Pause resume job result for ${job.session_id}:`, invokeResult);
         } else if (hasValidPendingDelay || isDelayNode) {
           // This is a delay job (either has pending delay or current node is delay)
           console.log(`[process-delay-queue] Delay completed for session ${job.session_id}, resuming flow`);
-          
+
           const { data: invokeResult, error: invokeError } = await supabase.functions.invoke("process-inbox-flow", {
             body: {
               sessionId: job.session_id,
               resumeFromDelay: true,
             },
           });
-          
+
           if (invokeError) {
             console.error(`[process-delay-queue] Error invoking process-inbox-flow for delay ${job.session_id}:`, invokeError);
-            
+
             // Mark as failed if max attempts reached, otherwise back to scheduled
             const newStatus = job.attempts >= 2 ? "failed" : "scheduled";
             await supabase
@@ -253,11 +291,15 @@ serve(async (req) => {
                 updated_at: new Date().toISOString()
               })
               .eq("session_id", job.session_id);
-            
+
             failed++;
             continue;
           }
-          
+
+          if (await rescheduleIfLocked(invokeResult)) {
+            continue;
+          }
+
           console.log(`[process-delay-queue] Delay job result for ${job.session_id}:`, invokeResult);
         } else {
           console.log(`[process-delay-queue] Job ${job.session_id} doesn't match timeout or delay criteria, marking as done (node: ${currentNode?.type})`);
