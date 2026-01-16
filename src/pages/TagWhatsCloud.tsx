@@ -444,137 +444,6 @@ const TagWhatsCloud = () => {
             </CardContent>
           </Card>
 
-          {/* Auto Charge Section */}
-          <Card className="mb-6 border-lime-500/30 bg-lime-500/5">
-            <CardContent className="p-4">
-              <div className="flex items-start gap-3">
-                <div className="p-2 bg-lime-500/20 rounded-full">
-                  <Banknote className="h-4 w-4 text-lime-500" />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <h4 className="font-semibold text-lime-400">Envie Cobrança também automático</h4>
-                      <p className="text-sm text-muted-foreground">
-                        Envia uma cobrança automática para cada nova venda detectada
-                      </p>
-                    </div>
-                    <ColoredSwitch 
-                      checked={autoChargeEnabled} 
-                      onCheckedChange={setAutoChargeEnabled}
-                    />
-                  </div>
-                  
-                  {autoChargeEnabled && (
-                    <div className="mt-4 space-y-4 border-t border-lime-500/20 pt-4">
-                      {/* Charge Fields */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label className="text-sm">Valor (R$) *</Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="0.01"
-                            placeholder="25,00"
-                            value={chargeAmount || ''}
-                            onChange={(e) => setChargeAmount(parseFloat(e.target.value) || undefined)}
-                            className="bg-background"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-sm">Nome do Item/Produto *</Label>
-                          <Input
-                            placeholder="Ex: Sapatinho de Croche"
-                            value={chargeItemName}
-                            onChange={(e) => setChargeItemName(e.target.value)}
-                            className="bg-background"
-                          />
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label className="text-sm">Descrição (opcional)</Label>
-                        <Textarea
-                          placeholder="Descrição da cobrança..."
-                          value={chargeDescription}
-                          onChange={(e) => setChargeDescription(e.target.value)}
-                          rows={2}
-                          className="bg-background"
-                        />
-                      </div>
-                      
-                      <div className="border-t border-lime-500/20 pt-4">
-                        <Label className="text-xs text-muted-foreground uppercase mb-3 block">Dados PIX para Recebimento *</Label>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label className="text-sm">Tipo da Chave PIX</Label>
-                            <Select value={chargePixType} onValueChange={setChargePixType}>
-                              <SelectTrigger className="bg-background">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="CPF">CPF</SelectItem>
-                                <SelectItem value="CNPJ">CNPJ</SelectItem>
-                                <SelectItem value="PHONE">Telefone</SelectItem>
-                                <SelectItem value="EMAIL">E-mail</SelectItem>
-                                <SelectItem value="EVP">Chave Aleatória (EVP)</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-2">
-                            <Label className="text-sm">Chave PIX *</Label>
-                            <Input
-                              placeholder="Sua chave PIX..."
-                              value={chargePixKey}
-                              onChange={(e) => setChargePixKey(e.target.value)}
-                              className="bg-background"
-                            />
-                          </div>
-                        </div>
-                        
-                        <div className="mt-4 space-y-2">
-                          <Label className="text-sm">Nome do Recebedor *</Label>
-                          <Input
-                            placeholder="Nome exibido para o cliente"
-                            value={chargePixName}
-                            onChange={(e) => setChargePixName(e.target.value)}
-                            className="bg-background"
-                          />
-                        </div>
-                      </div>
-                      
-                      {/* Toggle for disabling labels */}
-                      <div className="border-t border-lime-500/20 pt-4 mt-4">
-                        <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                          <div>
-                            <Label className="text-sm font-medium">Desativar marcação de etiquetas</Label>
-                            <p className="text-xs text-muted-foreground">
-                              Enviar apenas cobranças sem aplicar a etiqueta "Pago"
-                            </p>
-                          </div>
-                          <ColoredSwitch 
-                            checked={disableLabelOnCharge} 
-                            onCheckedChange={setDisableLabelOnCharge}
-                          />
-                        </div>
-                        
-                        {disableLabelOnCharge && (
-                          <div className="mt-3 flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-                            <p className="text-xs text-amber-400">
-                              <strong>Atenção:</strong> Apenas as cobranças serão enviadas. Para marcar como pago, a etiqueta terá que ser aplicada manualmente no WhatsApp Business.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Add Number */}
           <Card className="mb-6 border-dashed border-2 border-emerald-500/30 bg-emerald-500/5">
             <CardContent className="p-4">
@@ -734,7 +603,7 @@ const TagWhatsCloud = () => {
 
       {/* Config Modal */}
       <Dialog open={configModalOpen} onOpenChange={setConfigModalOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Configurar Tag Whats</DialogTitle>
             <DialogDescription>
@@ -769,12 +638,127 @@ const TagWhatsCloud = () => {
               </div>
             </div>
 
+            {/* Auto Charge Section */}
+            <div className="border-t pt-4">
+              <div className="flex items-center justify-between p-3 bg-lime-500/10 border border-lime-500/30 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <Banknote className="h-5 w-5 text-lime-500" />
+                  <div>
+                    <Label>Enviar Cobrança Automática</Label>
+                    <p className="text-xs text-muted-foreground">Envia cobrança a cada venda detectada</p>
+                  </div>
+                </div>
+                <ColoredSwitch checked={autoChargeEnabled} onCheckedChange={setAutoChargeEnabled} />
+              </div>
+              
+              {autoChargeEnabled && (
+                <div className="mt-4 space-y-4 p-4 bg-lime-500/5 border border-lime-500/20 rounded-lg">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-sm">Valor (R$) *</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        placeholder="25,00"
+                        value={chargeAmount || ''}
+                        onChange={(e) => setChargeAmount(parseFloat(e.target.value) || undefined)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm">Nome do Item/Produto *</Label>
+                      <Input
+                        placeholder="Ex: Sapatinho de Croche"
+                        value={chargeItemName}
+                        onChange={(e) => setChargeItemName(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-sm">Descrição (opcional)</Label>
+                    <Textarea
+                      placeholder="Descrição da cobrança..."
+                      value={chargeDescription}
+                      onChange={(e) => setChargeDescription(e.target.value)}
+                      rows={2}
+                    />
+                  </div>
+                  
+                  <div className="border-t border-lime-500/20 pt-4">
+                    <Label className="text-xs text-muted-foreground uppercase mb-3 block">Dados PIX para Recebimento *</Label>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-sm">Tipo da Chave PIX</Label>
+                        <Select value={chargePixType} onValueChange={setChargePixType}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="CPF">CPF</SelectItem>
+                            <SelectItem value="CNPJ">CNPJ</SelectItem>
+                            <SelectItem value="PHONE">Telefone</SelectItem>
+                            <SelectItem value="EMAIL">E-mail</SelectItem>
+                            <SelectItem value="EVP">Chave Aleatória (EVP)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm">Chave PIX *</Label>
+                        <Input
+                          placeholder="Sua chave PIX..."
+                          value={chargePixKey}
+                          onChange={(e) => setChargePixKey(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4 space-y-2">
+                      <Label className="text-sm">Nome do Recebedor *</Label>
+                      <Input
+                        placeholder="Nome exibido para o cliente"
+                        value={chargePixName}
+                        onChange={(e) => setChargePixName(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Toggle for disabling labels */}
+                  <div className="border-t border-lime-500/20 pt-4">
+                    <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                      <div>
+                        <Label className="text-sm font-medium">Desativar marcação de etiquetas</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Enviar apenas cobranças sem aplicar a etiqueta "Pago"
+                        </p>
+                      </div>
+                      <ColoredSwitch 
+                        checked={disableLabelOnCharge} 
+                        onCheckedChange={setDisableLabelOnCharge}
+                      />
+                    </div>
+                    
+                    {disableLabelOnCharge && (
+                      <div className="mt-3 flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                        <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                        <p className="text-xs text-amber-400">
+                          <strong>Atenção:</strong> Apenas as cobranças serão enviadas. Para marcar como pago, a etiqueta terá que ser aplicada manualmente no WhatsApp Business.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4">
               <h4 className="font-medium text-emerald-400 mb-2">Como funciona:</h4>
               <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
                 <li>O sistema monitora mensagens recebidas</li>
                 <li>IA analisa imagens e PDFs automaticamente</li>
                 <li>Se for um comprovante PIX, marca como "Pago"</li>
+                {autoChargeEnabled && <li>Envia automaticamente uma cobrança para o cliente</li>}
                 <li>A etiqueta aparece no WhatsApp Business</li>
               </ol>
             </div>
@@ -786,7 +770,7 @@ const TagWhatsCloud = () => {
             </Button>
             <Button 
               onClick={handleSaveConfig} 
-              disabled={saving || (!filterImages && !filterPdfs)}
+              disabled={saving || (!filterImages && !filterPdfs) || (autoChargeEnabled && (!chargeAmount || !chargeItemName || !chargePixKey || !chargePixName))}
               className="bg-emerald-600 hover:bg-emerald-700"
             >
               {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
