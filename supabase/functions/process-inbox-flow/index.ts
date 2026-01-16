@@ -68,24 +68,17 @@ serve(async (req) => {
     }
 
     // === LOCK ACQUISITION ===
-    // Check if session is being processed by another instance
+    // IMPORTANT: We must acquire the session lock ATOMICALLY to prevent races.
+    // The previous implementation only *checked* `session.processing` and then updated,
+    // which allows two concurrent executions to both see `processing=false` and both send messages.
+    const snapshotLockAge = session.processing_started_at
+      ? Date.now() - new Date(session.processing_started_at).getTime()
+      : 0;
+
     if (session.processing) {
-      const lockAge = session.processing_started_at 
-        ? Date.now() - new Date(session.processing_started_at).getTime() 
-        : 0;
-      
-      if (lockAge < LOCK_TIMEOUT_MS) {
-        console.log(`[${runId}] Session ${sessionId} is locked by another process (lock age: ${lockAge}ms), skipping`);
-        return new Response(JSON.stringify({ 
-          success: true, 
-          skipped: true, 
-          reason: 'session_locked',
-          lockAge 
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      console.log(`[${runId}] Session ${sessionId} has stale lock (${lockAge}ms), taking over`);
+      console.log(
+        `[${runId}] Session ${sessionId} currently marked processing=true (snapshot lock age: ${snapshotLockAge}ms). Will attempt atomic lock acquisition...`
+      );
     }
 
     // === GET USER-SPECIFIC API CONFIGURATION ===
@@ -396,19 +389,84 @@ serve(async (req) => {
     }
 
     // Acquire lock (with checkpoint if userInput was provided)
-    const { error: lockError } = await supabaseClient
+    // Atomic lock acquisition to prevent concurrent executions from sending duplicates.
+    const nowIso = new Date().toISOString();
+    const staleBeforeIso = new Date(Date.now() - LOCK_TIMEOUT_MS).toISOString();
+
+    // Ensure our lock timestamp matches what we use in conditional updates
+    lockUpdate.processing_started_at = nowIso;
+
+    let lockAcquired = false;
+    let lockAcquiredReason: 'fresh' | 'stale_takeover' = 'fresh';
+
+    // 1) Try to acquire a fresh lock (processing=false -> true)
+    const { data: freshLockRows, error: freshLockError } = await supabaseClient
       .from('inbox_flow_sessions')
       .update(lockUpdate)
-      .eq('id', sessionId);
-    
-    if (lockError) {
-      console.error(`[${runId}] Failed to acquire lock:`, lockError);
+      .eq('id', sessionId)
+      .eq('processing', false)
+      .select('id');
+
+    if (freshLockError) {
+      console.error(`[${runId}] Failed to acquire lock (fresh):`, freshLockError);
       return new Response(JSON.stringify({ error: 'Failed to acquire lock' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    console.log(`[${runId}] Lock acquired for session ${sessionId}`);
+
+    if (Array.isArray(freshLockRows) && freshLockRows.length > 0) {
+      lockAcquired = true;
+    }
+
+    // 2) If fresh lock failed, try to take over a stale lock
+    if (!lockAcquired) {
+      const { data: staleLockRows, error: staleLockError } = await supabaseClient
+        .from('inbox_flow_sessions')
+        .update(lockUpdate)
+        .eq('id', sessionId)
+        .eq('processing', true)
+        .lt('processing_started_at', staleBeforeIso)
+        .select('id');
+
+      if (staleLockError) {
+        console.error(`[${runId}] Failed to acquire lock (stale takeover):`, staleLockError);
+        return new Response(JSON.stringify({ error: 'Failed to acquire lock' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (Array.isArray(staleLockRows) && staleLockRows.length > 0) {
+        lockAcquired = true;
+        lockAcquiredReason = 'stale_takeover';
+      }
+    }
+
+    // 3) If still not acquired, session is currently being processed by another execution.
+    if (!lockAcquired) {
+      const lockAge = session.processing_started_at
+        ? Date.now() - new Date(session.processing_started_at).getTime()
+        : undefined;
+
+      console.log(
+        `[${runId}] Session ${sessionId} lock not acquired (another execution is running). lockAge=${lockAge ?? 'unknown'}ms`
+      );
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          skipped: true,
+          reason: 'session_locked',
+          lockAge,
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    console.log(`[${runId}] Lock acquired for session ${sessionId} (${lockAcquiredReason})`);
 
     // Helper function to release lock
     const releaseLock = async () => {
