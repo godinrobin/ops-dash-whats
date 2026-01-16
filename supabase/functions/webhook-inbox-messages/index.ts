@@ -41,6 +41,58 @@ const logIngestEvent = async (
   }
 };
 
+// Helper function to atomically acquire a flow session lock
+// Returns the session id if lock was acquired, null otherwise
+const tryAcquireSessionLock = async (
+  supabaseClient: any,
+  sessionId: string,
+  lockTimeoutMs: number = 30000
+): Promise<{ acquired: boolean; reason?: string }> => {
+  const nowIso = new Date().toISOString();
+  const staleBeforeIso = new Date(Date.now() - lockTimeoutMs).toISOString();
+
+  // 1) Try to acquire a fresh lock (processing=false -> true)
+  const { data: freshLockRows, error: freshError } = await supabaseClient
+    .from('inbox_flow_sessions')
+    .update({ processing: true, processing_started_at: nowIso })
+    .eq('id', sessionId)
+    .eq('processing', false)
+    .select('id');
+
+  if (freshError) {
+    console.error(`[LOCK] Error acquiring fresh lock for session ${sessionId}:`, freshError);
+    return { acquired: false, reason: 'error_fresh' };
+  }
+
+  if (Array.isArray(freshLockRows) && freshLockRows.length > 0) {
+    console.log(`[LOCK] Acquired fresh lock for session ${sessionId}`);
+    return { acquired: true };
+  }
+
+  // 2) Try to take over a stale lock
+  const { data: staleLockRows, error: staleError } = await supabaseClient
+    .from('inbox_flow_sessions')
+    .update({ processing: true, processing_started_at: nowIso })
+    .eq('id', sessionId)
+    .eq('processing', true)
+    .lt('processing_started_at', staleBeforeIso)
+    .select('id');
+
+  if (staleError) {
+    console.error(`[LOCK] Error acquiring stale lock for session ${sessionId}:`, staleError);
+    return { acquired: false, reason: 'error_stale' };
+  }
+
+  if (Array.isArray(staleLockRows) && staleLockRows.length > 0) {
+    console.log(`[LOCK] Acquired stale lock (takeover) for session ${sessionId}`);
+    return { acquired: true };
+  }
+
+  // Lock not acquired - another execution is running
+  console.log(`[LOCK] Could not acquire lock for session ${sessionId} - another execution in progress`);
+  return { acquired: false, reason: 'already_locked' };
+};
+
 // Helper function to log webhook diagnostics
 const logWebhookDiagnostic = async (
   supabaseClient: any,
@@ -2950,22 +3002,7 @@ serve(async (req) => {
         const flowNodes = (activeSession.flow?.nodes || []) as Array<{ id: string; type: string; data: Record<string, unknown> }>;
         const currentNode = flowNodes.find((n: { id: string }) => n.id === activeSession.current_node_id);
         
-        // Check if session is currently being processed (locked)
-        if (activeSession.processing) {
-          const lockAge = activeSession.processing_started_at 
-            ? Date.now() - new Date(activeSession.processing_started_at).getTime() 
-            : 0;
-          
-          // If lock is not stale (less than 60 seconds), skip processing
-          if (lockAge < 60000) {
-            console.log(`Session ${activeSession.id} is locked (${lockAge}ms), skipping to prevent duplicate processing`);
-            return new Response(JSON.stringify({ success: true, skipped: true, reason: 'session_locked' }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-          }
-          console.log(`Session ${activeSession.id} has stale lock (${lockAge}ms), proceeding`);
-        }
-        
+        // ATOMIC LOCK ACQUISITION - Prevents race conditions where multiple webhooks trigger process-inbox-flow
         // Check if the current node is waiting for input
         if (currentNode && (currentNode.type === 'waitInput' || currentNode.type === 'menu')) {
           console.log(`Found active session ${activeSession.id} waiting for input at node ${currentNode.id}`);
@@ -2985,6 +3022,15 @@ serve(async (req) => {
           }
           
           console.log(`[WAIT_INPUT] Valid input received: ${messageType} with content: "${userInputValue?.substring(0, 50)}"`);
+          
+          // ATOMIC: Try to acquire lock before calling process-inbox-flow
+          const lockResult = await tryAcquireSessionLock(supabaseClient, activeSession.id, 30000);
+          if (!lockResult.acquired) {
+            console.log(`[WAIT_INPUT] Could not acquire lock for session ${activeSession.id}, skipping (reason: ${lockResult.reason})`);
+            return new Response(JSON.stringify({ success: true, skipped: true, reason: 'session_locked_atomic' }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
           
           // Cancel any pending timeout job for this session
           const { error: cancelError } = await supabaseClient
@@ -3044,6 +3090,15 @@ serve(async (req) => {
           // For paymentIdentifier nodes: Accept ANY message type (text, audio, image, document)
           // The flow processor will determine what counts as an attempt vs valid payment proof
           console.log(`[PAYMENT_IDENTIFIER] Message received: ${messageType}`);
+          
+          // ATOMIC: Try to acquire lock before calling process-inbox-flow
+          const lockResult = await tryAcquireSessionLock(supabaseClient, activeSession.id, 30000);
+          if (!lockResult.acquired) {
+            console.log(`[PAYMENT_IDENTIFIER] Could not acquire lock for session ${activeSession.id}, skipping (reason: ${lockResult.reason})`);
+            return new Response(JSON.stringify({ success: true, skipped: true, reason: 'session_locked_atomic' }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
           
           // Process the message through the flow
           try {
