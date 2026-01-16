@@ -1930,9 +1930,11 @@ Regras RIGOROSAS:
               processedActions.push(`Randomizer: split ${selectedSplitId}`);
               
               // Find edge with matching sourceHandle
+              // IMPORTANT: The frontend uses "split-{id}" format for handle IDs
+              const expectedHandle = `split-${selectedSplitId}`;
               const randomEdge = edges.find(e => 
                 e.source === currentNodeId && 
-                e.sourceHandle === selectedSplitId
+                e.sourceHandle === expectedHandle
               );
               
               if (randomEdge) {
