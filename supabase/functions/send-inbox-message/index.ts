@@ -90,6 +90,43 @@ async function persistMediaToStorage(
   }
 }
 
+/**
+ * Downloads a file from URL and converts to base64 data URI
+ * This is needed because UazAPI cannot fetch from Supabase Storage directly (HTTP/2 protocol issues)
+ */
+async function urlToBase64DataUri(url: string): Promise<string | null> {
+  try {
+    console.log(`[BASE64] Downloading file from: ${url.substring(0, 100)}...`);
+    
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error(`[BASE64] Failed to download file: ${response.status} ${response.statusText}`);
+      return null;
+    }
+    
+    const contentType = response.headers.get('content-type') || 'application/octet-stream';
+    const arrayBuffer = await response.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    
+    // Convert to base64
+    let binary = '';
+    const chunkSize = 8192; // Process in chunks to avoid call stack issues
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.slice(i, i + chunkSize);
+      binary += String.fromCharCode(...chunk);
+    }
+    const base64 = btoa(binary);
+    
+    const dataUri = `data:${contentType};base64,${base64}`;
+    console.log(`[BASE64] Converted to data URI (${uint8Array.length} bytes, ${contentType})`);
+    
+    return dataUri;
+  } catch (error) {
+    console.error(`[BASE64] Error converting URL to base64:`, error);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -381,7 +418,20 @@ serve(async (req) => {
     }
 
     // Use the persisted URL for sending
-    const urlToSend = persistedMediaUrl || mediaUrl;
+    let urlToSend = persistedMediaUrl || mediaUrl;
+
+    // For UazAPI with media, convert URL to base64 to avoid HTTP/2 fetch issues
+    if (apiProvider === 'uazapi' && urlToSend && messageType !== 'text') {
+      console.log(`[UAZAPI] Converting media URL to base64 for reliable delivery...`);
+      const base64Uri = await urlToBase64DataUri(urlToSend);
+      if (base64Uri) {
+        urlToSend = base64Uri;
+        console.log(`[UAZAPI] Successfully converted to base64 data URI`);
+      } else {
+        console.warn(`[UAZAPI] Failed to convert to base64, falling back to URL`);
+        // Keep original URL as fallback
+      }
+    }
 
     let apiEndpoint = '';
     let apiBody: Record<string, unknown> = {};
