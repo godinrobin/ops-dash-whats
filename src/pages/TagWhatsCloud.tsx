@@ -518,13 +518,15 @@ const TagWhatsCloud = () => {
                     />
                   </div>
                   
-                  {/* Warning - always visible */}
-                  <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg mb-4">
-                    <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
-                    <p className="text-xs text-amber-400">
-                      <strong>Atenção:</strong> As cobranças serão enviadas automaticamente após a venda, porém você tem que alterar o status como pago para enviar para meta.
-                    </p>
-                  </div>
+                  {/* Warning - visible when not collapsed */}
+                  {!chargeSectionCollapsed && (
+                    <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg mb-4">
+                      <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                      <p className="text-xs text-amber-400">
+                        <strong>Atenção:</strong> As cobranças serão enviadas automaticamente após a venda, porém você tem que alterar o status como pago para enviar para meta.
+                      </p>
+                    </div>
+                  )}
                   
                   {!chargeSectionCollapsed && (
                     <p className="text-sm text-muted-foreground mb-4">
