@@ -1,8 +1,12 @@
 // Supabase Edge Function: trigger-inbox-flow
 // Creates (or resets) an inbox flow session and immediately processes it.
+// OPTIMIZED: Uses EdgeRuntime.waitUntil for non-blocking flow execution.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.78.0";
+
+// Declare EdgeRuntime for Supabase Edge Functions
+declare const EdgeRuntime: { waitUntil: (promise: Promise<unknown>) => void } | undefined;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -164,6 +168,35 @@ serve(async (req) => {
       }
     }
 
+    // If the SAME flow is being triggered again (restart), preserve _sent_node_ids to prevent duplicates
+    // but reset the rest of the state
+    let variablesToUse = baseVariables;
+    
+    // Check if there's an existing session for this flow-contact pair
+    const { data: existingSession } = await serviceClient
+      .from("inbox_flow_sessions")
+      .select("id, variables, status")
+      .eq("flow_id", flowId)
+      .eq("contact_id", contactId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    
+    // If restarting the same flow that was already active, DON'T reset _sent_node_ids
+    // This prevents re-sending PDFs and other media when manually triggering
+    if (existingSession && existingSession.status === "active") {
+      const existingVars = (existingSession.variables || {}) as Record<string, unknown>;
+      const existingSentNodeIds = existingVars._sent_node_ids as string[] | undefined;
+      
+      if (existingSentNodeIds && existingSentNodeIds.length > 0) {
+        console.log(`[${runId}] Preserving ${existingSentNodeIds.length} sent_node_ids from existing active session`);
+        // Keep the sent node IDs but reset everything else
+        variablesToUse = {
+          ...baseVariables,
+          _sent_node_ids: existingSentNodeIds,
+        };
+      }
+    }
+
     // IMPORTANT: The DB has a unique constraint for (flow_id, contact_id).
     // So we must UPSERT (create or restart) the single session for this pair.
     const { data: sessionRow, error: sessionError } = await serviceClient
@@ -175,7 +208,7 @@ serve(async (req) => {
           instance_id: contact.instance_id,
           user_id: user.id,
           current_node_id: startNodeId,
-          variables: baseVariables,
+          variables: variablesToUse,
           status: "active",
           started_at: nowIso,
           last_interaction: nowIso,
@@ -213,17 +246,34 @@ serve(async (req) => {
       return jsonResponse({ error: "Failed to create flow session" }, 500);
     }
 
-    // Process flow
-    const { error: invokeError } = await serviceClient.functions.invoke("process-inbox-flow", {
-      body: { sessionId: sessionIdToRun },
-    });
+    // OPTIMIZATION: Use EdgeRuntime.waitUntil to process flow asynchronously
+    // This returns immediately to the user while the flow continues processing in the background
+    const processFlowPromise = (async () => {
+      try {
+        const { error: invokeError } = await serviceClient.functions.invoke("process-inbox-flow", {
+          body: { sessionId: sessionIdToRun },
+        });
 
-    if (invokeError) {
-      console.error(`[${runId}] Invoke process-inbox-flow error:`, invokeError);
-      return jsonResponse({ error: "Failed to execute flow" }, 500);
+        if (invokeError) {
+          console.error(`[${runId}] Async invoke process-inbox-flow error:`, invokeError);
+        } else {
+          console.log(`[${runId}] Flow processing completed successfully`);
+        }
+      } catch (err) {
+        console.error(`[${runId}] Async flow processing exception:`, err);
+      }
+    })();
+
+    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
+      // Use waitUntil for non-blocking execution - response returns immediately
+      EdgeRuntime.waitUntil(processFlowPromise);
+      console.log(`[${runId}] Triggered flow (async via waitUntil)`, { flowId, contactId, sessionId: sessionIdToRun });
+    } else {
+      // Fallback: wait for the flow to complete (older behavior)
+      console.log(`[${runId}] EdgeRuntime.waitUntil not available, falling back to sync execution`);
+      await processFlowPromise;
+      console.log(`[${runId}] Triggered flow (sync fallback)`, { flowId, contactId, sessionId: sessionIdToRun });
     }
-
-    console.log(`[${runId}] Triggered flow`, { flowId, contactId, sessionId: sessionIdToRun });
 
     return jsonResponse({ ok: true, sessionId: sessionIdToRun, flowName: flow.name });
   } catch (e) {
