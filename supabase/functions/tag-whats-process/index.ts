@@ -538,7 +538,13 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
       }
       
       if (!alreadyHasLabel) {
-        console.log("[TAG-WHATS] First time - applying label...");
+        // Check if we should skip label application due to disable_label_on_charge
+        const shouldSkipLabelApplication = config.disable_label_on_charge && config.auto_charge_enabled;
+        
+        if (shouldSkipLabelApplication) {
+          console.log("[TAG-WHATS] Skipping label application due to disable_label_on_charge setting");
+        } else {
+          console.log("[TAG-WHATS] First time - applying label...");
 
         // First, get the "Pago" label id (config can get stale if labels are recreated)
         const fetchPagoLabelIdByName = async (): Promise<string | null> => {
@@ -752,8 +758,82 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
             errorMessage = "No 'Pago' label configured - create it in WhatsApp Business";
           }
         }
+        } // Close else (not shouldSkipLabelApplication)
       } // Close !alreadyHasLabel
     } // Close isPixPayment
+
+    // Auto Charge Logic - Send payment request if enabled
+    let chargeSent = false;
+    let chargeError: string | null = null;
+
+    // Check if disable_label_on_charge is true - if so, we still detect PIX but don't apply labels
+    const shouldSkipLabel = config.disable_label_on_charge && config.auto_charge_enabled;
+    if (shouldSkipLabel && isPixPayment && !alreadyHasLabel) {
+      console.log("[TAG-WHATS] disable_label_on_charge is enabled - skipping label but will send charge");
+      // Reset labelApplied since we're skipping it
+      labelApplied = false;
+    }
+
+    if (isPixPayment && config.auto_charge_enabled && !alreadyHasLabel) {
+      console.log("[TAG-WHATS] ====== STARTING AUTO CHARGE ======");
+      console.log("[TAG-WHATS] Charge config:", {
+        auto_charge_enabled: config.auto_charge_enabled,
+        charge_amount: config.charge_amount,
+        charge_item_name: config.charge_item_name,
+        charge_pix_key: config.charge_pix_key ? `${config.charge_pix_key.substring(0, 4)}...` : null,
+        disable_label_on_charge: config.disable_label_on_charge,
+      });
+
+      // Validate charge configuration
+      if (!config.charge_amount || config.charge_amount <= 0) {
+        console.log("[TAG-WHATS] Charge skipped: invalid amount");
+        chargeError = "Valor inválido";
+      } else if (!config.charge_item_name) {
+        console.log("[TAG-WHATS] Charge skipped: missing item name");
+        chargeError = "Nome do item obrigatório";
+      } else if (!config.charge_pix_key) {
+        console.log("[TAG-WHATS] Charge skipped: missing PIX key");
+        chargeError = "Chave PIX obrigatória";
+      } else if (!config.charge_pix_name) {
+        console.log("[TAG-WHATS] Charge skipped: missing PIX name");
+        chargeError = "Nome do recebedor obrigatório";
+      } else {
+        try {
+          console.log(`[TAG-WHATS] Sending charge: amount=${config.charge_amount}, item=${config.charge_item_name}`);
+          
+          const chargeResponse = await fetch(`${uazapiBaseUrl}/send/request-payment`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              token: uazapiToken,
+            },
+            body: JSON.stringify({
+              number: phone.replace(/\D/g, ""),
+              amount: config.charge_amount,
+              text: config.charge_description || "",
+              itemName: config.charge_item_name,
+              pixKey: config.charge_pix_key,
+              pixType: config.charge_pix_type || "EVP",
+              pixName: config.charge_pix_name,
+            }),
+          });
+
+          const chargeResult = await chargeResponse.json();
+          console.log("[TAG-WHATS] Charge response:", JSON.stringify(chargeResult));
+
+          if (chargeResponse.ok && (chargeResult.status === "PENDING" || chargeResult.messageid || chargeResult.success !== false)) {
+            chargeSent = true;
+            console.log("[TAG-WHATS] Charge sent successfully!");
+          } else {
+            console.error("[TAG-WHATS] Charge error:", chargeResult);
+            chargeError = chargeResult.error || chargeResult.message || "Erro desconhecido";
+          }
+        } catch (err) {
+          console.error("[TAG-WHATS] Charge exception:", err);
+          chargeError = err instanceof Error ? err.message : "Erro ao enviar cobrança";
+        }
+      }
+    }
 
     // Facebook Conversion Tracking
     let conversionSent = false;
