@@ -163,6 +163,27 @@ serve(async (req) => {
     }
     const sentNodeIds = variables._sent_node_ids as string[];
 
+    // Helper function to persist sentNodeIds immediately after each successful send
+    // This prevents duplicate sends if the process restarts or fails mid-execution
+    const persistSentNodeId = async (nodeId: string) => {
+      sentNodeIds.push(nodeId);
+      variables._sent_node_ids = sentNodeIds;
+      
+      try {
+        await supabaseClient
+          .from('inbox_flow_sessions')
+          .update({
+            variables,
+            last_interaction: new Date().toISOString(),
+          })
+          .eq('id', sessionId);
+        console.log(`[${runId}] Persisted sentNodeId: ${nodeId} (total: ${sentNodeIds.length})`);
+      } catch (persistError) {
+        console.error(`[${runId}] Failed to persist sentNodeId ${nodeId}:`, persistError);
+        // Continue anyway - the in-memory tracking will still work for this execution
+      }
+    };
+
     // === PAUSE SCHEDULE CHECK ===
     // Helper function to check if current time is within pause schedule (São Paulo timezone)
     const isWithinPauseSchedule = (): boolean => {
@@ -945,8 +966,8 @@ serve(async (req) => {
                 break;
               }
               
-              // Mark node as sent for idempotency
-              sentNodeIds.push(currentNodeId);
+              // Mark node as sent for idempotency - persist immediately to prevent duplicates on restart
+              await persistSentNodeId(currentNodeId);
               processedActions.push(`Sent text: ${message.substring(0, 50)}`);
             }
             
@@ -1123,8 +1144,8 @@ Regras RIGOROSAS:
                 break;
               }
               
-              // Mark node as sent for idempotency
-              sentNodeIds.push(currentNodeId);
+              // Mark node as sent for idempotency - persist immediately to prevent duplicates on restart
+              await persistSentNodeId(currentNodeId);
               processedActions.push(`Sent AI text: ${aiVariedMessage.substring(0, 50)}`);
             }
             
@@ -1252,8 +1273,8 @@ Regras RIGOROSAS:
                 break;
               }
               
-              // Mark node as sent for idempotency
-              sentNodeIds.push(currentNodeId);
+              // Mark node as sent for idempotency - persist immediately to prevent duplicates on restart
+              await persistSentNodeId(currentNodeId);
               processedActions.push(`Sent ${currentNode.type}: ${caption || fileName || 'media'}`);
               console.log(`[${runId}] ${currentNode.type} sent successfully`);
             } else {
@@ -1648,8 +1669,8 @@ Regras RIGOROSAS:
                 break;
               }
               
-              // Mark as sent
-              sentNodeIds.push(currentNodeId);
+              // Mark as sent - persist immediately to prevent duplicates on restart
+              await persistSentNodeId(currentNodeId);
             }
             
             // Wait for user input after showing menu - save state and release lock
@@ -1754,7 +1775,7 @@ Regras RIGOROSAS:
                   break;
                 }
                 
-                sentNodeIds.push(currentNodeId);
+                await persistSentNodeId(currentNodeId);
               }
             }
             
