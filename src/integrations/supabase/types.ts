@@ -3149,7 +3149,15 @@ export type Database = {
       tag_whats_configs: {
         Row: {
           ad_account_id: string | null
+          auto_charge_enabled: boolean | null
+          charge_amount: number | null
+          charge_description: string | null
+          charge_item_name: string | null
+          charge_pix_key: string | null
+          charge_pix_name: string | null
+          charge_pix_type: string | null
           created_at: string
+          disable_label_on_charge: boolean | null
           enable_conversion_tracking: boolean | null
           filter_images: boolean
           filter_pdfs: boolean
@@ -3164,7 +3172,15 @@ export type Database = {
         }
         Insert: {
           ad_account_id?: string | null
+          auto_charge_enabled?: boolean | null
+          charge_amount?: number | null
+          charge_description?: string | null
+          charge_item_name?: string | null
+          charge_pix_key?: string | null
+          charge_pix_name?: string | null
+          charge_pix_type?: string | null
           created_at?: string
+          disable_label_on_charge?: boolean | null
           enable_conversion_tracking?: boolean | null
           filter_images?: boolean
           filter_pdfs?: boolean
@@ -3179,7 +3195,15 @@ export type Database = {
         }
         Update: {
           ad_account_id?: string | null
+          auto_charge_enabled?: boolean | null
+          charge_amount?: number | null
+          charge_description?: string | null
+          charge_item_name?: string | null
+          charge_pix_key?: string | null
+          charge_pix_name?: string | null
+          charge_pix_type?: string | null
           created_at?: string
+          disable_label_on_charge?: boolean | null
           enable_conversion_tracking?: boolean | null
           filter_images?: boolean
           filter_pdfs?: boolean
