@@ -437,103 +437,44 @@ serve(async (req) => {
     let apiBody: Record<string, unknown> = {};
     let authHeader: Record<string, string> = {};
 
-    // Retry wrapper for API calls with backoff
-    const tryPostJsonWithRetry = async (
-      endpoint: string, 
-      body: Record<string, unknown>,
-      maxRetries = 2,
-      delayMs = 3000,
-      timeoutMs = 120000 // 2 minutes timeout
-    ): Promise<{ res: Response; json: any }> => {
-      let lastError: Error | null = null;
-      let lastResponse: Response | null = null;
-      let lastJson: any = null;
-      
-      for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        try {
-          console.log(`[${apiProvider.toUpperCase()}] Calling API (attempt ${attempt + 1}/${maxRetries + 1}): POST ${API_BASE_URL}${endpoint}`);
-          
-          // Use AbortController for timeout
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-          
-          const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-            method: 'POST',
-            headers: {
-              ...authHeader,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(body),
-            signal: controller.signal,
-          });
-          
-          clearTimeout(timeoutId);
-          
-          let json: any = null;
-          try {
-            json = await res.json();
-          } catch {
-            const text = await res.text().catch(() => '');
-            json = { message: text };
-          }
-          
-          // If success or error that shouldn't be retried, return immediately
-          if (res.ok || (res.status < 500 && res.status !== 408)) {
-            return { res, json };
-          }
-          
-          // Error 408 (timeout) or 5xx - worth retrying
-          console.warn(`[RETRY] Attempt ${attempt + 1} failed with status ${res.status}, ${attempt < maxRetries ? 'retrying...' : 'no more retries'}`);
-          lastResponse = res;
-          lastJson = json;
-          
-          if (attempt < maxRetries) {
-            await new Promise(r => setTimeout(r, delayMs * (attempt + 1))); // Exponential backoff
-          }
-        } catch (err) {
-          const error = err as Error;
-          lastError = error;
-          
-          // Check if it was an abort (timeout)
-          if (error.name === 'AbortError') {
-            console.warn(`[RETRY] Attempt ${attempt + 1} timed out after ${timeoutMs}ms, ${attempt < maxRetries ? 'retrying...' : 'no more retries'}`);
-          } else {
-            console.warn(`[RETRY] Attempt ${attempt + 1} threw error:`, error.message);
-          }
-          
-          if (attempt < maxRetries) {
-            await new Promise(r => setTimeout(r, delayMs * (attempt + 1)));
-          }
-        }
+    // Simple POST helper
+    const tryPostJson = async (endpoint: string, body: Record<string, unknown>, timeoutMs = 60000) => {
+      console.log(`[${apiProvider.toUpperCase()}] POST ${API_BASE_URL}${endpoint}`);
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+          method: 'POST',
+          headers: { ...authHeader, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+        clearTimeout(tid);
+        let json: any = null;
+        try { json = await res.json(); } catch { json = { message: await res.text().catch(() => '') }; }
+        return { res, json };
+      } catch (e) {
+        clearTimeout(tid);
+        throw e;
       }
-      
-      // All retries exhausted
-      if (lastResponse && lastJson) {
-        return { res: lastResponse, json: lastJson };
-      }
-      
-      throw lastError || new Error('All retry attempts failed');
     };
 
-    // Simple version without retry (for non-critical calls)
-    const tryPostJson = async (endpoint: string, body: Record<string, unknown>) => {
-      console.log(`[${apiProvider.toUpperCase()}] Calling API: POST ${API_BASE_URL}${endpoint}`);
-      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-        method: 'POST',
-        headers: {
-          ...authHeader,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      });
-      let json: any = null;
-      try {
-        json = await res.json();
-      } catch {
-        const text = await res.text().catch(() => '');
-        json = { message: text };
+    // Retry wrapper for media (up to 2 retries with 3s backoff)
+    const tryPostWithRetry = async (endpoint: string, body: Record<string, unknown>, retries = 2) => {
+      for (let i = 0; i <= retries; i++) {
+        try {
+          const { res, json } = await tryPostJson(endpoint, body, 120000);
+          if (res.ok || (res.status < 500 && res.status !== 408)) return { res, json };
+          console.warn(`[RETRY] Attempt ${i+1} failed ${res.status}`);
+          if (i < retries) await new Promise(r => setTimeout(r, 3000 * (i + 1)));
+          if (i === retries) return { res, json };
+        } catch (err) {
+          console.warn(`[RETRY] Attempt ${i+1} error:`, (err as Error).message);
+          if (i === retries) throw err;
+          await new Promise(r => setTimeout(r, 3000 * (i + 1)));
+        }
       }
-      return { res, json };
+      throw new Error('Retry exhausted');
     };
 
 
@@ -630,20 +571,20 @@ serve(async (req) => {
           const urlBody = {
             number: String(sendDestination),
             type: uazType,
-            file: persistedMediaUrl, // Use original URL, not base64
+            file: persistedMediaUrl,
             ...(typeof content === 'string' && content ? { text: content } : {}),
             docName: typeof content === 'string' && content ? content : 'document',
           };
           
           try {
-            const urlResult = await tryPostJsonWithRetry(endpoint, urlBody, 1, 3000, 60000); // 1 retry, 60s timeout for URL
+            const urlResult = await tryPostWithRetry(endpoint, urlBody, 1);
             apiResponse = urlResult.res;
             apiResult = urlResult.json;
             
-            if (apiResponse.ok) {
+            if (apiResponse && apiResponse.ok) {
               console.log(`[UAZAPI] Document sent successfully via URL`);
               sendSuccess = true;
-            } else {
+            } else if (apiResponse) {
               console.log(`[UAZAPI] URL method failed with ${apiResponse.status}, falling back to base64...`);
             }
           } catch (urlErr) {
@@ -656,15 +597,14 @@ serve(async (req) => {
           body = {
             number: String(sendDestination),
             type: uazType,
-            file: urlToSend, // This is already base64 if converted earlier
+            file: urlToSend,
             ...(typeof content === 'string' && content && messageType !== 'audio' ? { text: content } : {}),
             ...(uazType === 'document'
               ? { docName: typeof content === 'string' && content ? content : 'document' }
               : {}),
           };
 
-          // Use retry for media messages (especially large files)
-          const retryResult = await tryPostJsonWithRetry(endpoint, body, 2, 3000, 120000); // 2 retries, 120s timeout
+          const retryResult = await tryPostWithRetry(endpoint, body, 2);
           apiResponse = retryResult.res;
           apiResult = retryResult.json;
         }
