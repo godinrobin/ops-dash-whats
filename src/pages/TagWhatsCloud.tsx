@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { ColoredSwitch } from "@/components/ui/colored-switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Cloud, Plus, RefreshCw, QrCode, Settings, Image, FileText, CheckCircle2, XCircle, Loader2, Trash2, TrendingUp, ShoppingBag, Clock, Monitor, Apple, Download, ExternalLink, Banknote, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Cloud, Plus, RefreshCw, QrCode, Settings, Image, FileText, CheckCircle2, XCircle, Loader2, Trash2, TrendingUp, ShoppingBag, Clock, Monitor, Apple, Download, ExternalLink, Banknote, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useNavigate } from "react-router-dom";
@@ -95,6 +95,7 @@ const TagWhatsCloud = () => {
   const [chargePixKey, setChargePixKey] = useState('');
   const [chargePixName, setChargePixName] = useState('');
   const [disableLabelOnCharge, setDisableLabelOnCharge] = useState(false);
+  const [chargeSectionCollapsed, setChargeSectionCollapsed] = useState(false);
 
   const fetchData = useCallback(async () => {
     const userId = effectiveUserId || user?.id;
@@ -500,17 +501,38 @@ const TagWhatsCloud = () => {
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-semibold text-emerald-400">Envie Cobrança também automático</h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-semibold text-emerald-400">Envie Cobrança também automático</h4>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0"
+                        onClick={() => setChargeSectionCollapsed(!chargeSectionCollapsed)}
+                      >
+                        {chargeSectionCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                      </Button>
+                    </div>
                     <ColoredSwitch
                       checked={autoChargeEnabled}
                       onCheckedChange={setAutoChargeEnabled}
                     />
                   </div>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Quando ativado, uma cobrança PIX será enviada automaticamente para cada nova venda detectada.
-                  </p>
                   
-                  {autoChargeEnabled && (
+                  {/* Warning - always visible */}
+                  <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg mb-4">
+                    <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-amber-400">
+                      <strong>Atenção:</strong> As cobranças serão enviadas automaticamente após a venda, porém você tem que alterar o status como pago para enviar para meta.
+                    </p>
+                  </div>
+                  
+                  {!chargeSectionCollapsed && (
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Quando ativado, uma cobrança PIX será enviada automaticamente para cada nova venda detectada.
+                    </p>
+                  )}
+                  
+                  {autoChargeEnabled && !chargeSectionCollapsed && (
                     <div className="space-y-4 border-t border-border/50 pt-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
@@ -598,15 +620,6 @@ const TagWhatsCloud = () => {
                           onCheckedChange={setDisableLabelOnCharge}
                         />
                       </div>
-                      
-                      {disableLabelOnCharge && (
-                        <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                          <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
-                          <p className="text-xs text-amber-400">
-                            <strong>Atenção:</strong> Apenas as cobranças serão enviadas. Para marcar como pago, será necessário fazer manualmente.
-                          </p>
-                        </div>
-                      )}
                       
                       <Button 
                         onClick={handleSaveGlobalChargeConfig}
