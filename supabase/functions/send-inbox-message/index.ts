@@ -437,6 +437,85 @@ serve(async (req) => {
     let apiBody: Record<string, unknown> = {};
     let authHeader: Record<string, string> = {};
 
+    // Retry wrapper for API calls with backoff
+    const tryPostJsonWithRetry = async (
+      endpoint: string, 
+      body: Record<string, unknown>,
+      maxRetries = 2,
+      delayMs = 3000,
+      timeoutMs = 120000 // 2 minutes timeout
+    ): Promise<{ res: Response; json: any }> => {
+      let lastError: Error | null = null;
+      let lastResponse: Response | null = null;
+      let lastJson: any = null;
+      
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`[${apiProvider.toUpperCase()}] Calling API (attempt ${attempt + 1}/${maxRetries + 1}): POST ${API_BASE_URL}${endpoint}`);
+          
+          // Use AbortController for timeout
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+          
+          const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+            method: 'POST',
+            headers: {
+              ...authHeader,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          });
+          
+          clearTimeout(timeoutId);
+          
+          let json: any = null;
+          try {
+            json = await res.json();
+          } catch {
+            const text = await res.text().catch(() => '');
+            json = { message: text };
+          }
+          
+          // If success or error that shouldn't be retried, return immediately
+          if (res.ok || (res.status < 500 && res.status !== 408)) {
+            return { res, json };
+          }
+          
+          // Error 408 (timeout) or 5xx - worth retrying
+          console.warn(`[RETRY] Attempt ${attempt + 1} failed with status ${res.status}, ${attempt < maxRetries ? 'retrying...' : 'no more retries'}`);
+          lastResponse = res;
+          lastJson = json;
+          
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, delayMs * (attempt + 1))); // Exponential backoff
+          }
+        } catch (err) {
+          const error = err as Error;
+          lastError = error;
+          
+          // Check if it was an abort (timeout)
+          if (error.name === 'AbortError') {
+            console.warn(`[RETRY] Attempt ${attempt + 1} timed out after ${timeoutMs}ms, ${attempt < maxRetries ? 'retrying...' : 'no more retries'}`);
+          } else {
+            console.warn(`[RETRY] Attempt ${attempt + 1} threw error:`, error.message);
+          }
+          
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, delayMs * (attempt + 1)));
+          }
+        }
+      }
+      
+      // All retries exhausted
+      if (lastResponse && lastJson) {
+        return { res: lastResponse, json: lastJson };
+      }
+      
+      throw lastError || new Error('All retry attempts failed');
+    };
+
+    // Simple version without retry (for non-critical calls)
     const tryPostJson = async (endpoint: string, body: Record<string, unknown>) => {
       console.log(`[${apiProvider.toUpperCase()}] Calling API: POST ${API_BASE_URL}${endpoint}`);
       const res = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -482,6 +561,52 @@ serve(async (req) => {
           number: String(sendDestination),
           text: typeof content === 'string' ? content : String(content ?? ''),
         };
+        
+        // Text messages don't need retry
+        const { res: apiResponse, json: apiResult } = await tryPostJson(endpoint, body);
+        console.log(`[UAZAPI] ${endpoint} -> ${apiResponse.status}`);
+        console.log('API response:', JSON.stringify(apiResult, null, 2));
+
+        if (!apiResponse.ok) {
+          console.error('API error:', apiResult);
+
+          if (messageId) {
+            await supabaseAdmin
+              .from('inbox_messages')
+              .update({ status: 'failed' })
+              .eq('id', messageId);
+          }
+
+          const errorMessage = apiResult?.error || apiResult?.message || apiResult?.response?.message;
+          const errorDetails = Array.isArray(errorMessage) ? errorMessage.join(', ') : errorMessage;
+
+          let userFriendlyError = 'Falha ao enviar mensagem';
+          let errorCode = 'SEND_FAILED';
+
+          if (typeof errorDetails === 'string' && (errorDetails.includes('disconnected') || errorDetails.includes('logged out'))) {
+            userFriendlyError = 'A instância do WhatsApp está desconectada. Reconecte e tente novamente.';
+            errorCode = 'INSTANCE_DISCONNECTED';
+          }
+
+          if (instanceId && errorCode === 'INSTANCE_DISCONNECTED') {
+            const { error: statusErr } = await supabaseAdmin
+              .from('maturador_instances')
+              .update({ status: 'disconnected', last_error_at: new Date().toISOString() })
+              .eq('id', instanceId);
+            if (statusErr) console.warn('Failed to mark instance as disconnected:', statusErr);
+          }
+
+          return new Response(JSON.stringify({
+            error: userFriendlyError,
+            errorCode,
+            details: apiResult,
+          }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        var finalApiResult = apiResult;
       } else {
         endpoint = '/send/media';
 
@@ -493,61 +618,105 @@ serve(async (req) => {
           : messageType === 'document' ? 'document'
           : 'document';
 
-        body = {
-          number: String(sendDestination),
-          type: uazType,
-          file: urlToSend,
-          ...(typeof content === 'string' && content && messageType !== 'audio' ? { text: content } : {}),
-          ...(uazType === 'document'
-            ? { docName: typeof content === 'string' && content ? content : 'document' }
-            : {}),
-        };
+        // For documents, try sending with URL first (smaller payload, faster)
+        // Only fall back to base64 if URL fails with 408 timeout
+        let sendSuccess = false;
+        let apiResponse: Response | null = null;
+        let apiResult: any = null;
+        
+        if (messageType === 'document' && persistedMediaUrl && !persistedMediaUrl.startsWith('data:')) {
+          console.log(`[UAZAPI] Document detected - trying URL first before base64`);
+          
+          const urlBody = {
+            number: String(sendDestination),
+            type: uazType,
+            file: persistedMediaUrl, // Use original URL, not base64
+            ...(typeof content === 'string' && content ? { text: content } : {}),
+            docName: typeof content === 'string' && content ? content : 'document',
+          };
+          
+          try {
+            const urlResult = await tryPostJsonWithRetry(endpoint, urlBody, 1, 3000, 60000); // 1 retry, 60s timeout for URL
+            apiResponse = urlResult.res;
+            apiResult = urlResult.json;
+            
+            if (apiResponse.ok) {
+              console.log(`[UAZAPI] Document sent successfully via URL`);
+              sendSuccess = true;
+            } else {
+              console.log(`[UAZAPI] URL method failed with ${apiResponse.status}, falling back to base64...`);
+            }
+          } catch (urlErr) {
+            console.warn(`[UAZAPI] URL method threw error, falling back to base64:`, urlErr);
+          }
+        }
+        
+        // If URL didn't work (or wasn't tried), use base64 with retry
+        if (!sendSuccess) {
+          body = {
+            number: String(sendDestination),
+            type: uazType,
+            file: urlToSend, // This is already base64 if converted earlier
+            ...(typeof content === 'string' && content && messageType !== 'audio' ? { text: content } : {}),
+            ...(uazType === 'document'
+              ? { docName: typeof content === 'string' && content ? content : 'document' }
+              : {}),
+          };
+
+          // Use retry for media messages (especially large files)
+          const retryResult = await tryPostJsonWithRetry(endpoint, body, 2, 3000, 120000); // 2 retries, 120s timeout
+          apiResponse = retryResult.res;
+          apiResult = retryResult.json;
+        }
+
+        console.log(`[UAZAPI] ${endpoint} -> ${apiResponse!.status}`);
+        console.log('API response:', JSON.stringify(apiResult, null, 2));
+
+        if (!apiResponse!.ok) {
+          console.error('API error:', apiResult);
+
+          if (messageId) {
+            await supabaseAdmin
+              .from('inbox_messages')
+              .update({ status: 'failed' })
+              .eq('id', messageId);
+          }
+
+          const errorMessage = apiResult?.error || apiResult?.message || apiResult?.response?.message;
+          const errorDetails = Array.isArray(errorMessage) ? errorMessage.join(', ') : errorMessage;
+
+          let userFriendlyError = 'Falha ao enviar mensagem';
+          let errorCode = 'SEND_FAILED';
+
+          // Check for timeout specifically
+          if (apiResponse!.status === 408 || (typeof errorDetails === 'string' && errorDetails.includes('timeout'))) {
+            userFriendlyError = 'Tempo limite excedido ao enviar arquivo. Tente um arquivo menor.';
+            errorCode = 'UPLOAD_TIMEOUT';
+          } else if (typeof errorDetails === 'string' && (errorDetails.includes('disconnected') || errorDetails.includes('logged out'))) {
+            userFriendlyError = 'A instância do WhatsApp está desconectada. Reconecte e tente novamente.';
+            errorCode = 'INSTANCE_DISCONNECTED';
+          }
+
+          if (instanceId && errorCode === 'INSTANCE_DISCONNECTED') {
+            const { error: statusErr } = await supabaseAdmin
+              .from('maturador_instances')
+              .update({ status: 'disconnected', last_error_at: new Date().toISOString() })
+              .eq('id', instanceId);
+            if (statusErr) console.warn('Failed to mark instance as disconnected:', statusErr);
+          }
+
+          return new Response(JSON.stringify({
+            error: userFriendlyError,
+            errorCode,
+            details: apiResult,
+          }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        var finalApiResult = apiResult;
       }
-
-      const { res: apiResponse, json: apiResult } = await tryPostJson(endpoint, body);
-      console.log(`[UAZAPI] ${endpoint} -> ${apiResponse.status}`);
-      console.log('API response:', JSON.stringify(apiResult, null, 2));
-
-      if (!apiResponse.ok) {
-        console.error('API error:', apiResult);
-
-        if (messageId) {
-          await supabaseAdmin
-            .from('inbox_messages')
-            .update({ status: 'failed' })
-            .eq('id', messageId);
-        }
-
-        const errorMessage = apiResult?.error || apiResult?.message || apiResult?.response?.message;
-        const errorDetails = Array.isArray(errorMessage) ? errorMessage.join(', ') : errorMessage;
-
-        let userFriendlyError = 'Falha ao enviar mensagem';
-        let errorCode = 'SEND_FAILED';
-
-        if (typeof errorDetails === 'string' && (errorDetails.includes('disconnected') || errorDetails.includes('logged out'))) {
-          userFriendlyError = 'A instância do WhatsApp está desconectada. Reconecte e tente novamente.';
-          errorCode = 'INSTANCE_DISCONNECTED';
-        }
-
-        if (instanceId && errorCode === 'INSTANCE_DISCONNECTED') {
-          const { error: statusErr } = await supabaseAdmin
-            .from('maturador_instances')
-            .update({ status: 'disconnected', last_error_at: new Date().toISOString() })
-            .eq('id', instanceId);
-          if (statusErr) console.warn('Failed to mark instance as disconnected:', statusErr);
-        }
-
-        return new Response(JSON.stringify({
-          error: userFriendlyError,
-          errorCode,
-          details: apiResult,
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      var finalApiResult = apiResult;
     } else {
       // Evolution API endpoints - use apikey header
       authHeader = { apikey: API_KEY };
