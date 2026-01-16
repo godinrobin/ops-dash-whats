@@ -516,9 +516,124 @@ serve(async (req) => {
         }
       }
       
-      console.log(`[process-delay-queue] Healed ${staleLockHealed}/${staleLockSessions.length} stale lock sessions`);
+    console.log(`[process-delay-queue] Healed ${staleLockHealed}/${staleLockSessions.length} stale lock sessions`);
     } else {
       console.log("[process-delay-queue] No stale processing locks need healing");
+    }
+    
+    // === STALE JOB HEALING: Find jobs stuck with status='processing' for too long ===
+    // This catches cases where a job was marked 'processing' but never completed
+    console.log("[process-delay-queue] Checking for stale processing jobs that need healing...");
+    
+    const STALE_JOB_THRESHOLD_MS = 300_000; // 5 minutes - jobs older than this are considered stuck
+    const staleJobCutoff = new Date(Date.now() - STALE_JOB_THRESHOLD_MS).toISOString();
+    
+    const { data: staleJobs, error: staleJobError } = await supabase
+      .from("inbox_flow_delay_jobs")
+      .select("*, session:inbox_flow_sessions(id, status, current_node_id, variables)")
+      .eq("status", "processing")
+      .lt("updated_at", staleJobCutoff)
+      .limit(20);
+    
+    if (staleJobError) {
+      console.error("[process-delay-queue] Error fetching stale jobs:", staleJobError);
+    } else if (staleJobs && staleJobs.length > 0) {
+      console.log(`[process-delay-queue] Found ${staleJobs.length} stale processing jobs to heal`);
+      
+      let staleJobsHealed = 0;
+      for (const staleJob of staleJobs) {
+        try {
+          const jobAgeMs = Date.now() - new Date(staleJob.updated_at || 0).getTime();
+          console.log(`[process-delay-queue] Healing stale job for session ${staleJob.session_id} (job age: ${Math.round(jobAgeMs / 1000)}s)`);
+          
+          const session = staleJob.session as { id: string; status: string; current_node_id: string; variables: any } | null;
+          
+          // If session is still active and has pending delay, resume it
+          if (session && session.status === 'active') {
+            const vars = (session.variables || {}) as Record<string, unknown>;
+            const pendingDelay = vars._pendingDelay as { nodeId?: string; resumeAt?: number } | undefined;
+            
+            // Check if delay has expired
+            if (pendingDelay && pendingDelay.resumeAt && pendingDelay.resumeAt < Date.now()) {
+              console.log(`[process-delay-queue] Stale job session ${staleJob.session_id} has expired delay, resuming flow`);
+              
+              // Release any locks first
+              await supabase
+                .from("inbox_flow_sessions")
+                .update({
+                  processing: false,
+                  processing_started_at: null,
+                })
+                .eq("id", session.id);
+              
+              // Try to resume the flow
+              const { error: healError } = await supabase.functions.invoke("process-inbox-flow", {
+                body: {
+                  sessionId: session.id,
+                  resumeFromDelay: true,
+                },
+              });
+              
+              if (healError) {
+                console.error(`[process-delay-queue] Error resuming stale job session ${staleJob.session_id}:`, healError);
+                // Mark job as scheduled to retry later
+                await supabase
+                  .from("inbox_flow_delay_jobs")
+                  .update({ 
+                    status: "scheduled",
+                    run_at: new Date(Date.now() + 30_000).toISOString(),
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq("session_id", staleJob.session_id);
+              } else {
+                staleJobsHealed++;
+                // Mark job as done since we resumed successfully
+                await supabase
+                  .from("inbox_flow_delay_jobs")
+                  .update({ 
+                    status: "done",
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq("session_id", staleJob.session_id);
+                console.log(`[process-delay-queue] Successfully healed stale job for session ${staleJob.session_id}`);
+              }
+            } else {
+              // No expired delay, just reschedule the job
+              console.log(`[process-delay-queue] Stale job session ${staleJob.session_id} has no expired delay, rescheduling`);
+              const runAt = pendingDelay?.resumeAt 
+                ? new Date(pendingDelay.resumeAt).toISOString()
+                : new Date(Date.now() + 30_000).toISOString();
+              
+              await supabase
+                .from("inbox_flow_delay_jobs")
+                .update({ 
+                  status: "scheduled",
+                  run_at: runAt,
+                  updated_at: new Date().toISOString()
+                })
+                .eq("session_id", staleJob.session_id);
+              staleJobsHealed++;
+            }
+          } else {
+            // Session not active or doesn't exist, mark job as done
+            console.log(`[process-delay-queue] Stale job session ${staleJob.session_id} is not active, marking job as done`);
+            await supabase
+              .from("inbox_flow_delay_jobs")
+              .update({ 
+                status: "done",
+                updated_at: new Date().toISOString()
+              })
+              .eq("session_id", staleJob.session_id);
+            staleJobsHealed++;
+          }
+        } catch (staleJobHealErr) {
+          console.error(`[process-delay-queue] Unexpected error healing stale job for session ${staleJob.session_id}:`, staleJobHealErr);
+        }
+      }
+      
+      console.log(`[process-delay-queue] Healed ${staleJobsHealed}/${staleJobs.length} stale processing jobs`);
+    } else {
+      console.log("[process-delay-queue] No stale processing jobs need healing");
     }
     
     return new Response(
