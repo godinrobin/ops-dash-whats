@@ -113,6 +113,11 @@ serve(async (req) => {
         const isDelayNode = currentNode?.type === 'delay';
         const isPaymentIdentifier = currentNode?.type === 'paymentIdentifier';
         
+        // CRITICAL FIX: If current node is waitInput/menu and there's a timeout_at set,
+        // this session is waiting for user input - don't process delay jobs that aren't timeouts!
+        // The timeout_at check is the authoritative way to know if we're waiting for input
+        const isActuallyWaitingForInput = isWaitingForInput || (session.timeout_at !== null && !pendingDelay);
+        
         // More robust detection: check if we have a pending delay in variables
         const hasValidPendingDelay = pendingDelay && pendingDelay.resumeAt <= Date.now();
         const hasPendingDelayNotReady = pendingDelay && pendingDelay.resumeAt > Date.now();
@@ -126,7 +131,7 @@ serve(async (req) => {
         const paymentNoResponseDelayKey = `_payment_no_response_delay_${session.current_node_id}`;
         const hasPaymentNoResponseDelay = sessionVars[paymentNoResponseDelayKey] !== undefined;
         
-        console.log(`[process-delay-queue] Session ${job.session_id}: isTimeoutJob=${isTimeoutJob}, isWaitingForInput=${isWaitingForInput}, isDelayNode=${isDelayNode}, isPaymentIdentifier=${isPaymentIdentifier}, hasValidPendingDelay=${hasValidPendingDelay}, hasPendingDelayNotReady=${hasPendingDelayNotReady}, hasPaymentNoResponseDelay=${hasPaymentNoResponseDelay}, hasPauseScheduled=${hasPauseScheduled}, pauseReady=${pauseReady}, nodeType=${currentNode?.type}`);
+        console.log(`[process-delay-queue] Session ${job.session_id}: isTimeoutJob=${isTimeoutJob}, isWaitingForInput=${isWaitingForInput}, isActuallyWaitingForInput=${isActuallyWaitingForInput}, isDelayNode=${isDelayNode}, isPaymentIdentifier=${isPaymentIdentifier}, hasValidPendingDelay=${hasValidPendingDelay}, hasPendingDelayNotReady=${hasPendingDelayNotReady}, hasPaymentNoResponseDelay=${hasPaymentNoResponseDelay}, hasPauseScheduled=${hasPauseScheduled}, pauseReady=${pauseReady}, nodeType=${currentNode?.type}`);
 
         const rescheduleIfLocked = async (invokeResult: unknown) => {
           const isLockedSkip =
@@ -173,7 +178,8 @@ serve(async (req) => {
         }
 
         // If this is a timeout job and session is still waiting for input, trigger timeout
-        if (isTimeoutJob && isWaitingForInput) {
+        // Use isActuallyWaitingForInput which also checks timeout_at
+        if (isTimeoutJob && isActuallyWaitingForInput) {
           console.log(`[process-delay-queue] Timeout expired for session ${job.session_id}, continuing flow`);
 
           const { data: invokeResult, error: invokeError } = await supabase.functions.invoke("process-inbox-flow", {
