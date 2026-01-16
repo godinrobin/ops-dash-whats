@@ -499,11 +499,31 @@ serve(async (req) => {
     };
 
     // Helper function to stop flow on send failure
-    const handleSendFailure = async (nodeId: string, errorDetails: string) => {
+    const handleSendFailure = async (nodeId: string, errorDetails: string, instanceIdToUpdate?: string) => {
       console.error(`[${runId}] Send failed at node ${nodeId}: ${errorDetails}`);
       variables._last_send_error = errorDetails;
       variables._last_failed_node_id = nodeId;
       variables._last_failed_at = new Date().toISOString();
+      
+      // Check if error indicates WhatsApp disconnection - update instance status
+      const errorLower = (errorDetails || '').toLowerCase();
+      const isDisconnected = errorLower.includes('disconnected') || 
+                              errorLower.includes('logged out') || 
+                              errorLower.includes('connection closed') ||
+                              errorLower.includes('not connected') ||
+                              errorLower.includes('whatsapp disconnected');
+      
+      const targetInstanceId = instanceIdToUpdate || session.instance_id || contact?.instance_id;
+      if (isDisconnected && targetInstanceId) {
+        console.warn(`[${runId}] Instance ${targetInstanceId} appears disconnected, updating status`);
+        await supabaseClient
+          .from('maturador_instances')
+          .update({ 
+            status: 'disconnected', 
+            last_error_at: new Date().toISOString() 
+          })
+          .eq('id', targetInstanceId);
+      }
       
       await supabaseClient
         .from('inbox_flow_sessions')
@@ -960,7 +980,7 @@ serve(async (req) => {
               await saveOutboundMessage(supabaseClient, contact.id, effectiveInstanceId, session.user_id, message, 'text', flow.id, undefined, sendResult.remoteMessageId, messageStatus, currentReplyDbId);
               
               if (!sendResult.ok) {
-                await handleSendFailure(currentNodeId, sendResult.errorDetails || 'Unknown error');
+                await handleSendFailure(currentNodeId, sendResult.errorDetails || 'Unknown error', effectiveInstanceId);
                 sendFailed = true;
                 processedActions.push(`FAILED to send text: ${message.substring(0, 50)}`);
                 break;
@@ -1138,7 +1158,7 @@ Regras RIGOROSAS:
               await saveOutboundMessage(supabaseClient, contact.id, effectiveInstanceId, session.user_id, aiVariedMessage, 'text', flow.id, undefined, aiSendResult.remoteMessageId, aiMessageStatus, currentAiReplyDbId);
               
               if (!aiSendResult.ok) {
-                await handleSendFailure(currentNodeId, aiSendResult.errorDetails || 'Unknown error');
+                await handleSendFailure(currentNodeId, aiSendResult.errorDetails || 'Unknown error', effectiveInstanceId);
                 sendFailed = true;
                 processedActions.push(`FAILED to send AI text: ${aiVariedMessage.substring(0, 50)}`);
                 break;
@@ -1267,7 +1287,7 @@ Regras RIGOROSAS:
               await saveOutboundMessage(supabaseClient, contact.id, effectiveInstanceId, session.user_id, caption || '', currentNode.type, flow.id, mediaUrl, mediaSendResult.remoteMessageId, mediaStatus, currentMediaReplyDbId);
               
               if (!mediaSendResult.ok) {
-                await handleSendFailure(currentNodeId, mediaSendResult.errorDetails || 'Unknown error');
+                await handleSendFailure(currentNodeId, mediaSendResult.errorDetails || 'Unknown error', effectiveInstanceId);
                 sendFailed = true;
                 processedActions.push(`FAILED to send ${currentNode.type}: ${caption || fileName || 'media'}`);
                 break;
@@ -1663,7 +1683,7 @@ Regras RIGOROSAS:
               await saveOutboundMessage(supabaseClient, contact.id, effectiveInstanceId, session.user_id, fullMenuMessage, 'text', flow.id, undefined, menuSendResult.remoteMessageId, menuStatus, menuReplyDbId);
               
               if (!menuSendResult.ok) {
-                await handleSendFailure(currentNodeId, menuSendResult.errorDetails || 'Unknown error');
+                await handleSendFailure(currentNodeId, menuSendResult.errorDetails || 'Unknown error', effectiveInstanceId);
                 sendFailed = true;
                 processedActions.push(`FAILED to send menu`);
                 break;
@@ -1769,7 +1789,7 @@ Regras RIGOROSAS:
                 await saveOutboundMessage(supabaseClient, contact.id, effectiveInstanceId, session.user_id, transferMessage, 'text', flow.id, undefined, transferSendResult.remoteMessageId, transferStatus, transferReplyDbId);
                 
                 if (!transferSendResult.ok) {
-                  await handleSendFailure(currentNodeId, transferSendResult.errorDetails || 'Unknown error');
+                  await handleSendFailure(currentNodeId, transferSendResult.errorDetails || 'Unknown error', effectiveInstanceId);
                   sendFailed = true;
                   processedActions.push(`FAILED to send transfer message`);
                   break;
