@@ -2,18 +2,27 @@ import { useState, useEffect, useRef } from "react";
 import { SystemLayout } from "@/components/layout/SystemLayout";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/useSplashedToast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Download, Play, Pause, Volume2, Clock } from "lucide-react";
+import { Loader2, Download, Play, Pause, Volume2, Clock, Upload, Trash2, Plus, Mic } from "lucide-react";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useMultiGenerationCooldown } from "@/hooks/useMultiGenerationCooldown";
 
 interface Voice {
   id: string;
   name: string;
-  category: 'mulher' | 'homem' | 'crianca' | 'bonus';
+  category: 'mulher' | 'homem' | 'crianca' | 'bonus' | 'personalizado';
+}
+
+interface CustomVoice {
+  id: string;
+  voice_id: string;
+  voice_name: string;
+  created_at: string;
 }
 
 const PREVIEW_TEXT = "Esta é a voz selecionada, gostou?";
@@ -45,6 +54,8 @@ const voices: Voice[] = [
   { id: "v6ztLTVuY9k1rdRLQnQU", name: "Voz do Dráuzio Varela", category: "bonus" },
 ];
 
+const MAX_CUSTOM_VOICES = 3;
+
 const AudioGenerator = () => {
   useActivityTracker("page_visit", "Gerador de Áudio");
   const { toast } = useToast();
@@ -62,23 +73,186 @@ const AudioGenerator = () => {
   const [playingVoicePreview, setPlayingVoicePreview] = useState<string | null>(null);
   const voicePreviewAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Load cached previews from Supabase
+  // Custom voice states
+  const [customVoices, setCustomVoices] = useState<CustomVoice[]>([]);
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
+  const [newVoiceName, setNewVoiceName] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploadingVoice, setIsUploadingVoice] = useState(false);
+  const [deletingVoiceId, setDeletingVoiceId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load cached previews and custom voices from Supabase
   useEffect(() => {
-    const loadCachedPreviews = async () => {
-      const { data } = await supabase
+    const loadData = async () => {
+      // Load previews
+      const { data: previewData } = await supabase
         .from("voice_previews")
         .select("voice_id, audio_base64");
       
-      if (data) {
+      if (previewData) {
         const previews: Record<string, string> = {};
-        data.forEach((item: any) => {
+        previewData.forEach((item: any) => {
           previews[item.voice_id] = item.audio_base64;
         });
         setVoicePreviews(previews);
       }
+
+      // Load custom voices
+      const { data: customVoicesData } = await supabase
+        .from("user_custom_voices")
+        .select("*")
+        .order("created_at", { ascending: false });
+      
+      if (customVoicesData) {
+        setCustomVoices(customVoicesData);
+      }
     };
-    loadCachedPreviews();
+    loadData();
   }, []);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type
+      const validTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/m4a', 'audio/mp4'];
+      if (!validTypes.includes(file.type) && !file.name.match(/\.(mp3|wav|m4a)$/i)) {
+        toast({
+          title: "Formato inválido",
+          description: "Por favor, selecione um arquivo de áudio (MP3, WAV ou M4A).",
+          variant: "destructive",
+        });
+        return;
+      }
+      setSelectedFile(file);
+    }
+  };
+
+  const handleUploadVoice = async () => {
+    if (!selectedFile || !newVoiceName.trim()) {
+      toast({
+        title: "Erro",
+        description: "Por favor, preencha o nome da voz e selecione um arquivo de áudio.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUploadingVoice(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('name', newVoiceName.trim());
+      formData.append('file', selectedFile);
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error("Você precisa estar logado para criar vozes personalizadas.");
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manage-custom-voice`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: formData,
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro ao criar voz personalizada');
+      }
+
+      // Add to local state
+      setCustomVoices(prev => [{
+        id: crypto.randomUUID(),
+        voice_id: result.voiceId,
+        voice_name: result.voiceName,
+        created_at: new Date().toISOString(),
+      }, ...prev]);
+
+      // Reset form
+      setNewVoiceName("");
+      setSelectedFile(null);
+      setIsUploadDialogOpen(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+
+      toast({
+        title: "Sucesso!",
+        description: `Voz "${result.voiceName}" criada com sucesso!`,
+      });
+    } catch (error: any) {
+      console.error("Error uploading voice:", error);
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao criar voz personalizada.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingVoice(false);
+    }
+  };
+
+  const handleDeleteVoice = async (voiceId: string, voiceName: string) => {
+    if (!confirm(`Tem certeza que deseja excluir a voz "${voiceName}"?`)) {
+      return;
+    }
+
+    setDeletingVoiceId(voiceId);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error("Você precisa estar logado.");
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manage-custom-voice`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ voiceId }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro ao excluir voz');
+      }
+
+      // Remove from local state
+      setCustomVoices(prev => prev.filter(v => v.voice_id !== voiceId));
+      
+      // Clear selection if this voice was selected
+      if (selectedVoice === voiceId) {
+        setSelectedVoice("");
+      }
+
+      toast({
+        title: "Sucesso!",
+        description: `Voz "${voiceName}" excluída com sucesso.`,
+      });
+    } catch (error: any) {
+      console.error("Error deleting voice:", error);
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao excluir voz.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingVoiceId(null);
+    }
+  };
 
   const playVoicePreview = async (voiceId: string) => {
     // Stop current preview if playing
@@ -266,14 +440,172 @@ const AudioGenerator = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Custom Voices Section */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium flex items-center gap-2">
+                    <Mic className="w-4 h-4 text-accent" />
+                    Vozes Personalizadas
+                    <span className="text-xs text-muted-foreground">({customVoices.length}/{MAX_CUSTOM_VOICES})</span>
+                  </label>
+                  <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        disabled={customVoices.length >= MAX_CUSTOM_VOICES}
+                        className="border-accent/50 hover:bg-accent/10"
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Adicionar Voz
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Criar Voz Personalizada</DialogTitle>
+                        <DialogDescription>
+                          Faça upload de um áudio para clonar a voz. Use gravações de 30 segundos a 5 minutos para melhores resultados.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 pt-4">
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Nome da Voz</label>
+                          <Input
+                            placeholder="Ex: Minha Voz, Narrador, etc..."
+                            value={newVoiceName}
+                            onChange={(e) => setNewVoiceName(e.target.value)}
+                            disabled={isUploadingVoice}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Arquivo de Áudio</label>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              ref={fileInputRef}
+                              type="file"
+                              accept="audio/*,.mp3,.wav,.m4a"
+                              onChange={handleFileSelect}
+                              disabled={isUploadingVoice}
+                              className="flex-1"
+                            />
+                          </div>
+                          {selectedFile && (
+                            <p className="text-xs text-muted-foreground">
+                              Selecionado: {selectedFile.name}
+                            </p>
+                          )}
+                        </div>
+                        <Button
+                          onClick={handleUploadVoice}
+                          disabled={isUploadingVoice || !selectedFile || !newVoiceName.trim()}
+                          className="w-full bg-accent hover:bg-accent/90"
+                        >
+                          {isUploadingVoice ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Criando voz...
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-4 h-4 mr-2" />
+                              Criar Voz
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+
+                {customVoices.length > 0 ? (
+                  <div className="grid gap-2">
+                    {customVoices.map((voice) => (
+                      <div 
+                        key={voice.voice_id}
+                        className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                          selectedVoice === voice.voice_id 
+                            ? 'border-accent bg-accent/10' 
+                            : 'border-border hover:border-accent/50'
+                        }`}
+                      >
+                        <button
+                          onClick={() => setSelectedVoice(voice.voice_id)}
+                          className="flex items-center gap-2 flex-1 text-left"
+                        >
+                          <Mic className="w-4 h-4 text-accent" />
+                          <span className="font-medium">{voice.voice_name}</span>
+                        </button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => playVoicePreview(voice.voice_id)}
+                            disabled={loadingVoicePreview === voice.voice_id}
+                            className="h-8 w-8"
+                            title="Testar voz"
+                          >
+                            {loadingVoicePreview === voice.voice_id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : playingVoicePreview === voice.voice_id ? (
+                              <Pause className="w-4 h-4" />
+                            ) : (
+                              <Play className="w-4 h-4" />
+                            )}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteVoice(voice.voice_id, voice.voice_name)}
+                            disabled={deletingVoiceId === voice.voice_id}
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            title="Excluir voz"
+                          >
+                            {deletingVoiceId === voice.voice_id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-3 border border-dashed rounded-lg">
+                    Nenhuma voz personalizada criada ainda. Clique em "Adicionar Voz" para criar uma.
+                  </p>
+                )}
+              </div>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">ou escolha uma voz pronta</span>
+                </div>
+              </div>
+
               <div className="space-y-2">
-                <label className="text-sm font-medium">Selecione a Voz</label>
+                <label className="text-sm font-medium">Vozes Disponíveis</label>
                 <div className="flex gap-2">
                   <Select value={selectedVoice} onValueChange={setSelectedVoice}>
                     <SelectTrigger className="border-accent/50 flex-1">
                       <SelectValue placeholder="Escolha uma voz..." />
                     </SelectTrigger>
                     <SelectContent>
+                      {customVoices.length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel>⭐ Personalizado</SelectLabel>
+                          {customVoices.map((voice) => (
+                            <SelectItem key={voice.voice_id} value={voice.voice_id}>
+                              {voice.voice_name}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
                       <SelectGroup>
                         <SelectLabel>👩 Mulher</SelectLabel>
                         {voices.filter(v => v.category === 'mulher').map((voice) => (
