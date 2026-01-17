@@ -294,15 +294,15 @@ export default function LipSync() {
     }
   };
 
-  const startPolling = () => {
+  const startPolling = (requestId: string, responseUrl: string) => {
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
     }
 
-    pollingRef.current = setInterval(async () => {
-      if (!job?.requestId || !job?.responseUrl) return;
+    console.log('[LipSync] Starting polling with:', { requestId, responseUrl });
 
-      const result = await checkJobStatus(job.requestId, job.responseUrl);
+    pollingRef.current = setInterval(async () => {
+      const result = await checkJobStatus(requestId, responseUrl);
       
       if (result.status === 'done' || result.status === 'COMPLETED') {
         setJob(prev => prev ? { ...prev, status: 'done', url: result.videoUrl } : null);
@@ -367,11 +367,11 @@ export default function LipSync() {
         ...prev, 
         status: 'processing', 
         requestId: data.requestId,
-        responseUrl: data.responseUrl  // Armazenar a URL correta
+        responseUrl: data.responseUrl
       } : null);
 
       toast.success('Lip sync iniciado! Aguarde o processamento...');
-      startPolling();
+      startPolling(data.requestId, data.responseUrl);
 
     } catch (error) {
       console.error('Lip sync error:', error);
