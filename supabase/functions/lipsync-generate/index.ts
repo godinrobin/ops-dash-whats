@@ -95,8 +95,10 @@ serve(async (req) => {
     console.log('[LipSync] Fal.ai response:', JSON.stringify(falResult));
 
     const requestId = falResult.request_id;
-    if (!requestId) {
-      console.error('[LipSync] No request_id in response');
+    const responseUrl = falResult.response_url;
+    
+    if (!requestId || !responseUrl) {
+      console.error('[LipSync] No request_id or response_url in response');
       return new Response(
         JSON.stringify({ success: false, error: 'Failed to queue lip sync job' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -104,12 +106,13 @@ serve(async (req) => {
     }
 
     console.log(`[LipSync] Job queued with request_id: ${requestId}`);
+    console.log(`[LipSync] Response URL: ${responseUrl}`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         requestId,
-        responseUrl: `${FAL_QUEUE_URL}/requests/${requestId}`
+        responseUrl  // Usar a URL retornada pela fal.ai
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
