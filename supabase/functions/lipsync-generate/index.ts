@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 const FAL_KEY = Deno.env.get('FAL_KEY');
-const FAL_QUEUE_URL = 'https://queue.fal.run/fal-ai/sync-lipsync/react-1';
+const FAL_QUEUE_URL = 'https://queue.fal.run/fal-ai/sync-lipsync';
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -65,6 +65,8 @@ serve(async (req) => {
     console.log(`[LipSync] Settings: emotion=${emotion}, modelMode=${modelMode}, lipsyncMode=${lipsyncMode}`);
 
     // Queue the lip sync job with fal.ai
+    // Note: fal-ai/sync-lipsync uses sync_mode (not lipsync_mode)
+    // and doesn't support emotion or model_mode parameters
     const falResponse = await fetch(FAL_QUEUE_URL, {
       method: 'POST',
       headers: {
@@ -72,13 +74,9 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        input: {
-          video_url: videoUrl,
-          audio_url: audioUrl,
-          emotion: emotion || 'neutral',
-          model_mode: modelMode || 'face',
-          lipsync_mode: lipsyncMode || 'bounce'
-        }
+        video_url: videoUrl,
+        audio_url: audioUrl,
+        sync_mode: lipsyncMode || 'cut_off'
       }),
     });
 
