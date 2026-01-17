@@ -1529,7 +1529,30 @@ serve(async (req) => {
                 currentNode.type === 'paymentIdentifier'
               );
               
-              if (isWaitingForInput) {
+              // Check if session is stuck in a delay node with expired _pendingDelay
+              const sessionVars = (activeSession.variables || {}) as Record<string, unknown>;
+              const pendingDelay = sessionVars._pendingDelay as { nodeId?: string; resumeAt?: number } | undefined;
+              const isStuckInDelay = currentNode?.type === 'delay' && pendingDelay && pendingDelay.resumeAt && pendingDelay.resumeAt < Date.now();
+              
+              if (isStuckInDelay) {
+                // Session is stuck in a delay node - trigger healing by resuming flow
+                console.log(`[UAZAPI-WEBHOOK] Session ${activeSession.id} stuck in delay node ${currentNode.id}, triggering flow resume`);
+                
+                try {
+                  const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+                  await fetch(processUrl, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                    },
+                    body: JSON.stringify({ sessionId: activeSession.id, resumeFromDelay: true }),
+                  });
+                  console.log('[UAZAPI-WEBHOOK] Triggered flow resume for stuck delay session');
+                } catch (flowError) {
+                  console.error('[UAZAPI-WEBHOOK] Error resuming stuck delay session:', flowError);
+                }
+              } else if (isWaitingForInput) {
                 console.log(`[UAZAPI-WEBHOOK] Found active session ${activeSession.id} waiting for input at node ${currentNode.id} (type: ${currentNode.type})`);
                 
                 // For paymentIdentifier, ALL message types count as attempts
