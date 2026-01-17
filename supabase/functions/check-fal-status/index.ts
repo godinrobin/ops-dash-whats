@@ -164,19 +164,10 @@ serve(async (req) => {
     }
 
     // Use the response_url provided by Fal.ai
-    const baseUrl: string | undefined = responseUrl;
-
-    // For LipSync (sync-lipsync), Fal can return 422 on the base response_url while still processing.
-    // The reliable way to poll is using the /status endpoint, and only fetch the base URL when COMPLETED.
-    const shouldUseStatusEndpoint = Boolean(
-      baseUrl && baseUrl.includes('/sync-lipsync/') && !baseUrl.endsWith('/status')
-    );
-
-    const statusUrl = shouldUseStatusEndpoint ? `${baseUrl}/status` : undefined;
-    const fetchUrl = statusUrl || baseUrl || `https://queue.fal.run/fal-ai/ffmpeg-api/requests/${requestId}`;
-
+    const fetchUrl = responseUrl || `https://queue.fal.run/fal-ai/ffmpeg-api/requests/${requestId}`;
+    
     console.log(`Fetching result from: ${fetchUrl}`);
-
+    
     const resultResponse = await fetchWithRetry(fetchUrl, {
       method: 'GET',
       headers: {
@@ -189,8 +180,8 @@ serve(async (req) => {
 
     if (resultResponse.status === 202) {
       console.log('Job still processing (202)');
-      return new Response(JSON.stringify({
-        success: true,
+      return new Response(JSON.stringify({ 
+        success: true, 
         status: 'processing',
         videoUrl: null,
         requestId
@@ -202,11 +193,11 @@ serve(async (req) => {
     if (!resultResponse.ok) {
       const errorText = await resultResponse.text();
       console.error('Fal.ai error:', errorText);
-
+      
       if (resultResponse.status === 400 && errorText.toLowerCase().includes('still in progress')) {
         console.log('Job still in progress (400 response)');
-        return new Response(JSON.stringify({
-          success: true,
+        return new Response(JSON.stringify({ 
+          success: true, 
           status: 'processing',
           videoUrl: null,
           requestId
@@ -214,15 +205,15 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
-
+      
       await supabaseClient
         .from('video_generation_jobs')
         .update({ status: 'failed', updated_at: new Date().toISOString() })
         .eq('render_id', requestId)
         .eq('user_id', user.id);
-
-      return new Response(JSON.stringify({
-        success: true,
+      
+      return new Response(JSON.stringify({ 
+        success: true, 
         status: 'failed',
         videoUrl: null,
         requestId
@@ -231,132 +222,8 @@ serve(async (req) => {
       });
     }
 
-    let resultData = await resultResponse.json();
+    const resultData = await resultResponse.json();
     console.log('Fal.ai result:', JSON.stringify(resultData));
-
-    // If we polled the /status endpoint, handle the status response.
-    // For sync-lipsync, the /status endpoint may contain the video directly in the response when COMPLETED.
-    if (shouldUseStatusEndpoint) {
-      const status = resultData?.status;
-
-      if (status === 'IN_QUEUE' || status === 'IN_PROGRESS') {
-        console.log(`Job status: ${status}`);
-        return new Response(JSON.stringify({
-          success: true,
-          status: 'processing',
-          videoUrl: null,
-          requestId
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-
-      if (status === 'FAILED' || status === 'CANCELLED') {
-        console.log(`Job status: ${status}`);
-        await supabaseClient
-          .from('video_generation_jobs')
-          .update({ status: 'failed', updated_at: new Date().toISOString() })
-          .eq('render_id', requestId)
-          .eq('user_id', user.id);
-
-        return new Response(JSON.stringify({
-          success: true,
-          status: 'failed',
-          videoUrl: null,
-          requestId
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-
-      if (status === 'COMPLETED') {
-        console.log(`Status COMPLETED for request: ${requestId}`);
-        
-        // For sync-lipsync, the video URL should be directly in the status response
-        // Check common response patterns from Fal.ai
-        const videoUrl = resultData.video?.url || resultData.video_url || resultData.output?.url || resultData.output?.video?.url;
-        
-        if (videoUrl) {
-          console.log(`Video URL found in status response: ${videoUrl}`);
-          
-          await supabaseClient
-            .from('video_generation_jobs')
-            .update({ status: 'done', video_url: videoUrl, updated_at: new Date().toISOString() })
-            .eq('render_id', requestId)
-            .eq('user_id', user.id);
-
-          return new Response(JSON.stringify({
-            success: true,
-            status: 'done',
-            videoUrl,
-            requestId
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          });
-        }
-        
-        // If no video URL in status response, try fetching from response_url directly
-        // Note: For sync-lipsync, this requires a POST but we'll try GET first
-        console.log(`No video URL in status. Trying response_url: ${baseUrl}`);
-        
-        try {
-          const finalResponse = await fetchWithRetry(baseUrl!, {
-            method: 'GET',
-            headers: {
-              'Authorization': `Key ${FAL_KEY}`,
-              'Content-Type': 'application/json',
-            },
-          });
-
-          console.log(`Fal.ai response_url fetch status: ${finalResponse.status}`);
-
-          if (finalResponse.ok) {
-            const finalData = await finalResponse.json();
-            console.log('Fal.ai response_url result:', JSON.stringify(finalData));
-            
-            const finalVideoUrl = finalData.video?.url || finalData.video_url || finalData.output?.url || finalData.output?.video?.url;
-            
-            if (finalVideoUrl) {
-              console.log(`Video URL found: ${finalVideoUrl}`);
-              
-              await supabaseClient
-                .from('video_generation_jobs')
-                .update({ status: 'done', video_url: finalVideoUrl, updated_at: new Date().toISOString() })
-                .eq('render_id', requestId)
-                .eq('user_id', user.id);
-
-              return new Response(JSON.stringify({
-                success: true,
-                status: 'done',
-                videoUrl: finalVideoUrl,
-                requestId
-              }), {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-              });
-            }
-          }
-        } catch (fetchError) {
-          console.error('Error fetching response_url:', fetchError);
-        }
-        
-        // Status is COMPLETED but we couldn't get video URL - this is an error
-        console.error('Status COMPLETED but no video URL found');
-        await supabaseClient
-          .from('video_generation_jobs')
-          .update({ status: 'failed', updated_at: new Date().toISOString() })
-          .eq('render_id', requestId)
-          .eq('user_id', user.id);
-
-        return new Response(JSON.stringify({
-          success: true,
-          status: 'failed',
-          videoUrl: null,
-          requestId
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-    }
 
     const videoUrl = resultData.video?.url || resultData.video_url || resultData.output?.url;
     

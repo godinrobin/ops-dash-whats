@@ -83,7 +83,6 @@ const systemGroups: SystemGroup[] = [
       { id: "criativos-video", path: "/gerador-variacoes-video", title: "Gerador de Múltiplos Criativos em Vídeo", icon: <Video className="w-4 h-4" />, restricted: true },
       { id: "entregavel-site", path: "/criador-entregavel", title: "Criador de Entregável em Site", icon: <Smartphone className="w-4 h-4" />, restricted: true },
       { id: "audio", path: "/gerador-audio", title: "Gerador de Áudio", icon: <Mic className="w-4 h-4" />, restricted: true },
-      { id: "lip-sync", path: "/lip-sync", title: "Lip Sync", icon: <Music className="w-4 h-4" />, restricted: true },
       { id: "transcricao", path: "/transcricao-audio", title: "Transcrição", icon: <FileText className="w-4 h-4" />, restricted: true },
       { id: "analisador", path: "/analisador-criativos", title: "Analisador de Criativos", icon: <Microscope className="w-4 h-4" />, restricted: true },
     ]
