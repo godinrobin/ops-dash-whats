@@ -164,10 +164,19 @@ serve(async (req) => {
     }
 
     // Use the response_url provided by Fal.ai
-    const fetchUrl = responseUrl || `https://queue.fal.run/fal-ai/ffmpeg-api/requests/${requestId}`;
-    
+    const baseUrl: string | undefined = responseUrl;
+
+    // For LipSync (sync-lipsync), Fal can return 422 on the base response_url while still processing.
+    // The reliable way to poll is using the /status endpoint, and only fetch the base URL when COMPLETED.
+    const shouldUseStatusEndpoint = Boolean(
+      baseUrl && baseUrl.includes('/sync-lipsync/') && !baseUrl.endsWith('/status')
+    );
+
+    const statusUrl = shouldUseStatusEndpoint ? `${baseUrl}/status` : undefined;
+    const fetchUrl = statusUrl || baseUrl || `https://queue.fal.run/fal-ai/ffmpeg-api/requests/${requestId}`;
+
     console.log(`Fetching result from: ${fetchUrl}`);
-    
+
     const resultResponse = await fetchWithRetry(fetchUrl, {
       method: 'GET',
       headers: {
@@ -180,8 +189,8 @@ serve(async (req) => {
 
     if (resultResponse.status === 202) {
       console.log('Job still processing (202)');
-      return new Response(JSON.stringify({ 
-        success: true, 
+      return new Response(JSON.stringify({
+        success: true,
         status: 'processing',
         videoUrl: null,
         requestId
@@ -193,11 +202,11 @@ serve(async (req) => {
     if (!resultResponse.ok) {
       const errorText = await resultResponse.text();
       console.error('Fal.ai error:', errorText);
-      
+
       if (resultResponse.status === 400 && errorText.toLowerCase().includes('still in progress')) {
         console.log('Job still in progress (400 response)');
-        return new Response(JSON.stringify({ 
-          success: true, 
+        return new Response(JSON.stringify({
+          success: true,
           status: 'processing',
           videoUrl: null,
           requestId
@@ -205,15 +214,15 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
-      
+
       await supabaseClient
         .from('video_generation_jobs')
         .update({ status: 'failed', updated_at: new Date().toISOString() })
         .eq('render_id', requestId)
         .eq('user_id', user.id);
-      
-      return new Response(JSON.stringify({ 
-        success: true, 
+
+      return new Response(JSON.stringify({
+        success: true,
         status: 'failed',
         videoUrl: null,
         requestId
@@ -222,8 +231,101 @@ serve(async (req) => {
       });
     }
 
-    const resultData = await resultResponse.json();
+    let resultData = await resultResponse.json();
     console.log('Fal.ai result:', JSON.stringify(resultData));
+
+    // If we polled the /status endpoint, only fetch the final result from baseUrl when completed.
+    if (shouldUseStatusEndpoint) {
+      const status = resultData?.status;
+
+      if (status === 'IN_QUEUE' || status === 'IN_PROGRESS') {
+        console.log(`Job status: ${status}`);
+        return new Response(JSON.stringify({
+          success: true,
+          status: 'processing',
+          videoUrl: null,
+          requestId
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (status === 'FAILED' || status === 'CANCELLED') {
+        await supabaseClient
+          .from('video_generation_jobs')
+          .update({ status: 'failed', updated_at: new Date().toISOString() })
+          .eq('render_id', requestId)
+          .eq('user_id', user.id);
+
+        return new Response(JSON.stringify({
+          success: true,
+          status: 'failed',
+          videoUrl: null,
+          requestId
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (status === 'COMPLETED' && baseUrl) {
+        console.log(`Status COMPLETED. Fetching final result from: ${baseUrl}`);
+
+        const finalResponse = await fetchWithRetry(baseUrl, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Key ${FAL_KEY}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        console.log(`Fal.ai final result status: ${finalResponse.status}`);
+
+        if (finalResponse.status === 202) {
+          return new Response(JSON.stringify({
+            success: true,
+            status: 'processing',
+            videoUrl: null,
+            requestId
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        if (!finalResponse.ok) {
+          const errorText = await finalResponse.text();
+          console.error('Fal.ai final result error:', errorText);
+
+          if (finalResponse.status === 400 && errorText.toLowerCase().includes('still in progress')) {
+            return new Response(JSON.stringify({
+              success: true,
+              status: 'processing',
+              videoUrl: null,
+              requestId
+            }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+          }
+
+          await supabaseClient
+            .from('video_generation_jobs')
+            .update({ status: 'failed', updated_at: new Date().toISOString() })
+            .eq('render_id', requestId)
+            .eq('user_id', user.id);
+
+          return new Response(JSON.stringify({
+            success: true,
+            status: 'failed',
+            videoUrl: null,
+            requestId
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        resultData = await finalResponse.json();
+        console.log('Fal.ai completed result:', JSON.stringify(resultData));
+      }
+    }
 
     const videoUrl = resultData.video?.url || resultData.video_url || resultData.output?.url;
     
