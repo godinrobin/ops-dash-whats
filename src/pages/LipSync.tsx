@@ -40,6 +40,7 @@ interface LipSyncJob {
   status: 'uploading' | 'queued' | 'processing' | 'done' | 'failed';
   url?: string;
   requestId?: string;
+  responseUrl?: string;
   error?: string;
 }
 
@@ -269,12 +270,12 @@ export default function LipSync() {
     }
   };
 
-  const checkJobStatus = async (requestId: string) => {
+  const checkJobStatus = async (requestId: string, responseUrl: string) => {
     try {
       const { data, error } = await supabase.functions.invoke('check-fal-status', {
         body: { 
           requestId,
-          responseUrl: `https://queue.fal.run/fal-ai/sync-lipsync/react-1/requests/${requestId}`
+          responseUrl  // Usar a URL correta retornada pela fal.ai
         }
       });
 
@@ -299,9 +300,9 @@ export default function LipSync() {
     }
 
     pollingRef.current = setInterval(async () => {
-      if (!job?.requestId) return;
+      if (!job?.requestId || !job?.responseUrl) return;
 
-      const result = await checkJobStatus(job.requestId);
+      const result = await checkJobStatus(job.requestId, job.responseUrl);
       
       if (result.status === 'done' || result.status === 'COMPLETED') {
         setJob(prev => prev ? { ...prev, status: 'done', url: result.videoUrl } : null);
@@ -365,7 +366,8 @@ export default function LipSync() {
       setJob(prev => prev ? { 
         ...prev, 
         status: 'processing', 
-        requestId: data.requestId 
+        requestId: data.requestId,
+        responseUrl: data.responseUrl  // Armazenar a URL correta
       } : null);
 
       toast.success('Lip sync iniciado! Aguarde o processamento...');
