@@ -3514,6 +3514,30 @@ export type Database = {
           },
         ]
       }
+      user_custom_voices: {
+        Row: {
+          created_at: string
+          id: string
+          user_id: string
+          voice_id: string
+          voice_name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          user_id: string
+          voice_id: string
+          voice_name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          user_id?: string
+          voice_id?: string
+          voice_name?: string
+        }
+        Relationships: []
+      }
       user_payment_webhooks: {
         Row: {
           bank_type: string
