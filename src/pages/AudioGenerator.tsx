@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/useSplashedToast";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Download, Play, Pause, Volume2, Clock, Upload, Trash2, Plus, Mic } from "lucide-react";
@@ -80,6 +81,7 @@ const AudioGenerator = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
   const [deletingVoiceId, setDeletingVoiceId] = useState<string | null>(null);
+  const [voiceToDelete, setVoiceToDelete] = useState<{ id: string; name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load cached previews and custom voices from Supabase
@@ -199,12 +201,12 @@ const AudioGenerator = () => {
     }
   };
 
-  const handleDeleteVoice = async (voiceId: string, voiceName: string) => {
-    if (!confirm(`Tem certeza que deseja excluir a voz "${voiceName}"?`)) {
-      return;
-    }
-
+  const confirmDeleteVoice = async () => {
+    if (!voiceToDelete) return;
+    
+    const { id: voiceId, name: voiceName } = voiceToDelete;
     setDeletingVoiceId(voiceId);
+    setVoiceToDelete(null);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -574,7 +576,7 @@ const AudioGenerator = () => {
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleDeleteVoice(voice.voice_id, voice.voice_name);
+                                    setVoiceToDelete({ id: voice.voice_id, name: voice.voice_name });
                                   }}
                                   disabled={deletingVoiceId === voice.voice_id}
                                   className="p-1 hover:bg-destructive/20 rounded text-destructive"
@@ -724,6 +726,24 @@ const AudioGenerator = () => {
           </Card>
         </div>
       </div>
+
+      {/* Delete Voice Confirmation Dialog */}
+      <AlertDialog open={!!voiceToDelete} onOpenChange={(open) => !open && setVoiceToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir voz personalizada</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir a voz "{voiceToDelete?.name}"? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteVoice} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SystemLayout>
   );
 };
