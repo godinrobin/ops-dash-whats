@@ -559,22 +559,34 @@ serve(async (req) => {
           : messageType === 'document' ? 'document'
           : 'document';
 
-        // For documents, try sending with URL first (smaller payload, faster)
-        // Only fall back to base64 if URL fails with 408 timeout
+        // For documents and videos, try sending with URL first (smaller payload, faster)
+        // Videos can be very large and base64 triples the size, causing "Invalid payload" errors
+        // Only fall back to base64 if URL fails
         let sendSuccess = false;
         let apiResponse: Response | null = null;
         let apiResult: any = null;
         
-        if (messageType === 'document' && persistedMediaUrl && !persistedMediaUrl.startsWith('data:')) {
-          console.log(`[UAZAPI] Document detected - trying URL first before base64`);
+        const shouldTryUrlFirst = (messageType === 'document' || messageType === 'video') && 
+          persistedMediaUrl && !persistedMediaUrl.startsWith('data:');
+        
+        if (shouldTryUrlFirst) {
+          console.log(`[UAZAPI] ${messageType} detected - trying URL first before base64`);
           
-          const urlBody = {
+          const urlBody: Record<string, unknown> = {
             number: String(sendDestination),
             type: uazType,
             file: persistedMediaUrl,
-            ...(typeof content === 'string' && content ? { text: content } : {}),
-            docName: typeof content === 'string' && content ? content : 'document',
           };
+          
+          // Add text for non-audio messages
+          if (typeof content === 'string' && content && messageType !== 'audio') {
+            urlBody.text = content;
+          }
+          
+          // Add docName for documents
+          if (messageType === 'document') {
+            urlBody.docName = typeof content === 'string' && content ? content : 'document';
+          }
           
           try {
             const urlResult = await tryPostWithRetry(endpoint, urlBody, 1);
@@ -582,10 +594,11 @@ serve(async (req) => {
             apiResult = urlResult.json;
             
             if (apiResponse && apiResponse.ok) {
-              console.log(`[UAZAPI] Document sent successfully via URL`);
+              console.log(`[UAZAPI] ${messageType} sent successfully via URL`);
               sendSuccess = true;
             } else if (apiResponse) {
-              console.log(`[UAZAPI] URL method failed with ${apiResponse.status}, falling back to base64...`);
+              const errMsg = apiResult?.error || apiResult?.message || 'Unknown error';
+              console.log(`[UAZAPI] URL method failed with ${apiResponse.status}: ${errMsg}, falling back to base64...`);
             }
           } catch (urlErr) {
             console.warn(`[UAZAPI] URL method threw error, falling back to base64:`, urlErr);
@@ -594,6 +607,8 @@ serve(async (req) => {
         
         // If URL didn't work (or wasn't tried), use base64 with retry
         if (!sendSuccess) {
+          console.log(`[UAZAPI] Sending ${messageType} via base64...`);
+          
           body = {
             number: String(sendDestination),
             type: uazType,
