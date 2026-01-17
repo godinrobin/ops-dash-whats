@@ -440,7 +440,7 @@ const AudioGenerator = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Custom Voices Section */}
+              {/* Vozes Personalizadas Header with Add Button */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium flex items-center gap-2">
@@ -454,7 +454,7 @@ const AudioGenerator = () => {
                         variant="outline" 
                         size="sm"
                         disabled={customVoices.length >= MAX_CUSTOM_VOICES}
-                        className="border-accent/50 hover:bg-accent/10"
+                        className="border-accent hover:bg-accent/10"
                       >
                         <Plus className="w-4 h-4 mr-1" />
                         Adicionar Voz
@@ -517,62 +517,7 @@ const AudioGenerator = () => {
                   </Dialog>
                 </div>
 
-                {customVoices.length > 0 ? (
-                  <div className="grid gap-2">
-                    {customVoices.map((voice) => (
-                      <div 
-                        key={voice.voice_id}
-                        className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
-                          selectedVoice === voice.voice_id 
-                            ? 'border-accent bg-accent/10' 
-                            : 'border-border hover:border-accent/50'
-                        }`}
-                      >
-                        <button
-                          onClick={() => setSelectedVoice(voice.voice_id)}
-                          className="flex items-center gap-2 flex-1 text-left"
-                        >
-                          <Mic className="w-4 h-4 text-accent" />
-                          <span className="font-medium">{voice.voice_name}</span>
-                        </button>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => playVoicePreview(voice.voice_id)}
-                            disabled={loadingVoicePreview === voice.voice_id}
-                            className="h-8 w-8"
-                            title="Testar voz"
-                          >
-                            {loadingVoicePreview === voice.voice_id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : playingVoicePreview === voice.voice_id ? (
-                              <Pause className="w-4 h-4" />
-                            ) : (
-                              <Play className="w-4 h-4" />
-                            )}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteVoice(voice.voice_id, voice.voice_name)}
-                            disabled={deletingVoiceId === voice.voice_id}
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            title="Excluir voz"
-                          >
-                            {deletingVoiceId === voice.voice_id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-4 h-4" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
+                {customVoices.length === 0 && (
                   <p className="text-sm text-muted-foreground text-center py-3 border border-dashed rounded-lg">
                     Nenhuma voz personalizada criada ainda. Clique em "Adicionar Voz" para criar uma.
                   </p>
@@ -598,11 +543,51 @@ const AudioGenerator = () => {
                     <SelectContent>
                       {customVoices.length > 0 && (
                         <SelectGroup>
-                          <SelectLabel>⭐ Personalizado</SelectLabel>
+                          <SelectLabel className="flex items-center justify-between">
+                            <span>⭐ Voz Personalizada</span>
+                          </SelectLabel>
                           {customVoices.map((voice) => (
-                            <SelectItem key={voice.voice_id} value={voice.voice_id}>
-                              {voice.voice_name}
-                            </SelectItem>
+                            <div key={voice.voice_id} className="flex items-center justify-between pr-2">
+                              <SelectItem value={voice.voice_id} className="flex-1">
+                                {voice.voice_name}
+                              </SelectItem>
+                              <div className="flex items-center gap-1 ml-2">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    playVoicePreview(voice.voice_id);
+                                  }}
+                                  disabled={loadingVoicePreview === voice.voice_id}
+                                  className="p-1 hover:bg-accent/20 rounded"
+                                  title="Testar voz"
+                                >
+                                  {loadingVoicePreview === voice.voice_id ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : playingVoicePreview === voice.voice_id ? (
+                                    <Pause className="w-3 h-3" />
+                                  ) : (
+                                    <Play className="w-3 h-3" />
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteVoice(voice.voice_id, voice.voice_name);
+                                  }}
+                                  disabled={deletingVoiceId === voice.voice_id}
+                                  className="p-1 hover:bg-destructive/20 rounded text-destructive"
+                                  title="Excluir voz"
+                                >
+                                  {deletingVoiceId === voice.voice_id ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="w-3 h-3" />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
                           ))}
                         </SelectGroup>
                       )}
