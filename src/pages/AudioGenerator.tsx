@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Download, Play, Pause, Volume2, Clock, Upload, Trash2, Plus, Mic } from "lucide-react";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useMultiGenerationCooldown } from "@/hooks/useMultiGenerationCooldown";
+import { convertToMp3, needsConversion, getConversionInfo } from "@/utils/audioConverter";
 
 interface Voice {
   id: string;
@@ -80,6 +81,8 @@ const AudioGenerator = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
   const [deletingVoiceId, setDeletingVoiceId] = useState<string | null>(null);
+  const [isConverting, setIsConverting] = useState(false);
+  const [conversionStatus, setConversionStatus] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load cached previews and custom voices from Supabase
@@ -114,12 +117,11 @@ const AudioGenerator = () => {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validate file type
-      const validTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/m4a', 'audio/mp4'];
-      if (!validTypes.includes(file.type) && !file.name.match(/\.(mp3|wav|m4a)$/i)) {
+      // Accept all audio types - we'll convert if needed
+      if (!file.type.startsWith('audio/') && !file.name.match(/\.(mp3|wav|m4a|opus|ogg|webm|aac|flac)$/i)) {
         toast({
           title: "Formato inválido",
-          description: "Por favor, selecione um arquivo de áudio (MP3, WAV ou M4A).",
+          description: "Por favor, selecione um arquivo de áudio.",
           variant: "destructive",
         });
         return;
@@ -141,9 +143,36 @@ const AudioGenerator = () => {
     setIsUploadingVoice(true);
 
     try {
+      let fileToUpload = selectedFile;
+      
+      // Check if conversion is needed
+      if (needsConversion(selectedFile)) {
+        setIsConverting(true);
+        try {
+          fileToUpload = await convertToMp3(selectedFile, (status) => {
+            setConversionStatus(status);
+          });
+          toast({
+            title: "Conversão concluída",
+            description: "Áudio convertido para MP3 com sucesso!",
+          });
+        } catch (conversionError: any) {
+          console.error("Conversion error:", conversionError);
+          toast({
+            title: "Erro na conversão",
+            description: "Não foi possível converter o arquivo de áudio. Tente um arquivo MP3 ou WAV.",
+            variant: "destructive",
+          });
+          return;
+        } finally {
+          setIsConverting(false);
+          setConversionStatus("");
+        }
+      }
+      
       const formData = new FormData();
       formData.append('name', newVoiceName.trim());
-      formData.append('file', selectedFile);
+      formData.append('file', fileToUpload);
 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -483,24 +512,43 @@ const AudioGenerator = () => {
                             <Input
                               ref={fileInputRef}
                               type="file"
-                              accept="audio/*,.mp3,.wav,.m4a"
+                              accept="audio/*"
                               onChange={handleFileSelect}
-                              disabled={isUploadingVoice}
+                              disabled={isUploadingVoice || isConverting}
                               className="flex-1"
                             />
                           </div>
                           {selectedFile && (
                             <p className="text-xs text-muted-foreground">
                               Selecionado: {selectedFile.name}
+                              {needsConversion(selectedFile) && (
+                                <span className="text-yellow-500 ml-1">(será convertido para MP3)</span>
+                              )}
                             </p>
                           )}
+                          <p className="text-xs text-muted-foreground">
+                            {getConversionInfo()}
+                          </p>
                         </div>
+                        
+                        {isConverting && (
+                          <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
+                            <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                            <span className="text-sm">{conversionStatus || "Convertendo áudio..."}</span>
+                          </div>
+                        )}
+                        
                         <Button
                           onClick={handleUploadVoice}
-                          disabled={isUploadingVoice || !selectedFile || !newVoiceName.trim()}
+                          disabled={isUploadingVoice || isConverting || !selectedFile || !newVoiceName.trim()}
                           className="w-full bg-accent hover:bg-accent/90"
                         >
-                          {isUploadingVoice ? (
+                          {isConverting ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Convertendo...
+                            </>
+                          ) : isUploadingVoice ? (
                             <>
                               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                               Criando voz...
