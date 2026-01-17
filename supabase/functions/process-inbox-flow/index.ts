@@ -3159,17 +3159,32 @@ async function sendMessage(
   let body: Record<string, unknown> = {};
   let authHeader: Record<string, string> = {};
 
-  // For UazAPI with media, convert URL to base64 to avoid HTTP/2 fetch issues
+  // For UazAPI with media, we use different strategies based on media type:
+  // - For video/document: try URL first (smaller payload), fall back to base64 if it fails
+  // - For image/audio: convert to base64 directly (these are usually smaller)
   let fileToSend = mediaUrl;
+  let shouldTryUrlFirst = false;
+  
   if (apiProvider === 'uazapi' && mediaUrl && messageType !== 'text') {
-    console.log(`[UAZAPI] Converting media URL to base64 for reliable delivery...`);
-    const base64Uri = await urlToBase64DataUri(mediaUrl);
-    if (base64Uri) {
-      fileToSend = base64Uri;
-      console.log(`[UAZAPI] Successfully converted to base64 data URI`);
+    // Videos and documents should try URL first because base64 triples the size
+    // and large payloads cause "Invalid payload" errors
+    shouldTryUrlFirst = (messageType === 'video' || messageType === 'document') && 
+      !mediaUrl.startsWith('data:');
+    
+    if (!shouldTryUrlFirst) {
+      // For images and audio, convert to base64 directly
+      console.log(`[UAZAPI] Converting ${messageType} URL to base64 for reliable delivery...`);
+      const base64Uri = await urlToBase64DataUri(mediaUrl);
+      if (base64Uri) {
+        fileToSend = base64Uri;
+        console.log(`[UAZAPI] Successfully converted to base64 data URI`);
+      } else {
+        console.warn(`[UAZAPI] Failed to convert to base64, falling back to URL`);
+        // Keep original URL as fallback
+      }
     } else {
-      console.warn(`[UAZAPI] Failed to convert to base64, falling back to URL`);
-      // Keep original URL as fallback
+      console.log(`[UAZAPI] ${messageType} detected - will try URL first before base64`);
+      fileToSend = mediaUrl; // Start with URL
     }
   }
 
@@ -3213,6 +3228,58 @@ async function sendMessage(
       default:
         console.log(`Unknown message type: ${messageType}`);
         return { ok: false, remoteMessageId: null, errorDetails: `Unknown message type: ${messageType}` };
+    }
+    
+    // For video/document with URL-first strategy, try sending now
+    if (shouldTryUrlFirst) {
+      console.log(`[UAZAPI] Trying to send ${messageType} via URL first...`);
+      console.log(`[${apiProvider.toUpperCase()}] Sending ${messageType} to ${formattedPhone} via ${endpoint}`);
+      console.log('Request body (URL attempt):', JSON.stringify(body, null, 2));
+      
+      try {
+        const urlResponse = await fetch(`${baseUrl}${endpoint}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...authHeader,
+          },
+          body: JSON.stringify(body),
+        });
+        
+        const urlResponseText = await urlResponse.text();
+        console.log(`API response (${urlResponse.status}):`, urlResponseText);
+        
+        if (urlResponse.ok) {
+          console.log(`[UAZAPI] ${messageType} sent successfully via URL`);
+          let remoteMessageId: string | null = null;
+          try {
+            const responseData = JSON.parse(urlResponseText);
+            remoteMessageId = responseData?.key?.id || responseData?.id || responseData?.messageId || null;
+          } catch {}
+          return { ok: true, remoteMessageId, errorDetails: null };
+        }
+        
+        // URL failed, try base64 fallback
+        console.log(`[UAZAPI] URL method failed with ${urlResponse.status}, falling back to base64...`);
+        const base64Uri = await urlToBase64DataUri(mediaUrl!);
+        if (base64Uri) {
+          fileToSend = base64Uri;
+          body.file = fileToSend;
+          console.log(`[UAZAPI] Retrying ${messageType} with base64...`);
+        } else {
+          console.error(`[UAZAPI] Failed to convert to base64 for fallback`);
+          return { ok: false, remoteMessageId: null, errorDetails: urlResponseText };
+        }
+      } catch (urlError) {
+        console.warn(`[UAZAPI] URL attempt threw error, trying base64 fallback:`, urlError);
+        const base64Uri = await urlToBase64DataUri(mediaUrl!);
+        if (base64Uri) {
+          fileToSend = base64Uri;
+          body.file = fileToSend;
+        } else {
+          return { ok: false, remoteMessageId: null, errorDetails: String(urlError) };
+        }
+      }
     }
   } else {
     // Evolution API endpoints - use apikey header
