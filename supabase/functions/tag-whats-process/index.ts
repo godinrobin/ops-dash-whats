@@ -1067,6 +1067,105 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
       error_message: errorMessage,
     });
 
+    // Send Facebook events to user's configured pixels when a sale is detected
+    if (isPixPayment && (labelApplied || (config.disable_label_on_charge && config.auto_charge_enabled))) {
+      console.log("[TAG-WHATS] ====== SENDING FB EVENTS TO USER PIXELS ======");
+      
+      try {
+        // Get user's profile to check FB event settings
+        const { data: userProfile, error: profileError } = await supabase
+          .from("profiles")
+          .select("fb_event_enabled, fb_event_on_sale")
+          .eq("id", instance.user_id)
+          .single();
+
+        if (profileError) {
+          console.error("[TAG-WHATS] Error fetching user profile for FB events:", profileError);
+        } else if (userProfile?.fb_event_enabled) {
+          const eventType = userProfile.fb_event_on_sale || "Purchase";
+          console.log("[TAG-WHATS] FB events enabled, event type:", eventType);
+
+          // Get all user's active pixels
+          const { data: userPixels, error: pixelsError } = await supabase
+            .from("user_facebook_pixels")
+            .select("*")
+            .eq("user_id", instance.user_id)
+            .eq("is_active", true);
+
+          if (pixelsError || !userPixels || userPixels.length === 0) {
+            console.log("[TAG-WHATS] No active user pixels configured");
+          } else {
+            console.log(`[TAG-WHATS] Found ${userPixels.length} active pixels to send events to`);
+
+            // Hash phone for FB
+            const hashPhoneForFb = async (phoneNumber: string): Promise<string> => {
+              const encoder = new TextEncoder();
+              const dataBuffer = encoder.encode(phoneNumber.toLowerCase().trim());
+              const hashBuffer = await crypto.subtle.digest("SHA-256", dataBuffer);
+              const hashArray = Array.from(new Uint8Array(hashBuffer));
+              return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+            };
+
+            const hashedPhoneForPixels = await hashPhoneForFb(phone);
+
+            // Send event to each pixel
+            for (const pixel of userPixels) {
+              try {
+                const eventData: any = {
+                  event_name: eventType,
+                  event_time: Math.floor(Date.now() / 1000),
+                  action_source: "website",
+                  user_data: {
+                    ph: [hashedPhoneForPixels],
+                  },
+                };
+
+                // Add custom_data for Purchase events
+                if (eventType === "Purchase") {
+                  eventData.custom_data = {
+                    currency: "BRL",
+                    value: extractedValue || 0,
+                  };
+                }
+
+                // Add click IDs for better attribution
+                if (ctwaClid) {
+                  eventData.user_data.fbp = ctwaClid;
+                }
+
+                const pixelEventsUrl = `https://graph.facebook.com/v21.0/${pixel.pixel_id}/events`;
+                const pixelResponse = await fetch(pixelEventsUrl, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    data: [eventData],
+                    access_token: pixel.access_token,
+                  }),
+                });
+
+                const pixelResult = await pixelResponse.json();
+
+                if (pixelResult.error) {
+                  console.error(`[TAG-WHATS] User pixel ${pixel.pixel_id} error:`, pixelResult.error);
+                } else {
+                  console.log(`[TAG-WHATS] ✅ Event sent to user pixel ${pixel.pixel_id}:`, pixelResult.events_received);
+                }
+              } catch (pixelErr) {
+                console.error(`[TAG-WHATS] Exception sending to pixel ${pixel.pixel_id}:`, pixelErr);
+              }
+            }
+          }
+        } else {
+          console.log("[TAG-WHATS] FB events not enabled for user");
+        }
+      } catch (fbEventError) {
+        console.error("[TAG-WHATS] Error sending FB events:", fbEventError);
+        // Don't fail the main process for FB event errors
+      }
+
+      console.log("[TAG-WHATS] ====== FB EVENTS COMPLETE ======");
+    }
+
     // Send push notification for sales if enabled - ONLY to the instance owner
     if (isPixPayment && labelApplied) {
       console.log("[TAG-WHATS] Queueing sale notification for instance owner...");
