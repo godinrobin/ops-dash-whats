@@ -127,18 +127,16 @@ serve(async (req) => {
           },
         };
 
-        // Business Messaging (WhatsApp) payload per Meta docs:
-        // - action_source: business_messaging
-        // - messaging_channel: whatsapp
-        // - user_data: whatsapp_business_account_id + ctwa_clid
+        // Business Messaging payload per Meta CAPI docs:
+        // For WhatsApp: messaging_channel = "whatsapp", user_data contains page_id + ctwa_clid
+        // For Messenger: messaging_channel = "messenger", user_data contains page_id + page_scoped_user_id
         // NOTE: client_user_agent is NOT allowed for business_messaging.
-        // NOTE: For WhatsApp, the required id is the WhatsApp Business Account ID (WABA), not a Page ID.
         if (isBusinessMessaging) {
           eventData.messaging_channel = "whatsapp";
-          eventData.user_data.whatsapp_business_account_id = pixel.page_id;
+          eventData.user_data.page_id = pixel.page_id;
           eventData.user_data.ctwa_clid = finalCtwaClid;
           console.log(
-            `[SEND-FB-EVENT] Using Business Messaging with waba_id: ${pixel.page_id}, ctwa_clid: ${finalCtwaClid}`,
+            `[SEND-FB-EVENT] Using Business Messaging (WhatsApp) with page_id: ${pixel.page_id}, ctwa_clid: ${finalCtwaClid}`,
           );
         } else {
           // For website action_source, use client_user_agent and fbc/fbp
