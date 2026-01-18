@@ -25,6 +25,22 @@ interface SendEventPayload {
   contact_id?: string; // Optional: for inbox contacts
 }
 
+interface EventLogEntry {
+  user_id: string;
+  contact_id?: string;
+  phone: string;
+  event_name: string;
+  event_value?: number;
+  pixel_id: string;
+  action_source: string;
+  page_id?: string;
+  ctwa_clid?: string;
+  success: boolean;
+  error_message?: string;
+  facebook_trace_id?: string;
+  events_received?: number;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -107,16 +123,36 @@ serve(async (req) => {
     // Hash the phone number
     const hashedPhone = await hashData(phone);
 
-    const results: { pixel_id: string; success: boolean; error?: string; events_received?: number }[] = [];
+    const results: { 
+      pixel_id: string; 
+      success: boolean; 
+      error?: string; 
+      events_received?: number;
+      warning?: string;
+      action_source?: string;
+    }[] = [];
+    
+    const eventLogs: EventLogEntry[] = [];
 
     // Send event to each pixel
     for (const pixel of pixels) {
       try {
-        // Determine action_source based on whether we have page_id (Business Messaging)
-        const isBusinessMessaging = !!pixel.page_id && !!finalCtwaClid;
+        // Check if this pixel has page_id configured (for Business Messaging)
+        const hasPageId = !!pixel.page_id;
+        const hasCtwaClid = !!finalCtwaClid;
+        
+        // Determine if we should use Business Messaging
+        const isBusinessMessaging = hasPageId && hasCtwaClid;
         const actionSource = isBusinessMessaging ? "business_messaging" : "website";
         
-        console.log(`[SEND-FB-EVENT] Pixel ${pixel.pixel_id}, page_id: ${pixel.page_id || 'none'}, action_source: ${actionSource}`);
+        // Generate warnings for misconfigurations
+        let warning: string | undefined;
+        if (hasPageId && !hasCtwaClid) {
+          warning = "Pixel configurado para Business Messaging mas contato não possui CTWA CLID. O evento foi enviado como 'website'.";
+          console.warn(`[SEND-FB-EVENT] Warning for pixel ${pixel.pixel_id}: ${warning}`);
+        }
+        
+        console.log(`[SEND-FB-EVENT] Pixel ${pixel.pixel_id}, page_id: ${pixel.page_id || 'none'}, ctwa_clid: ${finalCtwaClid || 'none'}, action_source: ${actionSource}`);
 
         const eventData: any = {
           event_name,
@@ -171,23 +207,73 @@ serve(async (req) => {
         
         console.log(`[SEND-FB-EVENT] Pixel ${pixel.pixel_id} full response:`, JSON.stringify(eventsResult));
 
+        // Prepare log entry
+        const logEntry: EventLogEntry = {
+          user_id: user.id,
+          contact_id: contact_id || undefined,
+          phone,
+          event_name,
+          event_value: event_name === "Purchase" ? (value || 0) : undefined,
+          pixel_id: pixel.pixel_id,
+          action_source: actionSource,
+          page_id: pixel.page_id || undefined,
+          ctwa_clid: finalCtwaClid || undefined,
+          success: false,
+        };
+
         if (eventsResult.error) {
           console.error(`[SEND-FB-EVENT] Pixel ${pixel.pixel_id} error:`, eventsResult.error);
+          
+          // Parse Facebook error for better user feedback
+          let errorMessage = eventsResult.error.message;
+          if (eventsResult.error.error_subcode === 2804024) {
+            errorMessage = "Page ID incorreto ou não corresponde ao CTWA CLID do contato.";
+          } else if (eventsResult.error.error_subcode === 2804003) {
+            errorMessage = "CTWA CLID inválido ou expirado.";
+          }
+          
+          logEntry.error_message = errorMessage;
+          eventLogs.push(logEntry);
+          
           results.push({
             pixel_id: pixel.pixel_id,
             success: false,
-            error: eventsResult.error.message,
+            error: errorMessage,
+            warning,
+            action_source: actionSource,
           });
         } else {
           console.log(`[SEND-FB-EVENT] Pixel ${pixel.pixel_id} success:`, eventsResult);
+          
+          logEntry.success = true;
+          logEntry.facebook_trace_id = eventsResult.fbtrace_id;
+          logEntry.events_received = eventsResult.events_received;
+          eventLogs.push(logEntry);
+          
           results.push({
             pixel_id: pixel.pixel_id,
             success: true,
             events_received: eventsResult.events_received,
+            warning,
+            action_source: actionSource,
           });
         }
       } catch (err: any) {
         console.error(`[SEND-FB-EVENT] Pixel ${pixel.pixel_id} exception:`, err);
+        
+        const logEntry: EventLogEntry = {
+          user_id: user.id,
+          contact_id: contact_id || undefined,
+          phone,
+          event_name,
+          event_value: event_name === "Purchase" ? (value || 0) : undefined,
+          pixel_id: pixel.pixel_id,
+          action_source: "unknown",
+          success: false,
+          error_message: err.message,
+        };
+        eventLogs.push(logEntry);
+        
         results.push({
           pixel_id: pixel.pixel_id,
           success: false,
@@ -196,13 +282,28 @@ serve(async (req) => {
       }
     }
 
+    // Save all event logs to database
+    if (eventLogs.length > 0) {
+      const { error: logError } = await supabaseClient
+        .from("facebook_event_logs")
+        .insert(eventLogs);
+      
+      if (logError) {
+        console.error("[SEND-FB-EVENT] Failed to save event logs:", logError);
+      } else {
+        console.log(`[SEND-FB-EVENT] Saved ${eventLogs.length} event logs`);
+      }
+    }
+
     const successCount = results.filter(r => r.success).length;
+    const hasWarnings = results.some(r => r.warning);
 
     return new Response(
       JSON.stringify({
         success: successCount > 0,
         total_pixels: pixels.length,
         successful: successCount,
+        has_warnings: hasWarnings,
         results,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

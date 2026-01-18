@@ -1,4 +1,4 @@
-import { X, Tag, MessageSquare, Calendar, Edit2, Trash2, Megaphone, ExternalLink, ChevronDown, ChevronUp, Send, Loader2 } from 'lucide-react';
+import { X, Tag, MessageSquare, Calendar, Edit2, Trash2, Megaphone, ExternalLink, ChevronDown, ChevronUp, Send, Loader2, AlertTriangle, CheckCircle2, XCircle, History, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { formatPhoneDisplay } from '@/utils/phoneFormatter';
@@ -8,16 +8,28 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { InboxContact } from '@/types/inbox';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 interface ContactDetailsProps {
   contact: InboxContact;
   onClose: () => void;
+}
+
+interface EventLog {
+  id: string;
+  event_name: string;
+  event_value: number | null;
+  pixel_id: string;
+  action_source: string;
+  success: boolean;
+  error_message: string | null;
+  created_at: string;
 }
 
 export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
@@ -27,6 +39,9 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
   const [selectedEvent, setSelectedEvent] = useState<string>('Purchase');
   const [eventValue, setEventValue] = useState<string>('');
   const [sendingEvent, setSendingEvent] = useState(false);
+  const [eventLogs, setEventLogs] = useState<EventLog[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [showEventHistory, setShowEventHistory] = useState(false);
 
   const getInitials = (name: string | null, phone: string) => {
     if (name && name.trim()) {
@@ -64,6 +79,32 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
     return formatPhoneDisplay(contact.phone);
   };
 
+  // Load event logs for this contact
+  const loadEventLogs = async () => {
+    setLoadingLogs(true);
+    try {
+      const { data, error } = await supabase
+        .from('facebook_event_logs')
+        .select('id, event_name, event_value, pixel_id, action_source, success, error_message, created_at')
+        .eq('contact_id', contact.id)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      setEventLogs((data || []) as EventLog[]);
+    } catch (err: any) {
+      console.error('Error loading event logs:', err);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showEventHistory) {
+      loadEventLogs();
+    }
+  }, [showEventHistory, contact.id]);
+
   const handleSaveNotes = async () => {
     try {
       const { error } = await supabase
@@ -81,6 +122,14 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
   };
 
   const handleSendFacebookEvent = async () => {
+    // Pre-validation: check if ctwa_clid is empty when user likely expects Business Messaging
+    if (!contact.ctwa_clid) {
+      toast.warning(
+        'Atenção: Este contato não possui CTWA CLID. O evento será enviado como "website" ao invés de "business_messaging". Para atribuição correta, o contato deve ter vindo de um anúncio Click-to-WhatsApp.',
+        { duration: 6000 }
+      );
+    }
+
     setSendingEvent(true);
     try {
       const parsedValue = eventValue ? parseFloat(eventValue.replace(',', '.')) : 0;
@@ -98,10 +147,31 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
       if (error) throw error;
 
       if (data.success) {
+        // Check for warnings
+        if (data.has_warnings) {
+          const warningResults = data.results.filter((r: any) => r.warning);
+          warningResults.forEach((r: any) => {
+            toast.warning(r.warning, { duration: 5000 });
+          });
+        }
+        
         toast.success(`Evento ${selectedEvent} enviado para ${data.successful}/${data.total_pixels} pixel(s)`);
         setEventValue(''); // Clear value after sending
+        
+        // Refresh event logs if history is visible
+        if (showEventHistory) {
+          loadEventLogs();
+        }
       } else {
-        toast.error('Falha ao enviar evento. Verifique seus pixels em Configurações.');
+        // Check for specific errors
+        const errorResults = data.results?.filter((r: any) => !r.success && r.error) || [];
+        if (errorResults.length > 0) {
+          errorResults.forEach((r: any) => {
+            toast.error(`Pixel ${r.pixel_id}: ${r.error}`, { duration: 6000 });
+          });
+        } else {
+          toast.error('Falha ao enviar evento. Verifique seus pixels em Configurações.');
+        }
       }
     } catch (err: any) {
       toast.error(err.message || 'Erro ao enviar evento');
@@ -204,6 +274,17 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
               <Megaphone className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">Enviar Evento Facebook</span>
             </div>
+            
+            {/* Warning if no CTWA CLID */}
+            {!contact.ctwa_clid && (
+              <Alert variant="destructive" className="py-2">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  Contato sem CTWA CLID. Eventos serão enviados como "website" e não terão atribuição correta no Business Messaging.
+                </AlertDescription>
+              </Alert>
+            )}
+            
             <div className="space-y-2">
               <Select value={selectedEvent} onValueChange={setSelectedEvent}>
                 <SelectTrigger>
@@ -242,9 +323,96 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Envia para todos os pixels. Se configurou Page ID, usa Business Messaging API.
+              Envia para todos os pixels ativos. {contact.ctwa_clid ? 'Usa Business Messaging API.' : 'Sem CTWA CLID, usa Website API.'}
             </p>
           </div>
+
+          {/* Event History Section */}
+          <div className="space-y-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-between h-8 px-2"
+              onClick={() => setShowEventHistory(!showEventHistory)}
+            >
+              <div className="flex items-center gap-2">
+                <History className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Histórico de Eventos</span>
+              </div>
+              {showEventHistory ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </Button>
+            
+            {showEventHistory && (
+              <div className="space-y-2">
+                <div className="flex justify-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs"
+                    onClick={loadEventLogs}
+                    disabled={loadingLogs}
+                  >
+                    <RefreshCw className={`h-3 w-3 mr-1 ${loadingLogs ? 'animate-spin' : ''}`} />
+                    Atualizar
+                  </Button>
+                </div>
+                
+                {loadingLogs ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : eventLogs.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Nenhum evento enviado ainda.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {eventLogs.map((log) => (
+                      <div
+                        key={log.id}
+                        className={`p-2 rounded-md border text-xs space-y-1 ${
+                          log.success 
+                            ? 'border-green-500/30 bg-green-500/5' 
+                            : 'border-red-500/30 bg-red-500/5'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            {log.success ? (
+                              <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                            ) : (
+                              <XCircle className="h-3.5 w-3.5 text-red-500" />
+                            )}
+                            <span className="font-medium">{log.event_name}</span>
+                            {log.event_value && (
+                              <span className="text-muted-foreground">
+                                R$ {log.event_value.toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                            {log.action_source === 'business_messaging' ? 'CAPI BM' : 'Website'}
+                          </Badge>
+                        </div>
+                        
+                        <div className="text-muted-foreground">
+                          Pixel: {log.pixel_id.slice(-6)}... • {format(new Date(log.created_at), "dd/MM HH:mm")}
+                        </div>
+                        
+                        {log.error_message && (
+                          <p className="text-red-500 text-[10px] mt-1 break-words">
+                            {log.error_message}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <Separator />
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
