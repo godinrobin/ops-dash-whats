@@ -1396,6 +1396,68 @@ export type Database = {
         }
         Relationships: []
       }
+      facebook_event_logs: {
+        Row: {
+          action_source: string
+          contact_id: string | null
+          created_at: string
+          ctwa_clid: string | null
+          error_message: string | null
+          event_name: string
+          event_value: number | null
+          events_received: number | null
+          facebook_trace_id: string | null
+          id: string
+          page_id: string | null
+          phone: string
+          pixel_id: string
+          success: boolean
+          user_id: string
+        }
+        Insert: {
+          action_source: string
+          contact_id?: string | null
+          created_at?: string
+          ctwa_clid?: string | null
+          error_message?: string | null
+          event_name: string
+          event_value?: number | null
+          events_received?: number | null
+          facebook_trace_id?: string | null
+          id?: string
+          page_id?: string | null
+          phone: string
+          pixel_id: string
+          success?: boolean
+          user_id: string
+        }
+        Update: {
+          action_source?: string
+          contact_id?: string | null
+          created_at?: string
+          ctwa_clid?: string | null
+          error_message?: string | null
+          event_name?: string
+          event_value?: number | null
+          events_received?: number | null
+          facebook_trace_id?: string | null
+          id?: string
+          page_id?: string | null
+          phone?: string
+          pixel_id?: string
+          success?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "facebook_event_logs_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       feed_comment_reactions: {
         Row: {
           comment_id: string
