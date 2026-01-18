@@ -1220,6 +1220,36 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
                 console.log(`[TAG-WHATS] Log updated: all pixels failed, error: ${lastError}`);
               }
             }
+
+            // Log to facebook_event_logs so it appears in contact history
+            try {
+              // Find the inbox_contact by phone
+              const { data: inboxContact } = await supabase
+                .from("inbox_contacts")
+                .select("id")
+                .eq("phone", phone)
+                .eq("user_id", instance.user_id)
+                .limit(1)
+                .maybeSingle();
+
+              if (inboxContact) {
+                await supabase.from("facebook_event_logs").insert({
+                  user_id: instance.user_id,
+                  contact_id: inboxContact.id,
+                  phone: phone,
+                  pixel_id: successfulPixelId || userPixels[0]?.pixel_id || 'unknown',
+                  event_name: eventType,
+                  event_value: extractedValue || 0,
+                  action_source: 'business_messaging',
+                  success: eventSentSuccessfully,
+                  error_message: eventSentSuccessfully ? null : lastError,
+                  ctwa_clid: ctwaClid || null,
+                });
+                console.log(`[TAG-WHATS] Event logged to facebook_event_logs for contact ${inboxContact.id}`);
+              }
+            } catch (logErr) {
+              console.error(`[TAG-WHATS] Error logging to facebook_event_logs:`, logErr);
+            }
           }
         } else {
           console.log("[TAG-WHATS] FB events not enabled for user");
