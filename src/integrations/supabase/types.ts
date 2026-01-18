@@ -3555,6 +3555,7 @@ export type Database = {
           pixel_id: string
           updated_at: string
           user_id: string
+          whatsapp_business_account_id: string | null
         }
         Insert: {
           access_token: string
@@ -3566,6 +3567,7 @@ export type Database = {
           pixel_id: string
           updated_at?: string
           user_id: string
+          whatsapp_business_account_id?: string | null
         }
         Update: {
           access_token?: string
@@ -3577,6 +3579,7 @@ export type Database = {
           pixel_id?: string
           updated_at?: string
           user_id?: string
+          whatsapp_business_account_id?: string | null
         }
         Relationships: []
       }
