@@ -51,21 +51,6 @@ export function PixelSettings() {
   const [editName, setEditName] = useState("");
   const [editPageId, setEditPageId] = useState("");
 
-  // Load VTURB player script
-  useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://scripts.converteai.net/574be7f8-d9bf-450a-9bfb-e024758a6c13/players/696d4806dd2fe7b4886dc992/v4/player.js';
-    script.async = true;
-    document.head.appendChild(script);
-    
-    return () => {
-      // Cleanup script on unmount
-      const existingScript = document.querySelector(`script[src="${script.src}"]`);
-      if (existingScript) {
-        existingScript.remove();
-      }
-    };
-  }, []);
 
   useEffect(() => {
     fetchPixels();
@@ -423,11 +408,16 @@ export function PixelSettings() {
           <CardTitle className="text-lg">Como configurar</CardTitle>
         </CardHeader>
         <CardContent className="p-4 pt-0">
-          <div className="w-full max-w-2xl mx-auto aspect-video">
-            <div 
-              dangerouslySetInnerHTML={{
-                __html: `<vturb-smartplayer id="vid-696d4806dd2fe7b4886dc992" style="display: block; margin: 0 auto; width: 100%; height: 100%;"></vturb-smartplayer>`
-              }}
+          <div 
+            className="w-full aspect-video relative overflow-hidden rounded-lg"
+            style={{ contain: 'layout paint', isolation: 'isolate' }}
+          >
+            <iframe
+              src="https://player.vturb.com.br/embed/696d4806dd2fe7b4886dc992"
+              className="absolute inset-0 w-full h-full"
+              frameBorder="0"
+              allow="autoplay; fullscreen"
+              allowFullScreen
             />
           </div>
         </CardContent>
