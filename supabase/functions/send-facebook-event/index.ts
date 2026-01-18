@@ -112,21 +112,45 @@ serve(async (req) => {
     // Send event to each pixel
     for (const pixel of pixels) {
       try {
-        const eventData = {
+        // Determine action_source based on whether we have page_id (Business Messaging)
+        const isBusinessMessaging = !!pixel.page_id && !!finalCtwaClid;
+        const actionSource = isBusinessMessaging ? "business_messaging" : "website";
+        
+        console.log(`[SEND-FB-EVENT] Pixel ${pixel.pixel_id}, page_id: ${pixel.page_id || 'none'}, action_source: ${actionSource}`);
+
+        const eventData: any = {
           event_name,
           event_time: Math.floor(Date.now() / 1000),
-          action_source: "website",
+          action_source: actionSource,
           user_data: {
             ph: [hashedPhone],
             client_user_agent: req.headers.get("user-agent") || "",
-            fbc: fbclid ? `fb.1.${Date.now()}.${fbclid}` : undefined,
-            fbp: finalCtwaClid || undefined,
           },
-          custom_data: event_name === "Purchase" ? {
+        };
+
+        // For business_messaging, add page_id and page_scoped_user_id (ctwa_clid)
+        if (isBusinessMessaging) {
+          eventData.messaging_channel = "whatsapp";
+          eventData.user_data.page_id = pixel.page_id;
+          eventData.user_data.page_scoped_user_id = finalCtwaClid;
+          console.log(`[SEND-FB-EVENT] Using Business Messaging with page_id: ${pixel.page_id}, ctwa_clid: ${finalCtwaClid}`);
+        } else {
+          // For website action_source, use fbc/fbp
+          if (fbclid) {
+            eventData.user_data.fbc = `fb.1.${Date.now()}.${fbclid}`;
+          }
+          if (finalCtwaClid) {
+            eventData.user_data.fbp = finalCtwaClid;
+          }
+        }
+
+        // Add custom_data for Purchase events
+        if (event_name === "Purchase") {
+          eventData.custom_data = {
             currency: currency || "BRL",
             value: value || 0,
-          } : undefined,
-        };
+          };
+        }
 
         const eventsUrl = `https://graph.facebook.com/v21.0/${pixel.pixel_id}/events`;
         const eventsResponse = await fetch(eventsUrl, {
@@ -139,6 +163,8 @@ serve(async (req) => {
         });
 
         const eventsResult = await eventsResponse.json();
+        
+        console.log(`[SEND-FB-EVENT] Pixel ${pixel.pixel_id} full response:`, JSON.stringify(eventsResult));
 
         if (eventsResult.error) {
           console.error(`[SEND-FB-EVENT] Pixel ${pixel.pixel_id} error:`, eventsResult.error);

@@ -4,6 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { formatPhoneDisplay } from '@/utils/phoneFormatter';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -24,6 +25,7 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
   const [editingNotes, setEditingNotes] = useState(false);
   const [showFullAdBody, setShowFullAdBody] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<string>('Purchase');
+  const [eventValue, setEventValue] = useState<string>('');
   const [sendingEvent, setSendingEvent] = useState(false);
 
   const getInitials = (name: string | null, phone: string) => {
@@ -81,13 +83,15 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
   const handleSendFacebookEvent = async () => {
     setSendingEvent(true);
     try {
+      const parsedValue = eventValue ? parseFloat(eventValue.replace(',', '.')) : 0;
+      
       const { data, error } = await supabase.functions.invoke('send-facebook-event', {
         body: {
           contact_id: contact.id,
           phone: contact.phone,
           event_name: selectedEvent,
           ctwa_clid: contact.ctwa_clid,
-          value: selectedEvent === 'Purchase' ? 0 : undefined,
+          value: selectedEvent === 'Purchase' ? parsedValue : undefined,
         }
       });
 
@@ -95,6 +99,7 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
 
       if (data.success) {
         toast.success(`Evento ${selectedEvent} enviado para ${data.successful}/${data.total_pixels} pixel(s)`);
+        setEventValue(''); // Clear value after sending
       } else {
         toast.error('Falha ao enviar evento. Verifique seus pixels em Configurações.');
       }
@@ -197,11 +202,11 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Megaphone className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Enviar Evento</span>
+              <span className="text-sm font-medium">Enviar Evento Facebook</span>
             </div>
-            <div className="flex gap-2">
+            <div className="space-y-2">
               <Select value={selectedEvent} onValueChange={setSelectedEvent}>
-                <SelectTrigger className="flex-1">
+                <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -209,24 +214,35 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
                   <SelectItem value="Lead">Lead</SelectItem>
                 </SelectContent>
               </Select>
+              
+              {selectedEvent === 'Purchase' && (
+                <Input
+                  type="text"
+                  placeholder="Valor (ex: 97.00)"
+                  value={eventValue}
+                  onChange={(e) => setEventValue(e.target.value)}
+                  className="text-sm"
+                />
+              )}
+              
               <Button
                 onClick={handleSendFacebookEvent}
                 disabled={sendingEvent}
                 size="sm"
-                className="shrink-0"
+                className="w-full"
               >
                 {sendingEvent ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <>
                     <Send className="h-4 w-4 mr-1" />
-                    Disparar
+                    Disparar Evento
                   </>
                 )}
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Dispara evento para todos os pixels configurados em Configurações
+              Envia para todos os pixels. Se configurou Page ID, usa Business Messaging API.
             </p>
           </div>
 

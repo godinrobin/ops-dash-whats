@@ -24,6 +24,7 @@ interface Pixel {
   pixel_id: string;
   access_token: string;
   name: string | null;
+  page_id: string | null;
   is_active: boolean;
   created_at: string;
 }
@@ -42,11 +43,13 @@ export function PixelSettings() {
   const [newPixelId, setNewPixelId] = useState("");
   const [newAccessToken, setNewAccessToken] = useState("");
   const [newName, setNewName] = useState("");
+  const [newPageId, setNewPageId] = useState("");
   
   // Edit state
   const [editPixelId, setEditPixelId] = useState("");
   const [editAccessToken, setEditAccessToken] = useState("");
   const [editName, setEditName] = useState("");
+  const [editPageId, setEditPageId] = useState("");
 
   useEffect(() => {
     fetchPixels();
@@ -90,6 +93,7 @@ export function PixelSettings() {
           pixel_id: newPixelId.trim(),
           access_token: newAccessToken.trim(),
           name: newName.trim() || null,
+          page_id: newPageId.trim() || null,
           is_active: true,
         });
       
@@ -99,6 +103,7 @@ export function PixelSettings() {
       setNewPixelId("");
       setNewAccessToken("");
       setNewName("");
+      setNewPageId("");
       fetchPixels();
     } catch (error: any) {
       toast({
@@ -116,6 +121,7 @@ export function PixelSettings() {
     setEditPixelId(pixel.pixel_id);
     setEditAccessToken(pixel.access_token);
     setEditName(pixel.name || "");
+    setEditPageId(pixel.page_id || "");
   };
 
   const cancelEditing = () => {
@@ -123,6 +129,7 @@ export function PixelSettings() {
     setEditPixelId("");
     setEditAccessToken("");
     setEditName("");
+    setEditPageId("");
   };
 
   const handleUpdatePixel = async (pixelId: string) => {
@@ -140,6 +147,7 @@ export function PixelSettings() {
           pixel_id: editPixelId.trim(),
           access_token: editAccessToken.trim(),
           name: editName.trim() || null,
+          page_id: editPageId.trim() || null,
         })
         .eq("id", pixelId)
         .eq("user_id", user.id);
@@ -226,6 +234,21 @@ export function PixelSettings() {
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="page-id">
+                Page ID <span className="text-muted-foreground text-xs">(para pixels de mensagem)</span>
+              </Label>
+              <Input
+                id="page-id"
+                placeholder="Ex: 123456789012345"
+                value={newPageId}
+                onChange={(e) => setNewPageId(e.target.value)}
+                disabled={saving}
+              />
+              <p className="text-xs text-muted-foreground">
+                Obrigatório para atribuição de conversão via Click-to-WhatsApp
+              </p>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="access-token">
                 Token de Acesso <span className="text-destructive">*</span>
               </Label>
@@ -291,6 +314,12 @@ export function PixelSettings() {
                         disabled={saving}
                       />
                       <Input
+                        placeholder="Page ID (para mensagens)"
+                        value={editPageId}
+                        onChange={(e) => setEditPageId(e.target.value)}
+                        disabled={saving}
+                      />
+                      <Input
                         type="password"
                         placeholder="Token de Acesso"
                         value={editAccessToken}
@@ -335,6 +364,11 @@ export function PixelSettings() {
                         <p className="text-sm text-muted-foreground font-mono">
                           ID: {pixel.pixel_id}
                         </p>
+                        {pixel.page_id && (
+                          <p className="text-xs text-muted-foreground">
+                            Page ID: {pixel.page_id}
+                          </p>
+                        )}
                         <p className="text-xs text-muted-foreground">
                           Token: ••••••{pixel.access_token.slice(-6)}
                         </p>
