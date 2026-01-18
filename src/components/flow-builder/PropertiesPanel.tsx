@@ -1691,12 +1691,6 @@ export const PropertiesPanel = ({
       case 'pixel':
         return (
           <div className="space-y-4">
-            <div className="bg-gradient-to-r from-blue-500/10 to-blue-600/10 border border-blue-500/20 rounded-lg p-3 mb-2">
-              <p className="text-xs text-blue-400">
-                Dispara um evento para o Facebook quando o contato passar por este nó. O fluxo sempre avança, mesmo em caso de erro.
-              </p>
-            </div>
-            
             <div className="space-y-2">
               <Label>Pixel *</Label>
               <Select
@@ -1760,9 +1754,6 @@ export const PropertiesPanel = ({
               </div>
             )}
             
-            <div className="p-2 rounded bg-muted text-xs text-muted-foreground">
-              <strong>Comportamento:</strong> O nó sempre avança para o próximo, independente de sucesso ou falha no envio do evento.
-            </div>
           </div>
         );
 

@@ -51,6 +51,22 @@ export function PixelSettings() {
   const [editName, setEditName] = useState("");
   const [editPageId, setEditPageId] = useState("");
 
+  // Load VTURB player script
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://scripts.converteai.net/574be7f8-d9bf-450a-9bfb-e024758a6c13/players/696d4806dd2fe7b4886dc992/v4/player.js';
+    script.async = true;
+    document.head.appendChild(script);
+    
+    return () => {
+      // Cleanup script on unmount
+      const existingScript = document.querySelector(`script[src="${script.src}"]`);
+      if (existingScript) {
+        existingScript.remove();
+      }
+    };
+  }, []);
+
   useEffect(() => {
     fetchPixels();
   }, [user]);
@@ -205,9 +221,12 @@ export function PixelSettings() {
             <Megaphone className="h-5 w-5 text-accent" />
             <CardTitle>Adicionar Pixel do Facebook</CardTitle>
           </div>
-          <CardDescription>
-            Configure seus pixels para disparar eventos de conversão automaticamente
-          </CardDescription>
+          <div className="flex items-start gap-2 p-3 mt-2 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+            <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-amber-400">
+              O trackeamento é válido apenas para campanhas direto para WhatsApp, sem pressel.
+            </p>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4">
@@ -234,9 +253,7 @@ export function PixelSettings() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="page-id">
-                Page ID <span className="text-muted-foreground text-xs">(para pixels de mensagem)</span>
-              </Label>
+              <Label htmlFor="page-id">Page ID</Label>
               <Input
                 id="page-id"
                 placeholder="Ex: 123456789012345"
@@ -244,9 +261,6 @@ export function PixelSettings() {
                 onChange={(e) => setNewPageId(e.target.value)}
                 disabled={saving}
               />
-              <p className="text-xs text-muted-foreground">
-                Obrigatório para atribuição de conversão via Click-to-WhatsApp
-              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="access-token">
@@ -266,7 +280,7 @@ export function PixelSettings() {
           <Button
             onClick={handleAddPixel}
             disabled={saving || !newPixelId.trim() || !newAccessToken.trim()}
-            className="w-full"
+            className="w-full bg-emerald-600 hover:bg-emerald-700"
           >
             {saving ? (
               <>
@@ -357,7 +371,10 @@ export function PixelSettings() {
                           <span className="font-medium">
                             {pixel.name || "Pixel sem nome"}
                           </span>
-                          <Badge variant="secondary" className="text-xs">
+                          <Badge 
+                            variant="secondary" 
+                            className={`text-xs ${pixel.is_active ? 'bg-emerald-500/20 text-emerald-500 border-emerald-500/30' : ''}`}
+                          >
                             {pixel.is_active ? "Ativo" : "Inativo"}
                           </Badge>
                         </div>
@@ -400,19 +417,17 @@ export function PixelSettings() {
         </Card>
       )}
 
-      {/* Info Card */}
-      <Card className="border-accent/30 bg-accent/5">
-        <CardContent className="pt-6">
-          <div className="flex gap-3">
-            <AlertCircle className="h-5 w-5 text-accent shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Como funciona?</p>
-              <p className="text-xs text-muted-foreground">
-                Quando uma venda for identificada no Tag Whats Cloud, o evento será disparado automaticamente 
-                para todos os pixels configurados aqui. Você também pode disparar eventos manualmente no Automati-Zap.
-              </p>
-            </div>
-          </div>
+      {/* Video Tutorial */}
+      <Card className="border-accent/30 bg-accent/5 overflow-hidden">
+        <CardContent className="p-0">
+          <div 
+            dangerouslySetInnerHTML={{
+              __html: `
+                <script>!function(i,n){i._plt=i._plt||(n&&n.timeOrigin?n.timeOrigin+n.now():Date.now())}(window,performance);</script>
+                <vturb-smartplayer id="vid-696d4806dd2fe7b4886dc992" style="display: block; margin: 0 auto; width: 100%;"></vturb-smartplayer>
+              `
+            }}
+          />
         </CardContent>
       </Card>
 

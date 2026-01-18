@@ -366,12 +366,11 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
               </div>
             )}
             
-            <p className="text-xs text-muted-foreground">
-              {contact.ctwa_clid 
-                ? `Usa Business Messaging API.${selectedPixel === 'all' ? ' Envia para todos os pixels ativos.' : ''}`
-                : 'Este contato não veio de um anúncio Click-to-WhatsApp.'
-              }
-            </p>
+            {!contact.ctwa_clid && (
+              <p className="text-xs text-muted-foreground">
+                Este contato não veio de um anúncio Click-to-WhatsApp.
+              </p>
+            )}
           </div>
 
           {/* Event History Section */}
@@ -438,15 +437,9 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
                             )}
                           </div>
                           <span className="text-muted-foreground">
-                            {format(new Date(log.created_at), "dd/MM HH:mm")}
+                            {format(new Date(log.created_at), "dd/MM/yyyy HH:mm")}
                           </span>
                         </div>
-                        
-                        {log.error_message && (
-                          <p className="text-red-500 text-[10px] mt-1 break-words">
-                            {log.error_message}
-                          </p>
-                        )}
                       </div>
                     ))}
                   </div>

@@ -1993,8 +1993,36 @@ Regras RIGOROSAS:
                   if (pixelResult.error) {
                     console.error(`[${runId}] Pixel event error:`, pixelResult.error);
                     processedActions.push(`Pixel error: ${pixelResult.error.message}`);
+                    
+                    // Log failure to facebook_event_logs
+                    await supabaseClient.from("facebook_event_logs").insert({
+                      user_id: session.user_id,
+                      contact_id: session.contact_id,
+                      phone: contact.phone || '',
+                      pixel_id: pixel.pixel_id,
+                      event_name: pixelEventType,
+                      event_value: pixelEventValue || 0,
+                      action_source: isBusinessMessaging ? 'business_messaging' : 'website',
+                      success: false,
+                      error_message: pixelResult.error.message || 'Unknown error',
+                      ctwa_clid: ctwaClid,
+                    });
                   } else {
                     processedActions.push(`Pixel event sent: ${pixelEventType}`);
+                    
+                    // Log success to facebook_event_logs
+                    await supabaseClient.from("facebook_event_logs").insert({
+                      user_id: session.user_id,
+                      contact_id: session.contact_id,
+                      phone: contact.phone || '',
+                      pixel_id: pixel.pixel_id,
+                      event_name: pixelEventType,
+                      event_value: pixelEventValue || 0,
+                      action_source: isBusinessMessaging ? 'business_messaging' : 'website',
+                      success: true,
+                      error_message: null,
+                      ctwa_clid: ctwaClid,
+                    });
                   }
                 }
               } catch (pixelErr) {

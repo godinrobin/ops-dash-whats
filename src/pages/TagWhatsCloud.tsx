@@ -95,7 +95,12 @@ const TagWhatsCloud = () => {
   const [chargePixKey, setChargePixKey] = useState('');
   const [chargePixName, setChargePixName] = useState('');
   const [disableLabelOnCharge, setDisableLabelOnCharge] = useState(false);
-  const [chargeSectionCollapsed, setChargeSectionCollapsed] = useState(false);
+  
+  // Collapsed states - persist in localStorage
+  const [chargeSectionCollapsed, setChargeSectionCollapsed] = useState(() => {
+    const saved = localStorage.getItem('tagwhats_charge_collapsed');
+    return saved ? JSON.parse(saved) : false;
+  });
   
   // Global pago label toggle
   const [disablePagoLabel, setDisablePagoLabel] = useState(false);
@@ -103,8 +108,20 @@ const TagWhatsCloud = () => {
   // FB Auto Events states
   const [fbEventEnabled, setFbEventEnabled] = useState(false);
   const [fbEventType, setFbEventType] = useState('Purchase');
-  const [fbEventsSectionCollapsed, setFbEventsSectionCollapsed] = useState(false);
+  const [fbEventsSectionCollapsed, setFbEventsSectionCollapsed] = useState(() => {
+    const saved = localStorage.getItem('tagwhats_fb_collapsed');
+    return saved ? JSON.parse(saved) : false;
+  });
   const [savingFbConfig, setSavingFbConfig] = useState(false);
+  
+  // Persist collapsed states to localStorage
+  useEffect(() => {
+    localStorage.setItem('tagwhats_charge_collapsed', JSON.stringify(chargeSectionCollapsed));
+  }, [chargeSectionCollapsed]);
+  
+  useEffect(() => {
+    localStorage.setItem('tagwhats_fb_collapsed', JSON.stringify(fbEventsSectionCollapsed));
+  }, [fbEventsSectionCollapsed]);
 
   const fetchData = useCallback(async () => {
     const userId = effectiveUserId || user?.id;
