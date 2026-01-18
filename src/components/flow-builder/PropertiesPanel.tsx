@@ -1745,7 +1745,7 @@ export const PropertiesPanel = ({
               </Select>
             </div>
             
-            {['Purchase', 'InitiateCheckout', 'AddToCart'].includes((nodeData.eventType as string) || 'Purchase') && (
+            {(nodeData.eventType as string) === 'Purchase' && (
               <div className="space-y-2">
                 <Label>Valor (opcional)</Label>
                 <Input
