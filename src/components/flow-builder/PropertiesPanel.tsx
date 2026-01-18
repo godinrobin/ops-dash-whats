@@ -93,6 +93,7 @@ export const PropertiesPanel = ({
   const [showNewVariableInput, setShowNewVariableInput] = useState(false);
   const [newVariableName, setNewVariableName] = useState('');
   const [dbCustomVariables, setDbCustomVariables] = useState<string[]>([]);
+  const [pixelsList, setPixelsList] = useState<{id: string; pixel_id: string; name: string | null}[]>([]);
   
   // Extract custom variables from all nodes in the flow
   const flowCustomVariables = extractCustomVariablesFromNodes(allNodes);
@@ -114,6 +115,23 @@ export const PropertiesPanel = ({
     };
     
     fetchVariables();
+  }, [user]);
+
+  // Fetch pixels for Pixel node
+  useEffect(() => {
+    const fetchPixels = async () => {
+      if (!user) return;
+      
+      const { data } = await supabase
+        .from('user_facebook_pixels')
+        .select('id, pixel_id, name')
+        .eq('user_id', user.id)
+        .eq('is_active', true);
+      
+      setPixelsList((data || []) as {id: string; pixel_id: string; name: string | null}[]);
+    };
+    
+    fetchPixels();
   }, [user]);
 
   // Save variable to database when used in nodes
@@ -1666,6 +1684,84 @@ export const PropertiesPanel = ({
             
             <div className="p-2 rounded bg-amber-500/10 border border-amber-500/30 text-xs text-amber-400">
               <strong>Nota:</strong> Podem não aparecer corretamente no WhatsApp Web, apenas no dispositivo mobile.
+            </div>
+          </div>
+        );
+
+      case 'pixel':
+        return (
+          <div className="space-y-4">
+            <div className="bg-gradient-to-r from-blue-500/10 to-blue-600/10 border border-blue-500/20 rounded-lg p-3 mb-2">
+              <p className="text-xs text-blue-400">
+                Dispara um evento para o Facebook quando o contato passar por este nó. O fluxo sempre avança, mesmo em caso de erro.
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Pixel *</Label>
+              <Select
+                value={(nodeData.pixelId as string) || ''}
+                onValueChange={(value) => {
+                  const pixel = pixelsList.find(p => p.pixel_id === value);
+                  onUpdateNode(selectedNode.id, { 
+                    pixelId: value,
+                    pixelName: pixel?.name || null
+                  });
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um pixel..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {pixelsList.map((pixel) => (
+                    <SelectItem key={pixel.id} value={pixel.pixel_id}>
+                      {pixel.name || `Pixel ${pixel.pixel_id.slice(-6)}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {pixelsList.length === 0 && (
+                <p className="text-xs text-amber-500">
+                  Nenhum pixel configurado. Configure em Configurações → Pixel do Facebook.
+                </p>
+              )}
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Evento *</Label>
+              <Select
+                value={(nodeData.eventType as string) || 'Purchase'}
+                onValueChange={(value) => onUpdateNode(selectedNode.id, { eventType: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Purchase">Compra (Purchase)</SelectItem>
+                  <SelectItem value="Lead">Lead</SelectItem>
+                  <SelectItem value="InitiateCheckout">Iniciar Checkout (InitiateCheckout)</SelectItem>
+                  <SelectItem value="AddToCart">Adicionar ao Carrinho (AddToCart)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {['Purchase', 'InitiateCheckout', 'AddToCart'].includes((nodeData.eventType as string) || 'Purchase') && (
+              <div className="space-y-2">
+                <Label>Valor (opcional)</Label>
+                <Input
+                  type="text"
+                  placeholder="Ex: 97.00"
+                  value={(nodeData.eventValue as string) || ''}
+                  onChange={(e) => onUpdateNode(selectedNode.id, { eventValue: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Deixe vazio para usar o valor extraído pelo fluxo (se houver)
+                </p>
+              </div>
+            )}
+            
+            <div className="p-2 rounded bg-muted text-xs text-muted-foreground">
+              <strong>Comportamento:</strong> O nó sempre avança para o próximo, independente de sucesso ou falha no envio do evento.
             </div>
           </div>
         );

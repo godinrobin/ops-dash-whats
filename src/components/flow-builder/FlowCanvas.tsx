@@ -37,6 +37,7 @@ import { PaymentIdentifierNode } from './nodes/PaymentIdentifierNode';
 import { SendPixKeyNode } from './nodes/SendPixKeyNode';
 import { SendChargeNode } from './nodes/SendChargeNode';
 import { InteractiveBlockNode } from './nodes/InteractiveBlockNode';
+import { PixelNode } from './nodes/PixelNode';
 import { NodeSidebar } from './NodeSidebar';
 import { PropertiesPanel } from './PropertiesPanel';
 import { useFlowValidation } from './hooks/useFlowValidation';
@@ -66,6 +67,7 @@ const nodeTypes = {
   sendPixKey: SendPixKeyNode,
   sendCharge: SendChargeNode,
   interactiveBlock: InteractiveBlockNode,
+  pixel: PixelNode,
 };
 
 interface FlowCanvasProps {
@@ -258,6 +260,7 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
       paymentIdentifier: 'Identificar Pagamento',
       sendPixKey: 'Enviar Chave PIX',
       sendCharge: 'Enviar Cobrança',
+      pixel: 'Pixel Facebook',
     };
     return labels[type] || type;
   };

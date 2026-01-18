@@ -32,16 +32,26 @@ interface EventLog {
   created_at: string;
 }
 
+interface Pixel {
+  id: string;
+  pixel_id: string;
+  name: string | null;
+  page_id: string | null;
+  is_active: boolean;
+}
+
 export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
   const [notes, setNotes] = useState(contact.notes || '');
   const [editingNotes, setEditingNotes] = useState(false);
   const [showFullAdBody, setShowFullAdBody] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<string>('Purchase');
+  const [selectedPixel, setSelectedPixel] = useState<string>('all');
   const [eventValue, setEventValue] = useState<string>('');
   const [sendingEvent, setSendingEvent] = useState(false);
   const [eventLogs, setEventLogs] = useState<EventLog[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [showEventHistory, setShowEventHistory] = useState(false);
+  const [pixels, setPixels] = useState<Pixel[]>([]);
 
   const getInitials = (name: string | null, phone: string) => {
     if (name && name.trim()) {
@@ -105,6 +115,18 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
     }
   }, [showEventHistory, contact.id]);
 
+  // Load pixels for the dropdown
+  useEffect(() => {
+    const loadPixels = async () => {
+      const { data } = await supabase
+        .from('user_facebook_pixels')
+        .select('id, pixel_id, name, page_id, is_active')
+        .eq('is_active', true);
+      setPixels((data || []) as Pixel[]);
+    };
+    loadPixels();
+  }, []);
+
   const handleSaveNotes = async () => {
     try {
       const { error } = await supabase
@@ -122,12 +144,13 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
   };
 
   const handleSendFacebookEvent = async () => {
-    // Pre-validation: check if ctwa_clid is empty when user likely expects Business Messaging
+    // Pre-validation: check if ctwa_clid is empty
     if (!contact.ctwa_clid) {
-      toast.warning(
-        'Atenção: Este contato não possui CTWA CLID. O evento será enviado como "website" ao invés de "business_messaging". Para atribuição correta, o contato deve ter vindo de um anúncio Click-to-WhatsApp.',
-        { duration: 6000 }
+      toast.error(
+        'Não foi possível pegar as informações de anúncio do lead.',
+        { duration: 5000 }
       );
+      return;
     }
 
     setSendingEvent(true);
@@ -140,7 +163,8 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
           phone: contact.phone,
           event_name: selectedEvent,
           ctwa_clid: contact.ctwa_clid,
-          value: selectedEvent === 'Purchase' ? parsedValue : undefined,
+          value: ['Purchase', 'InitiateCheckout', 'AddToCart'].includes(selectedEvent) ? parsedValue : undefined,
+          pixel_id: selectedPixel !== 'all' ? selectedPixel : undefined,
         }
       });
 
@@ -275,55 +299,78 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
               <span className="text-sm font-medium">Enviar Evento Facebook</span>
             </div>
             
-            {/* Warning if no CTWA CLID */}
+          {/* Warning if no CTWA CLID */}
             {!contact.ctwa_clid && (
               <Alert variant="destructive" className="py-2">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription className="text-xs">
-                  Contato sem CTWA CLID. Eventos serão enviados como "website" e não terão atribuição correta no Business Messaging.
+                  Não foi possível pegar as informações de anúncio do lead. Não é possível enviar eventos.
                 </AlertDescription>
               </Alert>
             )}
             
-            <div className="space-y-2">
-              <Select value={selectedEvent} onValueChange={setSelectedEvent}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Purchase">Compra (Purchase)</SelectItem>
-                  <SelectItem value="Lead">Lead</SelectItem>
-                </SelectContent>
-              </Select>
-              
-              {selectedEvent === 'Purchase' && (
-                <Input
-                  type="text"
-                  placeholder="Valor (ex: 97.00)"
-                  value={eventValue}
-                  onChange={(e) => setEventValue(e.target.value)}
-                  className="text-sm"
-                />
-              )}
-              
-              <Button
-                onClick={handleSendFacebookEvent}
-                disabled={sendingEvent}
-                size="sm"
-                className="w-full"
-              >
-                {sendingEvent ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <>
-                    <Send className="h-4 w-4 mr-1" />
-                    Disparar Evento
-                  </>
+            {contact.ctwa_clid && (
+              <div className="space-y-2">
+                <Select value={selectedEvent} onValueChange={setSelectedEvent}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Purchase">Compra (Purchase)</SelectItem>
+                    <SelectItem value="Lead">Lead</SelectItem>
+                    <SelectItem value="InitiateCheckout">Iniciar Checkout (InitiateCheckout)</SelectItem>
+                    <SelectItem value="AddToCart">Adicionar ao Carrinho (AddToCart)</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                {['Purchase', 'InitiateCheckout', 'AddToCart'].includes(selectedEvent) && (
+                  <Input
+                    type="text"
+                    placeholder="Valor (ex: 97.00)"
+                    value={eventValue}
+                    onChange={(e) => setEventValue(e.target.value)}
+                    className="text-sm"
+                  />
                 )}
-              </Button>
-            </div>
+                
+                {/* Pixel Selection */}
+                <Select value={selectedPixel} onValueChange={setSelectedPixel}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecionar pixel..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os pixels</SelectItem>
+                    {pixels.map((pixel) => (
+                      <SelectItem key={pixel.id} value={pixel.pixel_id}>
+                        {pixel.name || `Pixel ${pixel.pixel_id.slice(-6)}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                <Button
+                  onClick={handleSendFacebookEvent}
+                  disabled={sendingEvent}
+                  size="sm"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  {sendingEvent ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4 mr-1" />
+                      Disparar Evento
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+            
             <p className="text-xs text-muted-foreground">
-              Envia para todos os pixels ativos. {contact.ctwa_clid ? 'Usa Business Messaging API.' : 'Sem CTWA CLID, usa Website API.'}
+              {contact.ctwa_clid 
+                ? `Usa Business Messaging API.${selectedPixel === 'all' ? ' Envia para todos os pixels ativos.' : ''}`
+                : 'Este contato não veio de um anúncio Click-to-WhatsApp.'
+              }
             </p>
           </div>
 
