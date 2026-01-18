@@ -16,7 +16,8 @@ import {
   QrCode,
   Banknote,
   Sparkles,
-  MousePointer2
+  MousePointer2,
+  Megaphone
 } from 'lucide-react';
 
 const nodeCategories = [
@@ -39,6 +40,7 @@ const nodeCategories = [
       { type: 'waitInput', label: 'Aguardar Resposta', icon: MessageCircle, color: 'bg-cyan-500' },
       { type: 'condition', label: 'Condição', icon: GitBranch, color: 'bg-red-500' },
       { type: 'randomizer', label: 'Randomizador', icon: Shuffle, color: 'bg-violet-500' },
+      { type: 'pixel', label: 'Pixel', icon: Megaphone, color: 'bg-blue-600' },
     ],
   },
   {

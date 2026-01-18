@@ -15,14 +15,18 @@ async function hashData(data: string): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// Supported Facebook events
+const SUPPORTED_EVENTS = ["Purchase", "Lead", "InitiateCheckout", "AddToCart"];
+
 interface SendEventPayload {
   phone?: string;
-  event_name: string; // "Purchase" or "Lead"
+  event_name: string; // "Purchase", "Lead", "InitiateCheckout", "AddToCart"
   value?: number;
   currency?: string;
   ctwa_clid?: string;
   fbclid?: string;
   contact_id?: string; // Optional: for inbox contacts
+  pixel_id?: string; // Optional: for specific pixel
 }
 
 interface EventLogEntry {
@@ -66,10 +70,10 @@ serve(async (req) => {
     }
 
     const payload: SendEventPayload = await req.json();
-    const { event_name, value, currency, ctwa_clid, fbclid, contact_id } = payload;
+    const { event_name, value, currency, ctwa_clid, fbclid, contact_id, pixel_id } = payload;
     let phone = payload.phone;
 
-    console.log("[SEND-FB-EVENT] Request:", { event_name, phone, contact_id, ctwa_clid });
+    console.log("[SEND-FB-EVENT] Request:", { event_name, phone, contact_id, ctwa_clid, pixel_id });
 
     // If contact_id is provided, get phone and ctwa_clid from inbox_contacts
     let finalCtwaClid = ctwa_clid;
@@ -94,23 +98,31 @@ serve(async (req) => {
       });
     }
 
-    if (!event_name || !["Purchase", "Lead"].includes(event_name)) {
-      return new Response(JSON.stringify({ error: "Invalid event_name. Must be 'Purchase' or 'Lead'" }), {
+    if (!event_name || !SUPPORTED_EVENTS.includes(event_name)) {
+      return new Response(JSON.stringify({ 
+        error: `Invalid event_name. Must be one of: ${SUPPORTED_EVENTS.join(", ")}`
+      }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Get all user's pixels
-    const { data: pixels, error: pixelsError } = await supabaseClient
+    // Get user's pixels - optionally filter by specific pixel_id
+    let pixelQuery = supabaseClient
       .from("user_facebook_pixels")
       .select("*")
       .eq("user_id", user.id)
       .eq("is_active", true);
 
+    if (pixel_id) {
+      pixelQuery = pixelQuery.eq("pixel_id", pixel_id);
+    }
+
+    const { data: pixels, error: pixelsError } = await pixelQuery;
+
     if (pixelsError || !pixels || pixels.length === 0) {
       return new Response(JSON.stringify({ 
-        error: "No active pixels configured",
+        error: pixel_id ? "Pixel específico não encontrado ou inativo" : "No active pixels configured",
         message: "Configure seus pixels em Configurações > Pixel do Facebook"
       }), {
         status: 400,
@@ -185,8 +197,8 @@ serve(async (req) => {
           }
         }
 
-        // Add custom_data for Purchase events
-        if (event_name === "Purchase") {
+        // Add custom_data for events that support value
+        if (["Purchase", "InitiateCheckout", "AddToCart"].includes(event_name)) {
           eventData.custom_data = {
             currency: currency || "BRL",
             value: value || 0,
@@ -226,10 +238,11 @@ serve(async (req) => {
           
           // Parse Facebook error for better user feedback
           let errorMessage = eventsResult.error.message;
-          if (eventsResult.error.error_subcode === 2804024) {
-            errorMessage = "Page ID incorreto ou não corresponde ao CTWA CLID do contato.";
-          } else if (eventsResult.error.error_subcode === 2804003) {
-            errorMessage = "CTWA CLID inválido ou expirado.";
+          const subcode = eventsResult.error.error_subcode;
+          if (subcode === 2804024) {
+            errorMessage = "Este lead não veio da mesma página do pixel selecionado, selecione outro pixel.";
+          } else if (subcode === 2804003) {
+            errorMessage = "Não foi possível pegar as informações de anúncio do lead.";
           }
           
           logEntry.error_message = errorMessage;

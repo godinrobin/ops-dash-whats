@@ -2746,6 +2746,8 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
+          disable_pago_label: boolean | null
+          fb_auto_event_type: string | null
           fb_event_enabled: boolean | null
           fb_event_on_sale: string | null
           id: string
@@ -2762,6 +2764,8 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          disable_pago_label?: boolean | null
+          fb_auto_event_type?: string | null
           fb_event_enabled?: boolean | null
           fb_event_on_sale?: string | null
           id: string
@@ -2778,6 +2782,8 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           created_at?: string
+          disable_pago_label?: boolean | null
+          fb_auto_event_type?: string | null
           fb_event_enabled?: boolean | null
           fb_event_on_sale?: string | null
           id?: string
@@ -3336,6 +3342,9 @@ export type Database = {
           ctwa_clid: string | null
           error_message: string | null
           extracted_value: number | null
+          fb_event_error: string | null
+          fb_event_pixel_id: string | null
+          fb_event_status: string | null
           id: string
           instance_id: string
           is_pix_payment: boolean
@@ -3354,6 +3363,9 @@ export type Database = {
           ctwa_clid?: string | null
           error_message?: string | null
           extracted_value?: number | null
+          fb_event_error?: string | null
+          fb_event_pixel_id?: string | null
+          fb_event_status?: string | null
           id?: string
           instance_id: string
           is_pix_payment?: boolean
@@ -3372,6 +3384,9 @@ export type Database = {
           ctwa_clid?: string | null
           error_message?: string | null
           extracted_value?: number | null
+          fb_event_error?: string | null
+          fb_event_pixel_id?: string | null
+          fb_event_status?: string | null
           id?: string
           instance_id?: string
           is_pix_payment?: boolean
