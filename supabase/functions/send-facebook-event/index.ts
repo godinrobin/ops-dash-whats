@@ -124,18 +124,19 @@ serve(async (req) => {
           action_source: actionSource,
           user_data: {
             ph: [hashedPhone],
-            client_user_agent: req.headers.get("user-agent") || "",
           },
         };
 
         // For business_messaging (WhatsApp), add page_id and ctwa_clid directly
+        // NOTE: client_user_agent is NOT allowed for business_messaging
         if (isBusinessMessaging) {
           eventData.messaging_channel = "whatsapp";
           eventData.user_data.page_id = pixel.page_id;
           eventData.user_data.ctwa_clid = finalCtwaClid;
           console.log(`[SEND-FB-EVENT] Using Business Messaging with page_id: ${pixel.page_id}, ctwa_clid: ${finalCtwaClid}`);
         } else {
-          // For website action_source, use fbc/fbp
+          // For website action_source, use client_user_agent and fbc/fbp
+          eventData.user_data.client_user_agent = req.headers.get("user-agent") || "";
           if (fbclid) {
             eventData.user_data.fbc = `fb.1.${Date.now()}.${fbclid}`;
           }
