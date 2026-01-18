@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, ShoppingBag, Phone, Calendar, Loader2, Tag } from "lucide-react";
+import { ArrowLeft, ShoppingBag, Phone, Calendar, Loader2, Tag, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,12 +12,16 @@ import { format, subDays, startOfDay, endOfDay, parseISO } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import { ptBR } from "date-fns/locale";
 import { AnimatedTable, Column } from "@/components/ui/animated-table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface SaleLog {
   id: string;
   contact_phone: string;
   instance_id: string;
   created_at: string;
+  fb_event_status?: string;
+  fb_event_pixel_id?: string;
+  fb_event_error?: string;
 }
 
 interface Instance {
@@ -54,7 +58,7 @@ const TagWhatsSales = () => {
         // Fetch sales logs (label_applied = true means it was a sale)
         const { data: logsData } = await (supabase
           .from("tag_whats_logs" as any)
-          .select("id, contact_phone, instance_id, created_at")
+          .select("id, contact_phone, instance_id, created_at, fb_event_status, fb_event_pixel_id, fb_event_error")
           .eq("user_id", user.id)
           .eq("label_applied", true)
           .order("created_at", { ascending: false }) as any);
@@ -147,6 +151,55 @@ const TagWhatsSales = () => {
           {getInstanceName(item.instance_id)}
         </Badge>
       ),
+    },
+    {
+      key: "fb_event_status",
+      header: "Meta",
+      sortable: true,
+      render: (item) => {
+        const status = item.fb_event_status || 'pending';
+        
+        if (status === 'sent') {
+          return (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    <span className="text-emerald-500 text-xs">Enviado</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Evento enviado para pixel: {item.fb_event_pixel_id?.slice(-6) || 'N/A'}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        } else if (status === 'failed') {
+          return (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <div className="flex items-center gap-1.5">
+                    <XCircle className="h-4 w-4 text-red-500" />
+                    <span className="text-red-500 text-xs">Não Enviado</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[300px]">
+                  <p className="text-xs">{item.fb_event_error || 'Lead e pixel não coincidem'}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        } else {
+          return (
+            <div className="flex items-center gap-1.5">
+              <AlertCircle className="h-4 w-4 text-muted-foreground" />
+              <span className="text-muted-foreground text-xs">Pendente</span>
+            </div>
+          );
+        }
+      },
     },
   ];
 

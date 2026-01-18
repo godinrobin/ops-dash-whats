@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { ColoredSwitch } from "@/components/ui/colored-switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Cloud, Plus, RefreshCw, QrCode, Settings, Image, FileText, CheckCircle2, XCircle, Loader2, Trash2, TrendingUp, ShoppingBag, Clock, Monitor, Apple, Download, ExternalLink, Banknote, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, Cloud, Plus, RefreshCw, QrCode, Settings, Image, FileText, CheckCircle2, XCircle, Loader2, Trash2, TrendingUp, ShoppingBag, Clock, Monitor, Apple, Download, ExternalLink, Banknote, AlertTriangle, ChevronDown, ChevronUp, Tag, Megaphone } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useNavigate } from "react-router-dom";
@@ -96,6 +96,15 @@ const TagWhatsCloud = () => {
   const [chargePixName, setChargePixName] = useState('');
   const [disableLabelOnCharge, setDisableLabelOnCharge] = useState(false);
   const [chargeSectionCollapsed, setChargeSectionCollapsed] = useState(false);
+  
+  // Global pago label toggle
+  const [disablePagoLabel, setDisablePagoLabel] = useState(false);
+  
+  // FB Auto Events states
+  const [fbEventEnabled, setFbEventEnabled] = useState(false);
+  const [fbEventType, setFbEventType] = useState('Purchase');
+  const [fbEventsSectionCollapsed, setFbEventsSectionCollapsed] = useState(false);
+  const [savingFbConfig, setSavingFbConfig] = useState(false);
 
   const fetchData = useCallback(async () => {
     const userId = effectiveUserId || user?.id;
@@ -158,6 +167,70 @@ const TagWhatsCloud = () => {
       setDisableLabelOnCharge(firstConfig.disable_label_on_charge ?? false);
     }
   }, [configs]);
+
+  // Load user profile settings for FB events and pago label
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      const userId = effectiveUserId || user?.id;
+      if (!userId) return;
+      
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('disable_pago_label, fb_event_enabled, fb_event_on_sale')
+        .eq('id', userId)
+        .single();
+      
+      if (profile) {
+        setDisablePagoLabel(profile.disable_pago_label ?? false);
+        setFbEventEnabled(profile.fb_event_enabled ?? false);
+        setFbEventType(profile.fb_event_on_sale ?? 'Purchase');
+      }
+    };
+    loadUserProfile();
+  }, [user, effectiveUserId]);
+
+  const handleTogglePagoLabel = async (disabled: boolean) => {
+    const userId = effectiveUserId || user?.id;
+    if (!userId) return;
+    
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ disable_pago_label: disabled })
+        .eq('id', userId);
+      
+      if (error) throw error;
+      setDisablePagoLabel(disabled);
+      toast.success(disabled ? 'Marcação de etiqueta desativada' : 'Marcação de etiqueta ativada');
+    } catch (error) {
+      console.error('Error toggling pago label:', error);
+      toast.error('Erro ao alterar configuração');
+    }
+  };
+
+  const handleSaveFbEventConfig = async () => {
+    const userId = effectiveUserId || user?.id;
+    if (!userId) return;
+    setSavingFbConfig(true);
+    
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ 
+          fb_event_enabled: fbEventEnabled,
+          fb_event_on_sale: fbEventType 
+        })
+        .eq('id', userId);
+      
+      if (error) throw error;
+      toast.success('Configuração de eventos salva!');
+    } catch (error) {
+      console.error('Error saving FB event config:', error);
+      toast.error('Erro ao salvar configuração');
+    } finally {
+      setSavingFbConfig(false);
+    }
+  };
 
   const getConfigForInstance = (instanceId: string) => {
     return configs.find(c => c.instance_id === instanceId);
@@ -487,6 +560,102 @@ const TagWhatsCloud = () => {
                     Certifique-se de ter a etiqueta <strong>"Pago"</strong> criada no seu WhatsApp Business. 
                     O sistema irá automaticamente detectar comprovantes PIX e aplicar essa etiqueta.
                   </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Disable Pago Label Toggle */}
+          <Card className="mb-6 border-red-500/30 bg-red-500/5">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-full ${disablePagoLabel ? 'bg-red-500/20' : 'bg-emerald-500/20'}`}>
+                    <Tag className={`h-4 w-4 ${disablePagoLabel ? 'text-red-500' : 'text-emerald-500'}`} />
+                  </div>
+                  <div>
+                    <h4 className={`font-semibold ${disablePagoLabel ? 'text-red-400' : 'text-emerald-400'}`}>
+                      Marcação de Etiqueta "Pago"
+                    </h4>
+                    <p className="text-sm text-muted-foreground">
+                      {disablePagoLabel ? 'Desativada - apenas detecção de vendas' : 'Ativada - etiqueta será aplicada automaticamente'}
+                    </p>
+                  </div>
+                </div>
+                <ColoredSwitch
+                  checked={!disablePagoLabel}
+                  onCheckedChange={(checked) => handleTogglePagoLabel(!checked)}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* FB Auto Events Section */}
+          <Card className="mb-6 border-blue-500/30 bg-blue-500/5">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-blue-500/20 rounded-full">
+                  <Megaphone className="h-4 w-4 text-blue-500" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-semibold text-blue-400">Envio Automático de Evento para Meta</h4>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0"
+                        onClick={() => setFbEventsSectionCollapsed(!fbEventsSectionCollapsed)}
+                      >
+                        {fbEventsSectionCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    <ColoredSwitch
+                      checked={fbEventEnabled}
+                      onCheckedChange={setFbEventEnabled}
+                    />
+                  </div>
+                  
+                  {!fbEventsSectionCollapsed && (
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Quando ativado, um evento será enviado automaticamente para o Meta (Facebook) a cada nova venda detectada.
+                    </p>
+                  )}
+                  
+                  {fbEventEnabled && !fbEventsSectionCollapsed && (
+                    <div className="space-y-4 border-t border-border/50 pt-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="fb-event-type">Tipo de Evento</Label>
+                        <Select value={fbEventType} onValueChange={setFbEventType}>
+                          <SelectTrigger id="fb-event-type">
+                            <SelectValue placeholder="Selecione o evento..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Purchase">Compra (Purchase)</SelectItem>
+                            <SelectItem value="Lead">Lead</SelectItem>
+                            <SelectItem value="InitiateCheckout">Iniciar Checkout</SelectItem>
+                            <SelectItem value="AddToCart">Adicionar ao Carrinho</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                        <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                        <p className="text-xs text-amber-400">
+                          <strong>Importante:</strong> Configure seus pixels em Configurações → Pixel Facebook. O sistema tentará todos os pixels configurados até encontrar um compatível com o lead.
+                        </p>
+                      </div>
+                      
+                      <Button 
+                        onClick={handleSaveFbEventConfig}
+                        disabled={savingFbConfig}
+                        className="w-full bg-blue-600 hover:bg-blue-700"
+                      >
+                        {savingFbConfig ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                        Salvar Configuração de Eventos
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             </CardContent>

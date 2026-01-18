@@ -1927,6 +1927,90 @@ Regras RIGOROSAS:
             }
             break;
 
+          case 'pixel':
+            // Pixel node - send Facebook event
+            const pixelId = currentNode.data.pixelId as string || '';
+            const pixelEventType = currentNode.data.eventType as string || 'Purchase';
+            const pixelEventValue = currentNode.data.eventValue as number || 0;
+            
+            console.log(`[${runId}] Processing Pixel node: pixelId=${pixelId}, event=${pixelEventType}`);
+            
+            if (pixelId) {
+              try {
+                // Get the pixel details
+                const { data: pixel, error: pixelError } = await supabaseClient
+                  .from('user_facebook_pixels')
+                  .select('*')
+                  .eq('id', pixelId)
+                  .single();
+                
+                if (pixelError || !pixel) {
+                  console.error(`[${runId}] Pixel not found:`, pixelError);
+                  processedActions.push('Pixel error: not found');
+                } else {
+                  // Hash phone for FB
+                  const hashPhone = async (phoneNumber: string): Promise<string> => {
+                    const encoder = new TextEncoder();
+                    const dataBuffer = encoder.encode(phoneNumber.toLowerCase().trim());
+                    const hashBuffer = await crypto.subtle.digest("SHA-256", dataBuffer);
+                    const hashArray = Array.from(new Uint8Array(hashBuffer));
+                    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+                  };
+                  
+                  const contactPhone = contact.phone?.replace(/\D/g, '') || '';
+                  const hashedPhone = await hashPhone(contactPhone);
+                  const ctwaClid = contact.ctwa_clid || null;
+                  const isBusinessMessaging = !!pixel.page_id && !!ctwaClid;
+                  
+                  const eventData: any = {
+                    event_name: pixelEventType,
+                    event_time: Math.floor(Date.now() / 1000),
+                    action_source: isBusinessMessaging ? 'business_messaging' : 'website',
+                    user_data: { ph: [hashedPhone] },
+                  };
+                  
+                  if (isBusinessMessaging) {
+                    eventData.messaging_channel = 'whatsapp';
+                    eventData.user_data.page_id = pixel.page_id;
+                    eventData.user_data.ctwa_clid = ctwaClid;
+                  }
+                  
+                  if (['Purchase', 'InitiateCheckout', 'AddToCart'].includes(pixelEventType)) {
+                    eventData.custom_data = { currency: 'BRL', value: pixelEventValue || 0 };
+                  }
+                  
+                  const pixelEventsUrl = `https://graph.facebook.com/v21.0/${pixel.pixel_id}/events`;
+                  const pixelResponse = await fetch(pixelEventsUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data: [eventData], access_token: pixel.access_token }),
+                  });
+                  
+                  const pixelResult = await pixelResponse.json();
+                  console.log(`[${runId}] Pixel event response:`, JSON.stringify(pixelResult));
+                  
+                  if (pixelResult.error) {
+                    console.error(`[${runId}] Pixel event error:`, pixelResult.error);
+                    processedActions.push(`Pixel error: ${pixelResult.error.message}`);
+                  } else {
+                    processedActions.push(`Pixel event sent: ${pixelEventType}`);
+                  }
+                }
+              } catch (pixelErr) {
+                console.error(`[${runId}] Pixel exception:`, pixelErr);
+                processedActions.push('Pixel exception');
+              }
+            }
+            
+            // Always advance to next node regardless of success/failure
+            const pixelEdge = edges.find(e => e.source === currentNodeId);
+            if (pixelEdge) {
+              currentNodeId = pixelEdge.target;
+            } else {
+              continueProcessing = false;
+            }
+            break;
+
           case 'randomizer':
             // Randomizer node - pick a random path based on splits configuration
             const splits = (currentNode.data.splits as Array<{ id: string; name: string; percentage: number }>) || [];
