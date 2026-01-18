@@ -163,7 +163,7 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
           phone: contact.phone,
           event_name: selectedEvent,
           ctwa_clid: contact.ctwa_clid,
-          value: ['Purchase', 'InitiateCheckout', 'AddToCart'].includes(selectedEvent) ? parsedValue : undefined,
+          value: selectedEvent === 'Purchase' ? parsedValue : undefined,
           pixel_id: selectedPixel !== 'all' ? selectedPixel : undefined,
         }
       });
@@ -323,7 +323,7 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
                   </SelectContent>
                 </Select>
                 
-                {['Purchase', 'InitiateCheckout', 'AddToCart'].includes(selectedEvent) && (
+                {selectedEvent === 'Purchase' && (
                   <Input
                     type="text"
                     placeholder="Valor (ex: 97.00)"
@@ -417,7 +417,7 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
                     {eventLogs.map((log) => (
                       <div
                         key={log.id}
-                        className={`p-2 rounded-md border text-xs space-y-1 ${
+                        className={`p-2 rounded-md border text-xs ${
                           log.success 
                             ? 'border-green-500/30 bg-green-500/5' 
                             : 'border-red-500/30 bg-red-500/5'
@@ -431,19 +431,15 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
                               <XCircle className="h-3.5 w-3.5 text-red-500" />
                             )}
                             <span className="font-medium">{log.event_name}</span>
-                            {log.event_value && (
+                            {log.event_value && log.event_value > 0 && (
                               <span className="text-muted-foreground">
-                                R$ {log.event_value.toFixed(2)}
+                                • R$ {log.event_value.toFixed(2)}
                               </span>
                             )}
                           </div>
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                            {log.action_source === 'business_messaging' ? 'CAPI BM' : 'Website'}
-                          </Badge>
-                        </div>
-                        
-                        <div className="text-muted-foreground">
-                          Pixel: {log.pixel_id.slice(-6)}... • {format(new Date(log.created_at), "dd/MM HH:mm")}
+                          <span className="text-muted-foreground">
+                            {format(new Date(log.created_at), "dd/MM HH:mm")}
+                          </span>
                         </div>
                         
                         {log.error_message && (

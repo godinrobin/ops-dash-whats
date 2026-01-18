@@ -1937,15 +1937,16 @@ Regras RIGOROSAS:
             
             if (pixelId) {
               try {
-                // Get the pixel details
+                // Get the pixel details - pixelId is the Facebook pixel_id, not the UUID
                 const { data: pixel, error: pixelError } = await supabaseClient
                   .from('user_facebook_pixels')
                   .select('*')
-                  .eq('id', pixelId)
+                  .eq('pixel_id', pixelId)
+                  .eq('user_id', session.user_id)
                   .single();
                 
                 if (pixelError || !pixel) {
-                  console.error(`[${runId}] Pixel not found:`, pixelError);
+                  console.error(`[${runId}] Pixel not found for pixel_id=${pixelId}:`, pixelError);
                   processedActions.push('Pixel error: not found');
                 } else {
                   // Hash phone for FB

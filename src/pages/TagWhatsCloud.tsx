@@ -189,6 +189,48 @@ const TagWhatsCloud = () => {
     loadUserProfile();
   }, [user, effectiveUserId]);
 
+  // Auto-add connected instances that don't have a config yet
+  useEffect(() => {
+    const autoAddNewInstances = async () => {
+      const userId = effectiveUserId || user?.id;
+      if (!userId || loading || instances.length === 0) return;
+      
+      // Find connected instances without a config (calculate inside useEffect)
+      const connected = instances.filter(i => i.status === 'connected');
+      const configuredIds = configs.map(c => c.instance_id);
+      const unconfiguredInstances = connected.filter(
+        i => !configuredIds.includes(i.id)
+      );
+      
+      if (unconfiguredInstances.length === 0) return;
+      
+      // Auto-create configs for unconfigured instances
+      for (const instance of unconfiguredInstances) {
+        try {
+          await (supabase
+            .from('tag_whats_configs' as any)
+            .insert({
+              user_id: userId,
+              instance_id: instance.id,
+              filter_images: true,
+              filter_pdfs: true,
+              is_active: true,
+            }) as any);
+          console.log(`Auto-added TagWhats config for instance ${instance.id}`);
+        } catch (err) {
+          console.error('Error auto-adding instance config:', err);
+        }
+      }
+      
+      // Refresh data after adding
+      if (unconfiguredInstances.length > 0) {
+        fetchData();
+      }
+    };
+    
+    autoAddNewInstances();
+  }, [instances, configs, user, effectiveUserId, loading, fetchData]);
+
   const handleTogglePagoLabel = async (disabled: boolean) => {
     const userId = effectiveUserId || user?.id;
     if (!userId) return;
