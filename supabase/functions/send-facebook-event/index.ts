@@ -128,11 +128,11 @@ serve(async (req) => {
           },
         };
 
-        // For business_messaging, add page_id and page_scoped_user_id (ctwa_clid)
+        // For business_messaging (WhatsApp), add page_id and ctwa_clid directly
         if (isBusinessMessaging) {
           eventData.messaging_channel = "whatsapp";
           eventData.user_data.page_id = pixel.page_id;
-          eventData.user_data.page_scoped_user_id = finalCtwaClid;
+          eventData.user_data.ctwa_clid = finalCtwaClid;
           console.log(`[SEND-FB-EVENT] Using Business Messaging with page_id: ${pixel.page_id}, ctwa_clid: ${finalCtwaClid}`);
         } else {
           // For website action_source, use fbc/fbp
