@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
 import { Button } from "@/components/ui/button";
-import { LogOut, ArrowLeft, User, Shield, LayoutGrid, ShoppingBag, Megaphone, Menu } from "lucide-react";
+import { LogOut, ArrowLeft, User, Shield, LayoutGrid, ShoppingBag, Megaphone, Menu, Settings } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ProfileModal } from "./ProfileModal";
 import Dock from "@/components/ui/dock";
@@ -37,6 +37,12 @@ export const Header = ({ mode, onModeChange, onSidebarToggle }: HeaderProps) => 
       icon: User, 
       label: "Perfil", 
       onClick: () => setProfileOpen(true),
+      active: false
+    },
+    {
+      icon: Settings,
+      label: "Config",
+      onClick: () => navigate("/settings"),
       active: false
     },
     ...(isAdmin ? [{

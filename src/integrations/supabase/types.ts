@@ -2684,6 +2684,8 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
+          fb_event_enabled: boolean | null
+          fb_event_on_sale: string | null
           id: string
           is_full_member: boolean
           lead_rotation_limit: number | null
@@ -2698,6 +2700,8 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          fb_event_enabled?: boolean | null
+          fb_event_on_sale?: string | null
           id: string
           is_full_member?: boolean
           lead_rotation_limit?: number | null
@@ -2712,6 +2716,8 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           created_at?: string
+          fb_event_enabled?: boolean | null
+          fb_event_on_sale?: string | null
           id?: string
           is_full_member?: boolean
           lead_rotation_limit?: number | null
@@ -3535,6 +3541,39 @@ export type Database = {
           user_id?: string
           voice_id?: string
           voice_name?: string
+        }
+        Relationships: []
+      }
+      user_facebook_pixels: {
+        Row: {
+          access_token: string
+          created_at: string
+          id: string
+          is_active: boolean | null
+          name: string | null
+          pixel_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token: string
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          name?: string | null
+          pixel_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          name?: string | null
+          pixel_id?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
