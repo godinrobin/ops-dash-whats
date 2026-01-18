@@ -1111,14 +1111,31 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
             // Send event to each pixel
             for (const pixel of userPixels) {
               try {
+                // Determine action_source based on whether we have page_id (Business Messaging)
+                const isBusinessMessaging = !!pixel.page_id && !!ctwaClid;
+                const actionSource = isBusinessMessaging ? "business_messaging" : "website";
+                
+                console.log(`[TAG-WHATS] Pixel ${pixel.pixel_id}, page_id: ${pixel.page_id || 'none'}, action_source: ${actionSource}`);
+
                 const eventData: any = {
                   event_name: eventType,
                   event_time: Math.floor(Date.now() / 1000),
-                  action_source: "website",
+                  action_source: actionSource,
                   user_data: {
                     ph: [hashedPhoneForPixels],
                   },
                 };
+
+                // For business_messaging, add page_id and page_scoped_user_id (ctwa_clid)
+                if (isBusinessMessaging) {
+                  eventData.messaging_channel = "whatsapp";
+                  eventData.user_data.page_id = pixel.page_id;
+                  eventData.user_data.page_scoped_user_id = ctwaClid;
+                  console.log(`[TAG-WHATS] Using Business Messaging with page_id: ${pixel.page_id}, ctwa_clid: ${ctwaClid}`);
+                } else if (ctwaClid) {
+                  // Fallback to fbp for attribution
+                  eventData.user_data.fbp = ctwaClid;
+                }
 
                 // Add custom_data for Purchase events
                 if (eventType === "Purchase") {
@@ -1126,11 +1143,6 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
                     currency: "BRL",
                     value: extractedValue || 0,
                   };
-                }
-
-                // Add click IDs for better attribution
-                if (ctwaClid) {
-                  eventData.user_data.fbp = ctwaClid;
                 }
 
                 const pixelEventsUrl = `https://graph.facebook.com/v21.0/${pixel.pixel_id}/events`;
@@ -1144,6 +1156,8 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
                 });
 
                 const pixelResult = await pixelResponse.json();
+                
+                console.log(`[TAG-WHATS] Pixel ${pixel.pixel_id} full response:`, JSON.stringify(pixelResult));
 
                 if (pixelResult.error) {
                   console.error(`[TAG-WHATS] User pixel ${pixel.pixel_id} error:`, pixelResult.error);

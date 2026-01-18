@@ -3551,6 +3551,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           name: string | null
+          page_id: string | null
           pixel_id: string
           updated_at: string
           user_id: string
@@ -3561,6 +3562,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           name?: string | null
+          page_id?: string | null
           pixel_id: string
           updated_at?: string
           user_id: string
@@ -3571,6 +3573,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           name?: string | null
+          page_id?: string | null
           pixel_id?: string
           updated_at?: string
           user_id?: string
