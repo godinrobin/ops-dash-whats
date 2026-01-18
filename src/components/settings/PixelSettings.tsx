@@ -418,16 +418,18 @@ export function PixelSettings() {
       )}
 
       {/* Video Tutorial */}
-      <Card className="border-accent/30 bg-accent/5 overflow-hidden">
-        <CardContent className="p-0">
-          <div 
-            dangerouslySetInnerHTML={{
-              __html: `
-                <script>!function(i,n){i._plt=i._plt||(n&&n.timeOrigin?n.timeOrigin+n.now():Date.now())}(window,performance);</script>
-                <vturb-smartplayer id="vid-696d4806dd2fe7b4886dc992" style="display: block; margin: 0 auto; width: 100%;"></vturb-smartplayer>
-              `
-            }}
-          />
+      <Card className="border-accent/30 bg-accent/5">
+        <CardHeader>
+          <CardTitle className="text-lg">Como configurar</CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 pt-0">
+          <div className="w-full max-w-2xl mx-auto aspect-video">
+            <div 
+              dangerouslySetInnerHTML={{
+                __html: `<vturb-smartplayer id="vid-696d4806dd2fe7b4886dc992" style="display: block; margin: 0 auto; width: 100%; height: 100%;"></vturb-smartplayer>`
+              }}
+            />
+          </div>
         </CardContent>
       </Card>
 
