@@ -1,4 +1,4 @@
-import { X, Tag, MessageSquare, Calendar, Edit2, Trash2, Megaphone, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Tag, MessageSquare, Calendar, Edit2, Trash2, Megaphone, ExternalLink, ChevronDown, ChevronUp, Send, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { formatPhoneDisplay } from '@/utils/phoneFormatter';
@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { InboxContact } from '@/types/inbox';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -22,6 +23,8 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
   const [notes, setNotes] = useState(contact.notes || '');
   const [editingNotes, setEditingNotes] = useState(false);
   const [showFullAdBody, setShowFullAdBody] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<string>('Purchase');
+  const [sendingEvent, setSendingEvent] = useState(false);
 
   const getInitials = (name: string | null, phone: string) => {
     if (name && name.trim()) {
@@ -72,6 +75,33 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
       setEditingNotes(false);
     } catch (err: any) {
       toast.error('Erro ao salvar notas: ' + err.message);
+    }
+  };
+
+  const handleSendFacebookEvent = async () => {
+    setSendingEvent(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-facebook-event', {
+        body: {
+          contact_id: contact.id,
+          phone: contact.phone,
+          event_name: selectedEvent,
+          ctwa_clid: contact.ctwa_clid,
+          value: selectedEvent === 'Purchase' ? 0 : undefined,
+        }
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        toast.success(`Evento ${selectedEvent} enviado para ${data.successful}/${data.total_pixels} pixel(s)`);
+      } else {
+        toast.error('Falha ao enviar evento. Verifique seus pixels em Configurações.');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao enviar evento');
+    } finally {
+      setSendingEvent(false);
     }
   };
 
@@ -163,7 +193,43 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
 
           <Separator />
 
-          {/* Notes */}
+          {/* Send Facebook Event */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Megaphone className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Enviar Evento</span>
+            </div>
+            <div className="flex gap-2">
+              <Select value={selectedEvent} onValueChange={setSelectedEvent}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Purchase">Compra (Purchase)</SelectItem>
+                  <SelectItem value="Lead">Lead</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                onClick={handleSendFacebookEvent}
+                disabled={sendingEvent}
+                size="sm"
+                className="shrink-0"
+              >
+                {sendingEvent ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <Send className="h-4 w-4 mr-1" />
+                    Disparar
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Dispara evento para todos os pixels configurados em Configurações
+            </p>
+          </div>
+
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Notas</span>
