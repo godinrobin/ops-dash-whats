@@ -1049,8 +1049,8 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
       });
     }
 
-    // Log the result
-    await supabase.from("tag_whats_logs").insert({
+    // Log the result - we'll update fb_event_status after attempting to send
+    const { data: logRecord, error: logInsertError } = await supabase.from("tag_whats_logs").insert({
       user_id: instance.user_id,
       config_id: config.id,
       instance_id: instance.id,
@@ -1065,7 +1065,10 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
       ctwa_clid: ctwaClid,
       extracted_value: extractedValue,
       error_message: errorMessage,
-    });
+      fb_event_status: 'pending',
+    }).select('id').single();
+
+    const logId = logRecord?.id;
 
     // Send Facebook events to user's configured pixels when a sale is detected
     if (isPixPayment && (labelApplied || (config.disable_label_on_charge && config.auto_charge_enabled))) {
@@ -1094,8 +1097,15 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
 
           if (pixelsError || !userPixels || userPixels.length === 0) {
             console.log("[TAG-WHATS] No active user pixels configured");
+            // Update log status to pending (no pixels)
+            if (logId) {
+              await supabase.from("tag_whats_logs").update({
+                fb_event_status: 'pending',
+                fb_event_error: 'Nenhum pixel configurado',
+              }).eq('id', logId);
+            }
           } else {
-            console.log(`[TAG-WHATS] Found ${userPixels.length} active pixels to send events to`);
+            console.log(`[TAG-WHATS] Found ${userPixels.length} active pixels to try (retry logic enabled)`);
 
             // Hash phone for FB
             const hashPhoneForFb = async (phoneNumber: string): Promise<string> => {
@@ -1108,14 +1118,21 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
 
             const hashedPhoneForPixels = await hashPhoneForFb(phone);
 
-            // Send event to each pixel
+            // TRY ALL PIXELS UNTIL ONE SUCCEEDS (Retry Logic)
+            let eventSentSuccessfully = false;
+            let successfulPixelId: string | null = null;
+            let lastError: string | null = null;
+            let allPixelsFailed = true;
+
             for (const pixel of userPixels) {
+              if (eventSentSuccessfully) break; // Stop once we succeed
+              
               try {
                 // Determine action_source based on whether we have page_id (Business Messaging)
                 const isBusinessMessaging = !!pixel.page_id && !!ctwaClid;
                 const actionSource = isBusinessMessaging ? "business_messaging" : "website";
                 
-                console.log(`[TAG-WHATS] Pixel ${pixel.pixel_id}, page_id: ${pixel.page_id || 'none'}, action_source: ${actionSource}`);
+                console.log(`[TAG-WHATS] Trying pixel ${pixel.pixel_id}, page_id: ${pixel.page_id || 'none'}, action_source: ${actionSource}`);
 
                 const eventData: any = {
                   event_name: eventType,
@@ -1138,7 +1155,7 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
                 }
 
                 // Add custom_data for Purchase events
-                if (eventType === "Purchase") {
+                if (eventType === "Purchase" || eventType === "InitiateCheckout" || eventType === "AddToCart") {
                   eventData.custom_data = {
                     currency: "BRL",
                     value: extractedValue || 0,
@@ -1157,15 +1174,50 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
 
                 const pixelResult = await pixelResponse.json();
                 
-                console.log(`[TAG-WHATS] Pixel ${pixel.pixel_id} full response:`, JSON.stringify(pixelResult));
+                console.log(`[TAG-WHATS] Pixel ${pixel.pixel_id} response:`, JSON.stringify(pixelResult));
 
                 if (pixelResult.error) {
-                  console.error(`[TAG-WHATS] User pixel ${pixel.pixel_id} error:`, pixelResult.error);
+                  // Check for specific error subcodes
+                  const subcode = pixelResult.error.error_subcode;
+                  if (subcode === 2804024) {
+                    lastError = "Lead não veio da mesma página do pixel";
+                    console.log(`[TAG-WHATS] Pixel ${pixel.pixel_id}: page_id mismatch, trying next pixel...`);
+                  } else if (subcode === 2804003) {
+                    lastError = "ctwa_clid inválido ou expirado";
+                    console.log(`[TAG-WHATS] Pixel ${pixel.pixel_id}: ctwa_clid invalid, trying next pixel...`);
+                  } else {
+                    lastError = pixelResult.error.message || "Erro desconhecido";
+                  }
+                  console.error(`[TAG-WHATS] Pixel ${pixel.pixel_id} error:`, pixelResult.error);
                 } else {
-                  console.log(`[TAG-WHATS] ✅ Event sent to user pixel ${pixel.pixel_id}:`, pixelResult.events_received);
+                  // SUCCESS!
+                  eventSentSuccessfully = true;
+                  successfulPixelId = pixel.pixel_id;
+                  allPixelsFailed = false;
+                  console.log(`[TAG-WHATS] ✅ Event sent successfully to pixel ${pixel.pixel_id}:`, pixelResult.events_received);
                 }
               } catch (pixelErr) {
                 console.error(`[TAG-WHATS] Exception sending to pixel ${pixel.pixel_id}:`, pixelErr);
+                lastError = pixelErr instanceof Error ? pixelErr.message : "Erro de conexão";
+              }
+            }
+
+            // Update log with final status
+            if (logId) {
+              if (eventSentSuccessfully) {
+                await supabase.from("tag_whats_logs").update({
+                  fb_event_status: 'sent',
+                  fb_event_pixel_id: successfulPixelId,
+                  fb_event_error: null,
+                }).eq('id', logId);
+                console.log(`[TAG-WHATS] Log updated: event sent via pixel ${successfulPixelId}`);
+              } else {
+                await supabase.from("tag_whats_logs").update({
+                  fb_event_status: 'failed',
+                  fb_event_pixel_id: null,
+                  fb_event_error: lastError || "Todos os pixels falharam",
+                }).eq('id', logId);
+                console.log(`[TAG-WHATS] Log updated: all pixels failed, error: ${lastError}`);
               }
             }
           }
