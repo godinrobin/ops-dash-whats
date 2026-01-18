@@ -65,6 +65,69 @@ export function PixelSettings() {
     fetchPixels();
   }, [user]);
 
+  useEffect(() => {
+    if (!videoOpen) return;
+
+    const createdEls: HTMLElement[] = [];
+
+    const addScript = (opts: { src?: string; innerHTML?: string }) => {
+      const s = document.createElement("script");
+      s.type = "text/javascript";
+      if (opts.src) {
+        s.src = opts.src;
+        s.async = true;
+      }
+      if (opts.innerHTML) s.innerHTML = opts.innerHTML;
+      s.setAttribute("data-vturb", "pixel-settings");
+      document.head.appendChild(s);
+      createdEls.push(s);
+    };
+
+    const addLink = (rel: string, href: string, extra?: Record<string, string>) => {
+      const l = document.createElement("link");
+      l.rel = rel;
+      l.href = href;
+      Object.entries(extra || {}).forEach(([k, v]) => l.setAttribute(k, v));
+      l.setAttribute("data-vturb", "pixel-settings");
+      document.head.appendChild(l);
+      createdEls.push(l);
+    };
+
+    // Optimization timestamp
+    addScript({
+      innerHTML: "!function(i,n){i._plt=i._plt||(n&&n.timeOrigin?n.timeOrigin+n.now():Date.now())}(window,performance);",
+    });
+
+    // Preloads
+    addLink(
+      "preload",
+      "https://scripts.converteai.net/574be7f8-d9bf-450a-9bfb-e024758a6c13/players/696d4806dd2fe7b4886dc992/v4/player.js",
+      { as: "script" }
+    );
+    addLink("preload", "https://scripts.converteai.net/lib/js/smartplayer-wc/v4/smartplayer.js", { as: "script" });
+    addLink(
+      "preload",
+      "https://cdn.converteai.net/574be7f8-d9bf-450a-9bfb-e024758a6c13/696d47dcc9aefd66086a8abc/main.m3u8",
+      { as: "fetch", crossorigin: "anonymous" }
+    );
+
+    // DNS prefetch
+    addLink("dns-prefetch", "https://cdn.converteai.net");
+    addLink("dns-prefetch", "https://scripts.converteai.net");
+    addLink("dns-prefetch", "https://images.converteai.net");
+    addLink("dns-prefetch", "https://api.vturb.com.br");
+
+    // Load scripts (smartplayer first)
+    addScript({ src: "https://scripts.converteai.net/lib/js/smartplayer-wc/v4/smartplayer.js" });
+    addScript({
+      src: "https://scripts.converteai.net/574be7f8-d9bf-450a-9bfb-e024758a6c13/players/696d4806dd2fe7b4886dc992/v4/player.js",
+    });
+
+    return () => {
+      createdEls.forEach((el) => el.remove());
+    };
+  }, [videoOpen]);
+
   const fetchPixels = async () => {
     if (!user) return;
     
@@ -413,22 +476,37 @@ export function PixelSettings() {
 
       {/* Video Tutorial */}
       <Card className="border-accent/30 bg-accent/5">
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between">
           <CardTitle className="text-lg">Como configurar</CardTitle>
+          <Dialog open={videoOpen} onOpenChange={setVideoOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm">Assistir vídeo</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl w-[95vw]">
+              <DialogHeader>
+                <DialogTitle>Como configurar</DialogTitle>
+              </DialogHeader>
+              <div className="w-full aspect-video relative overflow-hidden rounded-lg bg-secondary/20" style={{ isolation: 'isolate' }}>
+                {videoOpen ? (
+                  <div className="absolute inset-0">
+                    <div
+                      className="w-full h-full"
+                      style={{ overflow: "hidden" }}
+                      dangerouslySetInnerHTML={{
+                        __html:
+                          '<vturb-smartplayer id="vid-696d4806dd2fe7b4886dc992" style="display:block;margin:0 auto;width:100%;height:100%;"></vturb-smartplayer>',
+                      }}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            </DialogContent>
+          </Dialog>
         </CardHeader>
-        <CardContent className="p-4 pt-0">
-          <div 
-            className="w-full aspect-video relative overflow-hidden rounded-lg"
-            style={{ contain: 'layout paint', isolation: 'isolate' }}
-          >
-            <iframe
-              src="https://player.vturb.com.br/embed/696d4806dd2fe7b4886dc992"
-              className="absolute inset-0 w-full h-full"
-              frameBorder="0"
-              allow="autoplay; fullscreen"
-              allowFullScreen
-            />
-          </div>
+        <CardContent className="pt-0">
+          <p className="text-sm text-muted-foreground">
+            Clique em <span className="font-medium">Assistir vídeo</span> para ver o passo a passo.
+          </p>
         </CardContent>
       </Card>
 
