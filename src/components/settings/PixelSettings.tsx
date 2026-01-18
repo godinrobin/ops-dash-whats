@@ -9,6 +9,13 @@ import { Megaphone, Trash2, Plus, Edit2, Loader2, Check, X, AlertCircle } from "
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -50,6 +57,8 @@ export function PixelSettings() {
   const [editAccessToken, setEditAccessToken] = useState("");
   const [editName, setEditName] = useState("");
   const [editPageId, setEditPageId] = useState("");
+
+  const [videoOpen, setVideoOpen] = useState(false);
 
 
   useEffect(() => {
