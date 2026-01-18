@@ -1126,12 +1126,13 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
                   },
                 };
 
-                // For business_messaging (WhatsApp), add page_id and ctwa_clid directly
+                // Business Messaging (WhatsApp) payload per Meta docs:
+                // - user_data: whatsapp_business_account_id + ctwa_clid
                 if (isBusinessMessaging) {
                   eventData.messaging_channel = "whatsapp";
-                  eventData.user_data.page_id = pixel.page_id;
+                  eventData.user_data.whatsapp_business_account_id = pixel.page_id;
                   eventData.user_data.ctwa_clid = ctwaClid;
-                  console.log(`[TAG-WHATS] Using Business Messaging with page_id: ${pixel.page_id}, ctwa_clid: ${ctwaClid}`);
+                  console.log(`[TAG-WHATS] Using Business Messaging with waba_id: ${pixel.page_id}, ctwa_clid: ${ctwaClid}`);
                 } else if (ctwaClid) {
                   // Fallback to fbp for attribution
                   eventData.user_data.fbp = ctwaClid;
