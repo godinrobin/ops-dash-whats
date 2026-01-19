@@ -2989,6 +2989,36 @@ export type Database = {
         }
         Relationships: []
       }
+      proxy_prices: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          plan_type: string
+          price_brl: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          plan_type: string
+          price_brl: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          plan_type?: string
+          price_brl?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       push_notification_queue: {
         Row: {
           created_at: string

@@ -603,19 +603,49 @@ Deno.serve(async (req) => {
     console.log('City:', city || 'not specified');
     console.log('Timestamp:', new Date().toISOString());
 
-    // get-price is public - no auth required
+    // get-price is public - no auth required - now returns prices for all proxy types
     if (action === 'get-price') {
-      const { data: marginData } = await supabaseAdmin
-        .from('platform_margins')
-        .select('margin_percent')
-        .eq('system_name', 'proxy')
-        .single();
+      const { data: prices, error: pricesError } = await supabaseAdmin
+        .from('proxy_prices')
+        .select('plan_type, price_brl, description, is_active')
+        .eq('is_active', true);
 
-      const finalPrice = marginData?.margin_percent || 9.99;
+      if (pricesError || !prices || prices.length === 0) {
+        // Fallback to old margin system
+        const { data: marginData } = await supabaseAdmin
+          .from('platform_margins')
+          .select('margin_percent')
+          .eq('system_name', 'proxy')
+          .single();
 
-      console.log('Price (fixed BRL):', finalPrice);
+        const fallbackPrice = marginData?.margin_percent || 9.99;
+        console.log('Price (fallback):', fallbackPrice);
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            price: fallbackPrice,
+            prices: {
+              residential: { price: fallbackPrice, description: 'Proxy Residencial' },
+              mobile: { price: 14.50, description: 'Proxy Mobile' },
+              datacenter: { price: 50.00, description: 'Proxy Dedicada' }
+            }
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Build prices object
+      const pricesObj: Record<string, { price: number; description: string }> = {};
+      prices.forEach(p => {
+        pricesObj[p.plan_type] = { price: Number(p.price_brl), description: p.description || '' };
+      });
+
+      // Default price for backward compatibility
+      const defaultPrice = pricesObj['residential']?.price || 9.99;
+
+      console.log('Prices (from proxy_prices table):', pricesObj);
       return new Response(
-        JSON.stringify({ success: true, price: finalPrice }),
+        JSON.stringify({ success: true, price: defaultPrice, prices: pricesObj }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -680,7 +710,7 @@ Deno.serve(async (req) => {
       console.log('[STEP 0] Requested plan type:', planType);
 
       // ============= STEP 1: VALIDATE PLAN TYPE =============
-      const validPlanTypes = ['residential', 'isp', 'datacenter'];
+      const validPlanTypes = ['residential', 'isp', 'datacenter', 'mobile'];
       if (!validPlanTypes.includes(planType)) {
         await logAction('error', `Tipo de plano inválido: ${planType}`, null, { plan_type: planType });
         return new Response(
@@ -743,13 +773,15 @@ Deno.serve(async (req) => {
       console.log('[STEP 3] ✓ Gateway validated:', gatewayConfig.gateway_host, '→', gatewayResult.ip);
 
       // ============= STEP 4: CHECK USER WALLET BALANCE =============
-      const { data: marginData } = await supabaseAdmin
-        .from('platform_margins')
-        .select('margin_percent')
-        .eq('system_name', 'proxy')
+      // Get price for this specific plan type from proxy_prices table
+      const { data: planPriceData } = await supabaseAdmin
+        .from('proxy_prices')
+        .select('price_brl')
+        .eq('plan_type', planType)
+        .eq('is_active', true)
         .single();
 
-      const finalPrice = marginData?.margin_percent || 9.99;
+      const finalPrice = planPriceData?.price_brl ? Number(planPriceData.price_brl) : 9.99;
 
       const { data: wallet, error: walletError } = await supabaseAdmin
         .from('sms_user_wallets')
@@ -1201,13 +1233,16 @@ Deno.serve(async (req) => {
         console.log('[RENEW] Gateway validated for:', existingOrder.host);
       }
 
-      const { data: renewMarginData } = await supabaseAdmin
-        .from('platform_margins')
-        .select('margin_percent')
-        .eq('system_name', 'proxy')
+      // Get price for this specific plan type from proxy_prices table
+      const orderPlanType = existingOrder.plan_type || 'residential';
+      const { data: renewPriceData } = await supabaseAdmin
+        .from('proxy_prices')
+        .select('price_brl')
+        .eq('plan_type', orderPlanType)
+        .eq('is_active', true)
         .single();
 
-      const renewFinalPrice = renewMarginData?.margin_percent || 9.99;
+      const renewFinalPrice = renewPriceData?.price_brl ? Number(renewPriceData.price_brl) : 9.99;
 
       const { data: renewWallet, error: renewWalletError } = await supabaseAdmin
         .from('sms_user_wallets')
@@ -1371,6 +1406,183 @@ Deno.serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+
+    } else if (action === 'disable-expired') {
+      // Action to disable a specific expired proxy in PyProxy
+      // Can be called manually or by a cron job
+      if (!orderId) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'ID do pedido é obrigatório' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { data: expiredOrder, error: orderError } = await supabaseAdmin
+        .from('proxy_orders')
+        .select('*')
+        .eq('id', orderId)
+        .single();
+
+      if (orderError || !expiredOrder) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Pedido não encontrado' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const disableUsername = expiredOrder.username;
+      if (!disableUsername) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Proxy sem username' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Get access token
+      const disableAccessToken = await getPyProxyAccessToken(pyproxyApiKey!, pyproxyApiSecret!);
+      if (!disableAccessToken) {
+        await logAction('error', 'Falha ao obter token para desativar proxy');
+        return new Response(
+          JSON.stringify({ success: false, error: 'Falha ao autenticar no fornecedor' }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Disable user in PyProxy (status=0)
+      const disableUserForm = new FormData();
+      disableUserForm.append('username', disableUsername);
+      disableUserForm.append('status', '0'); // 0 = disabled
+
+      const disableUserRes = await fetch('https://api.pyproxy.com/g/open/add_or_edit_user', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${disableAccessToken}`,
+        },
+        body: disableUserForm,
+      });
+
+      const disableUserData = await disableUserRes.json();
+      console.log('[DISABLE] PyProxy response:', JSON.stringify(disableUserData));
+
+      if (!disableUserRes.ok || disableUserData?.ret !== 0 || disableUserData?.code !== 1) {
+        await logAction('error', 'Falha ao desativar proxy no fornecedor', disableUserData);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Fornecedor recusou desativação', details: disableUserData }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Update order status in database
+      await supabaseAdmin
+        .from('proxy_orders')
+        .update({ status: 'expired' })
+        .eq('id', orderId);
+
+      await logAction('success', `Proxy ${disableUsername} desativada por expiração`, { orderId });
+
+      return new Response(
+        JSON.stringify({ success: true, message: 'Proxy desativada com sucesso' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+
+    } else if (action === 'check-and-disable-expired') {
+      // Action to check all expired proxies and disable them
+      // This should be called by a cron job
+      const now = new Date().toISOString();
+
+      const { data: expiredOrders, error: expiredError } = await supabaseAdmin
+        .from('proxy_orders')
+        .select('*')
+        .eq('status', 'active')
+        .lt('expires_at', now);
+
+      if (expiredError) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Erro ao buscar pedidos expirados' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (!expiredOrders || expiredOrders.length === 0) {
+        return new Response(
+          JSON.stringify({ success: true, message: 'Nenhuma proxy expirada encontrada', count: 0 }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log(`[EXPIRED CHECK] Found ${expiredOrders.length} expired proxies`);
+
+      // Get access token once for all operations
+      const batchAccessToken = await getPyProxyAccessToken(pyproxyApiKey!, pyproxyApiSecret!);
+      if (!batchAccessToken) {
+        await logAction('error', 'Falha ao obter token para desativar proxies expiradas');
+        return new Response(
+          JSON.stringify({ success: false, error: 'Falha ao autenticar no fornecedor' }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      let disabledCount = 0;
+      let failedCount = 0;
+      const results: { orderId: string; username: string; success: boolean; error?: string }[] = [];
+
+      for (const order of expiredOrders) {
+        if (!order.username) {
+          results.push({ orderId: order.id, username: 'N/A', success: false, error: 'Sem username' });
+          failedCount++;
+          continue;
+        }
+
+        try {
+          // Disable user in PyProxy
+          const batchDisableForm = new FormData();
+          batchDisableForm.append('username', order.username);
+          batchDisableForm.append('status', '0');
+
+          const batchDisableRes = await fetch('https://api.pyproxy.com/g/open/add_or_edit_user', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${batchAccessToken}`,
+            },
+            body: batchDisableForm,
+          });
+
+          const batchDisableData = await batchDisableRes.json();
+
+          if (batchDisableRes.ok && batchDisableData?.ret === 0 && batchDisableData?.code === 1) {
+            // Update order status
+            await supabaseAdmin
+              .from('proxy_orders')
+              .update({ status: 'expired' })
+              .eq('id', order.id);
+
+            results.push({ orderId: order.id, username: order.username, success: true });
+            disabledCount++;
+            console.log(`[EXPIRED] Disabled: ${order.username}`);
+          } else {
+            results.push({ orderId: order.id, username: order.username, success: false, error: batchDisableData?.msg });
+            failedCount++;
+            console.error(`[EXPIRED] Failed to disable: ${order.username}`, batchDisableData);
+          }
+        } catch (err) {
+          results.push({ orderId: order.id, username: order.username, success: false, error: String(err) });
+          failedCount++;
+        }
+      }
+
+      await logAction('success', `Verificação de proxies expiradas: ${disabledCount} desativadas, ${failedCount} falharam`, { results });
+
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: `${disabledCount} proxies desativadas`,
+          disabled: disabledCount,
+          failed: failedCount,
+          total: expiredOrders.length,
+          results
+        }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
 
@@ -1548,11 +1760,12 @@ Deno.serve(async (req) => {
 
       // Step 2: Get dynamic gateway from API (optional verification)
       console.log('[TEST] Step 2: Checking dynamic gateway from API...');
-      // Map plan_type to PYPROXY proxy_type: residential->resi, isp->isp, datacenter->dc
+      // Map plan_type to PYPROXY proxy_type: residential->resi, isp->isp, datacenter->dc, mobile->mobile
       const proxyTypeMap: Record<string, string> = {
         'residential': 'resi',
         'isp': 'isp', 
-        'datacenter': 'dc'
+        'datacenter': 'dc',
+        'mobile': 'mobile'
       };
       const pyproxyType = proxyTypeMap[proxyOrder.plan_type || 'residential'] || 'resi';
       const dynamicGateway = await getPyProxyHost(testAccessToken, pyproxyType);
@@ -1621,11 +1834,12 @@ Deno.serve(async (req) => {
 
       // Step 5: Real HTTP test via Apify (if user is valid and has flow)
       // IMPORTANT: For rotating proxies, username format must be: {username}-zone-{type}-region-{country}
-      // Zone types: residential->resi, isp->isp, datacenter->dc
+      // Zone types: residential->resi, isp->isp, datacenter->dc, mobile->mobile
       const zoneMap: Record<string, string> = {
         'residential': 'resi',
         'isp': 'isp',
-        'datacenter': 'dc'
+        'datacenter': 'dc',
+        'mobile': 'mobile'
       };
       const zoneSuffix = zoneMap[proxyOrder.plan_type || 'residential'] || 'resi';
       const countryCode = proxyOrder.country || 'br';
