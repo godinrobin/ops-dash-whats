@@ -840,7 +840,67 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
     let conversionEventId: string | null = null;
     let conversionError: string | null = null;
     let ctwaClid: string | null = null;
+    let fbclid: string | null = null;
     let extractedValue: number | null = null;
+
+    // ============ EARLY LOOKUP: ctwa_clid and value extraction ============
+    // This must happen BEFORE any conversion tracking blocks so ctwaClid is available everywhere
+    if (isPixPayment) {
+      console.log("[TAG-WHATS] PIX detected - looking up ctwa_clid for attribution...");
+      
+      // Try to get ctwa_clid from ads_whatsapp_leads first
+      const { data: leadForCtwa, error: leadCtwaError } = await supabase
+        .from("ads_whatsapp_leads")
+        .select("ctwa_clid, fbclid")
+        .eq("phone", phone)
+        .eq("user_id", instance.user_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      ctwaClid = leadForCtwa?.ctwa_clid || null;
+      fbclid = leadForCtwa?.fbclid || null;
+      
+      console.log("[TAG-WHATS] Attribution lookup (ads_whatsapp_leads):", { 
+        found: !!leadForCtwa, 
+        ctwa_clid: ctwaClid,
+        fbclid: fbclid,
+        error: leadCtwaError?.message 
+      });
+      
+      // FALLBACK: If no ctwa_clid found in ads_whatsapp_leads, try inbox_contacts
+      if (!ctwaClid) {
+        const { data: inboxContactCtwa, error: inboxCtwaError } = await supabase
+          .from("inbox_contacts")
+          .select("ctwa_clid")
+          .eq("phone", phone)
+          .eq("user_id", instance.user_id)
+          .not("ctwa_clid", "is", null)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (inboxContactCtwa?.ctwa_clid) {
+          ctwaClid = inboxContactCtwa.ctwa_clid;
+          console.log("[TAG-WHATS] ✅ ctwa_clid found in inbox_contacts:", ctwaClid);
+        } else {
+          console.log("[TAG-WHATS] ⚠️ No ctwa_clid found anywhere for phone:", phone, { error: inboxCtwaError?.message });
+        }
+      }
+
+      // Try to extract value from AI response
+      if (aiResponse && typeof aiResponse === 'object') {
+        const aiStr = JSON.stringify(aiResponse);
+        // Match patterns like "R$ 100,00", "R$100", "100,00", "valor: 50", "value: 100"
+        const valueMatch = aiStr.match(/R\$?\s*([\d.,]+)|valor[:\s]*([\d.,]+)|value[:\s]*([\d.,]+)/i);
+        if (valueMatch) {
+          const valueStr = (valueMatch[1] || valueMatch[2] || valueMatch[3]).replace(/\./g, '').replace(',', '.');
+          extractedValue = parseFloat(valueStr);
+          if (isNaN(extractedValue)) extractedValue = null;
+        }
+      }
+      console.log("[TAG-WHATS] Attribution data:", { ctwaClid, fbclid, extractedValue });
+    }
 
     // Check if conversion tracking is enabled (support both old and new formats)
     const adAccountIds = (config.selected_ad_account_ids && config.selected_ad_account_ids.length > 0) 
@@ -853,51 +913,21 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
       console.log("[TAG-WHATS] Config:", { 
         enable_conversion_tracking: config.enable_conversion_tracking,
         ad_account_ids: adAccountIds,
-        phone: phone
+        phone: phone,
+        ctwaClid: ctwaClid
       });
       
       try {
-        // Try to get ctwa_clid from ads_whatsapp_leads first
-        const { data: lead, error: leadError } = await supabase
+        // Get lead info for ad_account_id prioritization
+        const { data: lead } = await supabase
           .from("ads_whatsapp_leads")
-          .select("ctwa_clid, fbclid, ad_account_id")
+          .select("ad_account_id")
           .eq("phone", phone)
           .eq("user_id", instance.user_id)
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
 
-        console.log("[TAG-WHATS] Lead lookup (ads_whatsapp_leads):", { 
-          found: !!lead, 
-          ctwa_clid: lead?.ctwa_clid, 
-          fbclid: lead?.fbclid,
-          ad_account_id: lead?.ad_account_id,
-          error: leadError?.message 
-        });
-
-        ctwaClid = lead?.ctwa_clid || null;
-        
-        // FALLBACK: If no ctwa_clid found in ads_whatsapp_leads, try inbox_contacts
-        if (!ctwaClid) {
-          const { data: inboxContact, error: inboxError } = await supabase
-            .from("inbox_contacts")
-            .select("ctwa_clid")
-            .eq("phone", phone)
-            .eq("user_id", instance.user_id)
-            .not("ctwa_clid", "is", null)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          
-          if (inboxContact?.ctwa_clid) {
-            ctwaClid = inboxContact.ctwa_clid;
-            console.log("[TAG-WHATS] ✅ ctwa_clid found in inbox_contacts:", ctwaClid);
-          } else {
-            console.log("[TAG-WHATS] No ctwa_clid found in inbox_contacts either", { error: inboxError?.message });
-          }
-        }
-        const fbclid = lead?.fbclid || null;
-        
         // If lead has ad_account_id, prioritize it for conversion tracking
         const leadAdAccountId = lead?.ad_account_id;
         const finalAdAccountIds = leadAdAccountId 
@@ -905,19 +935,6 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
           : adAccountIds;
         
         console.log("[TAG-WHATS] Final ad account IDs for conversion:", finalAdAccountIds);
-
-        // Try to extract value from AI response
-        if (aiResponse && typeof aiResponse === 'object') {
-          const aiStr = JSON.stringify(aiResponse);
-          // Match patterns like "R$ 100,00", "R$100", "100,00", "valor: 50"
-          const valueMatch = aiStr.match(/R\$?\s*([\d.,]+)|valor[:\s]+([\d.,]+)/i);
-          if (valueMatch) {
-            const valueStr = (valueMatch[1] || valueMatch[2]).replace(/\./g, '').replace(',', '.');
-            extractedValue = parseFloat(valueStr);
-            if (isNaN(extractedValue)) extractedValue = null;
-          }
-        }
-        console.log("[TAG-WHATS] Extracted value:", extractedValue);
 
         // Hash the phone number for privacy (SHA-256)
         const encoder = new TextEncoder();
@@ -1253,19 +1270,23 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
                 .maybeSingle();
 
               if (inboxContact) {
+                // Find the successful pixel to get its page_id
+                const successfulPixel = userPixels.find(p => p.pixel_id === successfulPixelId);
+                
                 await supabase.from("facebook_event_logs").insert({
                   user_id: instance.user_id,
                   contact_id: inboxContact.id,
                   phone: phone,
                   pixel_id: successfulPixelId || userPixels[0]?.pixel_id || 'unknown',
+                  page_id: successfulPixel?.page_id || null,
                   event_name: eventType,
                   event_value: extractedValue || 0,
-                  action_source: 'business_messaging',
+                  action_source: eventSentSuccessfully && ctwaClid ? 'business_messaging' : 'website',
                   success: eventSentSuccessfully,
                   error_message: eventSentSuccessfully ? null : lastError,
                   ctwa_clid: ctwaClid || null,
                 });
-                console.log(`[TAG-WHATS] Event logged to facebook_event_logs for contact ${inboxContact.id}`);
+                console.log(`[TAG-WHATS] Event logged to facebook_event_logs for contact ${inboxContact.id}, page_id: ${successfulPixel?.page_id}`);
               }
             } catch (logErr) {
               console.error(`[TAG-WHATS] Error logging to facebook_event_logs:`, logErr);
