@@ -58,7 +58,14 @@ export default function Settings() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate(-1)}
+              onClick={() => {
+                // Se não houver histórico, volta para a home
+                if (window.history.length > 1) {
+                  navigate(-1);
+                } else {
+                  navigate('/');
+                }
+              }}
               className="shrink-0"
             >
               <ChevronLeft className="h-5 w-5" />
