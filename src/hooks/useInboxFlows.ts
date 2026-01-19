@@ -2,21 +2,24 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { InboxFlow, FlowNode, FlowEdge } from '@/types/inbox';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 
 export const useInboxFlows = () => {
   const { user } = useAuth();
+  const { effectiveUserId } = useEffectiveUser();
   const [flows, setFlows] = useState<InboxFlow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchFlows = useCallback(async () => {
-    if (!user) return;
+    const userId = effectiveUserId || user?.id;
+    if (!userId) return;
 
     try {
       const { data, error: fetchError } = await supabase
         .from('inbox_flows')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
@@ -40,20 +43,21 @@ export const useInboxFlows = () => {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [effectiveUserId, user?.id]);
 
   useEffect(() => {
     fetchFlows();
   }, [fetchFlows]);
 
   const createFlow = async (name: string, description?: string) => {
-    if (!user) return { error: 'Not authenticated' };
+    const userId = effectiveUserId || user?.id;
+    if (!userId) return { error: 'Not authenticated' };
 
     try {
       const { data, error: insertError } = await supabase
         .from('inbox_flows')
         .insert({
-          user_id: user.id,
+          user_id: userId,
           name,
           description,
           nodes: [],
@@ -83,7 +87,8 @@ export const useInboxFlows = () => {
   };
 
   const updateFlow = async (flowId: string, updates: Partial<InboxFlow>) => {
-    if (!user) return { error: 'Not authenticated' };
+    const userId = effectiveUserId || user?.id;
+    if (!userId) return { error: 'Not authenticated' };
 
     try {
       const updateData: any = { ...updates, updated_at: new Date().toISOString() };
@@ -119,7 +124,8 @@ export const useInboxFlows = () => {
   };
 
   const deleteFlow = async (flowId: string) => {
-    if (!user) return { error: 'Not authenticated' };
+    const userId = effectiveUserId || user?.id;
+    if (!userId) return { error: 'Not authenticated' };
 
     try {
       const { error: deleteError } = await supabase
