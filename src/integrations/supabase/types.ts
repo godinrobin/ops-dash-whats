@@ -1915,6 +1915,7 @@ export type Database = {
           folder_id: string | null
           id: string
           is_active: boolean
+          keyword_match_type: string | null
           name: string
           nodes: Json
           pause_on_media: boolean | null
@@ -1938,6 +1939,7 @@ export type Database = {
           folder_id?: string | null
           id?: string
           is_active?: boolean
+          keyword_match_type?: string | null
           name: string
           nodes?: Json
           pause_on_media?: boolean | null
@@ -1961,6 +1963,7 @@ export type Database = {
           folder_id?: string | null
           id?: string
           is_active?: boolean
+          keyword_match_type?: string | null
           name?: string
           nodes?: Json
           pause_on_media?: boolean | null

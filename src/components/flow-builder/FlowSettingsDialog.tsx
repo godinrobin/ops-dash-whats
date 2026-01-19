@@ -49,6 +49,7 @@ export const FlowSettingsDialog = ({
   const [description, setDescription] = useState('');
   const [triggerType, setTriggerType] = useState<'keyword' | 'all' | 'schedule'>('keyword');
   const [triggerKeywords, setTriggerKeywords] = useState('');
+  const [keywordMatchType, setKeywordMatchType] = useState<'exact' | 'contains' | 'not_contains'>('exact');
   const [assignedInstances, setAssignedInstances] = useState<string[]>([]);
   const [pauseOnMedia, setPauseOnMedia] = useState(false);
   const [isActive, setIsActive] = useState(false);
@@ -66,6 +67,7 @@ export const FlowSettingsDialog = ({
       setDescription(flow.description || '');
       setTriggerType(flow.trigger_type || 'keyword');
       setTriggerKeywords(flow.trigger_keywords?.join(', ') || '');
+      setKeywordMatchType((flow as any).keyword_match_type || 'exact');
       setAssignedInstances(flow.assigned_instances || []);
       setPauseOnMedia(flow.pause_on_media || false);
       setIsActive(flow.is_active);
@@ -101,11 +103,12 @@ export const FlowSettingsDialog = ({
       .map((k) => k.trim().toLowerCase())
       .filter((k) => k.length > 0);
 
-    const updates: Partial<InboxFlow> = {
+    const updates: Partial<InboxFlow> & { keyword_match_type?: string } = {
       name: name.trim(),
       description: description.trim() || null,
       trigger_type: triggerType,
       trigger_keywords: keywords,
+      keyword_match_type: keywordMatchType,
       assigned_instances: assignedInstances,
       pause_on_media: pauseOnMedia,
       is_active: isActive,
@@ -180,18 +183,38 @@ export const FlowSettingsDialog = ({
 
           {/* Palavras-chave */}
           {triggerType === 'keyword' && (
-            <div className="space-y-2">
-              <Label>Palavras-chave</Label>
-              <Textarea
-                value={triggerKeywords}
-                onChange={(e) => setTriggerKeywords(e.target.value)}
-                placeholder="oi, olá, quero, comprar (separadas por vírgula)"
-                rows={2}
-              />
-              <p className="text-xs text-muted-foreground">
-                Separe as palavras-chave por vírgula
-              </p>
-            </div>
+            <>
+              <div className="space-y-2">
+                <Label>Tipo de Correspondência</Label>
+                <Select value={keywordMatchType} onValueChange={(v) => setKeywordMatchType(v as any)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="exact">Palavra exata</SelectItem>
+                    <SelectItem value="contains">Contém a palavra</SelectItem>
+                    <SelectItem value="not_contains">Não contém a palavra</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {keywordMatchType === 'exact' && 'O fluxo inicia quando a mensagem for exatamente igual a uma das palavras-chave.'}
+                  {keywordMatchType === 'contains' && 'O fluxo inicia quando a mensagem contiver uma das palavras-chave.'}
+                  {keywordMatchType === 'not_contains' && 'O fluxo inicia quando a mensagem NÃO contiver nenhuma das palavras-chave.'}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Palavras-chave</Label>
+                <Textarea
+                  value={triggerKeywords}
+                  onChange={(e) => setTriggerKeywords(e.target.value)}
+                  placeholder="oi, olá, quero, comprar (separadas por vírgula)"
+                  rows={2}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Separe as palavras-chave por vírgula
+                </p>
+              </div>
+            </>
           )}
 
           {/* Instâncias (Números) */}

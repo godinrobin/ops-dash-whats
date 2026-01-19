@@ -52,6 +52,7 @@ const FlowEditorPage = () => {
   const [flowDescription, setFlowDescription] = useState('');
   const [triggerType, setTriggerType] = useState<'keyword' | 'all' | 'schedule'>('keyword');
   const [triggerKeywords, setTriggerKeywords] = useState('');
+  const [keywordMatchType, setKeywordMatchType] = useState<'exact' | 'contains' | 'not_contains'>('exact');
   const [isActive, setIsActive] = useState(false);
   const [pauseOnMedia, setPauseOnMedia] = useState(false);
   const [pauseScheduleEnabled, setPauseScheduleEnabled] = useState(false);
@@ -156,6 +157,7 @@ const FlowEditorPage = () => {
         setFlowDescription(data.description || '');
         setTriggerType(data.trigger_type as 'keyword' | 'all' | 'schedule');
         setTriggerKeywords(data.trigger_keywords?.join(', ') || '');
+        setKeywordMatchType((data as any).keyword_match_type || 'exact');
         setIsActive(data.is_active);
         setPauseOnMedia(data.pause_on_media || false);
         setPauseScheduleEnabled(data.pause_schedule_enabled || false);
@@ -199,6 +201,7 @@ const FlowEditorPage = () => {
           edges: JSON.parse(JSON.stringify(cleanedEdges)),
           trigger_type: triggerType,
           trigger_keywords: triggerKeywords.split(',').map(k => k.trim()).filter(Boolean),
+          keyword_match_type: keywordMatchType,
           assigned_instances: assignedInstances,
           is_active: isActive,
           pause_on_media: pauseOnMedia,
@@ -327,15 +330,38 @@ const FlowEditorPage = () => {
                 </div>
 
                 {triggerType === 'keyword' && (
-                  <div className="space-y-2">
-                    <Label>Palavras-chave (separadas por vírgula)</Label>
-                    <Textarea
-                      value={triggerKeywords}
-                      onChange={(e) => setTriggerKeywords(e.target.value)}
-                      placeholder="oi, olá, bom dia, quero comprar"
-                      rows={2}
-                    />
-                  </div>
+                  <>
+                    <div className="space-y-2">
+                      <Label>Tipo de Correspondência</Label>
+                      <Select
+                        value={keywordMatchType}
+                        onValueChange={(value) => setKeywordMatchType(value as 'exact' | 'contains' | 'not_contains')}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="exact">Palavra exata</SelectItem>
+                          <SelectItem value="contains">Contém a palavra</SelectItem>
+                          <SelectItem value="not_contains">Não contém a palavra</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        {keywordMatchType === 'exact' && 'O fluxo inicia quando a mensagem for exatamente igual a uma das palavras-chave.'}
+                        {keywordMatchType === 'contains' && 'O fluxo inicia quando a mensagem contiver uma das palavras-chave.'}
+                        {keywordMatchType === 'not_contains' && 'O fluxo inicia quando a mensagem NÃO contiver nenhuma das palavras-chave.'}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Palavras-chave (separadas por vírgula)</Label>
+                      <Textarea
+                        value={triggerKeywords}
+                        onChange={(e) => setTriggerKeywords(e.target.value)}
+                        placeholder="oi, olá, bom dia, quero comprar"
+                        rows={2}
+                      />
+                    </div>
+                  </>
                 )}
 
                 <div className="space-y-2">
@@ -561,9 +587,11 @@ const FlowEditorPage = () => {
             onSave={handleSave}
             triggerType={triggerType}
             triggerKeywords={triggerKeywords.split(',').map(k => k.trim()).filter(Boolean)}
+            keywordMatchType={keywordMatchType}
             onUpdateFlowSettings={(settings) => {
               if (settings.triggerType) setTriggerType(settings.triggerType as 'keyword' | 'all' | 'schedule');
               if (settings.triggerKeywords) setTriggerKeywords(settings.triggerKeywords.join(', '));
+              if (settings.keywordMatchType) setKeywordMatchType(settings.keywordMatchType as 'exact' | 'contains' | 'not_contains');
             }}
           />
         )}
