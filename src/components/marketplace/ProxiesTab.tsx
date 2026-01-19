@@ -68,13 +68,13 @@ interface ProxiesTabProps {
   onBalanceChange: (newBalance: number) => void;
 }
 
-type PlanType = 'residential' | 'mobile' | 'datacenter';
+type PlanType = 'isp' | 'mobile';
 
 const PLAN_CONFIG: Record<PlanType, { label: string; icon: React.ReactNode; description: string; color: string; price: number; badge?: string }> = {
-  residential: {
-    label: 'Proxy Residencial',
+  isp: {
+    label: 'Proxy ISP',
     icon: <Wifi className="h-4 w-4" />,
-    description: 'IP residencial',
+    description: 'IP residencial estático',
     color: 'bg-green-500/20 text-green-400 border-green-500/30',
     price: 6.50
   },
@@ -85,14 +85,6 @@ const PLAN_CONFIG: Record<PlanType, { label: string; icon: React.ReactNode; desc
     color: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
     price: 14.50,
     badge: 'Novidade'
-  },
-  datacenter: {
-    label: 'Proxy Dedicada',
-    icon: <Building2 className="h-4 w-4" />,
-    description: 'IP fixo Brasil/SP',
-    color: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-    price: 50.00,
-    badge: 'IP Exclusivo'
   }
 };
 
@@ -120,7 +112,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
   const [price, setPrice] = useState<number | null>(null);
   const [prices, setPrices] = useState<Record<string, { price: number; description: string }>>({});
   const [quantity, setQuantity] = useState(1);
-  const [planType, setPlanType] = useState<PlanType>('residential');
+  const [planType, setPlanType] = useState<PlanType>('isp');
   const [country, setCountry] = useState('br');
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
@@ -259,7 +251,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
 
     // Find the order to get its plan type for pricing
     const order = orders.find(o => o.id === orderId);
-    const orderPlanType = (order?.plan_type as PlanType) || 'residential';
+    const orderPlanType = (order?.plan_type as PlanType) || 'isp';
     const renewPrice = prices[orderPlanType]?.price || PLAN_CONFIG[orderPlanType]?.price || 9.99;
 
     if (balance < renewPrice) {
@@ -443,8 +435,12 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
   };
 
   const getPlanTypeBadge = (orderPlanType?: string | null) => {
-    const pt = (orderPlanType as PlanType) || 'residential';
-    const config = PLAN_CONFIG[pt] || PLAN_CONFIG.residential;
+    // Map legacy types to current types
+    let pt: PlanType = 'isp';
+    if (orderPlanType === 'mobile') pt = 'mobile';
+    else if (orderPlanType === 'isp' || orderPlanType === 'residential') pt = 'isp';
+    
+    const config = PLAN_CONFIG[pt] || PLAN_CONFIG.isp;
     return (
       <Badge className={config.color}>
         {config.icon}
@@ -468,7 +464,8 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
 
   const formatUsername = (order: ProxyOrder) => {
     if (!order.username) return '-';
-    const zoneType = order.plan_type === 'isp' ? 'isp' : order.plan_type === 'datacenter' ? 'dc' : 'resi';
+    // Map plan types to zone types - residential maps to isp
+    const zoneType = order.plan_type === 'mobile' ? 'mobile' : 'isp';
     const region = order.country || 'br';
     let username = `${order.username}-zone-${zoneType}-region-${region}`;
     // Add state targeting if available
@@ -541,19 +538,13 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                 <li>✓ Renovação disponível</li>
                 <li>✓ Reduz Bloqueio de Número</li>
                 <li>✓ Protocolo SOCKS5</li>
-                {planType === 'datacenter' && (
-                  <>
-                    <li className="text-accent font-medium">⭐ IP fixo exclusivo Brasil/São Paulo</li>
-                    <li className="text-accent font-medium">⭐ Compra real no PyProxy (deduz do saldo)</li>
-                  </>
-                )}
               </ul>
 
               <div className="flex flex-col gap-4 pt-4 border-t border-border">
                 {/* Proxy Type Selector */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-foreground">Tipo de Proxy</label>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {(Object.keys(PLAN_CONFIG) as PlanType[]).map((type) => {
                       const config = PLAN_CONFIG[type];
                       const typePrice = prices[type]?.price || config.price;
@@ -605,50 +596,35 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                   </div>
                 </div>
 
-                {/* Country Selector - Hide for datacenter as it's fixed to Brazil/SP */}
-                {planType !== 'datacenter' && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-foreground">País do IP</label>
-                    <Select value={country} onValueChange={(val) => {
-                      setCountry(val);
-                      // Reset state/city when country changes
-                      if (val !== 'br') {
-                        setSelectedState('random');
-                        setSelectedCity('');
-                      }
-                    }}>
-                      <SelectTrigger className="w-full md:w-64">
-                        <SelectValue placeholder="Selecione o país" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {COUNTRY_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.code} value={opt.code}>
-                            <div className="flex items-center gap-2">
-                              <span>{opt.flag}</span>
-                              <span>{opt.label}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                
-                {/* Fixed location notice for datacenter */}
-                {planType === 'datacenter' && (
-                  <div className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/30">
-                    <div className="flex items-center gap-2 text-purple-400">
-                      <Building2 className="h-4 w-4" />
-                      <span className="font-medium">Localização Fixa</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      🇧🇷 Brasil - São Paulo (IP dedicado exclusivo)
-                    </p>
-                  </div>
-                )}
+                {/* Country Selector */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">País do IP</label>
+                  <Select value={country} onValueChange={(val) => {
+                    setCountry(val);
+                    // Reset state/city when country changes
+                    if (val !== 'br') {
+                      setSelectedState('random');
+                      setSelectedCity('');
+                    }
+                  }}>
+                    <SelectTrigger className="w-full md:w-64">
+                      <SelectValue placeholder="Selecione o país" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COUNTRY_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.code} value={opt.code}>
+                          <div className="flex items-center gap-2">
+                            <span>{opt.flag}</span>
+                            <span>{opt.label}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-{/* State Selector - Only for Brazil and NOT datacenter */}
-                {country === 'br' && planType !== 'datacenter' && (
+                {/* State Selector - Only for Brazil */}
+                {country === 'br' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-foreground">Estado do IP (opcional)</label>

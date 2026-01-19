@@ -47,6 +47,7 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
   const [selectedEvent, setSelectedEvent] = useState<string>('Purchase');
   const [selectedPixel, setSelectedPixel] = useState<string>('all');
   const [eventValue, setEventValue] = useState<string>('');
+  const [eventQuantity, setEventQuantity] = useState<number>(1);
   const [sendingEvent, setSendingEvent] = useState(false);
   const [eventLogs, setEventLogs] = useState<EventLog[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
@@ -156,51 +157,90 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
     setSendingEvent(true);
     try {
       const parsedValue = eventValue ? parseFloat(eventValue.replace(',', '.')) : 0;
+      const quantity = eventQuantity;
       
-      const { data, error } = await supabase.functions.invoke('send-facebook-event', {
-        body: {
-          contact_id: contact.id,
-          phone: contact.phone,
-          event_name: selectedEvent,
-          ctwa_clid: contact.ctwa_clid,
-          value: selectedEvent === 'Purchase' ? parsedValue : undefined,
-          pixel_id: selectedPixel !== 'all' ? selectedPixel : undefined,
+      let totalSuccess = 0;
+      let totalPixels = 0;
+      
+      // Send events sequentially to avoid duplicates
+      for (let i = 0; i < quantity; i++) {
+        // Calculate incrementing value: base value + i (e.g., 97, 98, 99...)
+        const incrementedValue = parsedValue + i;
+        
+        const { data, error } = await supabase.functions.invoke('send-facebook-event', {
+          body: {
+            contact_id: contact.id,
+            phone: contact.phone,
+            event_name: selectedEvent,
+            ctwa_clid: contact.ctwa_clid,
+            value: selectedEvent === 'Purchase' ? incrementedValue : undefined,
+            pixel_id: selectedPixel !== 'all' ? selectedPixel : undefined,
+            // Unique event_id for each iteration to prevent deduplication
+            event_id: `manual_${Date.now()}_${contact.phone.slice(-4)}_${i}`,
+          }
+        });
+
+        if (error) {
+          console.error(`Event ${i + 1}/${quantity} error:`, error);
+          continue;
         }
-      });
 
-      if (error) throw error;
-
-      if (data.success) {
-        // Check for warnings
-        if (data.has_warnings) {
-          const warningResults = data.results.filter((r: any) => r.warning);
-          warningResults.forEach((r: any) => {
-            toast.warning(r.warning, { duration: 5000 });
+        if (data?.success) {
+          totalSuccess += data.successful || 0;
+          totalPixels = data.total_pixels || totalPixels;
+          
+          // Check for warnings
+          if (data.has_warnings) {
+            const warningResults = data.results.filter((r: any) => r.warning);
+            warningResults.forEach((r: any) => {
+              toast.warning(r.warning, { duration: 5000 });
+            });
+          }
+        } else {
+          // Check for specific errors
+          const errorResults = data?.results?.filter((r: any) => !r.success && r.error) || [];
+          errorResults.forEach((r: any) => {
+            toast.error(`Pixel ${r.pixel_id}: ${r.error}`, { duration: 6000 });
           });
         }
         
-        toast.success(`Evento ${selectedEvent} enviado para ${data.successful}/${data.total_pixels} pixel(s)`);
+        // Small delay between events to prevent rate limiting
+        if (i < quantity - 1) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+      }
+      
+      if (totalSuccess > 0) {
+        const valueRange = quantity > 1 
+          ? `R$ ${parsedValue.toFixed(2)} a R$ ${(parsedValue + quantity - 1).toFixed(2)}`
+          : `R$ ${parsedValue.toFixed(2)}`;
+        toast.success(`${quantity}x evento${quantity > 1 ? 's' : ''} ${selectedEvent} enviado${quantity > 1 ? 's' : ''} (${valueRange})`);
         setEventValue(''); // Clear value after sending
+        setEventQuantity(1); // Reset quantity
         
         // Refresh event logs if history is visible
         if (showEventHistory) {
           loadEventLogs();
         }
       } else {
-        // Check for specific errors
-        const errorResults = data.results?.filter((r: any) => !r.success && r.error) || [];
-        if (errorResults.length > 0) {
-          errorResults.forEach((r: any) => {
-            toast.error(`Pixel ${r.pixel_id}: ${r.error}`, { duration: 6000 });
-          });
-        } else {
-          toast.error('Falha ao enviar evento. Verifique seus pixels em Configurações.');
-        }
+        toast.error('Falha ao enviar eventos. Verifique seus pixels em Configurações.');
       }
     } catch (err: any) {
       toast.error(err.message || 'Erro ao enviar evento');
     } finally {
       setSendingEvent(false);
+    }
+  };
+
+  // Handle quantity input with max 100 limit
+  const handleQuantityChange = (value: string) => {
+    const num = parseInt(value) || 1;
+    if (num > 100) {
+      setEventQuantity(100);
+    } else if (num < 1) {
+      setEventQuantity(1);
+    } else {
+      setEventQuantity(num);
     }
   };
 
@@ -324,13 +364,26 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
                 </Select>
                 
                 {selectedEvent === 'Purchase' && (
-                  <Input
-                    type="text"
-                    placeholder="Valor (ex: 97.00)"
-                    value={eventValue}
-                    onChange={(e) => setEventValue(e.target.value)}
-                    className="text-sm"
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      type="text"
+                      placeholder="Valor (ex: 97.00)"
+                      value={eventValue}
+                      onChange={(e) => setEventValue(e.target.value)}
+                      className="text-sm flex-1"
+                    />
+                    <Input
+                      type="number"
+                      min={1}
+                      max={100}
+                      placeholder="Qtd"
+                      value={eventQuantity}
+                      onChange={(e) => handleQuantityChange(e.target.value)}
+                      onBlur={(e) => handleQuantityChange(e.target.value)}
+                      className="text-sm w-16"
+                      title="Quantidade de eventos (máx 100)"
+                    />
+                  </div>
                 )}
                 
                 {/* Pixel Selection */}
