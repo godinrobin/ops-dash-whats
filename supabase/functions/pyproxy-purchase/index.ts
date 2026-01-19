@@ -924,11 +924,10 @@ Deno.serve(async (req) => {
             num: 1
           });
 
+          // Note: PyProxy /g/open/static/buy uses ONLY the access_token in form body
+          // Do NOT send Authorization header - it causes "Please log in first" error
           const staticBuyRes = await fetch('https://api.pyproxy.com/g/open/static/buy', {
             method: 'POST',
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-            },
             body: staticBuyForm,
           });
 
