@@ -901,12 +901,15 @@ Deno.serve(async (req) => {
 
         console.log('[STEP 7] Creating PYPROXY user:', username, 'with 1GB limit_flow');
 
+        const remark = `lovable:${order.id}:${gatewayPlanType}:${gatewayConfig.gateway_host}`;
+        console.log('[STEP 7] PyProxy remark:', remark);
+
         const userForm = new FormData();
         userForm.append('username', username);
         userForm.append('password', password);
         userForm.append('status', '1');
         userForm.append('limit_flow', '1'); // 1GB of traffic
-        userForm.append('remark', `lovable:${order.id}:${gatewayPlanType}:${gatewayConfig.gateway_host}`);
+        userForm.append('remark', remark);
 
         const userRes = await fetch('https://api.pyproxy.com/g/open/add_or_edit_user', {
           method: 'POST',
@@ -1321,6 +1324,13 @@ Deno.serve(async (req) => {
       renewUserForm.append('username', renewUsername);
       renewUserForm.append('status', '1');
       renewUserForm.append('limit_flow', '1');
+
+      const renewDisplayPlanType = existingOrder.plan_type ?? 'residential';
+      const renewProviderPlanType = renewDisplayPlanType === 'residential' ? 'isp' : renewDisplayPlanType;
+      const renewGatewayHost = (existingOrder as any).host ?? ((existingOrder as any).gateway_used?.split?.(':')?.[0] ?? 'pr.pyproxy.com');
+      const renewRemark = `lovable:${orderId}:${renewProviderPlanType}:${renewGatewayHost}`;
+      console.log('[RENEW] Updating PyProxy remark:', renewRemark);
+      renewUserForm.append('remark', renewRemark);
 
       const renewUserRes = await fetch('https://api.pyproxy.com/g/open/add_or_edit_user', {
         method: 'POST',
