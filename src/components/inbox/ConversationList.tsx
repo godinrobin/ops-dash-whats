@@ -61,7 +61,7 @@ const instanceColors = [
   'bg-red-500',
 ];
 
-type FilterType = 'all' | 'paid' | 'ignored';
+type FilterType = 'all' | 'paid' | 'ignored' | 'unread' | 'read';
 
 export const ConversationList = ({
   contacts,
@@ -195,23 +195,28 @@ export const ConversationList = ({
     return Array.from(labelsSet).filter(label => label.toLowerCase() !== 'pago');
   }, [contacts]);
 
-  // Filter contacts based on active filter (tabs: Todos/Pagos/Ignorados)
+  // Filter contacts based on active filter (tabs: Todos/Pagos/Ignorados/Não lidas/Lidas)
   // Note: The label dropdown filter is already applied by the parent component
   const filteredByType = useMemo(() => {
     return contacts.filter(contact => {
       const tags = Array.isArray((contact as any).tags) ? (contact as any).tags : [];
       const hasPagoTag = tags.some((tag: string) => tag.toLowerCase() === 'pago');
       const isIgnored = (contact as any).is_ignored === true;
+      const isUnread = contact.unread_count > 0;
 
       switch (activeFilter) {
         case 'paid':
           return hasPagoTag && !isIgnored;
         case 'ignored':
           return isIgnored;
+        case 'unread':
+          return isUnread && !isIgnored;
+        case 'read':
+          return !isUnread && !isIgnored;
         case 'all':
         default:
-          // "Todos" shows contacts that are NOT paid AND NOT ignored
-          return !hasPagoTag && !isIgnored;
+          // "Todos" shows all contacts (not ignored)
+          return !isIgnored;
       }
     });
   }, [contacts, activeFilter]);
@@ -225,6 +230,11 @@ export const ConversationList = ({
     { key: 'all', label: 'Todos' },
     { key: 'paid', label: 'Pagos' },
     { key: 'ignored', label: 'Ignorados' },
+  ];
+
+  const readFilterButtons: { key: FilterType; label: string }[] = [
+    { key: 'unread', label: 'Não lidas' },
+    { key: 'read', label: 'Lidas' },
   ];
 
   return (
@@ -277,7 +287,7 @@ export const ConversationList = ({
           )}
         </div>
 
-        {/* Filter Tabs */}
+        {/* Filter Tabs - Row 1: Todos/Pagos/Ignorados */}
         <div className="flex gap-2 mt-3">
           {filterButtons.map((filter) => (
             <button
@@ -288,6 +298,24 @@ export const ConversationList = ({
                 activeFilter === filter.key
                   ? "bg-orange-500 text-white border-orange-500"
                   : "bg-orange-500/10 text-orange-600 border-orange-500/30 hover:bg-orange-500/20"
+              )}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Filter Tabs - Row 2: Não lidas/Lidas */}
+        <div className="flex gap-2 mt-2">
+          {readFilterButtons.map((filter) => (
+            <button
+              key={filter.key}
+              onClick={() => handleFilterChange(filter.key)}
+              className={cn(
+                "flex-1 px-3 py-1.5 rounded-full text-xs font-medium transition-all border",
+                activeFilter === filter.key
+                  ? "bg-blue-500 text-white border-blue-500"
+                  : "bg-blue-500/10 text-blue-600 border-blue-500/30 hover:bg-blue-500/20"
               )}
             >
               {filter.label}

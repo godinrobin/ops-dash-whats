@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Send, Paperclip, Mic, Smile, Image, FileText, Video, Zap, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,8 +12,20 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
+import { cn } from '@/lib/utils';
+
+interface QuickReply {
+  id: string;
+  shortcut: string;
+  content: string;
+  type: 'text' | 'image' | 'video' | 'audio' | 'document';
+  file_url?: string | null;
+  assigned_instances: string[];
+}
 
 interface ChatInputProps {
   onSendMessage: (content: string, messageType?: string, mediaUrl?: string) => Promise<{ error?: string; data?: any }>;
@@ -24,6 +36,7 @@ interface ChatInputProps {
 
 export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactInstanceId }: ChatInputProps) => {
   const { user } = useAuth();
+  const { effectiveUserId } = useEffectiveUser();
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
@@ -34,6 +47,11 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactIns
   const [mediaCaption, setMediaCaption] = useState('');
   const [uploading, setUploading] = useState(false);
   const [triggeringFlowId, setTriggeringFlowId] = useState<string | null>(null);
+
+  // Quick replies
+  const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
+  const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [quickReplyFilter, setQuickReplyFilter] = useState('');
 
   // Audio recording
   const [isRecording, setIsRecording] = useState(false);
@@ -47,6 +65,47 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactIns
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch quick replies
+  useEffect(() => {
+    const userId = effectiveUserId || user?.id;
+    if (!userId) return;
+    
+    const fetchQuickReplies = async () => {
+      const { data } = await supabase
+        .from('inbox_quick_replies')
+        .select('*')
+        .eq('user_id', userId);
+      
+      if (data) {
+        setQuickReplies(data.map(r => ({
+          id: r.id,
+          shortcut: r.shortcut,
+          content: r.content,
+          type: (r as any).type || 'text',
+          file_url: (r as any).file_url || null,
+          assigned_instances: (r as any).assigned_instances || [],
+        })));
+      }
+    };
+    
+    fetchQuickReplies();
+  }, [user, effectiveUserId]);
+
+  // Filter quick replies for current instance
+  const filteredQuickReplies = useMemo(() => {
+    return quickReplies.filter(reply => {
+      // If no instances assigned, show for all
+      if (reply.assigned_instances.length === 0) return true;
+      // If instance matches
+      if (contactInstanceId && reply.assigned_instances.includes(contactInstanceId)) return true;
+      // If assigned to all (empty means all)
+      return false;
+    }).filter(reply => {
+      if (!quickReplyFilter) return true;
+      return reply.shortcut.toLowerCase().includes(quickReplyFilter.toLowerCase());
+    });
+  }, [quickReplies, contactInstanceId, quickReplyFilter]);
 
   useEffect(() => {
     if (!showEmojiPicker) return;
@@ -157,19 +216,65 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactIns
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Handle quick reply selection with arrow keys
+    if (showQuickReplies && filteredQuickReplies.length > 0) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowQuickReplies(false);
+        setQuickReplyFilter('');
+        return;
+      }
+    }
+    
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      if (showQuickReplies) {
+        // Don't send, close quick replies
+        setShowQuickReplies(false);
+        setQuickReplyFilter('');
+      } else {
+        handleSend();
+      }
     }
   };
 
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setMessage(e.target.value);
+    const value = e.target.value;
+    setMessage(value);
+    
+    // Check for "/" trigger
+    if (value === '/' || (value.startsWith('/') && !value.includes(' '))) {
+      setShowQuickReplies(true);
+      setQuickReplyFilter(value.slice(1)); // Remove the "/" prefix
+    } else {
+      setShowQuickReplies(false);
+      setQuickReplyFilter('');
+    }
     
     // Auto-resize
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
       textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px';
+    }
+  };
+
+  const handleQuickReplySelect = async (reply: QuickReply) => {
+    setShowQuickReplies(false);
+    setQuickReplyFilter('');
+    
+    if (reply.type === 'text') {
+      setMessage(reply.content);
+      textareaRef.current?.focus();
+    } else if (reply.file_url) {
+      // Send media directly
+      setSending(true);
+      const result = await onSendMessage(reply.content || '', reply.type, reply.file_url);
+      if (result.error) {
+        toast.error('Erro ao enviar: ' + result.error);
+      } else {
+        toast.success('Resposta rápida enviada!');
+      }
+      setSending(false);
     }
   };
 
@@ -391,13 +496,36 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactIns
           <div className="flex-1 relative">
             <Textarea
               ref={textareaRef}
-              placeholder="Digite sua mensagem..."
+              placeholder="Digite sua mensagem... (use / para respostas rápidas)"
               value={message}
               onChange={handleTextareaChange}
               onKeyDown={handleKeyDown}
               className="min-h-[40px] max-h-[120px] resize-none pr-10"
               rows={1}
             />
+            
+            {/* Quick Replies Dropdown */}
+            {showQuickReplies && filteredQuickReplies.length > 0 && (
+              <div className="absolute bottom-full left-0 right-0 mb-2 bg-popover border border-border rounded-lg shadow-lg z-50 overflow-hidden">
+                <div className="p-2 border-b border-border">
+                  <p className="text-xs text-muted-foreground font-medium">Respostas Rápidas</p>
+                </div>
+                <ScrollArea className="max-h-48">
+                  {filteredQuickReplies.map((reply) => (
+                    <button
+                      key={reply.id}
+                      onClick={() => handleQuickReplySelect(reply)}
+                      className="w-full px-3 py-2 text-left hover:bg-accent/50 transition-colors flex items-start gap-2 border-b border-border/50 last:border-0"
+                    >
+                      <span className="font-mono text-primary text-sm shrink-0">/{reply.shortcut}</span>
+                      <span className="text-sm text-muted-foreground line-clamp-1">
+                        {reply.content || reply.file_url || 'Sem conteúdo'}
+                      </span>
+                    </button>
+                  ))}
+                </ScrollArea>
+              </div>
+            )}
           </div>
 
           {/* Send / Record Button */}

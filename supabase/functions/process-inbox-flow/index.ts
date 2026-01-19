@@ -3552,4 +3552,18 @@ async function saveOutboundMessage(
   if (error) {
     console.error('Error saving outbound message:', error);
   }
+
+  // Mark conversation as read when flow sends a message (last message is from flow)
+  try {
+    await supabaseClient
+      .from('inbox_contacts')
+      .update({ 
+        unread_count: 0,
+        last_message_at: new Date().toISOString()
+      })
+      .eq('id', contactId);
+    console.log(`[FLOW] Marked contact ${contactId} as read after flow message`);
+  } catch (updateErr) {
+    console.error('[FLOW] Error updating contact unread_count:', updateErr);
+  }
 }
