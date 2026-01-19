@@ -238,7 +238,8 @@ export default function InboxDashboard() {
 
   // Fase 2: Carrega dados secundários em background (contatos e mensagens)
   const fetchSecondaryData = async () => {
-    if (!user) return;
+    const userId = effectiveUserId || user?.id;
+    if (!userId) return;
 
     try {
       // Pega mensagens dos últimos 7 dias SEM limite para contagem correta
@@ -246,8 +247,8 @@ export default function InboxDashboard() {
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       
       const [contactsRes, messagesRes] = await Promise.all([
-        supabase.from('inbox_contacts').select('id, instance_id, created_at').eq('user_id', user.id),
-        supabase.from('inbox_messages').select('id, instance_id, contact_id, created_at, direction').eq('user_id', user.id).gte('created_at', sevenDaysAgo.toISOString()).order('created_at', { ascending: false }),
+        supabase.from('inbox_contacts').select('id, instance_id, created_at').eq('user_id', userId),
+        supabase.from('inbox_messages').select('id, instance_id, contact_id, created_at, direction').eq('user_id', userId).gte('created_at', sevenDaysAgo.toISOString()).order('created_at', { ascending: false }),
       ]);
 
       if (contactsRes.data) setContacts(contactsRes.data);

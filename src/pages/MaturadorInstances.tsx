@@ -11,6 +11,7 @@ import { ArrowLeft, Plus, RefreshCw, Loader2, Smartphone, QrCode, Trash2, PowerO
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { splashedToast as toast } from "@/hooks/useSplashedToast";
 import { useAutoCheckConnectingInstances } from "@/hooks/useAutoCheckConnectingInstances";
 import { QRCodeModal, setQrCodeCache, clearQrCodeCache } from "@/components/QRCodeModal";
@@ -32,6 +33,7 @@ interface Instance {
 export default function MaturadorInstances() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { effectiveUserId } = useEffectiveUser();
   const [instances, setInstances] = useState<Instance[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -72,14 +74,15 @@ export default function MaturadorInstances() {
   const [instanceProxyResults, setInstanceProxyResults] = useState<Record<string, { ip?: string; location?: string; latency_ms?: number; error?: string }>>({});
 
   const fetchInstances = useCallback(async () => {
-    if (!user) return;
+    const userId = effectiveUserId || user?.id;
+    if (!userId) return;
 
     try {
       // Fetch instances from database
       const { data, error } = await supabase
         .from('maturador_instances')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -91,7 +94,7 @@ export default function MaturadorInstances() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [effectiveUserId, user?.id]);
 
   // Webhook verification removed - webhooks are configured automatically on instance creation
   // This reduces unnecessary API calls and speeds up page load
@@ -142,10 +145,11 @@ export default function MaturadorInstances() {
       const syncedCount = data.results?.filter((r: any) => r.phoneNumber).length || 0;
       
       // Reconfigure webhooks for all connected instances
+      const userId = effectiveUserId || user?.id;
       const { data: currentInstances } = await supabase
         .from('maturador_instances')
         .select('id')
-        .eq('user_id', user?.id)
+        .eq('user_id', userId)
         .eq('status', 'connected');
       
       if (currentInstances && currentInstances.length > 0) {
