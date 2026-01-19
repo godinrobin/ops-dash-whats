@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, ShoppingBag, Phone, Calendar, Loader2, Tag, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect, useMemo } from "react";
 import { format, subDays, startOfDay, endOfDay, parseISO } from "date-fns";
@@ -35,6 +36,7 @@ const SP_TIMEZONE = "America/Sao_Paulo";
 const TagWhatsSales = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { effectiveUserId } = useEffectiveUser();
 
   const [salesLogs, setSalesLogs] = useState<SaleLog[]>([]);
   const [instances, setInstances] = useState<Instance[]>([]);
@@ -44,7 +46,8 @@ const TagWhatsSales = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!user) return;
+      const userId = effectiveUserId || user?.id;
+      if (!userId) return;
       setLoading(true);
 
       try {
@@ -52,14 +55,14 @@ const TagWhatsSales = () => {
         const { data: instancesData } = await supabase
           .from("maturador_instances")
           .select("id, instance_name, phone_number")
-          .eq("user_id", user.id);
+          .eq("user_id", userId);
         setInstances(instancesData || []);
 
         // Fetch sales logs (label_applied = true means it was a sale)
         const { data: logsData } = await (supabase
           .from("tag_whats_logs" as any)
           .select("id, contact_phone, instance_id, created_at, fb_event_status, fb_event_pixel_id, fb_event_error")
-          .eq("user_id", user.id)
+          .eq("user_id", userId)
           .eq("label_applied", true)
           .order("created_at", { ascending: false }) as any);
 
@@ -72,7 +75,7 @@ const TagWhatsSales = () => {
     };
 
     fetchData();
-  }, [user]);
+  }, [user, effectiveUserId]);
 
   const getInstanceName = (instanceId: string) => {
     const instance = instances.find((i) => i.id === instanceId);
