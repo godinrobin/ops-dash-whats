@@ -59,6 +59,7 @@ import WhatsAppEditor from "./pages/WhatsAppEditor";
 import WhatsAppEditorAddNumber from "./pages/WhatsAppEditorAddNumber";
 import NotifyAdminPage from "./pages/NotifyAdminPage";
 import NotifyAdminAddNumber from "./pages/NotifyAdminAddNumber";
+import QuickRepliesPage from "./pages/QuickRepliesPage";
 import DeliverableCreator from "./pages/DeliverableCreator";
 import Settings from "./pages/Settings";
 
@@ -124,6 +125,7 @@ const AppContent = () => {
         <Route path="/inbox/flows/:id" element={<MemberRoute featureName="Automati-Zap"><FlowEditorPage /></MemberRoute>} />
         <Route path="/inbox/notify-admin" element={<MemberRoute featureName="Automati-Zap"><NotifyAdminPage /></MemberRoute>} />
         <Route path="/inbox/notify-admin/add-number" element={<MemberRoute featureName="Automati-Zap"><NotifyAdminAddNumber /></MemberRoute>} />
+        <Route path="/inbox/quick-replies" element={<MemberRoute featureName="Automati-Zap"><QuickRepliesPage /></MemberRoute>} />
         <Route path="/disparador" element={<MemberRoute featureName="DisparaZap"><MessageBlaster /></MemberRoute>} />
         <Route path="/disparazap/fluxos" element={<MemberRoute featureName="DisparaZap"><FlowListPage /></MemberRoute>} />
         <Route path="/disparazap/fluxos/novo" element={<MemberRoute featureName="DisparaZap"><FlowEditorPage /></MemberRoute>} />
