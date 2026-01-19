@@ -880,13 +880,13 @@ export default function InboxDashboard() {
       comingSoon: false,
     },
     { 
-      title: "Notificar Admin", 
-      description: "Configure alertas e notificações", 
-      icon: Bell, 
-      path: "/inbox/notify-admin",
+      title: "Respostas Rápidas", 
+      description: "Crie atalhos para mensagens frequentes", 
+      icon: MessageSquare, 
+      path: "/inbox/quick-replies",
       count: null,
       gradient: "from-amber-400 to-orange-500",
-      comingSoon: true,
+      comingSoon: false,
     },
   ];
 
