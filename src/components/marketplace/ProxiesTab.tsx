@@ -70,27 +70,29 @@ interface ProxiesTabProps {
 
 type PlanType = 'residential' | 'mobile' | 'datacenter';
 
-const PLAN_CONFIG: Record<PlanType, { label: string; icon: React.ReactNode; description: string; color: string; price: number }> = {
+const PLAN_CONFIG: Record<PlanType, { label: string; icon: React.ReactNode; description: string; color: string; price: number; badge?: string }> = {
   residential: {
     label: 'Proxy Residencial',
     icon: <Wifi className="h-4 w-4" />,
-    description: 'IPs residenciais rotativos - ideal para WhatsApp',
+    description: 'IP residencial',
     color: 'bg-green-500/20 text-green-400 border-green-500/30',
-    price: 9.99
+    price: 6.50
   },
   mobile: {
     label: 'Proxy Mobile',
     icon: <Zap className="h-4 w-4" />,
-    description: 'IPs de operadoras móveis - máxima confiabilidade',
+    description: 'IP mobile',
     color: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-    price: 14.50
+    price: 14.50,
+    badge: 'Novidade'
   },
   datacenter: {
     label: 'Proxy Dedicada',
     icon: <Building2 className="h-4 w-4" />,
-    description: 'IP fixo de datacenter - alta velocidade e estabilidade',
+    description: 'IP exclusivo',
     color: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-    price: 50.00
+    price: 50.00,
+    badge: 'Mais segura'
   }
 };
 
@@ -575,9 +577,9 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                             )}>
                               {config.label}
                             </span>
-                            {type === 'mobile' && (
+                            {config.badge && (
                               <Badge className="ml-auto bg-accent/20 text-accent border-accent/30 text-xs">
-                                Popular
+                                {config.badge}
                               </Badge>
                             )}
                           </div>
@@ -957,7 +959,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                             variant="outline"
                             size="sm"
                             onClick={() => handleRenew(order.id)}
-                            disabled={renewing === order.id || !price || !canRenew(order.expires_at)}
+                            disabled={renewing === order.id || !canRenew(order.expires_at)}
                             title={!canRenew(order.expires_at) ? 'Disponível quando faltar 3 dias para expirar' : ''}
                           >
                             {renewing === order.id ? (
@@ -968,7 +970,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                             ) : (
                               <>
                                 <RotateCcw className="h-4 w-4 mr-2" />
-                                Renovar R$ {price?.toFixed(2).replace('.', ',')}
+                                Renovar R$ {(prices[(order.plan_type as PlanType)]?.price || PLAN_CONFIG[(order.plan_type as PlanType) || 'residential']?.price || 6.50).toFixed(2).replace('.', ',')}
                               </>
                             )}
                           </Button>
