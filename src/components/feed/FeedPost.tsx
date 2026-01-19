@@ -327,11 +327,11 @@ export const FeedPost = ({ post, comments, commentReplies, commentReactions, use
         </div>
       )}
 
-      {/* Content - supports HTML from rich text editor */}
+      {/* Content - supports HTML from rich text editor with inline images */}
       {post.content && (
         <div className="px-4 pb-3">
           <div 
-            className="text-foreground prose prose-invert prose-sm max-w-none [&_a]:text-orange-500 [&_a]:hover:underline [&_a]:break-all"
+            className="text-foreground prose prose-invert prose-sm max-w-none [&_a]:text-orange-500 [&_a]:hover:underline [&_a]:break-all [&_img]:max-w-full [&_img]:rounded-xl [&_img]:my-3 [&_img]:mx-auto [&_img]:block [&_img]:max-h-96"
             dangerouslySetInnerHTML={{ __html: linkifyContent(post.content) }} 
           />
         </div>
