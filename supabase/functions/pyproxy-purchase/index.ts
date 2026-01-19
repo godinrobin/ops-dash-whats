@@ -899,41 +899,66 @@ Deno.serve(async (req) => {
         
         // For DEDICATED (datacenter) proxies, buy a real static IP from PyProxy
         if (planType === 'datacenter') {
-          console.log('[STEP 7] DEDICATED PROXY: Using /g/open/static/buy endpoint');
+          console.log('[STEP 7] DEDICATED PROXY: Using /api/v1/static-buy endpoint with signature auth');
           
-          // Build form for static IP purchase
-          // proxy_type: 4 = Dedicated Datacenter
-          // country: 'br' = Brazil
-          // city: 'sao_paulo' (or use PyProxy city code if needed)
-          // duration: 30 = 30 days
-          // num: 1 = 1 IP
+          // PyProxy static IP purchase may require direct signature authentication
+          // instead of access_token for financial transactions
+          // Try the main API path /api/v1/static-buy with signature headers
           
-          const staticBuyForm = new FormData();
-          staticBuyForm.append('access_token', accessToken);
-          staticBuyForm.append('proxy_type', '4'); // Dedicated Datacenter
-          staticBuyForm.append('country', 'br'); // Brazil
-          staticBuyForm.append('city', 'sao_paulo'); // São Paulo
-          staticBuyForm.append('duration', '30'); // 30 days
-          staticBuyForm.append('num', '1'); // 1 IP
+          const purchaseTimestamp = Math.floor(Date.now() / 1000).toString();
+          const purchaseSign = await sha256Hex(`${pyproxyApiKey}${purchaseTimestamp}${pyproxyApiSecret}`);
           
-          console.log('[STEP 7] Calling /g/open/static/buy with params:', {
-            proxy_type: 4,
-            country: 'br',
-            city: 'sao_paulo',
-            duration: 30,
-            num: 1
-          });
+          // Build request body as JSON for the v1 API
+          const staticBuyBody = {
+            proxy_type: 4, // Dedicated Datacenter
+            country: 'br', // Brazil  
+            city: 'sao_paulo', // São Paulo
+            duration: 30, // 30 days
+            num: 1 // 1 IP
+          };
+          
+          console.log('[STEP 7] Calling /api/v1/static-buy with params:', staticBuyBody);
+          console.log('[STEP 7] Using signature auth with timestamp:', purchaseTimestamp);
 
-          // Note: PyProxy /g/open/static/buy uses ONLY the access_token in form body
-          // Do NOT send Authorization header - it causes "Please log in first" error
-          const staticBuyRes = await fetch('https://api.pyproxy.com/g/open/static/buy', {
+          // Try the /api/v1 endpoint which uses header-based signature auth
+          let staticBuyRes = await fetch('https://api.pyproxy.com/api/v1/static-buy', {
             method: 'POST',
-            body: staticBuyForm,
+            headers: {
+              'Content-Type': 'application/json',
+              'Api-Key': pyproxyApiKey,
+              'Timestamp': purchaseTimestamp,
+              'Signature': purchaseSign
+            },
+            body: JSON.stringify(staticBuyBody),
           });
 
-          const staticBuyParsed = await parseJsonResponse(staticBuyRes);
-          console.log('[STEP 7] Static buy response status:', staticBuyRes.status);
-          console.log('[STEP 7] Static buy response:', staticBuyParsed.preview.slice(0, 800));
+          let staticBuyParsed = await parseJsonResponse(staticBuyRes);
+          console.log('[STEP 7] /api/v1/static-buy response status:', staticBuyRes.status);
+          console.log('[STEP 7] /api/v1/static-buy response:', staticBuyParsed.preview.slice(0, 800));
+          
+          // If v1 endpoint fails, fallback to /g/open/static/buy with access_token
+          if (!staticBuyRes.ok || (staticBuyParsed.json?.ret !== 0 && staticBuyParsed.json?.code !== 1)) {
+            console.log('[STEP 7] Fallback: trying /g/open/static/buy with access_token');
+            
+            const staticBuyForm = new FormData();
+            staticBuyForm.append('access_token', accessToken);
+            staticBuyForm.append('proxy_type', '4');
+            staticBuyForm.append('country', 'br');
+            staticBuyForm.append('city', 'sao_paulo');
+            staticBuyForm.append('duration', '30');
+            staticBuyForm.append('num', '1');
+
+            staticBuyRes = await fetch('https://api.pyproxy.com/g/open/static/buy', {
+              method: 'POST',
+              body: staticBuyForm,
+            });
+            
+            staticBuyParsed = await parseJsonResponse(staticBuyRes);
+            console.log('[STEP 7] Fallback response status:', staticBuyRes.status);
+            console.log('[STEP 7] Fallback response:', staticBuyParsed.preview.slice(0, 800));
+          }
+
+          // staticBuyParsed already contains the final response from either primary or fallback
 
           // Check for success
           if (!staticBuyRes.ok || staticBuyParsed.json?.ret !== 0 || staticBuyParsed.json?.code !== 1) {
