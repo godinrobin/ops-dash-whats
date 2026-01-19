@@ -21,7 +21,8 @@ interface PropertiesPanelProps {
   onSave: () => void;
   triggerType?: 'keyword' | 'all' | 'schedule';
   triggerKeywords?: string[];
-  onUpdateFlowSettings?: (settings: { triggerType?: string; triggerKeywords?: string[] }) => void;
+  keywordMatchType?: 'exact' | 'contains' | 'not_contains';
+  onUpdateFlowSettings?: (settings: { triggerType?: string; triggerKeywords?: string[]; keywordMatchType?: string }) => void;
   allNodes?: Node[];
 }
 // System variables that are always available (synchronized with backend)
@@ -84,6 +85,7 @@ export const PropertiesPanel = ({
   onSave,
   triggerType = 'keyword',
   triggerKeywords = [],
+  keywordMatchType = 'exact',
   onUpdateFlowSettings,
   allNodes = [],
 }: PropertiesPanelProps) => {
@@ -226,21 +228,45 @@ export const PropertiesPanel = ({
             </div>
 
             {triggerType === 'keyword' && (
-              <div className="space-y-2">
-                <Label>Palavras-chave</Label>
-                <Textarea
-                  placeholder="oi, olá, comprar..."
-                  value={triggerKeywords.join(', ')}
-                  onChange={(e) => {
-                    const keywords = e.target.value.split(',').map(k => k.trim()).filter(Boolean);
-                    onUpdateFlowSettings?.({ triggerKeywords: keywords });
-                  }}
-                  rows={3}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Separe por vírgula. O fluxo inicia quando a mensagem contiver uma dessas palavras.
-                </p>
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label>Tipo de Correspondência</Label>
+                  <Select
+                    value={keywordMatchType || 'exact'}
+                    onValueChange={(value) => onUpdateFlowSettings?.({ keywordMatchType: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="exact">Palavra exata</SelectItem>
+                      <SelectItem value="contains">Contém a palavra</SelectItem>
+                      <SelectItem value="not_contains">Não contém a palavra</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {keywordMatchType === 'exact' && 'O fluxo inicia quando a mensagem for exatamente igual a uma das palavras-chave.'}
+                    {keywordMatchType === 'contains' && 'O fluxo inicia quando a mensagem contiver uma das palavras-chave.'}
+                    {keywordMatchType === 'not_contains' && 'O fluxo inicia quando a mensagem NÃO contiver nenhuma das palavras-chave.'}
+                    {!keywordMatchType && 'O fluxo inicia quando a mensagem for exatamente igual a uma das palavras-chave.'}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Palavras-chave</Label>
+                  <Textarea
+                    placeholder="oi, olá, comprar..."
+                    value={triggerKeywords.join(', ')}
+                    onChange={(e) => {
+                      const keywords = e.target.value.split(',').map(k => k.trim()).filter(Boolean);
+                      onUpdateFlowSettings?.({ triggerKeywords: keywords });
+                    }}
+                    rows={3}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Separe por vírgula.
+                  </p>
+                </div>
+              </>
             )}
 
             {triggerKeywords.length > 0 && triggerType === 'keyword' && (

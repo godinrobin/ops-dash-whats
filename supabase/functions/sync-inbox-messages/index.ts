@@ -1039,15 +1039,35 @@ serve(async (req) => {
               // 'keyword' trigger - check keywords
               if (triggerType === 'keyword') {
                 const keywords = flow.trigger_keywords || [];
+                const matchType = (flow as any).keyword_match_type || 'exact';
+                
                 if (Array.isArray(keywords) && keywords.length > 0) {
-                  const matched = keywords.some((kw: string) => {
-                    const keyword = (kw || '').toLowerCase().trim();
-                    return keyword && messageContent.includes(keyword);
-                  });
+                  let matched = false;
+                  
+                  if (matchType === 'exact') {
+                    // Exact match: message must be exactly one of the keywords
+                    matched = keywords.some((kw: string) => {
+                      const keyword = (kw || '').toLowerCase().trim();
+                      return keyword && messageContent === keyword;
+                    });
+                  } else if (matchType === 'contains') {
+                    // Contains match: message must contain one of the keywords
+                    matched = keywords.some((kw: string) => {
+                      const keyword = (kw || '').toLowerCase().trim();
+                      return keyword && messageContent.includes(keyword);
+                    });
+                  } else if (matchType === 'not_contains') {
+                    // Not contains: message must NOT contain ANY of the keywords
+                    const containsAny = keywords.some((kw: string) => {
+                      const keyword = (kw || '').toLowerCase().trim();
+                      return keyword && messageContent.includes(keyword);
+                    });
+                    matched = !containsAny;
+                  }
                   
                   if (matched) {
                     matchedFlow = flow;
-                    console.log(`[SYNC-TRIGGER] Matched keyword trigger flow: ${flow.name} (${flow.id})`);
+                    console.log(`[SYNC-TRIGGER] Matched keyword trigger flow: ${flow.name} (${flow.id}) with matchType: ${matchType}`);
                     break;
                   }
                 }

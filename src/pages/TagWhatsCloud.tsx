@@ -149,16 +149,20 @@ const TagWhatsCloud = () => {
       setConfigs(configsData || []);
 
       // Fetch logs for chart (last 30 days to cover both filter options)
+      // Use higher limit to get accurate count beyond default 1000
       const thirtyDaysAgo = subDays(new Date(), 30).toISOString();
-      const { data: logsData, error: logsError } = await (supabase
+      const { data: logsData, error: logsError, count: logsCount } = await (supabase
         .from('tag_whats_logs' as any)
-        .select('id, instance_id, created_at, label_applied')
+        .select('id, instance_id, created_at, label_applied', { count: 'exact' })
         .eq('user_id', userId)
         .eq('label_applied', true)
-        .gte('created_at', thirtyDaysAgo) as any);
+        .gte('created_at', thirtyDaysAgo)
+        .limit(10000) as any);
 
       if (logsError) throw logsError;
-      setLogs(logsData || []);
+      const logsWithCount = logsData || [];
+      (logsWithCount as any)._exactCount = logsCount || logsData?.length || 0;
+      setLogs(logsWithCount);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Erro ao carregar dados');

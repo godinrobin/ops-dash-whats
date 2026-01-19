@@ -1748,12 +1748,29 @@ serve(async (req) => {
                       }
                     } else if (flow.trigger_type === 'keyword') {
                       const keywords = flow.trigger_keywords as string[] || [];
-                      const lowerContent = (uazText || '').toLowerCase();
-                      for (const kw of keywords) {
-                        if (lowerContent.includes(kw.toLowerCase())) {
-                          shouldTrigger = true;
-                          break;
+                      const matchType = (flow as any).keyword_match_type || 'exact';
+                      const lowerContent = (uazText || '').toLowerCase().trim();
+                      
+                      if (matchType === 'exact') {
+                        // Exact match: message must be exactly one of the keywords
+                        for (const kw of keywords) {
+                          if (lowerContent === kw.toLowerCase().trim()) {
+                            shouldTrigger = true;
+                            break;
+                          }
                         }
+                      } else if (matchType === 'contains') {
+                        // Contains match: message must contain one of the keywords
+                        for (const kw of keywords) {
+                          if (lowerContent.includes(kw.toLowerCase().trim())) {
+                            shouldTrigger = true;
+                            break;
+                          }
+                        }
+                      } else if (matchType === 'not_contains') {
+                        // Not contains: message must NOT contain ANY of the keywords
+                        const containsAny = keywords.some(kw => lowerContent.includes(kw.toLowerCase().trim()));
+                        shouldTrigger = !containsAny;
                       }
                     }
                     

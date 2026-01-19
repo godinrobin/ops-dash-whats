@@ -242,16 +242,26 @@ export default function InboxDashboard() {
     if (!userId) return;
 
     try {
-      // Pega mensagens dos últimos 7 dias SEM limite para contagem correta
+      // Pega mensagens dos últimos 7 dias
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       
-      const [contactsRes, messagesRes] = await Promise.all([
-        supabase.from('inbox_contacts').select('id, instance_id, created_at').eq('user_id', userId),
-        supabase.from('inbox_messages').select('id, instance_id, contact_id, created_at, direction').eq('user_id', userId).gte('created_at', sevenDaysAgo.toISOString()).order('created_at', { ascending: false }),
+      // Use count: 'exact' to get accurate counts beyond 1000 limit
+      const [contactsCountRes, contactsRes, messagesRes] = await Promise.all([
+        // Get exact count of contacts (bypasses 1000 limit)
+        supabase.from('inbox_contacts').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+        // Get contacts with instance_id for grouping (limited to 1000 for display, but count is accurate)
+        supabase.from('inbox_contacts').select('id, instance_id, created_at').eq('user_id', userId).limit(10000),
+        supabase.from('inbox_messages').select('id, instance_id, contact_id, created_at, direction').eq('user_id', userId).gte('created_at', sevenDaysAgo.toISOString()).order('created_at', { ascending: false }).limit(10000),
       ]);
 
-      if (contactsRes.data) setContacts(contactsRes.data);
+      // Use count if available, otherwise use data length
+      if (contactsRes.data) {
+        // Inject the exact count into the contacts array for accurate total
+        const contactsWithCount = contactsRes.data;
+        (contactsWithCount as any)._exactCount = contactsCountRes.count || contactsRes.data.length;
+        setContacts(contactsWithCount);
+      }
       if (messagesRes.data) setMessages(messagesRes.data);
     } catch (error) {
       console.error('Error fetching secondary data:', error);
