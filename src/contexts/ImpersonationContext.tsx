@@ -61,12 +61,17 @@ export const ImpersonationProvider = ({ children }: { children: ReactNode }) => 
       }
 
       // Set impersonation state
-      setState({
+      const newState = {
         isImpersonating: true,
         impersonatedEmail: userEmail,
         impersonatedUserId: userId,
         originalAdminId: currentUser.id,
-      });
+      };
+      
+      // Save to localStorage BEFORE navigating (to avoid race condition)
+      localStorage.setItem(IMPERSONATION_KEY, JSON.stringify(newState));
+      
+      setState(newState);
 
       toast.success(`Agora você está visualizando como ${userEmail}`);
       navigate("/");
