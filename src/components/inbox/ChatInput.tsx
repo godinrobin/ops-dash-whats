@@ -92,19 +92,21 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactIns
     fetchQuickReplies();
   }, [user, effectiveUserId]);
 
-  // Filter quick replies for current instance
+  // Filter quick replies for current instance (text only)
   const filteredQuickReplies = useMemo(() => {
-    return quickReplies.filter(reply => {
-      // If no instances assigned, show for all
-      if (reply.assigned_instances.length === 0) return true;
-      // If instance matches
-      if (contactInstanceId && reply.assigned_instances.includes(contactInstanceId)) return true;
-      // If assigned to all (empty means all)
-      return false;
-    }).filter(reply => {
-      if (!quickReplyFilter) return true;
-      return reply.shortcut.toLowerCase().includes(quickReplyFilter.toLowerCase());
-    });
+    return quickReplies
+      .filter(reply => reply.type === 'text') // Only text replies
+      .filter(reply => {
+        // If no instances assigned, show for all
+        if (reply.assigned_instances.length === 0) return true;
+        // If instance matches
+        if (contactInstanceId && reply.assigned_instances.includes(contactInstanceId)) return true;
+        // If assigned to all (empty means all)
+        return false;
+      }).filter(reply => {
+        if (!quickReplyFilter) return true;
+        return reply.shortcut.toLowerCase().includes(quickReplyFilter.toLowerCase());
+      });
   }, [quickReplies, contactInstanceId, quickReplyFilter]);
 
   useEffect(() => {
@@ -508,19 +510,16 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactIns
             {showQuickReplies && filteredQuickReplies.length > 0 && (
               <div className="absolute bottom-full left-0 right-0 mb-2 bg-popover border border-border rounded-lg shadow-lg z-50 overflow-hidden">
                 <div className="p-2 border-b border-border">
-                  <p className="text-xs text-muted-foreground font-medium">Respostas Rápidas</p>
+                  <p className="text-xs text-orange-500 font-medium">Respostas Rápidas</p>
                 </div>
                 <ScrollArea className="max-h-48">
                   {filteredQuickReplies.map((reply) => (
                     <button
                       key={reply.id}
                       onClick={() => handleQuickReplySelect(reply)}
-                      className="w-full px-3 py-2 text-left hover:bg-accent/50 transition-colors flex items-start gap-2 border-b border-border/50 last:border-0"
+                      className="w-full px-3 py-2 text-left hover:bg-orange-500/10 transition-colors border-b border-border/50 last:border-0"
                     >
-                      <span className="font-mono text-primary text-sm shrink-0">/{reply.shortcut}</span>
-                      <span className="text-sm text-muted-foreground line-clamp-1">
-                        {reply.content || reply.file_url || 'Sem conteúdo'}
-                      </span>
+                      <span className="text-orange-500 text-sm font-medium">/{reply.shortcut}</span>
                     </button>
                   ))}
                 </ScrollArea>

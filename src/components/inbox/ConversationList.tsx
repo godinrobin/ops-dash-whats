@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Plus, Smartphone, Filter, PauseCircle } from 'lucide-react';
+import { Search, Plus, Smartphone, Filter, PauseCircle, ChevronDown } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { InboxContact } from '@/types/inbox';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -14,6 +15,9 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { NewConversationDialog } from './NewConversationDialog';
 import { formatPhoneDisplay } from '@/utils/phoneFormatter';
+import { toast } from 'sonner';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Predefined label colors
 const labelColors: Record<string, string> = {
@@ -75,9 +79,12 @@ export const ConversationList = ({
   selectedFilter = 'all',
   onFilterChange,
 }: ConversationListProps) => {
+  const { user } = useAuth();
+  const { effectiveUserId } = useEffectiveUser();
   const [instances, setInstances] = useState<Instance[]>([]);
   const [showNewConversation, setShowNewConversation] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>(selectedFilter as FilterType);
+  const [showMarkAllReadMenu, setShowMarkAllReadMenu] = useState(false);
 
   // Fetch instances to get names
   useEffect(() => {
@@ -226,6 +233,26 @@ export const ConversationList = ({
     onFilterChange?.(filter);
   };
 
+  const handleMarkAllAsRead = async () => {
+    const userId = effectiveUserId || user?.id;
+    if (!userId) return;
+
+    try {
+      const { error } = await supabase
+        .from('inbox_contacts')
+        .update({ unread_count: 0 })
+        .eq('user_id', userId)
+        .gt('unread_count', 0);
+
+      if (error) throw error;
+      toast.success('Todas as conversas foram marcadas como lidas');
+      setShowMarkAllReadMenu(false);
+    } catch (error) {
+      console.error('Error marking all as read:', error);
+      toast.error('Erro ao marcar como lidas');
+    }
+  };
+
   const filterButtons: { key: FilterType; label: string }[] = [
     { key: 'all', label: 'Todos' },
     { key: 'paid', label: 'Pagos' },
@@ -297,7 +324,7 @@ export const ConversationList = ({
                 "flex-1 px-3 py-1.5 rounded-full text-xs font-medium transition-all border",
                 activeFilter === filter.key
                   ? "bg-orange-500 text-white border-orange-500"
-                  : "bg-orange-500/10 text-orange-600 border-orange-500/30 hover:bg-orange-500/20"
+                  : "bg-orange-500/10 text-orange-500 border-orange-500/30 hover:bg-orange-500/20"
               )}
             >
               {filter.label}
@@ -307,20 +334,57 @@ export const ConversationList = ({
 
         {/* Filter Tabs - Row 2: Não lidas/Lidas */}
         <div className="flex gap-2 mt-2">
-          {readFilterButtons.map((filter) => (
-            <button
-              key={filter.key}
-              onClick={() => handleFilterChange(filter.key)}
-              className={cn(
-                "flex-1 px-3 py-1.5 rounded-full text-xs font-medium transition-all border",
-                activeFilter === filter.key
-                  ? "bg-blue-500 text-white border-blue-500"
-                  : "bg-blue-500/10 text-blue-600 border-blue-500/30 hover:bg-blue-500/20"
-              )}
-            >
-              {filter.label}
-            </button>
-          ))}
+          {/* Não lidas with dropdown */}
+          <div className="flex-1 relative">
+            <Popover open={showMarkAllReadMenu} onOpenChange={setShowMarkAllReadMenu}>
+              <div className="flex">
+                <button
+                  onClick={() => handleFilterChange('unread')}
+                  className={cn(
+                    "flex-1 px-3 py-1.5 rounded-l-full text-xs font-medium transition-all border border-r-0",
+                    activeFilter === 'unread'
+                      ? "bg-orange-500 text-white border-orange-500"
+                      : "bg-orange-500/10 text-orange-500 border-orange-500/30 hover:bg-orange-500/20"
+                  )}
+                >
+                  Não lidas
+                </button>
+                <PopoverTrigger asChild>
+                  <button
+                    className={cn(
+                      "px-1.5 py-1.5 rounded-r-full text-xs font-medium transition-all border border-l-0",
+                      activeFilter === 'unread'
+                        ? "bg-orange-500 text-white border-orange-500"
+                        : "bg-orange-500/10 text-orange-500 border-orange-500/30 hover:bg-orange-500/20"
+                    )}
+                  >
+                    <ChevronDown className="h-3 w-3" />
+                  </button>
+                </PopoverTrigger>
+              </div>
+              <PopoverContent className="w-48 p-1" side="bottom" align="start">
+                <button
+                  onClick={handleMarkAllAsRead}
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-accent rounded-md transition-colors"
+                >
+                  Marcar todas como lidas
+                </button>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* Lidas */}
+          <button
+            onClick={() => handleFilterChange('read')}
+            className={cn(
+              "flex-1 px-3 py-1.5 rounded-full text-xs font-medium transition-all border",
+              activeFilter === 'read'
+                ? "bg-orange-500 text-white border-orange-500"
+                : "bg-orange-500/10 text-orange-500 border-orange-500/30 hover:bg-orange-500/20"
+            )}
+          >
+            Lidas
+          </button>
         </div>
       </div>
 
