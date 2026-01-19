@@ -157,68 +157,53 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
     setSendingEvent(true);
     try {
       const parsedValue = eventValue ? parseFloat(eventValue.replace(',', '.')) : 0;
-      const quantity = eventQuantity;
+      const quantity = Math.min(Math.max(eventQuantity, 1), 100);
       
-      let totalSuccess = 0;
-      let totalPixels = 0;
-      
-      // Send events sequentially with unique event_id to avoid deduplication
-      for (let i = 0; i < quantity; i++) {
-        // Use original value for all events (no increment)
-        const { data, error } = await supabase.functions.invoke('send-facebook-event', {
-          body: {
-            contact_id: contact.id,
-            phone: contact.phone,
-            event_name: selectedEvent,
-            ctwa_clid: contact.ctwa_clid,
-            value: selectedEvent === 'Purchase' ? parsedValue : undefined,
-            pixel_id: selectedPixel !== 'all' ? selectedPixel : undefined,
-            // Unique event_id for each iteration to prevent Meta deduplication
-            event_id: `manual_${Date.now()}_${contact.phone.slice(-4)}_${i}_${Math.random().toString(36).substring(2, 8)}`,
-          }
-        });
-
-        if (error) {
-          console.error(`Event ${i + 1}/${quantity} error:`, error);
-          continue;
+      // Single request - backend handles the loop for multiple events
+      const { data, error } = await supabase.functions.invoke('send-facebook-event', {
+        body: {
+          contact_id: contact.id,
+          phone: contact.phone,
+          event_name: selectedEvent,
+          ctwa_clid: contact.ctwa_clid,
+          value: selectedEvent === 'Purchase' ? parsedValue : undefined,
+          pixel_id: selectedPixel !== 'all' ? selectedPixel : undefined,
+          quantity: quantity, // Backend will process all events
         }
+      });
 
-        if (data?.success) {
-          totalSuccess += data.successful || 0;
-          totalPixels = data.total_pixels || totalPixels;
-          
-          // Check for warnings
-          if (data.has_warnings) {
-            const warningResults = data.results.filter((r: any) => r.warning);
-            warningResults.forEach((r: any) => {
-              toast.warning(r.warning, { duration: 5000 });
-            });
-          }
+      if (error) {
+        console.error('Error sending events:', error);
+        toast.error('Erro ao enviar eventos. Verifique a configuração do pixel.');
+        return;
+      }
+
+      if (!data?.success) {
+        const errorResults = data?.results?.filter((r: any) => !r.success && r.error) || [];
+        if (errorResults.length > 0) {
+          toast.error(errorResults[0].error);
         } else {
-          // Check for specific errors
-          const errorResults = data?.results?.filter((r: any) => !r.success && r.error) || [];
-          errorResults.forEach((r: any) => {
-            toast.error(`Pixel ${r.pixel_id}: ${r.error}`, { duration: 6000 });
-          });
+          toast.error('Erro ao enviar eventos');
         }
-        
-        // Small delay between events to prevent rate limiting
-        if (i < quantity - 1) {
-          await new Promise(resolve => setTimeout(resolve, 200));
-        }
+        return;
+      }
+
+      // Check for warnings
+      if (data.has_warnings) {
+        const warningResults = data.results?.filter((r: any) => r.warning) || [];
+        warningResults.forEach((r: any) => {
+          toast.warning(r.warning, { duration: 5000 });
+        });
       }
       
-      if (totalSuccess > 0) {
-        toast.success(`${quantity}x evento${quantity > 1 ? 's' : ''} ${selectedEvent} enviado${quantity > 1 ? 's' : ''} (R$ ${parsedValue.toFixed(2)})`);
-        setEventValue(''); // Clear value after sending
-        setEventQuantity(1); // Reset quantity
-        
-        // Refresh event logs if history is visible
-        if (showEventHistory) {
-          loadEventLogs();
-        }
-      } else {
-        toast.error('Falha ao enviar eventos. Verifique seus pixels em Configurações.');
+      const totalSent = data.total_events_sent || quantity;
+      toast.success(`${totalSent}x evento${totalSent > 1 ? 's' : ''} ${selectedEvent} enviado${totalSent > 1 ? 's' : ''} para processamento (R$ ${parsedValue.toFixed(2)})`);
+      setEventValue(''); // Clear value after sending
+      setEventQuantity(1); // Reset quantity
+      
+      // Refresh event logs after delay to allow backend processing
+      if (showEventHistory) {
+        setTimeout(() => loadEventLogs(), 2000);
       }
     } catch (err: any) {
       toast.error(err.message || 'Erro ao enviar evento');
