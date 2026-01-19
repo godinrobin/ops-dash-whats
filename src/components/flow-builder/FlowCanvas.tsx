@@ -212,11 +212,32 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
         y: event.clientY - bounds.top,
       });
 
+      // Count existing nodes of same type for auto-naming
+      const existingNodesOfType = latestNodesRef.current.filter(n => n.type === type);
+      const nodeIndex = existingNodesOfType.length + 1;
+      
+      // Generate default data based on node type
+      const getDefaultData = (nodeType: string, index: number) => {
+        const baseData = { label: getNodeLabel(nodeType) };
+        
+        // Auto-fill variable names for waitInput nodes
+        if (nodeType === 'waitInput') {
+          return { ...baseData, variableName: `resposta${index}` };
+        }
+        
+        // Auto-fill variable names for setVariable nodes
+        if (nodeType === 'setVariable') {
+          return { ...baseData, variableName: `variavel${index}` };
+        }
+        
+        return baseData;
+      };
+
       const newNode: Node = {
         id: `${type}-${Date.now()}`,
         type,
         position,
-        data: { label: getNodeLabel(type) },
+        data: getDefaultData(type, nodeIndex),
       };
 
       setNodes((nds) => [...nds, newNode]);
