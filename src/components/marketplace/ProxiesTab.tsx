@@ -348,7 +348,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
         toast({
           title: success ? "Proxy OK!" : "Atenção",
           description: success 
-            ? `Proxy funcionando. Tráfego: ${data.test_results.details?.remaining_flow_gb || '?'}GB`
+            ? "Proxy funcionando"
             : data.test_results.error || "Verifique os detalhes do teste",
           variant: success ? "success" : "default"
         });
