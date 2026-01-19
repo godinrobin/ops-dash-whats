@@ -1812,6 +1812,30 @@ export type Database = {
         }
         Relationships: []
       }
+      inbox_flow_folders: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       inbox_flow_sessions: {
         Row: {
           contact_id: string
@@ -1888,6 +1912,7 @@ export type Database = {
           created_at: string
           description: string | null
           edges: Json
+          folder_id: string | null
           id: string
           is_active: boolean
           name: string
@@ -1910,6 +1935,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           edges?: Json
+          folder_id?: string | null
           id?: string
           is_active?: boolean
           name: string
@@ -1932,6 +1958,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           edges?: Json
+          folder_id?: string | null
           id?: string
           is_active?: boolean
           name?: string
@@ -1949,7 +1976,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "inbox_flows_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_flow_folders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       inbox_messages: {
         Row: {
