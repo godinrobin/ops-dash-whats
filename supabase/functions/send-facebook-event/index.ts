@@ -27,6 +27,7 @@ interface SendEventPayload {
   fbclid?: string;
   contact_id?: string; // Optional: for inbox contacts
   pixel_id?: string; // Optional: for specific pixel
+  event_id?: string; // Optional: unique event ID for deduplication control
 }
 
 interface EventLogEntry {
@@ -70,10 +71,10 @@ serve(async (req) => {
     }
 
     const payload: SendEventPayload = await req.json();
-    const { event_name, value, currency, ctwa_clid, fbclid, contact_id, pixel_id } = payload;
+    const { event_name, value, currency, ctwa_clid, fbclid, contact_id, pixel_id, event_id } = payload;
     let phone = payload.phone;
 
-    console.log("[SEND-FB-EVENT] Request:", { event_name, phone, contact_id, ctwa_clid, pixel_id });
+    console.log("[SEND-FB-EVENT] Request:", { event_name, phone, contact_id, ctwa_clid, pixel_id, event_id });
 
     // If contact_id is provided, get phone and ctwa_clid from inbox_contacts
     let finalCtwaClid = ctwa_clid;
@@ -166,9 +167,14 @@ serve(async (req) => {
         
         console.log(`[SEND-FB-EVENT] Pixel ${pixel.pixel_id}, page_id: ${pixel.page_id || 'none'}, ctwa_clid: ${finalCtwaClid || 'none'}, action_source: ${actionSource}`);
 
+        // Generate unique event_id if not provided - this is CRITICAL for Meta deduplication
+        // Each unique event_id ensures Meta counts the event as distinct
+        const uniqueEventId = event_id || `fb_${Date.now()}_${phone.slice(-4)}_${pixel.pixel_id.slice(-4)}`;
+
         const eventData: any = {
           event_name,
           event_time: Math.floor(Date.now() / 1000),
+          event_id: uniqueEventId, // Meta uses event_name + event_id for deduplication within 48h
           action_source: actionSource,
           user_data: {
             ph: [hashedPhone],
