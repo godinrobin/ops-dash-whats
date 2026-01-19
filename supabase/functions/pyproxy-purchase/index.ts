@@ -721,10 +721,14 @@ Deno.serve(async (req) => {
       console.log('[STEP 1] ✓ Plan type validated:', planType);
 
       // ============= STEP 2: FETCH GATEWAY CONFIG =============
+      // Map 'residential' to 'isp' for gateway lookup (residential uses ISP rotating)
+      const gatewayPlanType = planType === 'residential' ? 'isp' : planType;
+      console.log('[STEP 2] Mapping plan type for gateway:', planType, '→', gatewayPlanType);
+      
       const { data: gatewayConfig, error: gatewayError } = await supabaseAdmin
         .from('proxy_gateway_config')
         .select('*')
-        .eq('plan_type', planType)
+        .eq('plan_type', gatewayPlanType)
         .single();
 
       if (gatewayError || !gatewayConfig) {
@@ -902,7 +906,7 @@ Deno.serve(async (req) => {
         userForm.append('password', password);
         userForm.append('status', '1');
         userForm.append('limit_flow', '1'); // 1GB of traffic
-        userForm.append('remark', `lovable:${order.id}:${planType}:${gatewayConfig.gateway_host}`);
+        userForm.append('remark', `lovable:${order.id}:${gatewayPlanType}:${gatewayConfig.gateway_host}`);
 
         const userRes = await fetch('https://api.pyproxy.com/g/open/add_or_edit_user', {
           method: 'POST',
