@@ -11,8 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Plus, Edit2, Trash2, Loader2, MessageSquare, Smartphone, FileText, Image, Video, Mic } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ArrowLeft, Plus, Edit2, Trash2, Loader2, MessageSquare, Smartphone } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
@@ -25,8 +24,6 @@ interface QuickReply {
   id: string;
   shortcut: string;
   content: string;
-  type: 'text' | 'image' | 'video' | 'audio' | 'document';
-  file_url?: string | null;
   assigned_instances: string[];
   created_at: string;
 }
@@ -59,8 +56,6 @@ export default function QuickRepliesPage() {
   const [editingReply, setEditingReply] = useState<QuickReply | null>(null);
   const [formShortcut, setFormShortcut] = useState('');
   const [formContent, setFormContent] = useState('');
-  const [formType, setFormType] = useState<'text' | 'image' | 'video' | 'audio' | 'document'>('text');
-  const [formFileUrl, setFormFileUrl] = useState('');
   const [formInstances, setFormInstances] = useState<string[]>([]);
   const [selectAllInstances, setSelectAllInstances] = useState(false);
 
@@ -95,8 +90,6 @@ export default function QuickRepliesPage() {
           id: r.id,
           shortcut: r.shortcut,
           content: r.content,
-          type: (r as any).type || 'text',
-          file_url: (r as any).file_url || null,
           assigned_instances: (r as any).assigned_instances || [],
           created_at: r.created_at,
         })));
@@ -113,8 +106,6 @@ export default function QuickRepliesPage() {
     setEditingReply(null);
     setFormShortcut('');
     setFormContent('');
-    setFormType('text');
-    setFormFileUrl('');
     setFormInstances([]);
     setSelectAllInstances(false);
     setEditDialog(true);
@@ -124,8 +115,6 @@ export default function QuickRepliesPage() {
     setEditingReply(reply);
     setFormShortcut(reply.shortcut);
     setFormContent(reply.content);
-    setFormType(reply.type);
-    setFormFileUrl(reply.file_url || '');
     setFormInstances(reply.assigned_instances);
     setSelectAllInstances(reply.assigned_instances.length === instances.length && instances.length > 0);
     setEditDialog(true);
@@ -162,12 +151,8 @@ export default function QuickRepliesPage() {
       toast.error('O atalho é obrigatório');
       return;
     }
-    if (formType === 'text' && !formContent.trim()) {
-      toast.error('O conteúdo é obrigatório para respostas de texto');
-      return;
-    }
-    if (formType !== 'text' && !formFileUrl.trim()) {
-      toast.error('A URL do arquivo é obrigatória para este tipo de resposta');
+    if (!formContent.trim()) {
+      toast.error('O conteúdo é obrigatório');
       return;
     }
 
@@ -177,8 +162,7 @@ export default function QuickRepliesPage() {
         user_id: userId,
         shortcut: formShortcut.trim(),
         content: formContent.trim(),
-        type: formType,
-        file_url: formFileUrl.trim() || null,
+        type: 'text',
         assigned_instances: formInstances,
       };
 
@@ -232,15 +216,6 @@ export default function QuickRepliesPage() {
     }
   };
 
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'image': return <Image className="h-4 w-4" />;
-      case 'video': return <Video className="h-4 w-4" />;
-      case 'audio': return <Mic className="h-4 w-4" />;
-      case 'document': return <FileText className="h-4 w-4" />;
-      default: return <MessageSquare className="h-4 w-4" />;
-    }
-  };
 
   const getInstanceName = (instanceId: string) => {
     const instance = instances.find(i => i.id === instanceId);
@@ -298,7 +273,7 @@ export default function QuickRepliesPage() {
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        {getTypeIcon(reply.type)}
+                        <MessageSquare className="h-4 w-4" />
                         <CardTitle className="text-base font-mono">/{reply.shortcut}</CardTitle>
                       </div>
                       <div className="flex items-center gap-1">
@@ -313,7 +288,7 @@ export default function QuickRepliesPage() {
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm text-muted-foreground line-clamp-3 mb-3">
-                      {reply.content || reply.file_url || 'Sem conteúdo'}
+                      {reply.content || 'Sem conteúdo'}
                     </p>
                     <div className="flex flex-wrap gap-1">
                       {reply.assigned_instances.length === 0 ? (
@@ -366,51 +341,14 @@ export default function QuickRepliesPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Tipo</Label>
-              <Select value={formType} onValueChange={(v: any) => setFormType(v)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="text">Texto</SelectItem>
-                  <SelectItem value="image">Imagem</SelectItem>
-                  <SelectItem value="video">Vídeo</SelectItem>
-                  <SelectItem value="audio">Áudio</SelectItem>
-                  <SelectItem value="document">Documento</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label>Conteúdo</Label>
+              <Textarea
+                placeholder="Olá! Como posso ajudar?"
+                value={formContent}
+                onChange={(e) => setFormContent(e.target.value)}
+                rows={4}
+              />
             </div>
-
-            {formType === 'text' ? (
-              <div className="space-y-2">
-                <Label>Conteúdo</Label>
-                <Textarea
-                  placeholder="Olá! Como posso ajudar?"
-                  value={formContent}
-                  onChange={(e) => setFormContent(e.target.value)}
-                  rows={4}
-                />
-              </div>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <Label>URL do Arquivo</Label>
-                  <Input
-                    placeholder="https://exemplo.com/arquivo.pdf"
-                    value={formFileUrl}
-                    onChange={(e) => setFormFileUrl(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Legenda (opcional)</Label>
-                  <Input
-                    placeholder="Descrição do arquivo..."
-                    value={formContent}
-                    onChange={(e) => setFormContent(e.target.value)}
-                  />
-                </div>
-              </>
-            )}
 
             <div className="space-y-2">
               <Label>Instâncias</Label>
