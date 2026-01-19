@@ -72,9 +72,9 @@ type PlanType = 'isp' | 'mobile';
 
 const PLAN_CONFIG: Record<PlanType, { label: string; icon: React.ReactNode; description: string; color: string; price: number; badge?: string }> = {
   isp: {
-    label: 'Proxy ISP',
+    label: 'Proxy Tradicional',
     icon: <Wifi className="h-4 w-4" />,
-    description: 'IP residencial estático',
+    description: 'IP residencial',
     color: 'bg-green-500/20 text-green-400 border-green-500/30',
     price: 6.50
   },
