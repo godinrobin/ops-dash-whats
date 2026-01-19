@@ -457,14 +457,133 @@ serve(async (req) => {
               console.log('[UAZAPI-SYNC] process-inbox-flow called successfully');
             }
           } else {
-            console.log(`[UAZAPI-SYNC] No active waitInput/menu session to continue (session=${activeSession?.id || 'none'}, node=${nodeId || 'none'})`);
+            // No active waitInput/menu session - check if we should trigger a NEW flow
+            console.log(`[UAZAPI-SYNC] No active waitInput/menu session, checking for flow trigger...`);
+            
+            // Get the latest inbound message for keyword matching
+            const latestInbound = inboundInputs[inboundInputs.length - 1];
+            const messageContent = (latestInbound?.content || '').toLowerCase().trim();
+            
+            // Check for any active session (not just waitInput)
+            const { data: anyActiveSession } = await supabaseAdmin
+              .from('inbox_flow_sessions')
+              .select('id')
+              .eq('contact_id', contactId)
+              .eq('status', 'active')
+              .maybeSingle();
+            
+            if (!anyActiveSession) {
+              // No active session at all - check for flows with matching triggers
+              const { data: userFlows } = await supabaseAdmin
+                .from('inbox_flows')
+                .select('id, name, trigger_type, trigger_keywords, assigned_instances')
+                .eq('user_id', user.id)
+                .eq('is_active', true);
+              
+              if (userFlows && userFlows.length > 0) {
+                console.log(`[UAZAPI-SYNC-TRIGGER] Checking ${userFlows.length} active flows for message: "${messageContent.substring(0, 50)}"`);
+                
+                let matchedFlow = null;
+                
+                for (const flow of userFlows) {
+                  // Check if flow is assigned to this instance
+                  const assignedInstances = (flow.assigned_instances as string[]) || [];
+                  if (assignedInstances.length > 0 && contact.instance_id && !assignedInstances.includes(contact.instance_id)) {
+                    console.log(`[UAZAPI-SYNC-TRIGGER] Flow ${flow.name} not assigned to instance ${contact.instance_id}, skipping`);
+                    continue;
+                  }
+                  
+                  const triggerType = flow.trigger_type || 'keyword';
+                  
+                  if (triggerType === 'all') {
+                    matchedFlow = flow;
+                    console.log(`[UAZAPI-SYNC-TRIGGER] Matched 'all' trigger flow: ${flow.name}`);
+                    break;
+                  }
+                  
+                  if (triggerType === 'keyword') {
+                    const keywords = (flow.trigger_keywords as string[]) || [];
+                    if (Array.isArray(keywords) && keywords.length > 0) {
+                      const matched = keywords.some((kw: string) => {
+                        const keyword = (kw || '').toLowerCase().trim();
+                        return keyword && messageContent.includes(keyword);
+                      });
+                      
+                      if (matched) {
+                        matchedFlow = flow;
+                        console.log(`[UAZAPI-SYNC-TRIGGER] Matched keyword trigger flow: ${flow.name}`);
+                        break;
+                      }
+                    }
+                  }
+                }
+                
+                if (matchedFlow) {
+                  console.log(`[UAZAPI-SYNC-TRIGGER] Creating new flow session for contact ${contactId}`);
+                  
+                  // Get contact name for variables
+                  const { data: contactData } = await supabaseAdmin
+                    .from('inbox_contacts')
+                    .select('name, phone')
+                    .eq('id', contactId)
+                    .single();
+                  
+                  const { data: newSession, error: sessionError } = await supabaseAdmin
+                    .from('inbox_flow_sessions')
+                    .insert({
+                      contact_id: contactId,
+                      flow_id: matchedFlow.id,
+                      user_id: user.id,
+                      instance_id: contact.instance_id,
+                      status: 'active',
+                      current_node_id: 'start-1',
+                      variables: { 
+                        nome: contactData?.name || '',
+                        telefone: contactData?.phone || '',
+                        contactName: contactData?.name || contactData?.phone || '',
+                        resposta: '',
+                        lastMessage: latestInbound?.content || '',
+                        ultima_mensagem: latestInbound?.content || '',
+                        _trigger_source: 'uazapi_sync_fallback'
+                      },
+                      processing: false,
+                    })
+                    .select()
+                    .single();
+                  
+                  if (sessionError) {
+                    console.error(`[UAZAPI-SYNC-TRIGGER] Failed to create session:`, sessionError);
+                  } else if (newSession) {
+                    console.log(`[UAZAPI-SYNC-TRIGGER] Created session ${newSession.id}, triggering process-inbox-flow`);
+                    
+                    const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+                    const processResp = await fetch(processUrl, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${serviceKey}`,
+                      },
+                      body: JSON.stringify({ sessionId: newSession.id }),
+                    });
+                    
+                    console.log(`[UAZAPI-SYNC-TRIGGER] process-inbox-flow response: ${processResp.status}`);
+                  }
+                } else {
+                  console.log(`[UAZAPI-SYNC-TRIGGER] No matching flow found for message`);
+                }
+              } else {
+                console.log(`[UAZAPI-SYNC-TRIGGER] No active flows for user`);
+              }
+            } else {
+              console.log(`[UAZAPI-SYNC] Contact already has active session ${anyActiveSession.id}, not triggering new flow`);
+            }
           }
         }
       } catch (e) {
-        console.error('[UAZAPI-SYNC] Error while continuing flow:', e);
+        console.error('[UAZAPI-SYNC] Error while continuing/triggering flow:', e);
       }
 
-      return new Response(JSON.stringify({ inserted: inserts.length }), {
+      return new Response(JSON.stringify({ inserted: inserts.length, flowTriggered: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -1015,18 +1134,26 @@ serve(async (req) => {
           // No active session - check for flows with matching triggers (keyword or 'all')
           const { data: userFlows } = await supabaseAdmin
             .from('inbox_flows')
-            .select('id, name, trigger_type, trigger_keywords, flow_data')
+            .select('id, name, trigger_type, trigger_keywords, assigned_instances, flow_data')
             .eq('user_id', user.id)
             .eq('is_active', true);
           
           if (userFlows && userFlows.length > 0) {
             const messageContent = (latestInbound.content || '').toLowerCase().trim();
-            console.log(`[SYNC-TRIGGER] Checking ${userFlows.length} active flows for message: "${messageContent.substring(0, 50)}"`);
+            const contactInstanceId = contact.instance_id;
+            console.log(`[SYNC-TRIGGER] Checking ${userFlows.length} active flows for message: "${messageContent.substring(0, 50)}" on instance ${contactInstanceId}`);
             
             // Find matching flow
             let matchedFlow = null;
             
             for (const flow of userFlows) {
+              // Check if flow is assigned to this instance
+              const assignedInstances = (flow.assigned_instances as string[]) || [];
+              if (assignedInstances.length > 0 && contactInstanceId && !assignedInstances.includes(contactInstanceId)) {
+                console.log(`[SYNC-TRIGGER] Flow ${flow.name} not assigned to instance ${contactInstanceId}, skipping`);
+                continue;
+              }
+              
               const triggerType = flow.trigger_type || 'keyword';
               
               // 'all' trigger - matches any message
