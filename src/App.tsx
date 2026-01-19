@@ -72,7 +72,7 @@ const ImpersonationWrapper = () => {
   return <ImpersonationBanner userEmail={impersonatedEmail} onExit={stopImpersonation} />;
 };
 
-const AppRoutes = () => {
+const AppContent = () => {
   // Process push notification queue in realtime
   usePushQueueProcessor();
   
@@ -147,6 +147,14 @@ const AppRoutes = () => {
   );
 };
 
+const AppWithImpersonation = () => {
+  return (
+    <ImpersonationProvider>
+      <AppContent />
+    </ImpersonationProvider>
+  );
+};
+
 const App = () => {
   const toasterRef = useRef<ToasterRef>(null);
 
@@ -165,9 +173,7 @@ const App = () => {
         <Toaster ref={toasterRef} defaultPosition="bottom-right" />
         <HashRouter>
           <AuthProvider>
-            <ImpersonationProvider>
-              <AppRoutes />
-            </ImpersonationProvider>
+            <AppWithImpersonation />
           </AuthProvider>
         </HashRouter>
       </TooltipProvider>
