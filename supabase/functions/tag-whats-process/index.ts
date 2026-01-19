@@ -857,7 +857,7 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
       });
       
       try {
-        // Try to get ctwa_clid from ads_whatsapp_leads to identify which ad account originated the lead
+        // Try to get ctwa_clid from ads_whatsapp_leads first
         const { data: lead, error: leadError } = await supabase
           .from("ads_whatsapp_leads")
           .select("ctwa_clid, fbclid, ad_account_id")
@@ -865,9 +865,9 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
           .eq("user_id", instance.user_id)
           .order("created_at", { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
 
-        console.log("[TAG-WHATS] Lead lookup:", { 
+        console.log("[TAG-WHATS] Lead lookup (ads_whatsapp_leads):", { 
           found: !!lead, 
           ctwa_clid: lead?.ctwa_clid, 
           fbclid: lead?.fbclid,
@@ -876,6 +876,26 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
         });
 
         ctwaClid = lead?.ctwa_clid || null;
+        
+        // FALLBACK: If no ctwa_clid found in ads_whatsapp_leads, try inbox_contacts
+        if (!ctwaClid) {
+          const { data: inboxContact, error: inboxError } = await supabase
+            .from("inbox_contacts")
+            .select("ctwa_clid")
+            .eq("phone", phone)
+            .eq("user_id", instance.user_id)
+            .not("ctwa_clid", "is", null)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          
+          if (inboxContact?.ctwa_clid) {
+            ctwaClid = inboxContact.ctwa_clid;
+            console.log("[TAG-WHATS] ✅ ctwa_clid found in inbox_contacts:", ctwaClid);
+          } else {
+            console.log("[TAG-WHATS] No ctwa_clid found in inbox_contacts either", { error: inboxError?.message });
+          }
+        }
         const fbclid = lead?.fbclid || null;
         
         // If lead has ad_account_id, prioritize it for conversion tracking
