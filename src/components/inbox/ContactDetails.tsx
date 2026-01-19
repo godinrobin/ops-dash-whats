@@ -162,21 +162,19 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
       let totalSuccess = 0;
       let totalPixels = 0;
       
-      // Send events sequentially to avoid duplicates
+      // Send events sequentially with unique event_id to avoid deduplication
       for (let i = 0; i < quantity; i++) {
-        // Calculate incrementing value: base value + i (e.g., 97, 98, 99...)
-        const incrementedValue = parsedValue + i;
-        
+        // Use original value for all events (no increment)
         const { data, error } = await supabase.functions.invoke('send-facebook-event', {
           body: {
             contact_id: contact.id,
             phone: contact.phone,
             event_name: selectedEvent,
             ctwa_clid: contact.ctwa_clid,
-            value: selectedEvent === 'Purchase' ? incrementedValue : undefined,
+            value: selectedEvent === 'Purchase' ? parsedValue : undefined,
             pixel_id: selectedPixel !== 'all' ? selectedPixel : undefined,
-            // Unique event_id for each iteration to prevent deduplication
-            event_id: `manual_${Date.now()}_${contact.phone.slice(-4)}_${i}`,
+            // Unique event_id for each iteration to prevent Meta deduplication
+            event_id: `manual_${Date.now()}_${contact.phone.slice(-4)}_${i}_${Math.random().toString(36).substring(2, 8)}`,
           }
         });
 
@@ -211,10 +209,7 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
       }
       
       if (totalSuccess > 0) {
-        const valueRange = quantity > 1 
-          ? `R$ ${parsedValue.toFixed(2)} a R$ ${(parsedValue + quantity - 1).toFixed(2)}`
-          : `R$ ${parsedValue.toFixed(2)}`;
-        toast.success(`${quantity}x evento${quantity > 1 ? 's' : ''} ${selectedEvent} enviado${quantity > 1 ? 's' : ''} (${valueRange})`);
+        toast.success(`${quantity}x evento${quantity > 1 ? 's' : ''} ${selectedEvent} enviado${quantity > 1 ? 's' : ''} (R$ ${parsedValue.toFixed(2)})`);
         setEventValue(''); // Clear value after sending
         setEventQuantity(1); // Reset quantity
         
