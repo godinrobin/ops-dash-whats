@@ -2029,27 +2029,36 @@ export type Database = {
       }
       inbox_quick_replies: {
         Row: {
+          assigned_instances: string[] | null
           attachments: Json | null
           content: string
           created_at: string
+          file_url: string | null
           id: string
           shortcut: string
+          type: string
           user_id: string
         }
         Insert: {
+          assigned_instances?: string[] | null
           attachments?: Json | null
           content: string
           created_at?: string
+          file_url?: string | null
           id?: string
           shortcut: string
+          type?: string
           user_id: string
         }
         Update: {
+          assigned_instances?: string[] | null
           attachments?: Json | null
           content?: string
           created_at?: string
+          file_url?: string | null
           id?: string
           shortcut?: string
+          type?: string
           user_id?: string
         }
         Relationships: []
