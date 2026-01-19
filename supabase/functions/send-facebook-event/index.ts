@@ -28,6 +28,7 @@ interface SendEventPayload {
   contact_id?: string; // Optional: for inbox contacts
   pixel_id?: string; // Optional: for specific pixel
   event_id?: string; // Optional: unique event ID for deduplication control
+  quantity?: number; // Optional: number of events to send (1-100), backend will loop
 }
 
 interface EventLogEntry {
@@ -72,9 +73,10 @@ serve(async (req) => {
 
     const payload: SendEventPayload = await req.json();
     const { event_name, value, currency, ctwa_clid, fbclid, contact_id, pixel_id, event_id } = payload;
+    const quantity = Math.min(Math.max(payload.quantity || 1, 1), 100); // Limit 1-100 events
     let phone = payload.phone;
 
-    console.log("[SEND-FB-EVENT] Request:", { event_name, phone, contact_id, ctwa_clid, pixel_id, event_id });
+    console.log("[SEND-FB-EVENT] Request:", { event_name, phone, contact_id, ctwa_clid, pixel_id, event_id, quantity });
 
     // If contact_id is provided, get phone and ctwa_clid from inbox_contacts
     let finalCtwaClid = ctwa_clid;
@@ -146,158 +148,175 @@ serve(async (req) => {
     }[] = [];
     
     const eventLogs: EventLogEntry[] = [];
+    let totalEventsSent = 0;
 
-    // Send event to each pixel
-    for (const pixel of pixels) {
-      try {
-        // Check if this pixel has page_id configured (for Business Messaging)
-        const hasPageId = !!pixel.page_id;
-        const hasCtwaClid = !!finalCtwaClid;
-        
-        // Determine if we should use Business Messaging
-        const isBusinessMessaging = hasPageId && hasCtwaClid;
-        const actionSource = isBusinessMessaging ? "business_messaging" : "website";
-        
-        // Generate warnings for misconfigurations
-        let warning: string | undefined;
-        if (hasPageId && !hasCtwaClid) {
-          warning = "Pixel configurado para Business Messaging mas contato não possui CTWA CLID. O evento foi enviado como 'website'.";
-          console.warn(`[SEND-FB-EVENT] Warning for pixel ${pixel.pixel_id}: ${warning}`);
-        }
-        
-        console.log(`[SEND-FB-EVENT] Pixel ${pixel.pixel_id}, page_id: ${pixel.page_id || 'none'}, ctwa_clid: ${finalCtwaClid || 'none'}, action_source: ${actionSource}`);
+    console.log(`[SEND-FB-EVENT] Processing ${quantity} event(s) for ${pixels.length} pixel(s)`);
 
-        // Generate unique event_id if not provided - this is CRITICAL for Meta deduplication
-        // Each unique event_id ensures Meta counts the event as distinct
-        const uniqueEventId = event_id || `fb_${Date.now()}_${phone.slice(-4)}_${pixel.pixel_id.slice(-4)}`;
+    // Loop through quantity - backend handles multiple events
+    for (let eventIndex = 0; eventIndex < quantity; eventIndex++) {
+      // Generate unique event_id for each iteration
+      const baseEventId = event_id || `fb_${Date.now()}_${phone.slice(-4)}`;
+      const uniqueEventId = quantity > 1 
+        ? `${baseEventId}_${eventIndex}_${crypto.randomUUID().slice(0, 8)}`
+        : baseEventId;
 
-        const eventData: any = {
-          event_name,
-          event_time: Math.floor(Date.now() / 1000),
-          event_id: uniqueEventId, // Meta uses event_name + event_id for deduplication within 48h
-          action_source: actionSource,
-          user_data: {
-            ph: [hashedPhone],
-          },
-        };
-
-        // Business Messaging payload per Meta CAPI docs:
-        // For WhatsApp: messaging_channel = "whatsapp", user_data contains page_id + ctwa_clid
-        // For Messenger: messaging_channel = "messenger", user_data contains page_id + page_scoped_user_id
-        // NOTE: client_user_agent is NOT allowed for business_messaging.
-        if (isBusinessMessaging) {
-          eventData.messaging_channel = "whatsapp";
-          eventData.user_data.page_id = pixel.page_id;
-          eventData.user_data.ctwa_clid = finalCtwaClid;
-          console.log(
-            `[SEND-FB-EVENT] Using Business Messaging (WhatsApp) with page_id: ${pixel.page_id}, ctwa_clid: ${finalCtwaClid}`,
-          );
-        } else {
-          // For website action_source, use client_user_agent and fbc/fbp
-          eventData.user_data.client_user_agent = req.headers.get("user-agent") || "";
-          if (fbclid) {
-            eventData.user_data.fbc = `fb.1.${Date.now()}.${fbclid}`;
+      // Send event to each pixel
+      for (const pixel of pixels) {
+        try {
+          // Check if this pixel has page_id configured (for Business Messaging)
+          const hasPageId = !!pixel.page_id;
+          const hasCtwaClid = !!finalCtwaClid;
+          
+          // Determine if we should use Business Messaging
+          const isBusinessMessaging = hasPageId && hasCtwaClid;
+          const actionSource = isBusinessMessaging ? "business_messaging" : "website";
+          
+          // Generate warnings for misconfigurations (only on first event)
+          let warning: string | undefined;
+          if (eventIndex === 0 && hasPageId && !hasCtwaClid) {
+            warning = "Pixel configurado para Business Messaging mas contato não possui CTWA CLID. O evento foi enviado como 'website'.";
+            console.warn(`[SEND-FB-EVENT] Warning for pixel ${pixel.pixel_id}: ${warning}`);
           }
-          if (finalCtwaClid) {
-            eventData.user_data.fbp = finalCtwaClid;
+          
+          if (eventIndex === 0) {
+            console.log(`[SEND-FB-EVENT] Pixel ${pixel.pixel_id}, page_id: ${pixel.page_id || 'none'}, ctwa_clid: ${finalCtwaClid || 'none'}, action_source: ${actionSource}`);
           }
-        }
 
-        // Add custom_data for events that support value
-        if (["Purchase", "InitiateCheckout", "AddToCart"].includes(event_name)) {
-          eventData.custom_data = {
-            currency: currency || "BRL",
-            value: value || 0,
+          const eventData: any = {
+            event_name,
+            event_time: Math.floor(Date.now() / 1000),
+            event_id: uniqueEventId, // Meta uses event_name + event_id for deduplication within 48h
+            action_source: actionSource,
+            user_data: {
+              ph: [hashedPhone],
+            },
           };
-        }
 
-        const eventsUrl = `https://graph.facebook.com/v21.0/${pixel.pixel_id}/events`;
-        const eventsResponse = await fetch(eventsUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            data: [eventData],
-            access_token: pixel.access_token,
-          }),
-        });
-
-        const eventsResult = await eventsResponse.json();
-        
-        console.log(`[SEND-FB-EVENT] Pixel ${pixel.pixel_id} full response:`, JSON.stringify(eventsResult));
-
-        // Prepare log entry
-        const logEntry: EventLogEntry = {
-          user_id: user.id,
-          contact_id: contact_id || undefined,
-          phone,
-          event_name,
-          event_value: event_name === "Purchase" ? (value || 0) : undefined,
-          pixel_id: pixel.pixel_id,
-          action_source: actionSource,
-          page_id: pixel.page_id || undefined,
-          ctwa_clid: finalCtwaClid || undefined,
-          success: false,
-        };
-
-        if (eventsResult.error) {
-          console.error(`[SEND-FB-EVENT] Pixel ${pixel.pixel_id} error:`, eventsResult.error);
-          
-          // Parse Facebook error for better user feedback
-          let errorMessage = eventsResult.error.message;
-          const subcode = eventsResult.error.error_subcode;
-          if (subcode === 2804024) {
-            errorMessage = "Este lead não veio da mesma página do pixel selecionado, selecione outro pixel.";
-          } else if (subcode === 2804003) {
-            errorMessage = "Não foi possível pegar as informações de anúncio do lead.";
+          // Business Messaging payload per Meta CAPI docs
+          if (isBusinessMessaging) {
+            eventData.messaging_channel = "whatsapp";
+            eventData.user_data.page_id = pixel.page_id;
+            eventData.user_data.ctwa_clid = finalCtwaClid;
+          } else {
+            eventData.user_data.client_user_agent = req.headers.get("user-agent") || "";
+            if (fbclid) {
+              eventData.user_data.fbc = `fb.1.${Date.now()}.${fbclid}`;
+            }
+            if (finalCtwaClid) {
+              eventData.user_data.fbp = finalCtwaClid;
+            }
           }
+
+          // Add custom_data for events that support value
+          if (["Purchase", "InitiateCheckout", "AddToCart"].includes(event_name)) {
+            eventData.custom_data = {
+              currency: currency || "BRL",
+              value: value || 0,
+            };
+          }
+
+          const eventsUrl = `https://graph.facebook.com/v21.0/${pixel.pixel_id}/events`;
+          const eventsResponse = await fetch(eventsUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              data: [eventData],
+              access_token: pixel.access_token,
+            }),
+          });
+
+          const eventsResult = await eventsResponse.json();
           
-          logEntry.error_message = errorMessage;
-          eventLogs.push(logEntry);
-          
-          results.push({
+          if (eventIndex === 0 || eventsResult.error) {
+            console.log(`[SEND-FB-EVENT] Event ${eventIndex + 1}/${quantity}, Pixel ${pixel.pixel_id} response:`, JSON.stringify(eventsResult));
+          }
+
+          // Prepare log entry
+          const logEntry: EventLogEntry = {
+            user_id: user.id,
+            contact_id: contact_id || undefined,
+            phone,
+            event_name,
+            event_value: event_name === "Purchase" ? (value || 0) : undefined,
             pixel_id: pixel.pixel_id,
+            action_source: actionSource,
+            page_id: pixel.page_id || undefined,
+            ctwa_clid: finalCtwaClid || undefined,
             success: false,
-            error: errorMessage,
-            warning,
-            action_source: actionSource,
-          });
-        } else {
-          console.log(`[SEND-FB-EVENT] Pixel ${pixel.pixel_id} success:`, eventsResult);
+          };
+
+          if (eventsResult.error) {
+            console.error(`[SEND-FB-EVENT] Event ${eventIndex + 1}/${quantity}, Pixel ${pixel.pixel_id} error:`, eventsResult.error);
+            
+            // Parse Facebook error for better user feedback
+            let errorMessage = eventsResult.error.message;
+            const subcode = eventsResult.error.error_subcode;
+            if (subcode === 2804024) {
+              errorMessage = "Este lead não veio da mesma página do pixel selecionado, selecione outro pixel.";
+            } else if (subcode === 2804003) {
+              errorMessage = "Não foi possível pegar as informações de anúncio do lead.";
+            }
+            
+            logEntry.error_message = errorMessage;
+            eventLogs.push(logEntry);
+            
+            // Only add to results on first event to avoid duplicates
+            if (eventIndex === 0) {
+              results.push({
+                pixel_id: pixel.pixel_id,
+                success: false,
+                error: errorMessage,
+                warning,
+                action_source: actionSource,
+              });
+            }
+          } else {
+            logEntry.success = true;
+            logEntry.facebook_trace_id = eventsResult.fbtrace_id;
+            logEntry.events_received = eventsResult.events_received;
+            eventLogs.push(logEntry);
+            totalEventsSent++;
+            
+            // Only add to results on first event to avoid duplicates
+            if (eventIndex === 0) {
+              results.push({
+                pixel_id: pixel.pixel_id,
+                success: true,
+                events_received: eventsResult.events_received,
+                warning,
+                action_source: actionSource,
+              });
+            }
+          }
+        } catch (err: any) {
+          console.error(`[SEND-FB-EVENT] Event ${eventIndex + 1}/${quantity}, Pixel ${pixel.pixel_id} exception:`, err);
           
-          logEntry.success = true;
-          logEntry.facebook_trace_id = eventsResult.fbtrace_id;
-          logEntry.events_received = eventsResult.events_received;
+          const logEntry: EventLogEntry = {
+            user_id: user.id,
+            contact_id: contact_id || undefined,
+            phone,
+            event_name,
+            event_value: event_name === "Purchase" ? (value || 0) : undefined,
+            pixel_id: pixel.pixel_id,
+            action_source: "unknown",
+            success: false,
+            error_message: err.message,
+          };
           eventLogs.push(logEntry);
           
-          results.push({
-            pixel_id: pixel.pixel_id,
-            success: true,
-            events_received: eventsResult.events_received,
-            warning,
-            action_source: actionSource,
-          });
+          if (eventIndex === 0) {
+            results.push({
+              pixel_id: pixel.pixel_id,
+              success: false,
+              error: err.message,
+            });
+          }
         }
-      } catch (err: any) {
-        console.error(`[SEND-FB-EVENT] Pixel ${pixel.pixel_id} exception:`, err);
-        
-        const logEntry: EventLogEntry = {
-          user_id: user.id,
-          contact_id: contact_id || undefined,
-          phone,
-          event_name,
-          event_value: event_name === "Purchase" ? (value || 0) : undefined,
-          pixel_id: pixel.pixel_id,
-          action_source: "unknown",
-          success: false,
-          error_message: err.message,
-        };
-        eventLogs.push(logEntry);
-        
-        results.push({
-          pixel_id: pixel.pixel_id,
-          success: false,
-          error: err.message,
-        });
+      }
+
+      // Delay between events to prevent rate limiting (200ms)
+      if (eventIndex < quantity - 1) {
+        await new Promise(resolve => setTimeout(resolve, 200));
       }
     }
 
@@ -317,12 +336,16 @@ serve(async (req) => {
     const successCount = results.filter(r => r.success).length;
     const hasWarnings = results.some(r => r.warning);
 
+    console.log(`[SEND-FB-EVENT] Completed: ${totalEventsSent}/${quantity * pixels.length} events sent successfully`);
+
     return new Response(
       JSON.stringify({
         success: successCount > 0,
         total_pixels: pixels.length,
         successful: successCount,
         has_warnings: hasWarnings,
+        total_events_sent: totalEventsSent,
+        quantity_requested: quantity,
         results,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
