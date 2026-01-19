@@ -212,22 +212,38 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
         y: event.clientY - bounds.top,
       });
 
-      // Count existing nodes of same type for auto-naming
-      const existingNodesOfType = latestNodesRef.current.filter(n => n.type === type);
-      const nodeIndex = existingNodesOfType.length + 1;
+      // Find next available variable number by checking existing nodes
+      const getNextVariableNumber = (prefix: string) => {
+        const usedNumbers: number[] = [];
+        latestNodesRef.current.forEach(n => {
+          const varName = n.data?.variableName as string;
+          if (varName?.startsWith(prefix)) {
+            const numMatch = varName.match(new RegExp(`^${prefix}(\\d+)$`));
+            if (numMatch) {
+              usedNumbers.push(parseInt(numMatch[1], 10));
+            }
+          }
+        });
+        
+        // Find the highest number and add 1
+        if (usedNumbers.length === 0) return 1;
+        return Math.max(...usedNumbers) + 1;
+      };
       
       // Generate default data based on node type
-      const getDefaultData = (nodeType: string, index: number) => {
+      const getDefaultData = (nodeType: string) => {
         const baseData = { label: getNodeLabel(nodeType) };
         
         // Auto-fill variable names for waitInput nodes
         if (nodeType === 'waitInput') {
-          return { ...baseData, variableName: `resposta${index}` };
+          const nextNum = getNextVariableNumber('resposta');
+          return { ...baseData, variableName: `resposta${nextNum}` };
         }
         
         // Auto-fill variable names for setVariable nodes
         if (nodeType === 'setVariable') {
-          return { ...baseData, variableName: `variavel${index}` };
+          const nextNum = getNextVariableNumber('variavel');
+          return { ...baseData, variableName: `variavel${nextNum}` };
         }
         
         return baseData;
@@ -237,7 +253,7 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
         id: `${type}-${Date.now()}`,
         type,
         position,
-        data: getDefaultData(type, nodeIndex),
+        data: getDefaultData(type),
       };
 
       setNodes((nds) => [...nds, newNode]);
