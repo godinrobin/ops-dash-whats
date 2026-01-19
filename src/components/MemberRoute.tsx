@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { supabase } from "@/integrations/supabase/client";
 import { RestrictedFeatureModal } from "@/components/RestrictedFeatureModal";
 import Home from "@/pages/Home";
@@ -12,6 +13,7 @@ interface MemberRouteProps {
 
 export const MemberRoute = ({ children, featureName }: MemberRouteProps) => {
   const { user, loading: authLoading } = useAuth();
+  const { effectiveUserId, isImpersonating } = useEffectiveUser();
   const navigate = useNavigate();
   const location = useLocation();
   const [isFullMember, setIsFullMember] = useState<boolean | null>(null);
@@ -20,7 +22,8 @@ export const MemberRoute = ({ children, featureName }: MemberRouteProps) => {
 
   useEffect(() => {
     const checkMembership = async () => {
-      if (!user) {
+      const userId = effectiveUserId || user?.id;
+      if (!userId) {
         setLoading(false);
         return;
       }
@@ -29,7 +32,7 @@ export const MemberRoute = ({ children, featureName }: MemberRouteProps) => {
         const { data, error } = await supabase
           .from("profiles")
           .select("is_full_member")
-          .eq("id", user.id)
+          .eq("id", userId)
           .single();
 
         if (error) {
@@ -39,8 +42,8 @@ export const MemberRoute = ({ children, featureName }: MemberRouteProps) => {
         } else {
           setIsFullMember(data?.is_full_member ?? true);
           
-          // If not a full member, show modal
-          if (!data?.is_full_member) {
+          // If not a full member, show modal (but skip if admin is impersonating)
+          if (!data?.is_full_member && !isImpersonating) {
             setShowModal(true);
           }
         }
@@ -55,7 +58,7 @@ export const MemberRoute = ({ children, featureName }: MemberRouteProps) => {
     if (!authLoading) {
       checkMembership();
     }
-  }, [user, authLoading]);
+  }, [user, authLoading, effectiveUserId, isImpersonating]);
 
   const handleModalClose = (open: boolean) => {
     setShowModal(open);
@@ -78,8 +81,8 @@ export const MemberRoute = ({ children, featureName }: MemberRouteProps) => {
     return null;
   }
 
-  // If not a full member, show modal and prevent content access
-  if (isFullMember === false) {
+  // If not a full member and not impersonating, show modal and prevent content access
+  if (isFullMember === false && !isImpersonating) {
     return (
       <>
         {/* Show restricted modal immediately */}
