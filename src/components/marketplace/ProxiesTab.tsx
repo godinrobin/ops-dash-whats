@@ -68,26 +68,29 @@ interface ProxiesTabProps {
   onBalanceChange: (newBalance: number) => void;
 }
 
-type PlanType = 'residential' | 'isp' | 'datacenter';
+type PlanType = 'residential' | 'mobile' | 'datacenter';
 
-const PLAN_CONFIG: Record<PlanType, { label: string; icon: React.ReactNode; description: string; color: string }> = {
+const PLAN_CONFIG: Record<PlanType, { label: string; icon: React.ReactNode; description: string; color: string; price: number }> = {
   residential: {
-    label: 'Residential',
+    label: 'Proxy Residencial',
     icon: <Wifi className="h-4 w-4" />,
-    description: 'IPs residenciais rotativos',
-    color: 'bg-green-500/20 text-green-400 border-green-500/30'
+    description: 'IPs residenciais rotativos - ideal para WhatsApp',
+    color: 'bg-green-500/20 text-green-400 border-green-500/30',
+    price: 9.99
   },
-  isp: {
-    label: 'ISP',
-    icon: <Server className="h-4 w-4" />,
-    description: 'IPs de provedores de internet',
-    color: 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+  mobile: {
+    label: 'Proxy Mobile',
+    icon: <Zap className="h-4 w-4" />,
+    description: 'IPs de operadoras móveis - máxima confiabilidade',
+    color: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+    price: 14.50
   },
   datacenter: {
-    label: 'Datacenter',
+    label: 'Proxy Dedicada',
     icon: <Building2 className="h-4 w-4" />,
-    description: 'IPs de datacenter',
-    color: 'bg-purple-500/20 text-purple-400 border-purple-500/30'
+    description: 'IP fixo de datacenter - alta velocidade e estabilidade',
+    color: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    price: 50.00
   }
 };
 
@@ -113,8 +116,9 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
   const [testResults, setTestResults] = useState<Record<string, ProxyTestResult>>({});
   const [orders, setOrders] = useState<ProxyOrder[]>([]);
   const [price, setPrice] = useState<number | null>(null);
+  const [prices, setPrices] = useState<Record<string, { price: number; description: string }>>({});
   const [quantity, setQuantity] = useState(1);
-  const [planType] = useState<PlanType>('isp'); // Always ISP for WhatsApp optimization
+  const [planType, setPlanType] = useState<PlanType>('residential');
   const [country, setCountry] = useState('br');
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
@@ -141,13 +145,16 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
   const loadData = async () => {
     setLoading(true);
     try {
-      // Get price
+      // Get prices for all proxy types
       const { data: priceData, error: priceError } = await supabase.functions.invoke('pyproxy-purchase', {
         body: { action: 'get-price' }
       });
 
       if (!priceError && priceData?.success) {
         setPrice(priceData.price);
+        if (priceData.prices) {
+          setPrices(priceData.prices);
+        }
       }
 
       // Get orders
@@ -165,10 +172,14 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
     }
   };
 
-  const handlePurchase = async () => {
-    if (!user || !price) return;
+  // Get current price for selected plan type
+  const currentPrice = prices[planType]?.price || PLAN_CONFIG[planType].price;
 
-    const totalPrice = price * quantity;
+  const handlePurchase = async () => {
+    if (!user) return;
+
+    const unitPrice = currentPrice;
+    const totalPrice = unitPrice * quantity;
 
     if (balance < totalPrice) {
       toast({
@@ -222,7 +233,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
         });
 
         // Update balance locally
-        onBalanceChange(balance - (price * successCount));
+        onBalanceChange(balance - (unitPrice * successCount));
         
         // Reload orders
         loadData();
@@ -242,12 +253,17 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
   };
 
   const handleRenew = async (orderId: string) => {
-    if (!user || !price) return;
+    if (!user) return;
 
-    if (balance < price) {
+    // Find the order to get its plan type for pricing
+    const order = orders.find(o => o.id === orderId);
+    const orderPlanType = (order?.plan_type as PlanType) || 'residential';
+    const renewPrice = prices[orderPlanType]?.price || PLAN_CONFIG[orderPlanType]?.price || 9.99;
+
+    if (balance < renewPrice) {
       toast({
         title: "Saldo insuficiente",
-        description: `Você precisa de R$ ${price.toFixed(2).replace('.', ',')} para renovar.`,
+        description: `Você precisa de R$ ${renewPrice.toFixed(2).replace('.', ',')} para renovar.`,
         variant: "error"
       });
       onRecharge();
@@ -277,7 +293,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
       });
 
       // Update balance locally
-      onBalanceChange(balance - price);
+      onBalanceChange(balance - renewPrice);
       
       // Reload orders
       loadData();
@@ -424,11 +440,13 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
     return <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/30">{status}</Badge>;
   };
 
-  const getPlanTypeBadge = () => {
+  const getPlanTypeBadge = (orderPlanType?: string | null) => {
+    const pt = (orderPlanType as PlanType) || 'residential';
+    const config = PLAN_CONFIG[pt] || PLAN_CONFIG.residential;
     return (
-      <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
-        <Zap className="h-3 w-3" />
-        <span className="ml-1">Otimizada para WhatsApp</span>
+      <Badge className={config.color}>
+        {config.icon}
+        <span className="ml-1">{config.label}</span>
       </Badge>
     );
   };
@@ -494,10 +512,10 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
             <div className="flex-1 space-y-4">
               <div>
                 <h2 className="text-2xl font-bold text-foreground">
-                  Proxy Otimizada para WhatsApp
+                  {PLAN_CONFIG[planType].label}
                 </h2>
                 <p className="text-muted-foreground mt-1">
-                  IP de Alta Qualidade para WhatsApp
+                  {PLAN_CONFIG[planType].description}
                 </p>
               </div>
 
@@ -524,15 +542,58 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
               </ul>
 
               <div className="flex flex-col gap-4 pt-4 border-t border-border">
-                {/* Proxy Type - Fixed */}
+                {/* Proxy Type Selector */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-foreground">Tipo de Proxy</label>
-                  <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-md border border-border">
-                    <Zap className="h-4 w-4 text-green-400" />
-                    <span className="text-foreground">Otimizada para WhatsApp</span>
-                    <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs ml-auto">
-                      Recomendado
-                    </Badge>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {(Object.keys(PLAN_CONFIG) as PlanType[]).map((type) => {
+                      const config = PLAN_CONFIG[type];
+                      const typePrice = prices[type]?.price || config.price;
+                      const isSelected = planType === type;
+                      return (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => setPlanType(type)}
+                          className={cn(
+                            "flex flex-col items-start p-3 rounded-lg border-2 transition-all text-left",
+                            isSelected 
+                              ? "border-accent bg-accent/10" 
+                              : "border-border hover:border-accent/50 bg-muted/30"
+                          )}
+                        >
+                          <div className="flex items-center gap-2 w-full">
+                            <span className={cn(
+                              "p-1.5 rounded-md",
+                              isSelected ? "bg-accent/20 text-accent" : "bg-muted text-muted-foreground"
+                            )}>
+                              {config.icon}
+                            </span>
+                            <span className={cn(
+                              "font-medium text-sm",
+                              isSelected ? "text-accent" : "text-foreground"
+                            )}>
+                              {config.label}
+                            </span>
+                            {type === 'mobile' && (
+                              <Badge className="ml-auto bg-accent/20 text-accent border-accent/30 text-xs">
+                                Popular
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1.5 line-clamp-1">
+                            {config.description}
+                          </p>
+                          <p className={cn(
+                            "text-lg font-bold mt-2",
+                            isSelected ? "text-accent" : "text-foreground"
+                          )}>
+                            R$ {typePrice.toFixed(2).replace('.', ',')}
+                            <span className="text-xs font-normal text-muted-foreground">/mês</span>
+                          </p>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -683,14 +744,12 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
 
                 <div className="flex items-center justify-between">
                   <div>
-                    {price !== null && (
-                      <p className="text-3xl font-bold text-green-500">
-                        R$ {(price * quantity).toFixed(2).replace('.', ',')}
-                        <span className="text-sm font-normal text-muted-foreground">
-                          {quantity > 1 ? ` (${quantity}x R$ ${price.toFixed(2).replace('.', ',')})` : '/mês'}
-                        </span>
-                      </p>
-                    )}
+                    <p className="text-3xl font-bold text-accent">
+                      R$ {(currentPrice * quantity).toFixed(2).replace('.', ',')}
+                      <span className="text-sm font-normal text-muted-foreground">
+                        {quantity > 1 ? ` (${quantity}x R$ ${currentPrice.toFixed(2).replace('.', ',')})` : '/mês'}
+                      </span>
+                    </p>
                   </div>
                 </div>
                 
@@ -727,7 +786,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
 
                   <Button 
                     onClick={handlePurchase}
-                    disabled={purchasing || !price}
+                    disabled={purchasing}
                     className="bg-accent hover:bg-accent/90 text-accent-foreground flex-1"
                   >
                     {purchasing ? (
@@ -832,7 +891,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                             <Badge variant="outline" className="text-xs">
                               {getCountryInfo(order.country).flag} {getCountryInfo(order.country).label}
                             </Badge>
-                            {getPlanTypeBadge()}
+                            {getPlanTypeBadge(order.plan_type)}
                             {getStatusBadge(order.status, order.expires_at)}
                             {order.expires_at && (
                               <span className="text-xs text-muted-foreground hidden sm:inline">
