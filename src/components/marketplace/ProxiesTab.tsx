@@ -578,7 +578,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                               {config.label}
                             </span>
                             {config.badge && (
-                              <Badge className="ml-auto bg-accent/20 text-accent border-accent/30 text-xs">
+                              <Badge className="ml-auto bg-accent/20 text-accent border-accent/30 text-xs whitespace-nowrap">
                                 {config.badge}
                               </Badge>
                             )}
