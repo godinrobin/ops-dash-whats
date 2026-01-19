@@ -95,6 +95,7 @@ const TagWhatsCloud = () => {
   const [chargePixKey, setChargePixKey] = useState('');
   const [chargePixName, setChargePixName] = useState('');
   const [disableLabelOnCharge, setDisableLabelOnCharge] = useState(false);
+  const [savingAutoChargeToggle, setSavingAutoChargeToggle] = useState(false);
   
   // Collapsed states - persist in localStorage
   const [chargeSectionCollapsed, setChargeSectionCollapsed] = useState(() => {
@@ -326,7 +327,8 @@ const TagWhatsCloud = () => {
           .update({
             filter_images: filterImages,
             filter_pdfs: filterPdfs,
-            is_active: true,
+            // Não reativa automaticamente um número que o usuário desativou
+            is_active: existingConfig.is_active,
             auto_charge_enabled: autoChargeEnabled,
             charge_amount: chargeAmount,
             charge_item_name: chargeItemName,
@@ -439,6 +441,39 @@ const TagWhatsCloud = () => {
       toast.error('Erro ao salvar configuração de cobrança');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Corrige bug: ao desligar o switch, o botão some e nunca salva o "false".
+  // Aqui salvamos imediatamente quando desliga (ligar continua exigindo clicar em "Salvar").
+  const handleToggleGlobalAutoChargeEnabled = async (checked: boolean) => {
+    setAutoChargeEnabled(checked);
+
+    // Para ligar, o usuário precisa preencher os campos e clicar em "Salvar Configuração de Cobrança"
+    if (checked) return;
+
+    const userId = effectiveUserId || user?.id;
+    if (!userId) return;
+
+    setSavingAutoChargeToggle(true);
+    try {
+      const { error } = await (supabase
+        .from('tag_whats_configs' as any)
+        .update({
+          auto_charge_enabled: false,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId) as any);
+
+      if (error) throw error;
+      toast.success('Cobrança automática desativada!');
+      fetchData();
+    } catch (error) {
+      console.error('Error disabling auto charge:', error);
+      toast.error('Erro ao desativar cobrança automática');
+      setAutoChargeEnabled(true);
+    } finally {
+      setSavingAutoChargeToggle(false);
     }
   };
 
@@ -742,7 +777,8 @@ const TagWhatsCloud = () => {
                     </div>
                     <ColoredSwitch
                       checked={autoChargeEnabled}
-                      onCheckedChange={setAutoChargeEnabled}
+                      onCheckedChange={handleToggleGlobalAutoChargeEnabled}
+                      disabled={savingAutoChargeToggle}
                     />
                   </div>
                   
