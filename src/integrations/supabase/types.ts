@@ -2797,6 +2797,7 @@ export type Database = {
           fb_auto_event_type: string | null
           fb_event_enabled: boolean | null
           fb_event_on_sale: string | null
+          fb_event_value: number | null
           id: string
           is_full_member: boolean
           lead_rotation_limit: number | null
@@ -2815,6 +2816,7 @@ export type Database = {
           fb_auto_event_type?: string | null
           fb_event_enabled?: boolean | null
           fb_event_on_sale?: string | null
+          fb_event_value?: number | null
           id: string
           is_full_member?: boolean
           lead_rotation_limit?: number | null
@@ -2833,6 +2835,7 @@ export type Database = {
           fb_auto_event_type?: string | null
           fb_event_enabled?: boolean | null
           fb_event_on_sale?: string | null
+          fb_event_value?: number | null
           id?: string
           is_full_member?: boolean
           lead_rotation_limit?: number | null

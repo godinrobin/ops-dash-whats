@@ -109,6 +109,7 @@ const TagWhatsCloud = () => {
   // FB Auto Events states
   const [fbEventEnabled, setFbEventEnabled] = useState(false);
   const [fbEventType, setFbEventType] = useState('Purchase');
+  const [fbEventValue, setFbEventValue] = useState<number | undefined>(undefined);
   const [fbEventsSectionCollapsed, setFbEventsSectionCollapsed] = useState(() => {
     const saved = localStorage.getItem('tagwhats_fb_collapsed');
     return saved ? JSON.parse(saved) : false;
@@ -198,7 +199,7 @@ const TagWhatsCloud = () => {
       
       const { data: profile } = await supabase
         .from('profiles')
-        .select('disable_pago_label, fb_event_enabled, fb_event_on_sale')
+        .select('disable_pago_label, fb_event_enabled, fb_event_on_sale, fb_event_value')
         .eq('id', userId)
         .single();
       
@@ -206,6 +207,7 @@ const TagWhatsCloud = () => {
         setDisablePagoLabel(profile.disable_pago_label ?? false);
         setFbEventEnabled(profile.fb_event_enabled ?? false);
         setFbEventType(profile.fb_event_on_sale ?? 'Purchase');
+        setFbEventValue(profile.fb_event_value ?? undefined);
       }
     };
     loadUserProfile();
@@ -282,7 +284,8 @@ const TagWhatsCloud = () => {
         .from('profiles')
         .update({ 
           fb_event_enabled: fbEventEnabled,
-          fb_event_on_sale: fbEventType 
+          fb_event_on_sale: fbEventType,
+          fb_event_value: fbEventValue || null
         })
         .eq('id', userId);
       
@@ -722,19 +725,37 @@ const TagWhatsCloud = () => {
                   
                   {fbEventEnabled && !fbEventsSectionCollapsed && (
                     <div className="space-y-4 border-t border-border/50 pt-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="fb-event-type">Tipo de Evento</Label>
-                        <Select value={fbEventType} onValueChange={setFbEventType}>
-                          <SelectTrigger id="fb-event-type">
-                            <SelectValue placeholder="Selecione o evento..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Purchase">Compra (Purchase)</SelectItem>
-                            <SelectItem value="Lead">Lead</SelectItem>
-                            <SelectItem value="InitiateCheckout">Iniciar Checkout</SelectItem>
-                            <SelectItem value="AddToCart">Adicionar ao Carrinho</SelectItem>
-                          </SelectContent>
-                        </Select>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="fb-event-type">Tipo de Evento</Label>
+                          <Select value={fbEventType} onValueChange={setFbEventType}>
+                            <SelectTrigger id="fb-event-type">
+                              <SelectValue placeholder="Selecione o evento..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Purchase">Compra (Purchase)</SelectItem>
+                              <SelectItem value="Lead">Lead</SelectItem>
+                              <SelectItem value="InitiateCheckout">Iniciar Checkout</SelectItem>
+                              <SelectItem value="AddToCart">Adicionar ao Carrinho</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="fb-event-value">Valor do Evento (R$)</Label>
+                          <Input
+                            id="fb-event-value"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="Deixe vazio para automático"
+                            value={fbEventValue ?? ''}
+                            onChange={(e) => setFbEventValue(e.target.value ? parseFloat(e.target.value) : undefined)}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Se deixar vazio, tentará extrair o valor do comprovante
+                          </p>
+                        </div>
                       </div>
                       
                       <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">

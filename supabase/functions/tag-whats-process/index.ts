@@ -1115,7 +1115,7 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
         // Get user's profile to check FB event settings
         const { data: userProfile, error: profileError } = await supabase
           .from("profiles")
-          .select("fb_event_enabled, fb_event_on_sale")
+          .select("fb_event_enabled, fb_event_on_sale, fb_event_value")
           .eq("id", instance.user_id)
           .single();
 
@@ -1123,7 +1123,9 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
           console.error("[TAG-WHATS] Error fetching user profile for FB events:", profileError);
         } else if (userProfile?.fb_event_enabled) {
           const eventType = userProfile.fb_event_on_sale || "Purchase";
-          console.log("[TAG-WHATS] FB events enabled, event type:", eventType);
+          // Use configured value if set, otherwise use extracted value from AI
+          const eventValue = userProfile.fb_event_value ?? extractedValue ?? 0;
+          console.log("[TAG-WHATS] FB events enabled, event type:", eventType, "value:", eventValue);
 
           // Get all user's active pixels
           const { data: userPixels, error: pixelsError } = await supabase
@@ -1195,7 +1197,7 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
                 if (eventType === "Purchase" || eventType === "InitiateCheckout" || eventType === "AddToCart") {
                   eventData.custom_data = {
                     currency: "BRL",
-                    value: extractedValue || 0,
+                    value: eventValue,
                   };
                 }
 
@@ -1280,13 +1282,13 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
                   pixel_id: successfulPixelId || userPixels[0]?.pixel_id || 'unknown',
                   page_id: successfulPixel?.page_id || null,
                   event_name: eventType,
-                  event_value: extractedValue || 0,
+                  event_value: eventValue,
                   action_source: eventSentSuccessfully && ctwaClid ? 'business_messaging' : 'website',
                   success: eventSentSuccessfully,
                   error_message: eventSentSuccessfully ? null : lastError,
                   ctwa_clid: ctwaClid || null,
                 });
-                console.log(`[TAG-WHATS] Event logged to facebook_event_logs for contact ${inboxContact.id}, page_id: ${successfulPixel?.page_id}`);
+                console.log(`[TAG-WHATS] Event logged to facebook_event_logs for contact ${inboxContact.id}, page_id: ${successfulPixel?.page_id}, value: ${eventValue}`);
               }
             } catch (logErr) {
               console.error(`[TAG-WHATS] Error logging to facebook_event_logs:`, logErr);
