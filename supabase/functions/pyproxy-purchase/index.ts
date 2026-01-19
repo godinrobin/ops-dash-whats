@@ -895,11 +895,191 @@ Deno.serve(async (req) => {
 
         console.log('[STEP 6] ✓ PYPROXY access token obtained');
 
-        // ============= STEP 7: CREATE PYPROXY USER WITH TRAFFIC =============
+        // ============= STEP 7: PROVISION PROXY (DEDICATED vs ROTATING) =============
+        
+        // For DEDICATED (datacenter) proxies, buy a real static IP from PyProxy
+        if (planType === 'datacenter') {
+          console.log('[STEP 7] DEDICATED PROXY: Using /g/open/static/buy endpoint');
+          
+          // Build form for static IP purchase
+          // proxy_type: 4 = Dedicated Datacenter
+          // country: 'br' = Brazil
+          // city: 'sao_paulo' (or use PyProxy city code if needed)
+          // duration: 30 = 30 days
+          // num: 1 = 1 IP
+          
+          const staticBuyForm = new FormData();
+          staticBuyForm.append('access_token', accessToken);
+          staticBuyForm.append('proxy_type', '4'); // Dedicated Datacenter
+          staticBuyForm.append('country', 'br'); // Brazil
+          staticBuyForm.append('city', 'sao_paulo'); // São Paulo
+          staticBuyForm.append('duration', '30'); // 30 days
+          staticBuyForm.append('num', '1'); // 1 IP
+          
+          console.log('[STEP 7] Calling /g/open/static/buy with params:', {
+            proxy_type: 4,
+            country: 'br',
+            city: 'sao_paulo',
+            duration: 30,
+            num: 1
+          });
+
+          const staticBuyRes = await fetch('https://api.pyproxy.com/g/open/static/buy', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: staticBuyForm,
+          });
+
+          const staticBuyParsed = await parseJsonResponse(staticBuyRes);
+          console.log('[STEP 7] Static buy response status:', staticBuyRes.status);
+          console.log('[STEP 7] Static buy response:', staticBuyParsed.preview.slice(0, 800));
+
+          // Check for success
+          if (!staticBuyRes.ok || staticBuyParsed.json?.ret !== 0 || staticBuyParsed.json?.code !== 1) {
+            const errorMsg = staticBuyParsed.json?.msg || 'Fornecedor recusou compra de IP dedicado';
+            await logAction('error', 'Falha ao comprar IP dedicado PYPROXY', {
+              status: staticBuyRes.status,
+              body: staticBuyParsed.preview,
+            }, { 
+              plan_type: planType,
+              error_code: 'PYPROXY_STATIC_BUY_FAILED' 
+            });
+            await supabaseAdmin.from('proxy_orders').delete().eq('id', order.id);
+            return new Response(
+              JSON.stringify({ success: false, error: errorMsg }),
+              { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // Parse the purchased IP data from response
+          // Expected response format: ret_data contains array of purchased IPs
+          const purchasedIps = staticBuyParsed.json?.ret_data || [];
+          console.log('[STEP 7] Purchased IPs:', JSON.stringify(purchasedIps).slice(0, 500));
+
+          if (!purchasedIps || purchasedIps.length === 0) {
+            await logAction('error', 'Nenhum IP retornado pelo fornecedor', staticBuyParsed.json, { 
+              plan_type: planType,
+              error_code: 'PYPROXY_NO_IP_RETURNED' 
+            });
+            await supabaseAdmin.from('proxy_orders').delete().eq('id', order.id);
+            return new Response(
+              JSON.stringify({ success: false, error: 'Nenhum IP disponível no momento' }),
+              { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // Extract first IP data (we're buying 1 IP)
+          const dedicatedIp = purchasedIps[0];
+          
+          // PyProxy static IP response format can vary, handle common formats
+          const host = dedicatedIp.ip || dedicatedIp.proxy_ip || dedicatedIp.host || dedicatedIp.address;
+          const port = String(dedicatedIp.port || dedicatedIp.proxy_port || '2333');
+          const username = dedicatedIp.username || dedicatedIp.user || dedicatedIp.account || '';
+          const password = dedicatedIp.password || dedicatedIp.pass || dedicatedIp.pwd || '';
+          const ipOrderId = dedicatedIp.order_id || dedicatedIp.id || dedicatedIp.order_no || '';
+          
+          console.log('[STEP 7] ✓ Dedicated IP purchased:', {
+            host,
+            port,
+            username: username ? '***' : 'none',
+            password: password ? '***' : 'none',
+            ipOrderId
+          });
+
+          if (!host) {
+            await logAction('error', 'IP não encontrado na resposta', dedicatedIp, { 
+              plan_type: planType,
+              error_code: 'PYPROXY_IP_PARSE_FAILED' 
+            });
+            await supabaseAdmin.from('proxy_orders').delete().eq('id', order.id);
+            return new Response(
+              JSON.stringify({ success: false, error: 'Erro ao processar IP retornado' }),
+              { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // ============= STEP 8: FINALIZE DEDICATED ORDER =============
+          const expiresAt = new Date();
+          expiresAt.setDate(expiresAt.getDate() + 30);
+
+          await supabaseAdmin
+            .from('proxy_orders')
+            .update({
+              pyproxy_subuser_id: ipOrderId || `dc_${host}`,
+              host,
+              port,
+              username,
+              password,
+              status: 'active',
+              expires_at: expiresAt.toISOString(),
+              plan_type: 'datacenter',
+              gateway_used: `${host}:${port}`,
+              test_result: 'dedicated_ip_purchased',
+              test_ip: host
+            })
+            .eq('id', order.id);
+
+          // ============= STEP 9: DEDUCT BALANCE AND RECORD TRANSACTION =============
+          await supabaseAdmin
+            .from('sms_user_wallets')
+            .update({ balance: Number(wallet.balance) - finalPrice })
+            .eq('user_id', user.id);
+
+          await supabaseAdmin
+            .from('sms_transactions')
+            .insert({
+              user_id: user.id,
+              type: 'purchase',
+              amount: -finalPrice,
+              description: 'Proxy DEDICADA Brasil/SP (IP Fixo)',
+            });
+
+          await logAction('success', 'Proxy dedicada comprada com sucesso', {
+            host,
+            port,
+            ipOrderId
+          }, {
+            plan_type: 'datacenter',
+            gateway_host: host,
+            gateway_port: port,
+            test_result: 'dedicated_ip_purchased'
+          });
+
+          console.log('=== DEDICATED PURCHASE COMPLETE ===');
+          console.log('Order ID:', order.id);
+          console.log('Dedicated IP:', host);
+          console.log('Port:', port);
+
+          return new Response(
+            JSON.stringify({
+              success: true,
+              order: {
+                id: order.id,
+                host,
+                port,
+                username,
+                password,
+                expires_at: expiresAt.toISOString(),
+                status: 'active',
+                plan_type: 'datacenter',
+                gateway_used: `${host}:${port}`,
+                test_result: 'dedicated_ip_purchased',
+                gateway_verified: true,
+                gateway_ip: host,
+                is_dedicated: true
+              },
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // ============= FOR ROTATING PROXIES (residential, mobile, isp) =============
         const username = `px${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
         const password = `pw${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
 
-        console.log('[STEP 7] Creating PYPROXY user:', username, 'with 1GB limit_flow');
+        console.log('[STEP 7] ROTATING PROXY: Creating PYPROXY user:', username, 'with 1GB limit_flow');
 
         const remark = `lovable:${order.id}:${gatewayPlanType}:${gatewayConfig.gateway_host}`;
         console.log('[STEP 7] PyProxy remark:', remark);
