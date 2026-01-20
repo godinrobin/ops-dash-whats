@@ -53,6 +53,13 @@ interface FunnelStep {
   percentage: number;
 }
 
+interface SaleByAd {
+  adId: string;
+  adName: string | null;
+  count: number;
+  value: number;
+}
+
 type DateFilter = "today" | "yesterday" | "7days" | "30days";
 
 const defaultCardOrder = [
@@ -96,6 +103,7 @@ export default function AdsDashboard() {
     costPerConversation: 0
   });
   const [hasAccounts, setHasAccounts] = useState(false);
+  const [salesByAd, setSalesByAd] = useState<SaleByAd[]>([]);
 
   // Only show active ad accounts
   const activeAdAccounts = adAccounts.filter(acc => acc.is_selected === true);
@@ -181,6 +189,41 @@ export default function AdsDashboard() {
       const totalMessages = leads?.length || 0;
       const totalPurchases = leads?.filter(l => l.purchase_sent_at)?.length || 0;
       const totalRevenue = leads?.reduce((sum, l) => sum + (l.purchase_value || 0), 0) || 0;
+
+      // Get sales with ad attribution and group by ad
+      const salesWithPurchase = leads?.filter(l => l.purchase_sent_at) || [];
+      
+      // Load ads for name lookup
+      const { data: adsData } = await supabase
+        .from("ads_ads")
+        .select("ad_id, name")
+        .eq("user_id", user.id);
+      
+      const adsMap: Record<string, string> = {};
+      (adsData || []).forEach(ad => {
+        if (ad.ad_id) adsMap[ad.ad_id] = ad.name || ad.ad_id;
+      });
+
+      // Group sales by ad_id
+      const salesGrouped: Record<string, { count: number; value: number; adName: string | null }> = {};
+      salesWithPurchase.forEach(sale => {
+        const key = sale.ad_id || "unknown";
+        if (!salesGrouped[key]) {
+          salesGrouped[key] = { 
+            count: 0, 
+            value: 0, 
+            adName: sale.ad_id ? (adsMap[sale.ad_id] || null) : null 
+          };
+        }
+        salesGrouped[key].count++;
+        salesGrouped[key].value += sale.purchase_value || 0;
+      });
+
+      const salesByAdArray = Object.entries(salesGrouped)
+        .map(([adId, data]) => ({ adId, ...data }))
+        .sort((a, b) => b.value - a.value);
+      
+      setSalesByAd(salesByAdArray);
 
       setMetrics({
         spend: totalSpend,
@@ -618,6 +661,72 @@ export default function AdsDashboard() {
           )}
         </CardContent>
       </Card>
+
+      {/* Sales by Ad Section */}
+      {salesByAd.length > 0 && salesByAd.some(s => s.adId !== "unknown") && (
+        <Card className="bg-card/50 backdrop-blur border-2 border-accent">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5" />
+              Vendas por Anúncio
+            </CardTitle>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs max-w-xs">Vendas atribuídas a anúncios específicos via Tag Whats</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <Skeleton className="h-32" />
+            ) : (
+              <div className="space-y-3">
+                {salesByAd.slice(0, 8).map((item, index) => {
+                  const maxValue = salesByAd[0]?.value || 1;
+                  const barWidth = (item.value / maxValue) * 100;
+                  
+                  return (
+                    <div key={item.adId} className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-medium truncate max-w-[60%]">
+                          {item.adId === "unknown" ? "Sem atribuição" : (item.adName || item.adId.slice(0, 20) + "...")}
+                        </span>
+                        <div className="flex items-center gap-3 text-right">
+                          <span className="text-muted-foreground">{item.count} vendas</span>
+                          <span className="font-semibold text-green-500">R$ {item.value.toFixed(2)}</span>
+                        </div>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          animate={{ width: `${barWidth}%` }}
+                          transition={{ duration: 0.6, delay: index * 0.1 }}
+                          className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+                
+                {/* Summary */}
+                <div className="pt-3 mt-3 border-t border-border/50 flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    Total: {salesByAd.reduce((sum, s) => sum + s.count, 0)} vendas
+                  </span>
+                  <span className="font-bold">
+                    R$ {salesByAd.reduce((sum, s) => sum + s.value, 0).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
