@@ -1108,8 +1108,8 @@ serve(async (req) => {
             contactUpdates.name = uazSenderName;
           }
 
-          // Update profile pic if we have a new one and contact doesn't have one
-          if (uazProfilePicUrl && !existingContact.profile_pic_url) {
+          // Update profile pic if we have a new one (always update to get fresh URLs)
+          if (uazProfilePicUrl && uazProfilePicUrl !== existingContact.profile_pic_url) {
             contactUpdates.profile_pic_url = uazProfilePicUrl;
           }
 

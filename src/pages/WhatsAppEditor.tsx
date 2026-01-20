@@ -276,7 +276,8 @@ export default function WhatsAppEditor() {
       }
 
       if (newName.trim()) {
-        payload.name = newName.trim();
+        // UazAPI limit: max 25 characters for profile name
+        payload.name = newName.trim().slice(0, 25);
       }
 
       if (removeImage) {
@@ -545,15 +546,23 @@ export default function WhatsAppEditor() {
           <div className="space-y-6">
             {/* Name Input */}
             <div className="space-y-2">
-              <Label>Nome do Perfil</Label>
+              <div className="flex items-center justify-between">
+                <Label>Nome do Perfil</Label>
+                <span className={cn(
+                  "text-xs",
+                  newName.length > 25 ? "text-destructive" : "text-muted-foreground"
+                )}>
+                  {newName.length}/25
+                </span>
+              </div>
               <Input
                 value={newName}
-                onChange={(e) => setNewName(e.target.value)}
+                onChange={(e) => setNewName(e.target.value.slice(0, 25))}
                 placeholder="Digite o novo nome..."
                 maxLength={25}
               />
               <p className="text-xs text-muted-foreground">
-                Deixe em branco para manter o nome atual
+                Deixe em branco para manter o nome atual. Máximo 25 caracteres.
               </p>
             </div>
 
