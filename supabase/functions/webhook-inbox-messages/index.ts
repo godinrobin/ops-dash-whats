@@ -964,8 +964,9 @@ serve(async (req) => {
         // === END UAZAPI AD DATA ===
 
         // === UAZAPI: Extract profile picture URL from payload.chat ===
+        // UazAPI uses imagePreview or image fields for profile pictures
         const uazChat = (payload as any)?.chat || {};
-        const uazProfilePicUrl = uazChat.profilePicUrl || uazChat.profilePictureUrl || uazChat.imgUrl || uazChat.profilePic || null;
+        const uazProfilePicUrl = uazChat.imagePreview || uazChat.image || uazChat.profilePicUrl || uazChat.profilePictureUrl || uazChat.imgUrl || uazChat.profilePic || null;
         if (uazProfilePicUrl) {
           console.log(`[UAZAPI-WEBHOOK] Found profile pic URL in chat object: ${uazProfilePicUrl.substring(0, 80)}`);
         }
@@ -1188,63 +1189,63 @@ serve(async (req) => {
           } else {
             contact = newContact;
             console.log(`[UAZAPI-WEBHOOK] Created new contact: ${contact.id} for instance ${instanceId}`);
-            
-            // If contact was created WITHOUT a profile pic, fetch it from UazAPI
-            // We await the fetch to ensure the request is at least sent before the function ends
-            if (!uazProfilePicUrl && contact.id) {
-              try {
-                const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-                const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-                console.log(`[PROFILE-PIC] Initiating profile pic fetch for new contact ${contact.id}`);
-                
-                // Await the fetch to ensure the request is sent
-                const picResponse = await fetch(`${supabaseUrl}/functions/v1/fetch-contact-profile-pic`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${serviceRoleKey}`,
-                  },
-                  body: JSON.stringify({ contactId: contact.id }),
-                });
-                
-                console.log(`[PROFILE-PIC] Response status: ${picResponse.status}`);
-                
-                // Don't block on reading the full response body
-                picResponse.text().then(text => {
-                  console.log(`[PROFILE-PIC] Response: ${text.substring(0, 200)}`);
-                }).catch(() => {});
-                
-              } catch (picErr) {
-                console.error('[PROFILE-PIC] Error initiating fetch:', picErr);
-              }
-            }
-            
-            // Check lead rotation limit (fire and forget - don't block main flow)
+          }
+          
+          // Fetch profile pic if contact doesn't have one (either newly created or race condition recovered)
+          // This runs for ALL contacts without a profile pic, not just newly created ones
+          if (contact && contact.id && !contact.profile_pic_url) {
             try {
               const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
               const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-              console.log(`[LEAD-ROTATION] Calling check-lead-rotation for instance ${instanceId}`);
-              fetch(`${supabaseUrl}/functions/v1/check-lead-rotation`, {
+              console.log(`[PROFILE-PIC] Initiating profile pic fetch for contact ${contact.id} (no pic in DB)`);
+              
+              // Await the fetch to ensure the request is sent
+              const picResponse = await fetch(`${supabaseUrl}/functions/v1/fetch-contact-profile-pic`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
                   'Authorization': `Bearer ${serviceRoleKey}`,
                 },
-                body: JSON.stringify({
-                  user_id: instance.user_id,
-                  instance_id: instanceId,
-                  instance_name: instance.label || instance.instance_name,
-                  phone_number: instance.phone_number,
-                }),
-              }).then(res => {
-                console.log(`[LEAD-ROTATION] Response status: ${res.status}`);
-                return res.text();
-              }).then(text => {
-                console.log(`[LEAD-ROTATION] Response: ${text.substring(0, 200)}`);
-              }).catch(err => console.log('[LEAD-ROTATION] Fire and forget call failed:', err));
-            } catch (rotationErr) {
-              console.log('[LEAD-ROTATION] Error calling check-lead-rotation:', rotationErr);
+                body: JSON.stringify({ contactId: contact.id }),
+              });
+              
+              console.log(`[PROFILE-PIC] Response status: ${picResponse.status}`);
+              
+              // Don't block on reading the full response body
+              picResponse.text().then(text => {
+                console.log(`[PROFILE-PIC] Response: ${text.substring(0, 200)}`);
+              }).catch(() => {});
+              
+            } catch (picErr) {
+              console.error('[PROFILE-PIC] Error initiating fetch:', picErr);
             }
+          }
+          
+          // Check lead rotation limit (fire and forget - don't block main flow)
+          try {
+            const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+            const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+            console.log(`[LEAD-ROTATION] Calling check-lead-rotation for instance ${instanceId}`);
+            fetch(`${supabaseUrl}/functions/v1/check-lead-rotation`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${serviceRoleKey}`,
+              },
+              body: JSON.stringify({
+                user_id: instanceInfo.user_id,
+                instance_id: instanceId,
+                instance_name: instanceNameForLookup,
+                phone_number: phone,
+              }),
+            }).then(res => {
+              console.log(`[LEAD-ROTATION] Response status: ${res.status}`);
+              return res.text();
+            }).then(text => {
+              console.log(`[LEAD-ROTATION] Response: ${text.substring(0, 200)}`);
+            }).catch(err => console.log('[LEAD-ROTATION] Fire and forget call failed:', err));
+          } catch (rotationErr) {
+            console.log('[LEAD-ROTATION] Error calling check-lead-rotation:', rotationErr);
           }
         }
         
