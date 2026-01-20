@@ -3721,11 +3721,27 @@ serve(async (req) => {
       console.log('[PRESENCE] Received presence event');
       
       // Extract presence data from UazAPI format
+      // UazAPI format: { event: { Chat, Sender, State, IsGroup, ... } }
       const presenceData = (payload as any).event || data;
-      const presenceType = presenceData?.presence || presenceData?.type || presenceData?.Type;
-      const remoteJid = presenceData?.from || presenceData?.remoteJid || presenceData?.jid || (payload as any)?.from;
       
-      console.log(`[PRESENCE] Type: ${presenceType}, RemoteJid: ${remoteJid}`);
+      // UazAPI uses "State" field with values: "composing", "recording", "paused", etc.
+      const presenceType = presenceData?.State || presenceData?.state || 
+                          presenceData?.presence || presenceData?.type || presenceData?.Type;
+      
+      // For individual chats: Chat = "5511999999999@s.whatsapp.net"
+      // For groups: Chat = "groupid@g.us", Sender = "5511999999999@lid" or "5511999999999@s.whatsapp.net"
+      const isGroup = presenceData?.IsGroup === true;
+      let remoteJid = presenceData?.Chat || presenceData?.from || presenceData?.remoteJid || presenceData?.jid || (payload as any)?.from;
+      
+      // For groups, skip (we don't track group typing indicators)
+      if (isGroup) {
+        console.log('[PRESENCE] Skipping group typing indicator');
+        return new Response(JSON.stringify({ success: true, event: 'presence', skipped: 'group' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      console.log(`[PRESENCE] Type: ${presenceType}, RemoteJid: ${remoteJid}, IsGroup: ${isGroup}`);
       
       // Only handle composing/recording (typing indicators)
       if (presenceType === 'composing' || presenceType === 'recording') {
@@ -3734,7 +3750,7 @@ serve(async (req) => {
         
         if (remoteJid) {
           // Extract phone from remoteJid (format: "5511999999999@s.whatsapp.net")
-          const phone = remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '');
+          const phone = remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '');
           
           // Find contact
           const { data: contacts } = await supabaseClient

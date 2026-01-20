@@ -18,6 +18,7 @@ import { formatPhoneDisplay } from '@/utils/phoneFormatter';
 import { toast } from 'sonner';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useAuth } from '@/contexts/AuthContext';
+import { useContactActivityStatus } from '@/hooks/useContactActivityStatus';
 
 // Predefined label colors
 const labelColors: Record<string, string> = {
@@ -86,6 +87,10 @@ export const ConversationList = ({
   const [showNewConversation, setShowNewConversation] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>(selectedFilter as FilterType);
   const [showMarkAllReadMenu, setShowMarkAllReadMenu] = useState(false);
+
+  // Get contact IDs for activity status subscription
+  const contactIds = useMemo(() => contacts.map(c => c.id), [contacts]);
+  const { getActivityStatus } = useContactActivityStatus(contactIds);
 
   // Calculate total unread messages from contacts
   const totalUnreadMessages = useMemo(() => {
@@ -431,6 +436,7 @@ export const ConversationList = ({
               const instancePhone = getInstancePhone(contact.instance_id);
               const instanceColor = getInstanceColor(contact.instance_id);
               const contactTags = Array.isArray((contact as any).tags) ? (contact as any).tags : [];
+              const activityStatus = getActivityStatus(contact.id);
               
               return (
                 <div
@@ -484,10 +490,16 @@ export const ConversationList = ({
                         {formatTime(contact.last_message_at)}
                       </span>
                     </div>
-                    {getSubtitle(contact) && (
-                      <p className="text-xs text-muted-foreground truncate mt-0.5">
-                        {getSubtitle(contact)}
+                    {activityStatus ? (
+                      <p className="text-xs text-green-500 font-medium truncate mt-0.5 animate-pulse">
+                        {activityStatus === 'recording' ? '🎙️ gravando áudio...' : '✍️ digitando...'}
                       </p>
+                    ) : (
+                      getSubtitle(contact) && (
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">
+                          {getSubtitle(contact)}
+                        </p>
+                      )
                     )}
                     <div className="flex items-center gap-1 mt-1 flex-wrap">
                       {instanceName && (
