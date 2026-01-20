@@ -128,25 +128,45 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Fetch the effective profile from provider right after update
+        // Fetch the effective profile from provider right after update.
+        // NOTE: WhatsApp/UazAPI can take a few seconds to propagate profile updates.
+        // We poll status a few times to avoid false negatives.
         let effectiveProfileName: string | null = null
         let effectiveProfilePicUrl: string | null = null
 
-        try {
-          const statusResponse = await fetch(`${UAZAPI_BASE_URL}/instance/status`, {
-            method: 'GET',
-            headers: {
-              'token': instance.uazapi_token,
-            },
-          })
+        const maxAttempts = 6
+        const delayMs = 1500
 
-          if (statusResponse.ok) {
-            const statusData = await statusResponse.json()
-            effectiveProfileName = statusData?.instance?.profileName ?? null
-            effectiveProfilePicUrl = statusData?.instance?.profilePicUrl ?? null
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          try {
+            const statusResponse = await fetch(`${UAZAPI_BASE_URL}/instance/status`, {
+              method: 'GET',
+              headers: {
+                'token': instance.uazapi_token,
+              },
+            })
+
+            if (statusResponse.ok) {
+              const statusData = await statusResponse.json()
+              effectiveProfileName = statusData?.instance?.profileName ?? null
+              effectiveProfilePicUrl = statusData?.instance?.profilePicUrl ?? null
+
+              // If a name update was requested and already matches, stop polling early
+              if (name && effectiveProfileName === name) {
+                break
+              }
+            }
+          } catch (statusError) {
+            console.error(`Error fetching updated status for ${instance.instance_name} (attempt ${attempt}):`, statusError)
           }
-        } catch (statusError) {
-          console.error(`Error fetching updated status for ${instance.instance_name}:`, statusError)
+
+          // If we requested a name change and it's still not applied, wait and retry
+          if (name && effectiveProfileName !== name && attempt < maxAttempts) {
+            await new Promise((resolve) => setTimeout(resolve, delayMs))
+            continue
+          }
+
+          break
         }
 
         results.push({
