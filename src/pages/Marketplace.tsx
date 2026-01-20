@@ -22,6 +22,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { toast } from "sonner";
 import { RechargeModal } from "@/components/RechargeModal";
 import { InsufficientBalanceModal } from "@/components/InsufficientBalanceModal";
@@ -85,6 +86,7 @@ interface UserOrder {
 
 const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
   const { user } = useAuth();
+  const { isImpersonating } = useImpersonation();
   useActivityTracker("marketplace", "Marketplace");
 
   const [activeTab, setActiveTab] = useState("numeros-virtuais");
@@ -374,10 +376,13 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
     </Card>
   );
 
+  // Add extra spacing for impersonation banner
+  const spacerHeight = isImpersonating ? "h-24 md:h-[104px]" : "h-14 md:h-16";
+  
   return (
     <>
       <Header mode={currentMode} onModeChange={onModeChange} />
-      <div className="h-14 md:h-16" />
+      <div className={spacerHeight} />
       <div className="min-h-screen bg-background p-4 md:p-6">
         <div className="container mx-auto max-w-6xl">
           {/* Wallet Card */}
