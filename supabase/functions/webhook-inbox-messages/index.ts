@@ -3584,9 +3584,87 @@ serve(async (req) => {
     }
 
     // Handle message status updates (sent, delivered, read)
-    if (event === 'messages.update' || event === 'MESSAGES_UPDATE') {
-      console.log('Processing message status update');
+    // Supports both Evolution API format (messages.update) and UazAPI format (messages_update)
+    if (event === 'messages.update' || event === 'MESSAGES_UPDATE' || event === 'messages_update') {
+      console.log(`Processing message status update (event: ${event})`);
       
+      // Check for UazAPI format first (has event.MessageIDs and state/Type)
+      const uazapiEvent = (payload as any).event;
+      const uazapiState = (payload as any).state;
+      
+      if (uazapiEvent?.MessageIDs && (uazapiState || uazapiEvent?.Type)) {
+        // UazAPI format: { event: { MessageIDs: [...], Type: "Read" }, state: "Read" }
+        const messageIds: string[] = uazapiEvent.MessageIDs || [];
+        const statusType = uazapiState || uazapiEvent.Type || '';
+        
+        console.log(`[UAZAPI-STATUS] Processing ${messageIds.length} message(s) with status: ${statusType}`);
+        
+        let newStatus = 'sent';
+        const statusLower = String(statusType).toLowerCase();
+        if (statusLower === 'delivered' || statusLower === 'delivery_ack') {
+          newStatus = 'delivered';
+        } else if (statusLower === 'read' || statusLower === 'played') {
+          newStatus = 'read';
+        } else if (statusLower === 'sent' || statusLower === 'server_ack') {
+          newStatus = 'sent';
+        }
+        
+        for (const rawMessageId of messageIds) {
+          // Normalize the message ID to handle "owner:ID" format
+          const normalizedId = normalizeRemoteMessageId(rawMessageId);
+          if (!normalizedId) {
+            console.log(`[UAZAPI-STATUS] Skipping invalid message ID: ${rawMessageId}`);
+            continue;
+          }
+          
+          console.log(`[UAZAPI-STATUS] Updating message ${normalizedId} (raw: ${rawMessageId}) to status: ${newStatus}`);
+          
+          // Try to find and update the message by normalized ID
+          const { data: existingMessages, error: findError } = await supabaseClient
+            .from('inbox_messages')
+            .select('id, remote_message_id, status')
+            .or(`remote_message_id.eq.${normalizedId},remote_message_id.ilike.%${normalizedId}`)
+            .limit(5);
+          
+          if (findError) {
+            console.error(`[UAZAPI-STATUS] Error finding message:`, findError);
+            continue;
+          }
+          
+          if (!existingMessages || existingMessages.length === 0) {
+            console.log(`[UAZAPI-STATUS] No message found for ID: ${normalizedId}`);
+            continue;
+          }
+          
+          // Update all matching messages (usually just one)
+          for (const msg of existingMessages) {
+            // Only update if new status is "higher" (sent -> delivered -> read)
+            const currentRank = msg.status === 'read' ? 3 : msg.status === 'delivered' ? 2 : 1;
+            const newRank = newStatus === 'read' ? 3 : newStatus === 'delivered' ? 2 : 1;
+            
+            if (newRank >= currentRank) {
+              const { error: updateError } = await supabaseClient
+                .from('inbox_messages')
+                .update({ status: newStatus })
+                .eq('id', msg.id);
+              
+              if (updateError) {
+                console.error(`[UAZAPI-STATUS] Error updating message ${msg.id}:`, updateError);
+              } else {
+                console.log(`[UAZAPI-STATUS] Message ${msg.id} updated from ${msg.status} to ${newStatus}`);
+              }
+            } else {
+              console.log(`[UAZAPI-STATUS] Skipping downgrade for ${msg.id}: ${msg.status} -> ${newStatus}`);
+            }
+          }
+        }
+        
+        return new Response(JSON.stringify({ success: true, format: 'uazapi' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      // Evolution API format: { data: [{ key: { id }, update: { status } }] }
       const updates = Array.isArray(data) ? data : [data];
       
       for (const update of updates) {
@@ -3626,7 +3704,7 @@ serve(async (req) => {
         }
       }
       
-      return new Response(JSON.stringify({ success: true }), {
+      return new Response(JSON.stringify({ success: true, format: 'evolution' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

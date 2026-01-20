@@ -180,6 +180,8 @@ export const ChatPanel = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [connectionError, setConnectionError] = useState<{ show: boolean; errorCode?: string; instanceName?: string }>({ show: false });
   const [isIgnored, setIsIgnored] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const scrollToBottom = useCallback(() => {
     const root = scrollAreaRef.current;
@@ -341,6 +343,60 @@ export const ChatPanel = ({
   useEffect(() => {
     scrollToBottom();
   }, [scrollToBottom, messages.length]);
+
+  // Clear typing indicator when contact changes
+  useEffect(() => {
+    setIsTyping(false);
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+  }, [contact?.id]);
+
+  // Listen for typing events from the webhook via realtime
+  useEffect(() => {
+    if (!contact?.id) return;
+    
+    // Subscribe to a custom typing channel for this contact
+    const channel = supabase
+      .channel(`typing:${contact.id}`)
+      .on('broadcast', { event: 'typing' }, (payload) => {
+        console.log('[ChatPanel] Received typing event:', payload);
+        setIsTyping(true);
+        
+        // Clear any existing timeout
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+        }
+        
+        // Auto-hide typing after 5 seconds
+        typingTimeoutRef.current = setTimeout(() => {
+          setIsTyping(false);
+        }, 5000);
+      })
+      .subscribe();
+    
+    return () => {
+      supabase.removeChannel(channel);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, [contact?.id]);
+
+  // Hide typing indicator when new message arrives
+  useEffect(() => {
+    if (messages.length > 0 && isTyping) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage.direction === 'inbound') {
+        setIsTyping(false);
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+          typingTimeoutRef.current = null;
+        }
+      }
+    }
+  }, [messages, isTyping]);
 
 
   const handleAddLabel = async (labelName: string) => {
@@ -872,6 +928,17 @@ export const ChatPanel = ({
                 contact={contact}
               />
             ))}
+            {/* Typing indicator */}
+            {isTyping && (
+              <div className="flex items-center gap-2 px-3 py-2">
+                <div className="flex gap-1 bg-muted rounded-full px-3 py-2">
+                  <span className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+                <span className="text-xs text-muted-foreground">digitando...</span>
+              </div>
+            )}
           </div>
         )}
       </ScrollArea>
