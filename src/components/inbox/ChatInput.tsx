@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Send, Paperclip, Mic, Smile, Image, FileText, Video, Zap, Square } from 'lucide-react';
+import { Send, Paperclip, Mic, Smile, Image, FileText, Video, Zap, Square, X, Reply } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -17,6 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { cn } from '@/lib/utils';
+import { InboxMessage } from '@/types/inbox';
 
 interface QuickReply {
   id: string;
@@ -28,13 +29,15 @@ interface QuickReply {
 }
 
 interface ChatInputProps {
-  onSendMessage: (content: string, messageType?: string, mediaUrl?: string) => Promise<{ error?: string; data?: any }>;
+  onSendMessage: (content: string, messageType?: string, mediaUrl?: string, replyToMessageId?: string) => Promise<{ error?: string; data?: any }>;
   flows?: { id: string; name: string; is_active: boolean }[];
   onTriggerFlow?: (flowId: string) => Promise<void>;
   contactInstanceId?: string | null;
+  replyToMessage?: InboxMessage | null;
+  onCancelReply?: () => void;
 }
 
-export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactInstanceId }: ChatInputProps) => {
+export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactInstanceId, replyToMessage, onCancelReply }: ChatInputProps) => {
   const { user } = useAuth();
   const { effectiveUserId } = useEffectiveUser();
   const [message, setMessage] = useState('');
@@ -132,6 +135,7 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactIns
     if (!message.trim() || sending) return;
 
     const messageToSend = message.trim();
+    const replyToId = replyToMessage?.id;
     setSending(true);
     
     // Clear message immediately for better UX
@@ -140,7 +144,10 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactIns
       textareaRef.current.style.height = 'auto';
     }
     
-    const result = await onSendMessage(messageToSend);
+    // Clear reply state
+    onCancelReply?.();
+    
+    const result = await onSendMessage(messageToSend, 'text', undefined, replyToId);
     
     if (result.error) {
       toast.error('Erro ao enviar mensagem: ' + result.error);
@@ -387,7 +394,34 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactIns
 
   return (
     <>
-      <div className="border-t border-border p-4 bg-card">
+      <div className="border-t border-border bg-card">
+        {/* Reply Preview */}
+        {replyToMessage && (
+          <div className="px-4 pt-3 pb-2">
+            <div className="flex items-center gap-2 bg-muted/50 rounded-lg p-2 border-l-4 border-primary">
+              <Reply className="h-4 w-4 text-primary shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-primary font-medium">Respondendo</p>
+                <p className="text-sm text-muted-foreground truncate">
+                  {replyToMessage.content || 
+                   (replyToMessage.message_type === 'audio' ? '🎵 Áudio' : 
+                    replyToMessage.message_type === 'image' ? '📷 Imagem' : 
+                    replyToMessage.message_type === 'video' ? '🎬 Vídeo' : 
+                    replyToMessage.message_type === 'document' ? '📄 Documento' : 'Mídia')}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 shrink-0"
+                onClick={onCancelReply}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+        <div className="p-4 pt-2">
         <div className="flex items-end gap-2">
           {/* Emoji Picker */}
           <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
@@ -562,6 +596,7 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactIns
               <Mic className="h-5 w-5 text-muted-foreground" />
             </Button>
           )}
+        </div>
         </div>
       </div>
 

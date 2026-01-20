@@ -55,7 +55,7 @@ interface ChatPanelProps {
   contact: InboxContact | null;
   messages: InboxMessage[];
   loading: boolean;
-  onSendMessage: (content: string, messageType?: string, mediaUrl?: string) => Promise<{ error?: string; errorCode?: string; data?: any }>;
+  onSendMessage: (content: string, messageType?: string, mediaUrl?: string, replyToMessageId?: string) => Promise<{ error?: string; errorCode?: string; data?: any }>;
   onToggleDetails: () => void;
   flows?: { id: string; name: string; is_active: boolean }[];
   onTriggerFlow?: (flowId: string) => Promise<void>;
@@ -183,6 +183,8 @@ export const ChatPanel = ({
   // Activity status: 'typing' | 'recording' | null
   const [activityStatus, setActivityStatus] = useState<'typing' | 'recording' | null>(null);
   const activityTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Reply state
+  const [replyToMessage, setReplyToMessage] = useState<InboxMessage | null>(null);
 
   const scrollToBottom = useCallback(() => {
     const root = scrollAreaRef.current;
@@ -626,8 +628,8 @@ export const ChatPanel = ({
   };
 
   // Handler for send message with connection error detection
-  const handleSendWithErrorDetection = async (content: string, messageType?: string, mediaUrl?: string) => {
-    const result = await onSendMessage(content, messageType, mediaUrl);
+  const handleSendWithErrorDetection = async (content: string, messageType?: string, mediaUrl?: string, replyToMessageId?: string) => {
+    const result = await onSendMessage(content, messageType, mediaUrl, replyToMessageId);
     
     if (result.errorCode === 'CONNECTION_CLOSED' || result.errorCode === 'INSTANCE_DISCONNECTED') {
       setConnectionError({
@@ -635,6 +637,11 @@ export const ChatPanel = ({
         errorCode: result.errorCode,
         instanceName: instanceName || undefined,
       });
+    }
+    
+    // Clear reply state after sending
+    if (!result.error) {
+      setReplyToMessage(null);
     }
     
     return result;
@@ -964,8 +971,7 @@ export const ChatPanel = ({
                 allMessages={visibleMessages}
                 contact={contact}
                 onReply={(msg) => {
-                  // For now, just show a toast - full implementation requires ChatInput state management
-                  toast.info('Responder: ' + (msg.content?.slice(0, 30) || 'mídia') + '...');
+                  setReplyToMessage(msg);
                 }}
               />
             ))}
@@ -1025,6 +1031,8 @@ export const ChatPanel = ({
         flows={flows} 
         onTriggerFlow={onTriggerFlow} 
         contactInstanceId={contact.instance_id}
+        replyToMessage={replyToMessage}
+        onCancelReply={() => setReplyToMessage(null)}
       />
     </div>
   );

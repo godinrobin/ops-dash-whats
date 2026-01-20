@@ -290,7 +290,6 @@ export const ConversationList = ({
             <Plus className="h-4 w-4" />
           </Button>
         </div>
-        
         {/* Search and Label Filter Side by Side */}
         <div className="flex gap-2">
           <div className="relative flex-1">
