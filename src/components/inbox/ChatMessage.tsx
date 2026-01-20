@@ -10,11 +10,13 @@ interface ChatMessageProps {
   message: InboxMessageWithReply;
   allMessages?: InboxMessage[];
   contact?: InboxContact | null;
+  onReply?: (message: InboxMessageWithReply) => void;
 }
 
-export const ChatMessage = ({ message, allMessages = [], contact }: ChatMessageProps) => {
+export const ChatMessage = ({ message, allMessages = [], contact, onReply }: ChatMessageProps) => {
   const isOutbound = message.direction === 'outbound';
   const isInbound = message.direction === 'inbound';
+  const [showActions, setShowActions] = useState(false);
   
   // Get contact display info
   const getContactInitials = () => {
@@ -555,10 +557,29 @@ export const ChatMessage = ({ message, allMessages = [], contact }: ChatMessageP
   };
 
   return (
-    <div className={cn(
-      "flex animate-in fade-in slide-in-from-bottom-2 duration-200 gap-2",
-      isOutbound ? "justify-end" : "justify-start"
-    )}>
+    <div 
+      className={cn(
+        "flex animate-in fade-in slide-in-from-bottom-2 duration-200 gap-2 group relative",
+        isOutbound ? "justify-end" : "justify-start"
+      )}
+      onMouseEnter={() => setShowActions(true)}
+      onMouseLeave={() => setShowActions(false)}
+    >
+      {/* Reply action button */}
+      {showActions && onReply && (
+        <button
+          onClick={() => onReply(message)}
+          className={cn(
+            "absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10",
+            "p-1.5 rounded-full bg-card border border-border shadow-sm hover:bg-accent",
+            isOutbound ? "left-0 -translate-x-full mr-2" : "right-0 translate-x-full ml-2"
+          )}
+          title="Responder"
+        >
+          <Reply className="h-3.5 w-3.5 text-muted-foreground" />
+        </button>
+      )}
+      
       {/* Avatar for inbound messages */}
       {isInbound && (
         <Avatar className="h-8 w-8 flex-shrink-0 mt-auto">

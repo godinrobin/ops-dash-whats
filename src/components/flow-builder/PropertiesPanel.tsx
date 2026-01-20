@@ -1811,6 +1811,105 @@ export const PropertiesPanel = ({
           </div>
         );
 
+      case 'iaConverter':
+        return (
+          <div className="space-y-4">
+            <div className="bg-gradient-to-r from-violet-500/10 to-purple-500/10 border border-violet-500/20 rounded-lg p-3 mb-2">
+              <p className="text-xs text-violet-400 flex items-center gap-2">
+                <span className="text-sm">🤖</span>
+                A IA irá conversar com o lead baseado na base de conhecimento que você fornecer.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Base de Conhecimento *</Label>
+              <Textarea
+                placeholder="Descreva seu produto, serviço, como a IA deve se comportar, respostas para perguntas frequentes, etc..."
+                value={(nodeData.knowledgeBase as string) || ''}
+                onChange={(e) => onUpdateNode(selectedNode.id, { knowledgeBase: e.target.value })}
+                rows={6}
+              />
+              <p className="text-xs text-muted-foreground">
+                Insira todas as informações que a IA precisa saber para conversar com o lead.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Público Alvo</Label>
+              <Select
+                value={(nodeData.targetAudience as string) || 'geral'}
+                onValueChange={(value) => onUpdateNode(selectedNode.id, { targetAudience: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="homem">Homem</SelectItem>
+                  <SelectItem value="mulher">Mulher</SelectItem>
+                  <SelectItem value="geral">Geral</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Tom da Conversa</Label>
+              <Select
+                value={(nodeData.conversationTone as string) || 'informal'}
+                onValueChange={(value) => onUpdateNode(selectedNode.id, { conversationTone: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="formal">Formal</SelectItem>
+                  <SelectItem value="informal">Informal</SelectItem>
+                  <SelectItem value="neutro">Neutro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center justify-between p-3 border rounded-md">
+              <div>
+                <Label>Utilizar Emojis</Label>
+                <p className="text-xs text-muted-foreground">
+                  A IA usará emojis nas respostas
+                </p>
+              </div>
+              <Switch
+                checked={(nodeData.useEmojis as boolean) ?? true}
+                onCheckedChange={(checked) => onUpdateNode(selectedNode.id, { useEmojis: checked })}
+              />
+            </div>
+            
+            {/* Presence/Typing indicator option */}
+            <div className="space-y-3 pt-2 border-t border-border">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="showPresenceIaConverter"
+                  checked={(nodeData.showPresence as boolean) || false}
+                  onCheckedChange={(checked) => onUpdateNode(selectedNode.id, { showPresence: checked })}
+                />
+                <Label htmlFor="showPresenceIaConverter" className="text-sm cursor-pointer">
+                  Mostrar "digitando..." antes de enviar
+                </Label>
+              </div>
+              {(nodeData.showPresence as boolean) && (
+                <div className="space-y-2 pl-6">
+                  <Label className="text-xs">Duração (segundos)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={(nodeData.presenceDelay as number) || 3}
+                    onChange={(e) => onUpdateNode(selectedNode.id, { presenceDelay: Math.min(60, Math.max(1, parseInt(e.target.value) || 3)) })}
+                    className="w-24 h-8"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        );
+
       default:
         return null;
     }
