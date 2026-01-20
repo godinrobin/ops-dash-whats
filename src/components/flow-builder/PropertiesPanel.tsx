@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Trash2, Save, Settings, Copy, Plus, Minus } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
@@ -22,7 +23,8 @@ interface PropertiesPanelProps {
   triggerType?: 'keyword' | 'all' | 'schedule' | 'sale';
   triggerKeywords?: string[];
   keywordMatchType?: 'exact' | 'contains' | 'not_contains';
-  onUpdateFlowSettings?: (settings: { triggerType?: string; triggerKeywords?: string[]; keywordMatchType?: string }) => void;
+  pauseOtherFlows?: boolean;
+  onUpdateFlowSettings?: (settings: { triggerType?: string; triggerKeywords?: string[]; keywordMatchType?: string; pauseOtherFlows?: boolean }) => void;
   allNodes?: Node[];
 }
 // System variables that are always available (synchronized with backend)
@@ -86,6 +88,7 @@ export const PropertiesPanel = ({
   triggerType = 'keyword',
   triggerKeywords = [],
   keywordMatchType = 'exact',
+  pauseOtherFlows = false,
   onUpdateFlowSettings,
   allNodes = [],
 }: PropertiesPanelProps) => {
@@ -277,6 +280,30 @@ export const PropertiesPanel = ({
                     {kw}
                   </Badge>
                 ))}
+              </div>
+            )}
+
+            {/* Pausar outros fluxos - only for sale trigger */}
+            {triggerType === 'sale' && (
+              <div className="flex items-center justify-between p-3 border rounded-md bg-amber-500/10 border-amber-500/30">
+                <div>
+                  <Label className="flex items-center gap-2">
+                    <span className="text-amber-500">⚡</span>
+                    Pausar outros fluxos
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Pausa todos os outros fluxos ativos do contato para priorizar este fluxo de venda
+                  </p>
+                </div>
+                <Switch
+                  checked={pauseOtherFlows}
+                  onCheckedChange={(checked) => onUpdateFlowSettings?.({ pauseOtherFlows: checked })}
+                  className={
+                    pauseOtherFlows
+                      ? 'data-[state=checked]:bg-green-500'
+                      : 'data-[state=unchecked]:bg-red-500'
+                  }
+                />
               </div>
             )}
           </div>

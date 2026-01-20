@@ -617,11 +617,14 @@ const FlowEditorPage = () => {
             triggerType={triggerType}
             triggerKeywords={triggerKeywords.split(',').map(k => k.trim()).filter(Boolean)}
             keywordMatchType={keywordMatchType}
+            pauseOtherFlows={pauseOtherFlows}
             onUpdateFlowSettings={(settings) => {
               if (settings.triggerType) setTriggerType(settings.triggerType as 'keyword' | 'all' | 'schedule' | 'sale');
               if (settings.triggerKeywords) setTriggerKeywords(settings.triggerKeywords.join(', '));
               if (settings.keywordMatchType) setKeywordMatchType(settings.keywordMatchType as 'exact' | 'contains' | 'not_contains');
+              if (settings.pauseOtherFlows !== undefined) setPauseOtherFlows(settings.pauseOtherFlows);
             }}
+            flowId={id}
           />
         )}
       </div>
