@@ -347,7 +347,7 @@ export const ConversationList = ({
                 <button
                   onClick={() => handleFilterChange('unread')}
                   className={cn(
-                    "flex-1 px-3 py-1.5 rounded-l-full text-xs font-medium transition-all border border-r-0 flex items-center justify-center gap-1",
+                    "flex-1 px-2 py-1.5 rounded-l-full text-xs font-medium transition-all border border-r-0 flex items-center justify-center gap-1 whitespace-nowrap",
                     activeFilter === 'unread'
                       ? "bg-orange-500 text-white border-orange-500"
                       : "bg-orange-500/10 text-orange-500 border-orange-500/30 hover:bg-orange-500/20"
@@ -355,7 +355,7 @@ export const ConversationList = ({
                 >
                   <span>Não lidas</span>
                   {totalUnreadMessages > 0 && (
-                    <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                    <span className="bg-orange-600 text-white text-[10px] px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
                       {totalUnreadMessages > 999 ? '999+' : totalUnreadMessages}
                     </span>
                   )}
