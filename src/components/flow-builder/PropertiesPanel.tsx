@@ -1878,6 +1878,10 @@ export const PropertiesPanel = ({
               <Switch
                 checked={(nodeData.useEmojis as boolean) ?? true}
                 onCheckedChange={(checked) => onUpdateNode(selectedNode.id, { useEmojis: checked })}
+                className={(nodeData.useEmojis as boolean) ?? true
+                  ? 'data-[state=checked]:bg-green-500'
+                  : 'data-[state=unchecked]:bg-red-500'
+                }
               />
             </div>
             

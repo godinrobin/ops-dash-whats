@@ -12,12 +12,13 @@ import { NodeAnalyticsWrapper } from '../NodeAnalyticsWrapper';
 
 interface ConditionRule {
   id: string;
-  type: 'variable' | 'tag';
+  type: 'variable' | 'tag' | 'ia';
   variable?: string;
   operator?: string;
   value?: string;
   tagName?: string;
   tagCondition?: 'has' | 'not_has';
+  iaPrompt?: string;
 }
 
 interface ConditionNodeData {
@@ -73,6 +74,9 @@ export const ConditionNode = ({ id, data }: NodeProps) => {
       if (c.type === 'tag') {
         return `Tag: ${c.tagCondition === 'has' ? 'Tem' : 'Não tem'} "${c.tagName || '?'}"`;
       }
+      if (c.type === 'ia') {
+        return c.iaPrompt ? `🤖 ${c.iaPrompt.substring(0, 25)}...` : '🤖 Condição IA configurada';
+      }
       return `${c.variable || '?'} ${getOperatorLabel(c.operator)} ${c.value || '?'}`;
     }
 
@@ -82,6 +86,7 @@ export const ConditionNode = ({ id, data }: NodeProps) => {
   const getConditionIcons = () => {
     const hasVariableCondition = conditions.some(c => c.type === 'variable') || hasLegacyCondition;
     const hasTagCondition = conditions.some(c => c.type === 'tag');
+    const hasIaCondition = conditions.some(c => c.type === 'ia');
     
     return (
       <div className="flex gap-1 mt-1">
@@ -95,6 +100,11 @@ export const ConditionNode = ({ id, data }: NodeProps) => {
           <Badge variant="outline" className="text-xs px-1 py-0">
             <Tag className="h-2.5 w-2.5 mr-0.5" />
             Tag
+          </Badge>
+        )}
+        {hasIaCondition && (
+          <Badge variant="outline" className="text-xs px-1 py-0 border-violet-500/50 text-violet-400">
+            🤖 IA
           </Badge>
         )}
       </div>
