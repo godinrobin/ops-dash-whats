@@ -71,12 +71,13 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    
+
+    // Admin client (bypasses RLS). We still validate user JWT for normal calls.
     const supabaseClient = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { persistSession: false },
     })
 
-    // Get user from auth header
+    // Auth
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
       return new Response(
@@ -86,17 +87,25 @@ Deno.serve(async (req) => {
     }
 
     const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token)
-    
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Usuário não autenticado' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
-      )
+    const isInternalServiceCall = !!token && token === supabaseServiceKey
+
+    let callerUserId: string | null = null
+    if (!isInternalServiceCall) {
+      // Normal client call: validate the user's JWT
+      const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token)
+
+      if (authError || !user) {
+        return new Response(
+          JSON.stringify({ error: 'Usuário não autenticado' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        )
+      }
+
+      callerUserId = user.id
     }
 
     const { contactId } = await req.json()
-    
+
     if (!contactId) {
       return new Response(
         JSON.stringify({ error: 'ID do contato não fornecido' }),
@@ -104,20 +113,34 @@ Deno.serve(async (req) => {
       )
     }
 
-    console.log(`Fetching profile pic for contact: ${contactId}`)
+    console.log(`Fetching profile pic for contact: ${contactId} (${isInternalServiceCall ? 'internal' : 'user'})`)
 
     // Get contact with instance info
-    const { data: contact, error: contactError } = await supabaseClient
+    let contactQuery = supabaseClient
       .from('inbox_contacts')
-      .select('id, phone, remote_jid, instance_id, profile_pic_url')
+      .select('id, phone, remote_jid, instance_id, profile_pic_url, user_id')
       .eq('id', contactId)
-      .eq('user_id', user.id)
-      .single()
+
+    // When called from the app, restrict to the logged-in user.
+    // When called internally (webhook), allow lookup by contactId.
+    if (!isInternalServiceCall && callerUserId) {
+      contactQuery = contactQuery.eq('user_id', callerUserId)
+    }
+
+    const { data: contact, error: contactError } = await contactQuery.single()
 
     if (contactError || !contact) {
       return new Response(
         JSON.stringify({ error: 'Contato não encontrado' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
+      )
+    }
+
+    const contactUserId = contact.user_id as string
+    if (!isInternalServiceCall && callerUserId && contactUserId !== callerUserId) {
+      return new Response(
+        JSON.stringify({ error: 'Não autorizado' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
       )
     }
 
@@ -209,7 +232,7 @@ Deno.serve(async (req) => {
       supabaseClient,
       whatsappImageUrl,
       contactId,
-      user.id
+      contactUserId
     )
 
     if (!permanentUrl) {
@@ -224,6 +247,7 @@ Deno.serve(async (req) => {
       .from('inbox_contacts')
       .update({ profile_pic_url: finalUrl })
       .eq('id', contactId)
+      .eq('user_id', contactUserId)
 
     if (updateError) {
       console.error('Error updating contact profile pic:', updateError)
@@ -238,6 +262,7 @@ Deno.serve(async (req) => {
         .from('inbox_contacts')
         .update({ name: contactName })
         .eq('id', contactId)
+        .eq('user_id', contactUserId)
         .is('name', null) // Only update if name is null
     }
 
