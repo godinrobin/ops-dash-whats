@@ -78,7 +78,7 @@ interface ProxyPackage {
   savings?: string;
 }
 
-const PLAN_CONFIG: Record<PlanType, { label: string; icon: React.ReactNode; description: string; color: string; price: number; badge?: string; packages: Record<PackageType, ProxyPackage> }> = {
+const PLAN_CONFIG: Record<PlanType, { label: string; icon: React.ReactNode; description: string; color: string; price: number; badge?: string; isSoldOut?: boolean; packages: Record<PackageType, ProxyPackage> }> = {
   isp: {
     label: 'Proxy Tradicional',
     icon: <Wifi className="h-4 w-4" />,
@@ -97,7 +97,8 @@ const PLAN_CONFIG: Record<PlanType, { label: string; icon: React.ReactNode; desc
     description: 'IP mobile',
     color: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
     price: 14.50,
-    badge: 'Novidade',
+    badge: 'Esgotado',
+    isSoldOut: true,
     packages: {
       unit: { quantity: 1, price: 14.50, label: 'Unitário' },
       pack10: { quantity: 10, price: 100, label: '10 Proxies', savings: 'Economize R$45' },
@@ -192,8 +193,20 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
   const handlePurchase = async () => {
     if (!user) return;
 
+    // Check if plan is sold out
+    if (PLAN_CONFIG[planType].isSoldOut) {
+      toast({
+        title: "Produto esgotado",
+        description: `${PLAN_CONFIG[planType].label} não está disponível no momento.`,
+        variant: "error"
+      });
+      return;
+    }
+
     const totalPrice = currentPrice;
     const totalQuantity = packageQuantity;
+    // Calculate unit price based on package (package price / quantity)
+    const unitPrice = totalPrice / totalQuantity;
 
     if (balance < totalPrice) {
       toast({
@@ -212,7 +225,13 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
       let lastError = '';
 
       for (let i = 0; i < totalQuantity; i++) {
-        const purchaseBody: any = { action: 'purchase', planType, country };
+        const purchaseBody: any = { 
+          action: 'purchase', 
+          planType, 
+          country,
+          // Pass the unit price from the package so backend uses it instead of table price
+          unitPrice: unitPrice
+        };
         // Add state/city for Brazil targeting
         if (country === 'br' && selectedState !== 'random') {
           purchaseBody.state = selectedState;
@@ -239,8 +258,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
 
       if (successCount > 0) {
         // Calculate the cost per unit based on package price
-        const unitCost = totalPrice / totalQuantity;
-        const actualCost = unitCost * successCount;
+        const actualCost = unitPrice * successCount;
 
         toast({
           title: successCount === totalQuantity ? "Proxies adquiridas!" : `${successCount}/${totalQuantity} proxies adquiridas`,
@@ -573,32 +591,49 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                       const config = PLAN_CONFIG[type];
                       const typePrice = prices[type]?.price || config.price;
                       const isSelected = planType === type;
+                      const isSoldOut = config.isSoldOut === true;
                       return (
                         <button
                           key={type}
                           type="button"
-                          onClick={() => { setPlanType(type); setSelectedPackage('unit'); }}
+                          onClick={() => { 
+                            if (!isSoldOut) {
+                              setPlanType(type); 
+                              setSelectedPackage('unit'); 
+                            }
+                          }}
+                          disabled={isSoldOut}
                           className={cn(
-                            "flex flex-col items-start p-3 rounded-lg border-2 transition-all text-left",
-                            isSelected 
-                              ? "border-accent bg-accent/10" 
-                              : "border-border hover:border-accent/50 bg-muted/30"
+                            "flex flex-col items-start p-3 rounded-lg border-2 transition-all text-left relative",
+                            isSoldOut 
+                              ? "border-muted bg-muted/20 opacity-60 cursor-not-allowed"
+                              : isSelected 
+                                ? "border-accent bg-accent/10" 
+                                : "border-border hover:border-accent/50 bg-muted/30"
                           )}
                         >
                           <div className="flex items-center gap-2 w-full">
                             <span className={cn(
                               "p-1.5 rounded-md",
-                              isSelected ? "bg-accent/20 text-accent" : "bg-muted text-muted-foreground"
+                              isSoldOut 
+                                ? "bg-muted text-muted-foreground"
+                                : isSelected ? "bg-accent/20 text-accent" : "bg-muted text-muted-foreground"
                             )}>
                               {config.icon}
                             </span>
                             <span className={cn(
                               "font-medium text-sm",
-                              isSelected ? "text-accent" : "text-foreground"
+                              isSoldOut 
+                                ? "text-muted-foreground"
+                                : isSelected ? "text-accent" : "text-foreground"
                             )}>
                               {config.label}
                             </span>
-                            {config.badge && (
+                            {isSoldOut ? (
+                              <Badge className="ml-auto bg-destructive/20 text-destructive border-destructive/30 text-xs whitespace-nowrap">
+                                Esgotado
+                              </Badge>
+                            ) : config.badge && (
                               <Badge className="ml-auto bg-accent/20 text-accent border-accent/30 text-xs whitespace-nowrap">
                                 {config.badge}
                               </Badge>
@@ -609,7 +644,9 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                           </p>
                           <p className={cn(
                             "text-lg font-bold mt-2",
-                            isSelected ? "text-accent" : "text-foreground"
+                            isSoldOut 
+                              ? "text-muted-foreground line-through"
+                              : isSelected ? "text-accent" : "text-foreground"
                           )}>
                             R$ {typePrice.toFixed(2).replace('.', ',')}
                             <span className="text-xs font-normal text-muted-foreground">/mês</span>
