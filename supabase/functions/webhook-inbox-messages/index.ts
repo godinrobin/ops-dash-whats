@@ -3192,7 +3192,20 @@ serve(async (req) => {
           console.log(`[WAIT_INPUT] Valid input received: ${messageType} with content: "${userInputValue?.substring(0, 50)}"`);
           
           // ATOMIC: Try to acquire lock before calling process-inbox-flow
-          const lockResult = await tryAcquireSessionLock(supabaseClient, activeSession.id, 30000);
+          // For iaConverter nodes, retry with delay since AI processing can take time
+          let lockResult = await tryAcquireSessionLock(supabaseClient, activeSession.id, 30000);
+          
+          // If lock failed and it's an iaConverter node, retry up to 3 times with increasing delays
+          if (!lockResult.acquired && currentNode.type === 'iaConverter') {
+            console.log(`[WAIT_INPUT] iaConverter node - will retry lock acquisition`);
+            for (let retry = 0; retry < 3 && !lockResult.acquired; retry++) {
+              const delayMs = (retry + 1) * 2000; // 2s, 4s, 6s
+              console.log(`[WAIT_INPUT] Retry ${retry + 1}/3 - waiting ${delayMs}ms before retry`);
+              await new Promise(resolve => setTimeout(resolve, delayMs));
+              lockResult = await tryAcquireSessionLock(supabaseClient, activeSession.id, 30000);
+            }
+          }
+          
           if (!lockResult.acquired) {
             console.log(`[WAIT_INPUT] Could not acquire lock for session ${activeSession.id}, skipping (reason: ${lockResult.reason})`);
             return new Response(JSON.stringify({ success: true, skipped: true, reason: 'session_locked_atomic' }), {
