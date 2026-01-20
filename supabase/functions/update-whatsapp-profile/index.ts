@@ -99,10 +99,19 @@ Deno.serve(async (req) => {
             body: JSON.stringify({ name }),
           })
 
-          if (!nameResponse.ok) {
-            const errorText = await nameResponse.text()
-            console.error(`Error updating name for ${instance.instance_name}:`, errorText)
-            results.push({ id: instance.id, success: false, error: `Nome: ${errorText}` })
+          const raw = await nameResponse.text()
+          let parsed: any = null
+          try {
+            parsed = raw ? JSON.parse(raw) : null
+          } catch {
+            // keep null
+          }
+
+          // Some providers return 200 with { success: false, error: "..." }
+          if (!nameResponse.ok || parsed?.success === false) {
+            const message = parsed?.error || parsed?.message || raw || `HTTP ${nameResponse.status}`
+            console.error(`Error updating name for ${instance.instance_name}:`, message)
+            results.push({ id: instance.id, success: false, error: `Nome: ${message}` })
             continue
           }
         }
@@ -129,13 +138,13 @@ Deno.serve(async (req) => {
         }
 
         // Fetch the effective profile from provider right after update.
-        // NOTE: WhatsApp/UazAPI can take a few seconds to propagate profile updates.
-        // We poll status a few times to avoid false negatives.
+        // NOTE: WhatsApp/UazAPI can take some seconds to propagate profile updates.
+        // We poll status a bit longer to avoid false negatives.
         let effectiveProfileName: string | null = null
         let effectiveProfilePicUrl: string | null = null
 
-        const maxAttempts = 6
-        const delayMs = 1500
+        const maxAttempts = 12
+        const delayMs = 2000
 
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
           try {

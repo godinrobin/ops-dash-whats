@@ -298,9 +298,9 @@ export default function WhatsAppEditor() {
 
         toast.success(data.message || 'Perfil atualizado com sucesso');
 
-        // If provider did not apply name, warn user (WhatsApp limits/privacy rules)
+        // If provider did not apply name yet, inform user without implying a "limite".
         if (requestedName && effectiveName && requestedName !== effectiveName) {
-          toast.warning(`O WhatsApp manteve o nome atual: "${effectiveName}" (pode haver limite de alteração).`);
+          toast.info(`Alteração enviada. O WhatsApp ainda mostra: "${effectiveName}". Aguarde alguns segundos e clique em Atualizar.`);
         }
 
         setEditModalOpen(false);
