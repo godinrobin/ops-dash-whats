@@ -543,7 +543,7 @@ export const ConditionEditor = ({
           <Button
             variant="outline"
             size="sm"
-            className="w-full h-8 text-xs bg-primary/10 border-primary/30 text-primary hover:bg-primary/20"
+            className="w-full h-8 text-xs bg-violet-500/20 border-violet-500/50 text-white hover:bg-violet-500/30 hover:text-white"
             onClick={() => addCondition('ia')}
           >
             🤖 + Condição IA
