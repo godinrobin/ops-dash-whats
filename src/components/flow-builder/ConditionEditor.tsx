@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
@@ -448,20 +449,21 @@ export const ConditionEditor = ({
             ) : (
               <>
                 <div className="bg-violet-500/10 border border-violet-500/20 rounded p-2 mb-2">
-                  <p className="text-xs text-violet-400">
-                    🤖 A IA irá analisar as tags, contexto da conversa e última mensagem para decidir Sim ou Não.
+                  <p className="text-xs text-violet-300">
+                    🤖 A IA irá analisar as tags, contexto da conversa, base de conhecimento e última mensagem para decidir Sim ou Não.
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">O que a IA deve verificar?</Label>
-                  <Input
-                    className="h-8 text-xs"
-                    placeholder="Ex: O cliente demonstrou interesse em comprar?"
+                  <Label className="text-xs text-foreground">O que a IA deve verificar?</Label>
+                  <Textarea
+                    className="text-xs min-h-[80px] resize-y text-foreground"
+                    placeholder="Ex: O cliente demonstrou interesse em comprar? A IA irá considerar a base de conhecimento configurada no fluxo."
                     value={condition.iaPrompt || ''}
                     onChange={(e) => updateCondition(condition.id, { iaPrompt: e.target.value })}
+                    rows={3}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    A IA responderá apenas Sim ou Não baseado na análise.
+                    A IA considerará a base de conhecimento e responderá apenas Sim ou Não.
                   </p>
                 </div>
               </>
@@ -536,14 +538,17 @@ export const ConditionEditor = ({
           <Tag className="h-3 w-3 mr-1" />
           + Tag
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full h-8 text-xs bg-primary/10 border-primary/30 text-primary hover:bg-primary/20"
-          onClick={() => addCondition('ia')}
-        >
-          🤖 + Condição IA
-        </Button>
+        {/* Only show IA condition button if no IA condition exists */}
+        {!conditions.some(c => c.type === 'ia') && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full h-8 text-xs bg-primary/10 border-primary/30 text-primary hover:bg-primary/20"
+            onClick={() => addCondition('ia')}
+          >
+            🤖 + Condição IA
+          </Button>
+        )}
       </div>
 
       {conditions.length === 0 && (

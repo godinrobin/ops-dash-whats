@@ -50,11 +50,12 @@ export const IAConverterNode = ({ id, data }: NodeProps) => {
             <Badge variant="outline" className="text-[10px] px-1.5">
               {getToneLabel(nodeData.conversationTone)}
             </Badge>
-            {nodeData.useEmojis && (
-              <Badge variant="outline" className="text-[10px] px-1.5">
-                ✨ Emojis
-              </Badge>
-            )}
+            <Badge 
+              variant="outline" 
+              className={`text-[10px] px-1.5 ${nodeData.useEmojis !== false ? 'border-green-500/50 text-green-400' : 'border-red-500/50 text-red-400'}`}
+            >
+              {nodeData.useEmojis !== false ? '✨ Emojis' : '🚫 Sem Emojis'}
+            </Badge>
           </div>
           
           <div className="text-xs text-muted-foreground truncate max-w-[180px]">

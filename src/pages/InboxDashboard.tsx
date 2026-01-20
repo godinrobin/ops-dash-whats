@@ -969,7 +969,7 @@ export default function InboxDashboard() {
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Total de Contatos</CardDescription>
-              <CardTitle className="text-3xl">{contacts.length}</CardTitle>
+              <CardTitle className="text-3xl">{(contacts as any)._exactCount || contacts.length}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">

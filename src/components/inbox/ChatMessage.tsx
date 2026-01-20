@@ -559,7 +559,7 @@ export const ChatMessage = ({ message, allMessages = [], contact, onReply }: Cha
   return (
     <div 
       className={cn(
-        "flex animate-in fade-in slide-in-from-bottom-2 duration-200 gap-2 group relative px-8",
+        "flex animate-in fade-in slide-in-from-bottom-2 duration-200 gap-2 group relative px-4",
         isOutbound ? "justify-end" : "justify-start"
       )}
       onMouseEnter={() => setShowActions(true)}
