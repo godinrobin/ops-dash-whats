@@ -81,11 +81,12 @@ interface FlowCanvasProps {
   triggerType?: 'keyword' | 'all' | 'schedule' | 'sale';
   triggerKeywords?: string[];
   keywordMatchType?: 'exact' | 'contains' | 'not_contains';
-  onUpdateFlowSettings?: (settings: { triggerType?: string; triggerKeywords?: string[]; keywordMatchType?: string }) => void;
+  pauseOtherFlows?: boolean;
+  onUpdateFlowSettings?: (settings: { triggerType?: string; triggerKeywords?: string[]; keywordMatchType?: string; pauseOtherFlows?: boolean }) => void;
   flowId?: string;
 }
 
-const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, triggerKeywords, keywordMatchType, onUpdateFlowSettings, flowId }: FlowCanvasProps) => {
+const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, triggerKeywords, keywordMatchType, pauseOtherFlows, onUpdateFlowSettings, flowId }: FlowCanvasProps) => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, fitView } = useReactFlow();
   
@@ -429,6 +430,7 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
         triggerType={triggerType}
         triggerKeywords={triggerKeywords}
         keywordMatchType={keywordMatchType}
+        pauseOtherFlows={pauseOtherFlows}
         onUpdateFlowSettings={onUpdateFlowSettings}
         allNodes={nodes}
       />
