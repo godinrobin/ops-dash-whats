@@ -3158,6 +3158,240 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
 
+          case 'iaConverter': {
+            // IA Converter node - AI-driven conversation based on knowledge base
+            // Fetches conversation history, generates AI response, sends message, and waits for next input
+            const iaKnowledgeBase = (currentNode.data.knowledgeBase as string) || '';
+            const iaTargetAudience = (currentNode.data.targetAudience as string) || 'geral';
+            const iaConversationTone = (currentNode.data.conversationTone as string) || 'informal';
+            const iaUseEmojis = (currentNode.data.useEmojis as boolean) !== false;
+            const iaShowPresence = (currentNode.data.showPresence as boolean) || false;
+            const iaPresenceDuration = (currentNode.data.presenceDuration as number) || 3;
+            
+            console.log(`[${runId}] IA Converter node: tone=${iaConversationTone}, audience=${iaTargetAudience}, emojis=${iaUseEmojis}`);
+            
+            if (!iaKnowledgeBase) {
+              console.error(`[${runId}] IA Converter: missing knowledge base`);
+              processedActions.push('IA Converter error: base de conhecimento não configurada');
+              
+              const iaConverterEdge = edges.find(e => e.source === currentNodeId);
+              if (iaConverterEdge) {
+                currentNodeId = iaConverterEdge.target;
+              } else {
+                continueProcessing = false;
+              }
+              break;
+            }
+            
+            try {
+              const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+              if (!LOVABLE_API_KEY) {
+                console.error(`[${runId}] LOVABLE_API_KEY not configured`);
+                processedActions.push('IA Converter error: API key not configured');
+                
+                const iaConverterEdge = edges.find(e => e.source === currentNodeId);
+                if (iaConverterEdge) {
+                  currentNodeId = iaConverterEdge.target;
+                } else {
+                  continueProcessing = false;
+                }
+                break;
+              }
+              
+              // Fetch last 10 messages for conversation context
+              const { data: recentMessages } = await supabaseClient
+                .from('inbox_messages')
+                .select('content, direction, message_type')
+                .eq('contact_id', contact.id)
+                .order('created_at', { ascending: false })
+                .limit(10);
+              
+              const conversationHistory = (recentMessages || [])
+                .reverse()
+                .filter(m => m.content && m.message_type === 'text')
+                .map(m => `${m.direction === 'inbound' ? 'Cliente' : 'Vendedor'}: ${m.content}`)
+                .join('\n');
+              
+              // Build audience description
+              let audienceDescription = '';
+              if (iaTargetAudience === 'homem') {
+                audienceDescription = 'O cliente é um homem.';
+              } else if (iaTargetAudience === 'mulher') {
+                audienceDescription = 'O cliente é uma mulher.';
+              }
+              
+              // Build tone description
+              let toneDescription = 'Use um tom informal e amigável.';
+              if (iaConversationTone === 'formal') {
+                toneDescription = 'Use um tom formal e profissional.';
+              } else if (iaConversationTone === 'neutro') {
+                toneDescription = 'Use um tom neutro e equilibrado.';
+              }
+              
+              // Build emoji instruction
+              const emojiInstruction = iaUseEmojis 
+                ? 'Use emojis de forma moderada para tornar a conversa mais amigável.' 
+                : 'NÃO use emojis nas suas respostas.';
+              
+              const systemPrompt = `Você é um vendedor/atendente experiente. Seu objetivo é conversar com o cliente e guiá-lo na jornada de compra.
+
+${toneDescription}
+${audienceDescription}
+${emojiInstruction}
+
+IMPORTANTE:
+- Responda APENAS como vendedor, sem explicações ou meta-comentários
+- Mantenha respostas curtas e diretas (máximo 2-3 frases)
+- Se o cliente demonstrar interesse, forneça informações sobre como comprar
+- Seja persuasivo mas não agressivo
+- Use linguagem natural de WhatsApp
+
+BASE DE CONHECIMENTO (use estas informações para responder):
+${iaKnowledgeBase}
+
+Nome do cliente: ${variables.nome || variables.contactName || 'Cliente'}`;
+
+              const userMessage = conversationHistory 
+                ? `Histórico da conversa:\n${conversationHistory}\n\nResponda à última mensagem do cliente.`
+                : `O cliente acabou de iniciar a conversa com: "${variables.lastMessage || variables.ultima_mensagem || ''}"`;
+
+              console.log(`[${runId}] IA Converter: calling AI with context (${conversationHistory.length} chars)`);
+              
+              const iaResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model: 'openai/gpt-5-mini',
+                  messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userMessage },
+                  ],
+                }),
+              });
+
+              if (!iaResponse.ok) {
+                console.error(`[${runId}] IA Converter API error:`, await iaResponse.text());
+                processedActions.push('IA Converter error: API request failed');
+                
+                const iaConverterEdge = edges.find(e => e.source === currentNodeId);
+                if (iaConverterEdge) {
+                  currentNodeId = iaConverterEdge.target;
+                } else {
+                  continueProcessing = false;
+                }
+                break;
+              }
+              
+              const iaData = await iaResponse.json();
+              const iaContent = (iaData.choices?.[0]?.message?.content || '').trim();
+              
+              if (!iaContent) {
+                console.error(`[${runId}] IA Converter: empty response from AI`);
+                processedActions.push('IA Converter error: empty AI response');
+                
+                const iaConverterEdge = edges.find(e => e.source === currentNodeId);
+                if (iaConverterEdge) {
+                  currentNodeId = iaConverterEdge.target;
+                } else {
+                  continueProcessing = false;
+                }
+                break;
+              }
+              
+              console.log(`[${runId}] IA Converter response: ${iaContent.substring(0, 100)}...`);
+              
+              // Show typing indicator if configured
+              if (iaShowPresence && effectiveBaseUrl && effectiveApiKey && instanceName && phone) {
+                await sendPresence(effectiveBaseUrl, effectiveApiKey, instanceName, phone, 'composing', apiProvider);
+                await new Promise(resolve => setTimeout(resolve, iaPresenceDuration * 1000));
+              }
+              
+              // Send the AI response
+              const iaReplyId = shouldSendAsReply();
+              const iaReplyDbId = getReplyToMessageDbId();
+              const iaSendResult = await sendMessage(
+                effectiveBaseUrl, 
+                effectiveApiKey, 
+                instanceName, 
+                phone, 
+                iaContent, 
+                'text', 
+                undefined, 
+                undefined, 
+                apiProvider, 
+                instanceUazapiToken, 
+                0, 
+                iaReplyId
+              );
+              incrementMessageCounter();
+              
+              const iaMessageStatus = iaSendResult.ok ? 'sent' : 'failed';
+              await saveOutboundMessage(
+                supabaseClient, 
+                contact.id, 
+                effectiveInstanceId, 
+                session.user_id, 
+                iaContent, 
+                'text', 
+                flow.id, 
+                undefined, 
+                iaSendResult.remoteMessageId, 
+                iaMessageStatus, 
+                iaReplyDbId
+              );
+              
+              if (!iaSendResult.ok) {
+                await handleSendFailure(currentNodeId, iaSendResult.errorDetails || 'Unknown error', effectiveInstanceId);
+                sendFailed = true;
+                processedActions.push('IA Converter: FAILED to send message');
+                break;
+              }
+              
+              processedActions.push(`IA Converter: sent response (${iaContent.length} chars)`);
+              
+              // Stay on this node waiting for next input (like waitInput)
+              // Update session to wait for next message
+              await supabaseClient
+                .from('inbox_flow_sessions')
+                .update({
+                  current_node_id: currentNodeId, // Stay on iaConverter node
+                  variables: { ...variables, _ia_converter_active: true },
+                  last_interaction: new Date().toISOString(),
+                  processing: false,
+                  processing_started_at: null,
+                })
+                .eq('id', sessionId);
+              
+              processedActions.push('IA Converter: waiting for next client message');
+              continueProcessing = false;
+              
+              return new Response(JSON.stringify({ 
+                success: true, 
+                currentNode: currentNodeId,
+                actions: processedActions,
+                waitingForInput: true,
+                iaConverterActive: true
+              }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              });
+              
+            } catch (iaConverterError) {
+              console.error(`[${runId}] IA Converter error:`, iaConverterError);
+              processedActions.push('IA Converter error: Exception');
+              
+              const iaConverterEdge = edges.find(e => e.source === currentNodeId);
+              if (iaConverterEdge) {
+                currentNodeId = iaConverterEdge.target;
+              } else {
+                continueProcessing = false;
+              }
+            }
+            break;
+          }
+
           default:
             console.log(`[${runId}] Unknown node type: ${currentNode.type}`);
             const defaultEdge = edges.find(e => e.source === currentNodeId);
