@@ -355,7 +355,7 @@ export const ConversationList = ({
                 >
                   <span>Não lidas</span>
                   {totalUnreadMessages > 0 && (
-                    <span className="bg-orange-600 text-white text-[10px] px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                    <span className="text-orange-500 text-xs font-semibold">
                       {totalUnreadMessages > 999 ? '999+' : totalUnreadMessages}
                     </span>
                   )}
