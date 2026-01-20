@@ -292,9 +292,23 @@ export default function WhatsAppEditor() {
       if (error) throw error;
 
       if (data.success) {
+        const firstResult = data?.results?.[0];
+        const requestedName = payload.name as string | undefined;
+        const effectiveName = firstResult?.effectiveProfileName as string | null | undefined;
+
         toast.success(data.message || 'Perfil atualizado com sucesso');
+
+        // If provider did not apply name, warn user (WhatsApp limits/privacy rules)
+        if (requestedName && effectiveName && requestedName !== effectiveName) {
+          toast.warning(`O WhatsApp manteve o nome atual: "${effectiveName}" (pode haver limite de alteração).`);
+        }
+
         setEditModalOpen(false);
         setSelectedInstances(new Set());
+
+        // Refresh list to reflect the real profile state
+        setRefreshing(true);
+        await fetchInstances();
       } else {
         toast.error(data.message || 'Alguns perfis falharam');
       }

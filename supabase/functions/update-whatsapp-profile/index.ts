@@ -78,7 +78,13 @@ Deno.serve(async (req) => {
       )
     }
 
-    const results: Array<{ id: string; success: boolean; error?: string }> = []
+    const results: Array<{
+      id: string
+      success: boolean
+      error?: string
+      effectiveProfileName?: string | null
+      effectiveProfilePicUrl?: string | null
+    }> = []
 
     for (const instance of instancesToUpdate) {
       try {
@@ -109,8 +115,8 @@ Deno.serve(async (req) => {
               'Content-Type': 'application/json',
               'token': instance.uazapi_token,
             },
-            body: JSON.stringify({ 
-              image: imageBase64 === 'remove' ? 'remove' : imageBase64 
+            body: JSON.stringify({
+              image: imageBase64 === 'remove' ? 'remove' : imageBase64
             }),
           })
 
@@ -122,7 +128,33 @@ Deno.serve(async (req) => {
           }
         }
 
-        results.push({ id: instance.id, success: true })
+        // Fetch the effective profile from provider right after update
+        let effectiveProfileName: string | null = null
+        let effectiveProfilePicUrl: string | null = null
+
+        try {
+          const statusResponse = await fetch(`${UAZAPI_BASE_URL}/instance/status`, {
+            method: 'GET',
+            headers: {
+              'token': instance.uazapi_token,
+            },
+          })
+
+          if (statusResponse.ok) {
+            const statusData = await statusResponse.json()
+            effectiveProfileName = statusData?.instance?.profileName ?? null
+            effectiveProfilePicUrl = statusData?.instance?.profilePicUrl ?? null
+          }
+        } catch (statusError) {
+          console.error(`Error fetching updated status for ${instance.instance_name}:`, statusError)
+        }
+
+        results.push({
+          id: instance.id,
+          success: true,
+          effectiveProfileName,
+          effectiveProfilePicUrl,
+        })
         console.log(`Successfully updated profile for ${instance.instance_name}`)
       } catch (error) {
         console.error(`Error updating ${instance.instance_name}:`, error)
