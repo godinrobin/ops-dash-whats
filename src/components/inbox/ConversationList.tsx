@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Plus, Smartphone, Filter, PauseCircle, ChevronDown } from 'lucide-react';
+import { Search, Plus, Smartphone, Filter, PauseCircle, ChevronDown, MessageSquare, Users } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -52,6 +52,8 @@ interface ConversationListProps {
   onLabelChange?: (label: string) => void;
   selectedFilter?: string;
   onFilterChange?: (filter: string) => void;
+  viewMode?: 'conversations' | 'groups';
+  onViewModeChange?: (mode: 'conversations' | 'groups') => void;
 }
 
 // Generate consistent colors for instances
@@ -79,6 +81,8 @@ export const ConversationList = ({
   onLabelChange,
   selectedFilter = 'all',
   onFilterChange,
+  viewMode = 'conversations',
+  onViewModeChange,
 }: ConversationListProps) => {
   const { user } = useAuth();
   const { effectiveUserId } = useEffectiveUser();
@@ -279,6 +283,36 @@ export const ConversationList = ({
     <div className="w-80 border-r border-border flex flex-col bg-card flex-shrink-0 overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-border">
+        {/* View Mode Toggle */}
+        {onViewModeChange && (
+          <div className="flex gap-1 mb-4 p-1 bg-muted rounded-lg">
+            <button
+              onClick={() => onViewModeChange('conversations')}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-md text-sm font-medium transition-all",
+                viewMode === 'conversations'
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <MessageSquare className="h-4 w-4" />
+              Conversas
+            </button>
+            <button
+              onClick={() => onViewModeChange('groups')}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-md text-sm font-medium transition-all",
+                viewMode === 'groups'
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Users className="h-4 w-4" />
+              Grupos
+            </button>
+          </div>
+        )}
+        
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">Conversas</h2>
           <Button

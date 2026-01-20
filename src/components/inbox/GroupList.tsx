@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Search, Users, Send, Image, FileText, Mic, MoreVertical, RefreshCw } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Search, Users, Send, Image, FileText, Mic, MoreVertical, RefreshCw, MessageSquare } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -22,12 +22,16 @@ interface GroupListProps {
   selectedGroup: WhatsAppGroup | null;
   onSelectGroup: (group: WhatsAppGroup) => void;
   selectedInstanceId?: string;
+  viewMode?: 'conversations' | 'groups';
+  onViewModeChange?: (mode: 'conversations' | 'groups') => void;
 }
 
 export const GroupList = ({
   selectedGroup,
   onSelectGroup,
   selectedInstanceId,
+  viewMode = 'groups',
+  onViewModeChange,
 }: GroupListProps) => {
   const { groups, loading, refetch } = useWhatsAppGroups(selectedInstanceId);
   const [searchQuery, setSearchQuery] = useState('');
@@ -78,6 +82,36 @@ export const GroupList = ({
     <div className="w-80 border-r border-border flex flex-col bg-card flex-shrink-0 overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-border">
+        {/* View Mode Toggle */}
+        {onViewModeChange && (
+          <div className="flex gap-1 mb-4 p-1 bg-muted rounded-lg">
+            <button
+              onClick={() => onViewModeChange('conversations')}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-md text-sm font-medium transition-all",
+                viewMode === 'conversations'
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <MessageSquare className="h-4 w-4" />
+              Conversas
+            </button>
+            <button
+              onClick={() => onViewModeChange('groups')}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-md text-sm font-medium transition-all",
+                viewMode === 'groups'
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Users className="h-4 w-4" />
+              Grupos
+            </button>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Users className="h-5 w-5" />

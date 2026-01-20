@@ -4,10 +4,13 @@ import { InboxSidebar } from './InboxSidebar';
 import { ConversationList } from './ConversationList';
 import { ChatPanel } from './ChatPanel';
 import { ContactDetails } from './ContactDetails';
+import { GroupList } from './GroupList';
+import { GroupChatPanel } from './GroupChatPanel';
 import { useInboxConversations } from '@/hooks/useInboxConversations';
 import { useInboxMessages } from '@/hooks/useInboxMessages';
 import { useInboxFlows } from '@/hooks/useInboxFlows';
 import { InboxContact } from '@/types/inbox';
+import { WhatsAppGroup } from '@/types/groups';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -23,6 +26,10 @@ export const InboxLayout = () => {
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | undefined>();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLabel, setSelectedLabel] = useState('');
+  
+  // View mode: 'conversations' or 'groups'
+  const [viewMode, setViewMode] = useState<'conversations' | 'groups'>('conversations');
+  const [selectedGroup, setSelectedGroup] = useState<WhatsAppGroup | null>(null);
 
   const { contacts, loading: contactsLoading, refetch: refetchContacts } = useInboxConversations(selectedInstanceId);
   const { messages, loading: messagesLoading, error: messagesError, sendMessage, refetch: refetchMessages } = useInboxMessages(selectedContact?.id || null);
@@ -75,6 +82,19 @@ export const InboxLayout = () => {
   const handleSelectContact = (contact: InboxContact) => {
     setSelectedContact(contact);
     setSearchParams({ contact: contact.id });
+  };
+  
+  // Handle view mode change
+  const handleViewModeChange = (mode: 'conversations' | 'groups') => {
+    setViewMode(mode);
+    if (mode === 'groups') {
+      // Clear contact selection when switching to groups
+      setSelectedContact(null);
+      setSearchParams({});
+    } else {
+      // Clear group selection when switching to conversations
+      setSelectedGroup(null);
+    }
   };
 
   // Manual flow triggering
@@ -149,54 +169,70 @@ export const InboxLayout = () => {
         onInstanceChange={setSelectedInstanceId}
       />
 
-      {/* Lista de Conversas */}
-      <ConversationList
-        contacts={filteredContacts}
-        loading={contactsLoading}
-        selectedContact={selectedContact}
-        onSelectContact={handleSelectContact}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        selectedLabel={selectedLabel}
-        onLabelChange={setSelectedLabel}
-      />
+      {/* Lista de Conversas ou Grupos */}
+      {viewMode === 'conversations' ? (
+        <ConversationList
+          contacts={filteredContacts}
+          loading={contactsLoading}
+          selectedContact={selectedContact}
+          onSelectContact={handleSelectContact}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          selectedLabel={selectedLabel}
+          onLabelChange={setSelectedLabel}
+          viewMode={viewMode}
+          onViewModeChange={handleViewModeChange}
+        />
+      ) : (
+        <GroupList
+          selectedGroup={selectedGroup}
+          onSelectGroup={setSelectedGroup}
+          selectedInstanceId={selectedInstanceId}
+          viewMode={viewMode}
+          onViewModeChange={handleViewModeChange}
+        />
+      )}
 
-      {/* Painel de Chat */}
-      <ChatPanel
-        contact={selectedContact}
-        messages={messages}
-        loading={messagesLoading}
-        onSendMessage={sendMessage}
-        onToggleDetails={() => setShowContactDetails(!showContactDetails)}
-        flows={flows
-          .filter(f => {
-            // Se o fluxo não tem instâncias atribuídas, mostrar para todos
-            if (!f.assigned_instances || f.assigned_instances.length === 0) {
-              return true;
-            }
-            // Se o contato não tem instância, não mostrar fluxos com instâncias específicas
-            if (!selectedContact?.instance_id) {
-              return false;
-            }
-            // Mostrar apenas fluxos atribuídos à instância do contato
-            return f.assigned_instances.includes(selectedContact.instance_id);
-          })
-          .map(f => ({ id: f.id, name: f.name, is_active: f.is_active }))}
-        onTriggerFlow={handleTriggerFlow}
-        onRefreshContact={refetchContacts}
-        onContactDeleted={() => {
-          setSelectedContact(null);
-          setSearchParams((prev) => {
-            const next = new URLSearchParams(prev);
-            next.delete('contact');
-            return next;
-          });
-          refetchContacts();
-        }}
-      />
+      {/* Painel de Chat ou Grupo */}
+      {viewMode === 'conversations' ? (
+        <ChatPanel
+          contact={selectedContact}
+          messages={messages}
+          loading={messagesLoading}
+          onSendMessage={sendMessage}
+          onToggleDetails={() => setShowContactDetails(!showContactDetails)}
+          flows={flows
+            .filter(f => {
+              // Se o fluxo não tem instâncias atribuídas, mostrar para todos
+              if (!f.assigned_instances || f.assigned_instances.length === 0) {
+                return true;
+              }
+              // Se o contato não tem instância, não mostrar fluxos com instâncias específicas
+              if (!selectedContact?.instance_id) {
+                return false;
+              }
+              // Mostrar apenas fluxos atribuídos à instância do contato
+              return f.assigned_instances.includes(selectedContact.instance_id);
+            })
+            .map(f => ({ id: f.id, name: f.name, is_active: f.is_active }))}
+          onTriggerFlow={handleTriggerFlow}
+          onRefreshContact={refetchContacts}
+          onContactDeleted={() => {
+            setSelectedContact(null);
+            setSearchParams((prev) => {
+              const next = new URLSearchParams(prev);
+              next.delete('contact');
+              return next;
+            });
+            refetchContacts();
+          }}
+        />
+      ) : (
+        <GroupChatPanel group={selectedGroup} />
+      )}
 
       {/* Detalhes do Contato */}
-      {showContactDetails && selectedContact && (
+      {showContactDetails && selectedContact && viewMode === 'conversations' && (
         <ContactDetails
           contact={selectedContact}
           onClose={() => setShowContactDetails(false)}

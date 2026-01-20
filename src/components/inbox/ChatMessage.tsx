@@ -559,20 +559,24 @@ export const ChatMessage = ({ message, allMessages = [], contact, onReply }: Cha
   return (
     <div 
       className={cn(
-        "flex animate-in fade-in slide-in-from-bottom-2 duration-200 gap-2 group relative",
+        "flex animate-in fade-in slide-in-from-bottom-2 duration-200 gap-2 group relative px-8",
         isOutbound ? "justify-end" : "justify-start"
       )}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
-      {/* Reply action button */}
-      {showActions && onReply && (
+      {/* Reply action button - positioned inside padding area */}
+      {onReply && (
         <button
-          onClick={() => onReply(message)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onReply(message);
+          }}
           className={cn(
-            "absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10",
+            "absolute top-1/2 -translate-y-1/2 transition-all z-10",
             "p-1.5 rounded-full bg-card border border-border shadow-sm hover:bg-accent",
-            isOutbound ? "left-0 -translate-x-full mr-2" : "right-0 translate-x-full ml-2"
+            "opacity-0 group-hover:opacity-100",
+            isOutbound ? "left-1" : "right-1"
           )}
           title="Responder"
         >
