@@ -101,7 +101,7 @@ const PLAN_CONFIG: Record<PlanType, { label: string; icon: React.ReactNode; desc
     packages: {
       unit: { quantity: 1, price: 14.50, label: 'Unitário' },
       pack10: { quantity: 10, price: 100, label: '10 Proxies', savings: 'Economize R$45' },
-      pack20: { quantity: 20, price: 200, label: '20 Proxies', savings: 'Economize R$90' }
+      pack20: { quantity: 20, price: 180, label: '20 Proxies', savings: 'Economize R$110' }
     }
   }
 };
