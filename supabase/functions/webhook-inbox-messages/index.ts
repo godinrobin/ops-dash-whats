@@ -1139,7 +1139,7 @@ serve(async (req) => {
             status: 'active',
           };
 
-          // Add profile pic if available
+          // Add profile pic if available from payload
           if (uazProfilePicUrl) {
             contactInsertData.profile_pic_url = uazProfilePicUrl;
           }
@@ -1188,6 +1188,30 @@ serve(async (req) => {
           } else {
             contact = newContact;
             console.log(`[UAZAPI-WEBHOOK] Created new contact: ${contact.id} for instance ${instanceId}`);
+            
+            // If contact was created WITHOUT a profile pic, fetch it from UazAPI (fire and forget)
+            if (!uazProfilePicUrl && contact.id) {
+              try {
+                const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+                const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+                console.log(`[PROFILE-PIC] Fetching profile pic for new contact ${contact.id}`);
+                fetch(`${supabaseUrl}/functions/v1/fetch-contact-profile-pic`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${serviceRoleKey}`,
+                  },
+                  body: JSON.stringify({ contactId: contact.id }),
+                }).then(res => {
+                  console.log(`[PROFILE-PIC] Response status: ${res.status}`);
+                  return res.text();
+                }).then(text => {
+                  console.log(`[PROFILE-PIC] Response: ${text.substring(0, 200)}`);
+                }).catch(err => console.log('[PROFILE-PIC] Fire and forget call failed:', err));
+              } catch (picErr) {
+                console.log('[PROFILE-PIC] Error calling fetch-contact-profile-pic:', picErr);
+              }
+            }
             
             // Check lead rotation limit (fire and forget - don't block main flow)
             try {
