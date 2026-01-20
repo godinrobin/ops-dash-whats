@@ -121,21 +121,43 @@ async function getPyProxyHost(accessToken: string, proxyType: string = 'resi'): 
     'datacenter': '4'
   };
   const numericType = typeMapping[proxyType.toLowerCase()] || '1';
-  
-  const form = new FormData();
-  form.append('access_token', accessToken);
-  form.append('proxy_type', numericType);
 
   console.log(`[PYPROXY] get_user_proxy_host request: proxyType="${proxyType}" -> numericType="${numericType}"`);
 
   try {
-    const res = await fetch('https://api.pyproxy.com/g/open/get_user_proxy_host', {
+    // Tentar primeiro com application/x-www-form-urlencoded (mais comum)
+    const urlEncodedBody = new URLSearchParams();
+    urlEncodedBody.append('access_token', accessToken);
+    urlEncodedBody.append('proxy_type', numericType);
+
+    let res = await fetch('https://api.pyproxy.com/g/open/get_user_proxy_host', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}` },
-      body: form,
+      headers: { 
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: urlEncodedBody.toString(),
     });
-    const data = await res.json();
-    console.log(`[PYPROXY] get_user_proxy_host response (type=${proxyType}/${numericType}):`, JSON.stringify(data));
+    let data = await res.json();
+    console.log(`[PYPROXY] get_user_proxy_host response (urlencoded, type=${proxyType}/${numericType}):`, JSON.stringify(data));
+    
+    // Se falhar com urlencoded, tentar com JSON
+    if (data?.ret !== 0 || data?.code !== 1) {
+      console.log(`[PYPROXY] urlencoded failed, trying JSON body...`);
+      res = await fetch('https://api.pyproxy.com/g/open/get_user_proxy_host', {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          access_token: accessToken,
+          proxy_type: numericType
+        }),
+      });
+      data = await res.json();
+      console.log(`[PYPROXY] get_user_proxy_host response (json, type=${proxyType}/${numericType}):`, JSON.stringify(data));
+    }
     
     if (data?.ret === 0 && data?.code === 1 && data?.ret_data) {
       // Response can have different formats - handle both
@@ -2352,6 +2374,80 @@ Deno.serve(async (req) => {
             credentials_valid: proxyTestSuccess
           }
         }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ============= DEBUG: TEST PYPROXY API ENDPOINTS =============
+    if (action === 'debug-pyproxy-api') {
+      const pyproxyApiKey = Deno.env.get('PYPROXY_API_KEY');
+      const pyproxyApiSecret = Deno.env.get('PYPROXY_API_SECRET');
+      
+      if (!pyproxyApiKey || !pyproxyApiSecret) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'PYPROXY credentials not configured' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const accessToken = await getPyProxyAccessToken(pyproxyApiKey, pyproxyApiSecret);
+      if (!accessToken) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Failed to get access token' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const results: Record<string, any> = {};
+
+      // Test get_user_proxy_host with different formats
+      const testFormats = [
+        { name: 'form-data-numeric', proxy_type: '3' },
+        { name: 'form-data-string', proxy_type: 'mobile' },
+        { name: 'form-data-4g', proxy_type: '4g' },
+      ];
+
+      for (const test of testFormats) {
+        try {
+          const form = new FormData();
+          form.append('access_token', accessToken);
+          form.append('proxy_type', test.proxy_type);
+          
+          const res = await fetch('https://api.pyproxy.com/g/open/get_user_proxy_host', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${accessToken}` },
+            body: form,
+          });
+          results[test.name] = await res.json();
+        } catch (e) {
+          results[test.name] = { error: String(e) };
+        }
+      }
+
+      // Test known mobile gateways
+      const mobileGateways = [
+        'mobile.pyproxy.com:16666',
+        'mb.pyproxy.com:16666', 
+        '4g.pyproxy.com:16666',
+        'pr.pyproxy.com:16666',
+      ];
+
+      // username and password are already destructured from the request body at the top
+      if (username && password) {
+        results.gateway_tests = {};
+        for (const gw of mobileGateways) {
+          const [host, port] = gw.split(':');
+          try {
+            const testResult = await testProxyViaApify(host, port, username, password);
+            results.gateway_tests[gw] = testResult;
+          } catch (e) {
+            results.gateway_tests[gw] = { error: String(e) };
+          }
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, results, access_token: accessToken.substring(0, 20) + '...' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
