@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Zap, Edit2, Trash2, Copy, ArrowLeft, Smartphone, AlertTriangle, Settings, Folder, FolderOpen, ChevronRight, GripVertical } from 'lucide-react';
+import { Plus, Zap, Edit2, Trash2, Copy, ArrowLeft, Smartphone, AlertTriangle, Settings, Folder, FolderOpen, ChevronRight, GripVertical, Download, Upload } from 'lucide-react';
 import { useInboxFlows } from '@/hooks/useInboxFlows';
 import { toast } from 'sonner';
 import { Label } from '@/components/ui/label';
@@ -64,6 +64,13 @@ const FlowListPage = () => {
   // Drag and drop states
   const [draggingFlowId, setDraggingFlowId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+
+  // Export/Import states
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [exportCode, setExportCode] = useState('');
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [importCode, setImportCode] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -361,6 +368,95 @@ const FlowListPage = () => {
     setDragOverFolderId(null);
   };
 
+  // Export flow handler
+  const handleExportFlow = (flow: typeof flows[0]) => {
+    setExportCode(flow.id);
+    setShowExportDialog(true);
+  };
+
+  // Import flow handler
+  const handleImportFlow = async () => {
+    if (!importCode.trim()) {
+      toast.error('Cole o código do fluxo');
+      return;
+    }
+
+    const userId = effectiveUserId || user?.id;
+    if (!userId) {
+      toast.error('Usuário não autenticado');
+      return;
+    }
+
+    setIsImporting(true);
+
+    try {
+      // Fetch the original flow by ID
+      const { data: originalFlow, error: fetchError } = await supabase
+        .from('inbox_flows')
+        .select('*')
+        .eq('id', importCode.trim())
+        .maybeSingle();
+
+      if (fetchError || !originalFlow) {
+        toast.error('Fluxo não encontrado. Verifique o código.');
+        setIsImporting(false);
+        return;
+      }
+
+      // Create a copy of the flow for the current user
+      const { data: newFlow, error: insertError } = await supabase
+        .from('inbox_flows')
+        .insert({
+          user_id: userId,
+          name: `${originalFlow.name} (Importado)`,
+          description: originalFlow.description,
+          nodes: originalFlow.nodes,
+          edges: originalFlow.edges,
+          trigger_type: originalFlow.trigger_type,
+          trigger_keywords: originalFlow.trigger_keywords,
+          assigned_instances: [], // Don't copy instances
+          is_active: false, // Start as inactive
+          priority: originalFlow.priority,
+          pause_on_media: originalFlow.pause_on_media,
+          pause_schedule_enabled: originalFlow.pause_schedule_enabled,
+          pause_schedule_start: originalFlow.pause_schedule_start,
+          pause_schedule_end: originalFlow.pause_schedule_end,
+          reply_to_last_message: originalFlow.reply_to_last_message,
+          reply_mode: originalFlow.reply_mode,
+          reply_interval: originalFlow.reply_interval,
+          pause_other_flows: originalFlow.pause_other_flows,
+          knowledge_base: (originalFlow as any).knowledge_base,
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        toast.error('Erro ao importar fluxo: ' + insertError.message);
+        setIsImporting(false);
+        return;
+      }
+
+      toast.success('Fluxo importado com sucesso!');
+      setShowImportDialog(false);
+      setImportCode('');
+      refetch();
+
+      // Navigate to the new flow
+      if (newFlow) {
+        navigate(`/inbox/flows/${newFlow.id}`);
+      }
+    } catch (err: any) {
+      toast.error('Erro ao importar fluxo: ' + err.message);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const copyExportCode = () => {
+    navigator.clipboard.writeText(exportCode);
+    toast.success('Código copiado!');
+  };
+
   const renderFlowCard = (flow: typeof flows[0], inFolder: boolean = false) => (
     <Card 
       key={flow.id} 
@@ -486,6 +582,15 @@ const FlowListPage = () => {
           <Button 
             variant="ghost" 
             size="icon" 
+            className="h-8 w-8"
+            onClick={() => handleExportFlow(flow)}
+            title="Exportar fluxo"
+          >
+            <Download className="h-3 w-3" />
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="icon" 
             className="h-8 w-8 text-destructive hover:text-destructive"
             onClick={() => openDeleteDialog(flow.id)}
           >
@@ -565,6 +670,12 @@ const FlowListPage = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Import Flow Button */}
+            <Button variant="outline" onClick={() => setShowImportDialog(true)}>
+              <Upload className="h-4 w-4 mr-2" />
+              Importar
+            </Button>
+
             {/* Create Folder Button */}
             <Dialog open={showCreateFolderDialog} onOpenChange={setShowCreateFolderDialog}>
               <DialogTrigger asChild>
@@ -839,6 +950,69 @@ const FlowListPage = () => {
         instances={instances}
         onSave={handleSaveSettings}
       />
+
+      {/* Export Flow Dialog */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Exportar Fluxo</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <p className="text-sm text-muted-foreground">
+              Use o código abaixo para compartilhar ou importar este fluxo em outra conta.
+            </p>
+            <div className="flex gap-2">
+              <Input
+                readOnly
+                value={exportCode}
+                className="font-mono text-sm"
+              />
+              <Button onClick={copyExportCode}>
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => setShowExportDialog(false)}>
+                Fechar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Flow Dialog */}
+      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Importar Fluxo</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <p className="text-sm text-muted-foreground">
+              Cole o código do fluxo que deseja importar. O fluxo será copiado para sua conta como inativo.
+            </p>
+            <div className="space-y-2">
+              <Label>Código do Fluxo</Label>
+              <Input
+                placeholder="Cole o código UUID aqui..."
+                value={importCode}
+                onChange={(e) => setImportCode(e.target.value)}
+                className="font-mono text-sm"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => {
+                setShowImportDialog(false);
+                setImportCode('');
+              }}>
+                Cancelar
+              </Button>
+              <Button onClick={handleImportFlow} disabled={isImporting || !importCode.trim()}>
+                {isImporting ? 'Importando...' : 'Importar'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

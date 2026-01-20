@@ -1555,12 +1555,13 @@ Regras RIGOROSAS:
           case 'condition':
             const conditions = currentNode.data.conditions as Array<{
               id: string;
-              type: 'variable' | 'tag';
+              type: 'variable' | 'tag' | 'ia';
               variable?: string;
               operator?: string;
               value?: string;
               tagName?: string;
               tagCondition?: 'has' | 'not_has';
+              iaPrompt?: string;
             }> || [];
             const logicOperator = (currentNode.data.logicOperator as string) || 'and';
             
@@ -1587,7 +1588,93 @@ Regras RIGOROSAS:
             console.log(`[${runId}] Condition node: checking ${conditions.length} conditions, contact tags:`, contactTags);
             console.log(`[${runId}] Session variables:`, variables);
             
-            const evaluateCondition = (cond: typeof conditions[0]): boolean => {
+            // Evaluate a single condition (can be async for IA type)
+            const evaluateCondition = async (cond: typeof conditions[0]): Promise<boolean> => {
+              // IA condition - uses Lovable AI to evaluate
+              if (cond.type === 'ia') {
+                const iaPrompt = cond.iaPrompt || '';
+                if (!iaPrompt) {
+                  console.log(`[${runId}] IA condition: empty prompt, returning false`);
+                  return false;
+                }
+                
+                try {
+                  // Get knowledge base from flow
+                  const knowledgeBase = (flow as any).knowledge_base || '';
+                  
+                  // Fetch last 10 messages for conversation context
+                  const { data: recentMessages } = await supabaseClient
+                    .from('inbox_messages')
+                    .select('content, direction')
+                    .eq('contact_id', contact.id)
+                    .order('created_at', { ascending: false })
+                    .limit(10);
+                  
+                  const conversationContext = recentMessages?.reverse()
+                    .map(m => `${m.direction === 'inbound' ? 'Cliente' : 'Bot'}: ${m.content || '[mídia]'}`)
+                    .join('\n') || '';
+                  
+                  const lastMessage = variables.lastMessage || variables.userInput || '';
+                  
+                  const systemPrompt = `Você é um analisador de conversas especializado. Sua tarefa é avaliar se uma condição é verdadeira ou falsa com base no contexto fornecido.
+
+REGRAS IMPORTANTES:
+- Responda APENAS com a palavra "SIM" ou "NAO" (sem acento)
+- Não adicione explicações, pontuações ou qualquer outro texto
+- Avalie com base no contexto real da conversa e na última mensagem do cliente
+
+${knowledgeBase ? `BASE DE CONHECIMENTO:\n${knowledgeBase}\n` : ''}
+CONTEXTO DA CONVERSA:
+${conversationContext || 'Sem mensagens anteriores'}
+
+ÚLTIMA MENSAGEM DO CLIENTE: "${lastMessage}"
+
+TAGS DO CONTATO: ${contactTags.length > 0 ? contactTags.join(', ') : 'Nenhuma'}
+
+CRITÉRIO A VERIFICAR: ${iaPrompt}
+
+Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou NAO.`;
+
+                  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+                  if (!LOVABLE_API_KEY) {
+                    console.log(`[${runId}] IA condition: LOVABLE_API_KEY not configured, returning false`);
+                    return false;
+                  }
+
+                  console.log(`[${runId}] IA condition: calling Lovable AI with prompt="${iaPrompt}", lastMessage="${lastMessage}"`);
+                  
+                  const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      model: 'google/gemini-2.5-flash',
+                      messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: 'Avalie e responda apenas SIM ou NAO.' }
+                      ],
+                    }),
+                  });
+                  
+                  if (!aiResponse.ok) {
+                    console.error(`[${runId}] IA condition: AI request failed with status ${aiResponse.status}`);
+                    return false;
+                  }
+                  
+                  const aiData = await aiResponse.json();
+                  const answer = (aiData.choices?.[0]?.message?.content || '').toUpperCase().trim();
+                  const result = answer.includes('SIM');
+                  
+                  console.log(`[${runId}] IA condition: prompt="${iaPrompt}", AI answer="${answer}", result=${result}`);
+                  return result;
+                } catch (err) {
+                  console.error(`[${runId}] IA condition error:`, err);
+                  return false;
+                }
+              }
+              
               if (cond.type === 'tag') {
                 const tagToCheck = normalizeComparable(cond.tagName || '');
                 const hasTag = contactTags.some(t => normalizeComparable(t) === tagToCheck);
@@ -1625,13 +1712,16 @@ Regras RIGOROSAS:
               return result;
             };
 
+            // Evaluate all conditions (async)
             let conditionMet: boolean;
             if (conditions.length === 0) {
               conditionMet = false;
             } else if (logicOperator === 'and') {
-              conditionMet = conditions.every(evaluateCondition);
+              const results = await Promise.all(conditions.map(evaluateCondition));
+              conditionMet = results.every(r => r);
             } else {
-              conditionMet = conditions.some(evaluateCondition);
+              const results = await Promise.all(conditions.map(evaluateCondition));
+              conditionMet = results.some(r => r);
             }
             
             console.log(`[${runId}] Condition evaluated: ${conditionMet} (${logicOperator}, ${conditions.length} conditions)`);
