@@ -12,7 +12,7 @@ export const ImpersonationBanner = ({ userEmail, onExit }: ImpersonationBannerPr
     <motion.div
       initial={{ y: -50, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      className="fixed top-0 left-0 right-0 z-[100] bg-destructive text-destructive-foreground py-2 px-4 shadow-lg"
+      className="sticky top-0 left-0 right-0 z-[60] bg-destructive text-destructive-foreground py-2 px-4 shadow-lg"
     >
       <div className="container mx-auto flex items-center justify-between">
         <div className="flex items-center gap-2">
