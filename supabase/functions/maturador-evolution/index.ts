@@ -3626,6 +3626,116 @@ Regras IMPORTANTES:
         break;
       }
 
+      case 'fetch-groups': {
+        // Fetch WhatsApp groups for a specific instance
+        const { instanceId } = params;
+        
+        if (!instanceId) {
+          return new Response(JSON.stringify({ error: 'instanceId is required' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Get instance details
+        const { data: inst, error: instError } = await supabaseClient
+          .from('maturador_instances')
+          .select('id, instance_name, api_provider, uazapi_token')
+          .eq('id', instanceId)
+          .eq('user_id', user.id)
+          .single();
+
+        if (instError || !inst) {
+          return new Response(JSON.stringify({ error: 'Instance not found' }), {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        console.log(`[FETCH-GROUPS] Fetching groups for instance ${inst.instance_name}, provider: ${inst.api_provider || 'evolution'}`);
+
+        // Get global config for API details
+        const globalConfig = await getGlobalApiConfig(supabaseClient);
+
+        let groups: any[] = [];
+
+        if (inst.api_provider === 'uazapi') {
+          // UazAPI: GET /group/all with instance token
+          const uazapiBaseUrl = globalConfig.baseUrl;
+          const uazapiToken = inst.uazapi_token;
+
+          if (!uazapiToken) {
+            return new Response(JSON.stringify({ error: 'No UAZAPI token for this instance' }), {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          console.log(`[FETCH-GROUPS] UazAPI: GET ${uazapiBaseUrl}/group/all`);
+          
+          const groupsRes = await fetch(`${uazapiBaseUrl}/group/all`, {
+            method: 'GET',
+            headers: {
+              'token': uazapiToken,
+            },
+          });
+
+          if (!groupsRes.ok) {
+            const errorText = await groupsRes.text();
+            console.error(`[FETCH-GROUPS] UazAPI error:`, errorText);
+            return new Response(JSON.stringify({ error: 'Failed to fetch groups from UAZAPI' }), {
+              status: groupsRes.status,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          const groupsData = await groupsRes.json();
+          console.log(`[FETCH-GROUPS] UazAPI response: ${JSON.stringify(groupsData).substring(0, 500)}`);
+          
+          // UazAPI returns array of groups directly or { groups: [...] }
+          groups = Array.isArray(groupsData) ? groupsData : (groupsData.groups || []);
+          
+        } else {
+          // Evolution API: GET /group/fetchAllGroups/{instanceName}
+          const evolutionBaseUrl = globalConfig.baseUrl;
+          const evolutionApiKey = globalConfig.apiKey;
+
+          console.log(`[FETCH-GROUPS] Evolution: GET ${evolutionBaseUrl}/group/fetchAllGroups/${inst.instance_name}`);
+
+          const groupsRes = await fetch(`${evolutionBaseUrl}/group/fetchAllGroups/${inst.instance_name}`, {
+            method: 'GET',
+            headers: {
+              'apikey': evolutionApiKey,
+              'Content-Type': 'application/json',
+            },
+          });
+
+          if (!groupsRes.ok) {
+            const errorText = await groupsRes.text();
+            console.error(`[FETCH-GROUPS] Evolution error:`, errorText);
+            return new Response(JSON.stringify({ error: 'Failed to fetch groups from Evolution API' }), {
+              status: groupsRes.status,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          const groupsData = await groupsRes.json();
+          console.log(`[FETCH-GROUPS] Evolution response: ${JSON.stringify(groupsData).substring(0, 500)}`);
+          
+          // Evolution returns array of groups directly
+          groups = Array.isArray(groupsData) ? groupsData : (groupsData.groups || []);
+        }
+
+        console.log(`[FETCH-GROUPS] Found ${groups.length} groups for instance ${inst.instance_name}`);
+
+        result = {
+          success: true,
+          groups,
+          count: groups.length,
+        };
+        break;
+      }
+
       default:
         return new Response(JSON.stringify({ error: `Ação desconhecida: ${action}` }), {
           status: 400,
