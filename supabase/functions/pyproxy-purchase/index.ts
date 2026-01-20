@@ -630,7 +630,7 @@ Deno.serve(async (req) => {
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { action, orderId, quantity, planType = 'residential', country = 'br', state, city, host, port, username, password } = await req.json();
+    const { action, orderId, quantity, planType = 'residential', country = 'br', state, city, host, port, username, password, unitPrice } = await req.json();
     console.log('=== PYPROXY PURCHASE START ===');
     console.log('Action:', action);
     console.log('Plan type:', planType);
@@ -836,15 +836,23 @@ Deno.serve(async (req) => {
       console.log('[STEP 3] ✓ Gateway validated:', finalGatewayConfig.gateway_host, '→', gatewayResult.ip);
 
       // ============= STEP 4: CHECK USER WALLET BALANCE =============
-      // Get price for this specific plan type from proxy_prices table
-      const { data: planPriceData } = await supabaseAdmin
-        .from('proxy_prices')
-        .select('price_brl')
-        .eq('plan_type', planType)
-        .eq('is_active', true)
-        .single();
-
-      const finalPrice = planPriceData?.price_brl ? Number(planPriceData.price_brl) : 9.99;
+      // Use unitPrice from frontend if provided (for package pricing), otherwise fetch from table
+      let finalPrice: number;
+      if (unitPrice && typeof unitPrice === 'number' && unitPrice > 0) {
+        // Frontend passed the unit price from package (e.g., R$5.00 for 10-pack instead of R$6.50 unit)
+        finalPrice = unitPrice;
+        console.log('[STEP 4] Using package unit price from frontend:', finalPrice);
+      } else {
+        // Fallback: Get price for this specific plan type from proxy_prices table
+        const { data: planPriceData } = await supabaseAdmin
+          .from('proxy_prices')
+          .select('price_brl')
+          .eq('plan_type', planType)
+          .eq('is_active', true)
+          .single();
+        finalPrice = planPriceData?.price_brl ? Number(planPriceData.price_brl) : 9.99;
+        console.log('[STEP 4] Using table price:', finalPrice);
+      }
 
       const { data: wallet, error: walletError } = await supabaseAdmin
         .from('sms_user_wallets')
