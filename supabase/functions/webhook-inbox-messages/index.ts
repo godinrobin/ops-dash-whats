@@ -1191,37 +1191,7 @@ serve(async (req) => {
             console.log(`[UAZAPI-WEBHOOK] Created new contact: ${contact.id} for instance ${instanceId}`);
           }
           
-          // Fetch profile pic if contact doesn't have one (either newly created or race condition recovered)
-          // This runs for ALL contacts without a profile pic, not just newly created ones
-          if (contact && contact.id && !contact.profile_pic_url) {
-            try {
-              const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-              const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-              console.log(`[PROFILE-PIC] Initiating profile pic fetch for contact ${contact.id} (no pic in DB)`);
-              
-              // Await the fetch to ensure the request is sent
-              const picResponse = await fetch(`${supabaseUrl}/functions/v1/fetch-contact-profile-pic`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${serviceRoleKey}`,
-                },
-                body: JSON.stringify({ contactId: contact.id }),
-              });
-              
-              console.log(`[PROFILE-PIC] Response status: ${picResponse.status}`);
-              
-              // Don't block on reading the full response body
-              picResponse.text().then(text => {
-                console.log(`[PROFILE-PIC] Response: ${text.substring(0, 200)}`);
-              }).catch(() => {});
-              
-            } catch (picErr) {
-              console.error('[PROFILE-PIC] Error initiating fetch:', picErr);
-            }
-          }
-          
-          // Check lead rotation limit (fire and forget - don't block main flow)
+          // Check lead rotation limit for new contacts (fire and forget)
           try {
             const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
             const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -1246,6 +1216,35 @@ serve(async (req) => {
             }).catch(err => console.log('[LEAD-ROTATION] Fire and forget call failed:', err));
           } catch (rotationErr) {
             console.log('[LEAD-ROTATION] Error calling check-lead-rotation:', rotationErr);
+          }
+        }
+        
+        // Fetch profile pic if contact doesn't have one - runs for ALL contacts (new or existing)
+        if (contact && contact.id && !contact.profile_pic_url) {
+          try {
+            const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+            const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+            console.log(`[PROFILE-PIC] Initiating profile pic fetch for contact ${contact.id} (no pic in DB)`);
+            
+            // Await the fetch to ensure the request is sent
+            const picResponse = await fetch(`${supabaseUrl}/functions/v1/fetch-contact-profile-pic`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${serviceRoleKey}`,
+              },
+              body: JSON.stringify({ contactId: contact.id }),
+            });
+            
+            console.log(`[PROFILE-PIC] Response status: ${picResponse.status}`);
+            
+            // Don't block on reading the full response body
+            picResponse.text().then(text => {
+              console.log(`[PROFILE-PIC] Response: ${text.substring(0, 200)}`);
+            }).catch(() => {});
+            
+          } catch (picErr) {
+            console.error('[PROFILE-PIC] Error initiating fetch:', picErr);
           }
         }
         
