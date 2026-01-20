@@ -332,7 +332,7 @@ export const useInboxMessages = (contactId: string | null) => {
   }, [userId, contactId, fetchMessages, realtimeSubscribed]);
 
 
-  const sendMessage = useCallback(async (content: string, messageType: string = 'text', mediaUrl?: string) => {
+  const sendMessage = useCallback(async (content: string, messageType: string = 'text', mediaUrl?: string, replyToMessageId?: string) => {
     if (!userId || !contactId) return { error: 'Not authenticated or no contact selected' };
 
     try {
@@ -359,6 +359,17 @@ export const useInboxMessages = (contactId: string | null) => {
       // For @lid contacts, we need to use remote_jid for sending
       const remoteJid = (contact as any).remote_jid || null;
 
+      // Get the remote_message_id of the message being replied to (if any)
+      let replyToRemoteId: string | null = null;
+      if (replyToMessageId) {
+        const { data: replyMsg } = await supabase
+          .from('inbox_messages')
+          .select('remote_message_id')
+          .eq('id', replyToMessageId)
+          .single();
+        replyToRemoteId = replyMsg?.remote_message_id || null;
+      }
+
       // Insert message with pending status
       const { data: message, error: insertError } = await supabase
         .from('inbox_messages')
@@ -371,13 +382,14 @@ export const useInboxMessages = (contactId: string | null) => {
           content,
           media_url: mediaUrl,
           status: 'pending',
+          reply_to_message_id: replyToMessageId || null,
         })
         .select()
         .single();
 
       if (insertError) throw insertError;
 
-      // Call edge function to send via Evolution API - pass the message ID and remote_jid
+      // Call edge function to send via Evolution API - pass the message ID, remote_jid and reply info
       const { data: sendResult, error: sendError } = await supabase.functions.invoke('send-inbox-message', {
         body: {
           contactId,
@@ -388,6 +400,7 @@ export const useInboxMessages = (contactId: string | null) => {
           messageType,
           mediaUrl,
           messageId: message.id, // Pass the message ID so the edge function can update it
+          replyToRemoteMessageId: replyToRemoteId, // Pass the remote message ID for reply
         }
       });
 

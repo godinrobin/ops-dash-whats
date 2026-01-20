@@ -189,9 +189,9 @@ serve(async (req) => {
 
     console.log('[AUTH] User authenticated:', user.id);
 
-    const { contactId, instanceName, phone, content, messageType = 'text', mediaUrl, messageId, remoteJid } = await req.json();
+    const { contactId, instanceName, phone, content, messageType = 'text', mediaUrl, messageId, remoteJid, replyToRemoteMessageId } = await req.json();
     
-    console.log('Sending message:', { contactId, instanceName, phone, remoteJid, messageType, content: content?.substring(0, 50), messageId });
+    console.log('Sending message:', { contactId, instanceName, phone, remoteJid, messageType, content: content?.substring(0, 50), messageId, replyToRemoteMessageId });
 
     if (!instanceName || (!phone && !remoteJid)) {
       return new Response(JSON.stringify({ error: 'Missing required fields (need phone or remoteJid)' }), {
@@ -502,6 +502,12 @@ serve(async (req) => {
           number: String(sendDestination),
           text: typeof content === 'string' ? content : String(content ?? ''),
         };
+        
+        // Add reply support for UazAPI
+        if (replyToRemoteMessageId) {
+          body.quoted = replyToRemoteMessageId;
+          console.log(`[UAZAPI] Adding quoted message ID: ${replyToRemoteMessageId}`);
+        }
         
         // Text messages don't need retry
         const { res: apiResponse, json: apiResult } = await tryPostJson(endpoint, body);
