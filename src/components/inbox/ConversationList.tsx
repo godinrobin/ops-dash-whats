@@ -86,7 +86,6 @@ export const ConversationList = ({
   const [showNewConversation, setShowNewConversation] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>(selectedFilter as FilterType);
   const [showMarkAllReadMenu, setShowMarkAllReadMenu] = useState(false);
-  const [activeFlowsCount, setActiveFlowsCount] = useState(0);
 
   // Calculate total unread messages from contacts
   const totalUnreadMessages = useMemo(() => {
@@ -106,44 +105,6 @@ export const ConversationList = ({
     };
     fetchInstances();
   }, []);
-
-  // Fetch active flows count
-  useEffect(() => {
-    if (!userId) return;
-
-    const fetchActiveFlows = async () => {
-      const { count } = await supabase
-        .from('inbox_flow_sessions')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId)
-        .eq('status', 'active');
-      
-      setActiveFlowsCount(count || 0);
-    };
-
-    fetchActiveFlows();
-
-    // Subscribe to realtime updates
-    const channel = supabase
-      .channel('active-flows-count')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'inbox_flow_sessions',
-          filter: `user_id=eq.${userId}`,
-        },
-        () => {
-          fetchActiveFlows();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [userId]);
 
   // Create a color map for instances
   const instanceColorMap = useMemo(() => {
@@ -314,21 +275,7 @@ export const ConversationList = ({
       {/* Header */}
       <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold">Conversas</h2>
-            {/* Active flows counter */}
-            {activeFlowsCount > 0 && (
-              <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30 text-xs">
-                {activeFlowsCount} {activeFlowsCount === 1 ? 'fluxo' : 'fluxos'}
-              </Badge>
-            )}
-            {/* Total unread messages counter */}
-            {totalUnreadMessages > 0 && (
-              <Badge variant="destructive" className="text-xs">
-                {totalUnreadMessages > 999 ? '999+' : totalUnreadMessages} não lidas
-              </Badge>
-            )}
-          </div>
+          <h2 className="text-lg font-semibold">Conversas</h2>
           <Button
             size="icon" 
             variant="ghost" 
@@ -406,7 +353,7 @@ export const ConversationList = ({
                       : "bg-orange-500/10 text-orange-500 border-orange-500/30 hover:bg-orange-500/20"
                   )}
                 >
-                  Não lidas
+                  Não lidas{totalUnreadMessages > 0 && ` (${totalUnreadMessages > 999 ? '999+' : totalUnreadMessages})`}
                 </button>
                 <PopoverTrigger asChild>
                   <button
