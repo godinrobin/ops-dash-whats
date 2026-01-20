@@ -47,7 +47,7 @@ export interface InboxFlow {
   description: string | null;
   nodes: FlowNode[];
   edges: FlowEdge[];
-  trigger_type: 'keyword' | 'all' | 'schedule';
+  trigger_type: 'keyword' | 'all' | 'schedule' | 'sale';
   trigger_keywords: string[];
   assigned_instances: string[];
   is_active: boolean;
@@ -59,6 +59,7 @@ export interface InboxFlow {
   reply_to_last_message?: boolean;
   reply_mode?: 'all' | 'interval';
   reply_interval?: number;
+  pause_other_flows?: boolean;
   created_at: string;
   updated_at: string;
 }

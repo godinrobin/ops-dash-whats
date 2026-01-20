@@ -78,7 +78,7 @@ interface FlowCanvasProps {
     edges: { id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string }[],
     silent?: boolean
   ) => void | Promise<void>;
-  triggerType?: 'keyword' | 'all' | 'schedule';
+  triggerType?: 'keyword' | 'all' | 'schedule' | 'sale';
   triggerKeywords?: string[];
   keywordMatchType?: 'exact' | 'contains' | 'not_contains';
   onUpdateFlowSettings?: (settings: { triggerType?: string; triggerKeywords?: string[]; keywordMatchType?: string }) => void;

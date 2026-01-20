@@ -47,7 +47,7 @@ export const FlowSettingsDialog = ({
 }: FlowSettingsDialogProps) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [triggerType, setTriggerType] = useState<'keyword' | 'all' | 'schedule'>('keyword');
+  const [triggerType, setTriggerType] = useState<'keyword' | 'all' | 'schedule' | 'sale'>('keyword');
   const [triggerKeywords, setTriggerKeywords] = useState('');
   const [keywordMatchType, setKeywordMatchType] = useState<'exact' | 'contains' | 'not_contains'>('exact');
   const [assignedInstances, setAssignedInstances] = useState<string[]>([]);
@@ -59,6 +59,7 @@ export const FlowSettingsDialog = ({
   const [replyToLastMessage, setReplyToLastMessage] = useState(false);
   const [replyMode, setReplyMode] = useState<'all' | 'interval'>('all');
   const [replyInterval, setReplyInterval] = useState(3);
+  const [pauseOtherFlows, setPauseOtherFlows] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -77,6 +78,7 @@ export const FlowSettingsDialog = ({
       setReplyToLastMessage(flow.reply_to_last_message || false);
       setReplyMode(flow.reply_mode || 'all');
       setReplyInterval(flow.reply_interval || 3);
+      setPauseOtherFlows(flow.pause_other_flows || false);
     }
   }, [flow]);
 
@@ -118,6 +120,7 @@ export const FlowSettingsDialog = ({
       reply_to_last_message: replyToLastMessage,
       reply_mode: replyToLastMessage ? replyMode : 'all',
       reply_interval: replyToLastMessage && replyMode === 'interval' ? replyInterval : 3,
+      pause_other_flows: triggerType === 'sale' ? pauseOtherFlows : false,
     };
 
     const result = await onSave(flow.id, updates);
@@ -170,16 +173,41 @@ export const FlowSettingsDialog = ({
           {/* Tipo de Gatilho */}
           <div className="space-y-2">
             <Label>Tipo de Gatilho</Label>
-            <Select value={triggerType} onValueChange={(v) => setTriggerType(v as any)}>
+            <Select value={triggerType} onValueChange={(v) => setTriggerType(v as 'keyword' | 'all' | 'schedule' | 'sale')}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="keyword">Palavra-chave</SelectItem>
                 <SelectItem value="all">Todas as mensagens</SelectItem>
+                <SelectItem value="sale">Venda</SelectItem>
               </SelectContent>
             </Select>
           </div>
+
+          {/* Pausar outros fluxos - only for sale trigger */}
+          {triggerType === 'sale' && (
+            <div className="flex items-center justify-between p-3 border rounded-md bg-amber-500/10 border-amber-500/30">
+              <div>
+                <Label className="flex items-center gap-2">
+                  <span className="text-amber-500">⚡</span>
+                  Pausar outros fluxos
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Ao ativar, pausa todos os outros fluxos ativos do contato para priorizar este fluxo de venda
+                </p>
+              </div>
+              <Switch
+                checked={pauseOtherFlows}
+                onCheckedChange={setPauseOtherFlows}
+                className={
+                  pauseOtherFlows
+                    ? 'data-[state=checked]:bg-green-500'
+                    : 'data-[state=unchecked]:bg-red-500'
+                }
+              />
+            </div>
+          )}
 
           {/* Palavras-chave */}
           {triggerType === 'keyword' && (

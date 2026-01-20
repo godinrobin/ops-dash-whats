@@ -28,7 +28,7 @@ export const useInboxFlows = () => {
         ...flow,
         nodes: (flow.nodes as any[]) || [],
         edges: (flow.edges as any[]) || [],
-        trigger_type: flow.trigger_type as 'keyword' | 'all' | 'schedule',
+        trigger_type: flow.trigger_type as 'keyword' | 'all' | 'schedule' | 'sale',
         trigger_keywords: flow.trigger_keywords || [],
         assigned_instances: flow.assigned_instances || [],
         pause_schedule_enabled: flow.pause_schedule_enabled || false,
@@ -37,6 +37,7 @@ export const useInboxFlows = () => {
         reply_to_last_message: flow.reply_to_last_message || false,
         reply_mode: (flow.reply_mode as 'all' | 'interval') || 'all',
         reply_interval: flow.reply_interval || 3,
+        pause_other_flows: flow.pause_other_flows || false,
       })));
     } catch (err: any) {
       setError(err.message);
@@ -106,7 +107,7 @@ export const useInboxFlows = () => {
         ...data,
         nodes: (data.nodes as any[]) || [],
         edges: (data.edges as any[]) || [],
-        trigger_type: data.trigger_type as 'keyword' | 'all' | 'schedule',
+        trigger_type: data.trigger_type as 'keyword' | 'all' | 'schedule' | 'sale',
         trigger_keywords: data.trigger_keywords || [],
         assigned_instances: data.assigned_instances || [],
         pause_schedule_enabled: data.pause_schedule_enabled || false,
@@ -115,6 +116,7 @@ export const useInboxFlows = () => {
         reply_to_last_message: data.reply_to_last_message || false,
         reply_mode: (data.reply_mode as 'all' | 'interval') || 'all',
         reply_interval: data.reply_interval || 3,
+        pause_other_flows: data.pause_other_flows || false,
       } : f));
 
       return { data };

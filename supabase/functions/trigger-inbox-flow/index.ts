@@ -96,7 +96,7 @@ serve(async (req) => {
 
     const { data: flow, error: flowError } = await serviceClient
       .from("inbox_flows")
-      .select("id, user_id, name, nodes, assigned_instances, is_active")
+      .select("id, user_id, name, nodes, assigned_instances, is_active, trigger_type, pause_other_flows")
       .eq("id", flowId)
       .maybeSingle();
 
@@ -112,6 +112,9 @@ serve(async (req) => {
     if (flow.user_id !== user.id) {
       return jsonResponse({ error: "Forbidden" }, 403);
     }
+
+    // Check if this is a sale trigger flow with pause_other_flows enabled
+    const shouldPauseOtherFlows = flow.trigger_type === 'sale' && flow.pause_other_flows === true;
 
     // Optional safety: if flow is assigned to instances, enforce contact instance match
     const assignedInstances = Array.isArray(flow.assigned_instances) ? flow.assigned_instances : [];
@@ -133,38 +136,81 @@ serve(async (req) => {
 
     // If another flow is active for this contact, complete it so we can start/restart the chosen flow
     // BUT: check if it has a pending delay - if so, cancel the delay job first
-    const { data: otherActiveSession } = await serviceClient
-      .from("inbox_flow_sessions")
-      .select("id, flow_id, variables")
-      .eq("contact_id", contactId)
-      .eq("user_id", user.id)
-      .eq("status", "active")
-      .order("started_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (otherActiveSession && otherActiveSession.flow_id !== flowId) {
-      const sessionVars = (otherActiveSession.variables || {}) as Record<string, unknown>;
-      const hasPendingDelay = !!(sessionVars._pendingDelay);
-      
-      if (hasPendingDelay) {
-        console.log(`[${runId}] Previous session ${otherActiveSession.id} has pending delay, cancelling delay job`);
-        // Cancel any pending delay jobs for this session
-        await serviceClient
-          .from("inbox_flow_delay_jobs")
-          .update({ status: "cancelled", updated_at: nowIso })
-          .eq("session_id", otherActiveSession.id)
-          .eq("status", "scheduled");
-      }
-      
-      const { error: completeError } = await serviceClient
+    // NEW: If pause_other_flows is enabled, pause ALL active sessions for this contact
+    if (shouldPauseOtherFlows) {
+      // Pause ALL active sessions for this contact (not just one)
+      const { data: allActiveSessions } = await serviceClient
         .from("inbox_flow_sessions")
-        .update({ status: "completed", last_interaction: nowIso })
-        .eq("id", otherActiveSession.id)
-        .eq("user_id", user.id);
+        .select("id, flow_id, variables")
+        .eq("contact_id", contactId)
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .neq("flow_id", flowId); // Don't pause the flow we're about to trigger
 
-      if (completeError) {
-        console.warn(`[${runId}] Could not complete previous session (continuing):`, completeError);
+      if (allActiveSessions && allActiveSessions.length > 0) {
+        console.log(`[${runId}] Pausing ${allActiveSessions.length} active sessions due to pause_other_flows`);
+        
+        for (const session of allActiveSessions) {
+          const sessionVars = (session.variables || {}) as Record<string, unknown>;
+          const hasPendingDelay = !!(sessionVars._pendingDelay);
+          
+          if (hasPendingDelay) {
+            console.log(`[${runId}] Cancelling pending delay for session ${session.id}`);
+            await serviceClient
+              .from("inbox_flow_delay_jobs")
+              .update({ status: "cancelled", updated_at: nowIso })
+              .eq("session_id", session.id)
+              .eq("status", "scheduled");
+          }
+          
+          // Set status to 'paused' instead of 'completed'
+          const { error: pauseError } = await serviceClient
+            .from("inbox_flow_sessions")
+            .update({ status: "paused", last_interaction: nowIso })
+            .eq("id", session.id)
+            .eq("user_id", user.id);
+
+          if (pauseError) {
+            console.warn(`[${runId}] Could not pause session ${session.id}:`, pauseError);
+          } else {
+            console.log(`[${runId}] Successfully paused session ${session.id} (flow: ${session.flow_id})`);
+          }
+        }
+      }
+    } else {
+      // Normal behavior: just complete the other active session if exists
+      const { data: otherActiveSession } = await serviceClient
+        .from("inbox_flow_sessions")
+        .select("id, flow_id, variables")
+        .eq("contact_id", contactId)
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (otherActiveSession && otherActiveSession.flow_id !== flowId) {
+        const sessionVars = (otherActiveSession.variables || {}) as Record<string, unknown>;
+        const hasPendingDelay = !!(sessionVars._pendingDelay);
+        
+        if (hasPendingDelay) {
+          console.log(`[${runId}] Previous session ${otherActiveSession.id} has pending delay, cancelling delay job`);
+          await serviceClient
+            .from("inbox_flow_delay_jobs")
+            .update({ status: "cancelled", updated_at: nowIso })
+            .eq("session_id", otherActiveSession.id)
+            .eq("status", "scheduled");
+        }
+        
+        const { error: completeError } = await serviceClient
+          .from("inbox_flow_sessions")
+          .update({ status: "completed", last_interaction: nowIso })
+          .eq("id", otherActiveSession.id)
+          .eq("user_id", user.id);
+
+        if (completeError) {
+          console.warn(`[${runId}] Could not complete previous session (continuing):`, completeError);
+        }
       }
     }
 
