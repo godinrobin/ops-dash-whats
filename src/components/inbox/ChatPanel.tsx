@@ -354,43 +354,57 @@ export const ChatPanel = ({
     }
   }, [contact?.id]);
 
-  // Listen for activity events (typing/recording) from the webhook via realtime
+  // Listen for activity events (typing/recording) via postgres_changes on inbox_contact_activity
   useEffect(() => {
     if (!contact?.id) return;
     
-    // Subscribe to a custom activity channel for this contact
+    // Subscribe to postgres_changes on inbox_contact_activity for this specific contact
     const channel = supabase
-      .channel(`typing:${contact.id}`,
+      .channel(`activity:${contact.id}`)
+      .on(
+        'postgres_changes',
         {
-          config: {
-            // Broadcast MUST be enabled or 'on("broadcast")' may never fire
-            broadcast: { self: false },
-          },
+          event: '*',
+          schema: 'public',
+          table: 'inbox_contact_activity',
+          filter: `contact_id=eq.${contact.id}`,
+        },
+        (payload) => {
+          console.log('[ChatPanel] Received activity event:', payload);
+          const newRow = payload.new as { status?: string } | undefined;
+          const status = newRow?.status;
+          
+          if (payload.eventType === 'DELETE' || !status) {
+            setActivityStatus(null);
+            if (activityTimeoutRef.current) {
+              clearTimeout(activityTimeoutRef.current);
+              activityTimeoutRef.current = null;
+            }
+            return;
+          }
+          
+          // Set status based on value
+          if (status === 'recording') {
+            setActivityStatus('recording');
+          } else {
+            setActivityStatus('typing');
+          }
+          
+          // Clear any existing timeout
+          if (activityTimeoutRef.current) {
+            clearTimeout(activityTimeoutRef.current);
+          }
+          
+          // Auto-hide after 5 seconds
+          activityTimeoutRef.current = setTimeout(() => {
+            setActivityStatus(null);
+          }, 5000);
         }
       )
-      .on('broadcast', { event: 'typing' }, (payload) => {
-        console.log('[ChatPanel] Received activity event:', payload);
-        const presenceType = payload?.payload?.presenceType;
-        
-        // Set status based on presence type
-        if (presenceType === 'recording') {
-          setActivityStatus('recording');
-        } else {
-          setActivityStatus('typing');
-        }
-        
-        // Clear any existing timeout
-        if (activityTimeoutRef.current) {
-          clearTimeout(activityTimeoutRef.current);
-        }
-        
-        // Auto-hide after 5 seconds
-        activityTimeoutRef.current = setTimeout(() => {
-          setActivityStatus(null);
-        }, 5000);
-      })
       .subscribe((status, err) => {
-        console.log('[ChatPanel] Activity channel status:', status, err);
+        if (err) {
+          console.error('[ChatPanel] Activity channel error:', err);
+        }
       });
     
     return () => {
