@@ -3745,19 +3745,29 @@ serve(async (req) => {
       
       // Only handle composing/recording (typing indicators)
       if (presenceType === 'composing' || presenceType === 'recording') {
+        console.log(`[PRESENCE] Processing ${presenceType} event for ${remoteJid}`);
+        
         // Find the contact by remote_jid or phone
         let contactId: string | null = null;
         
         if (remoteJid) {
-          // Extract phone from remoteJid (format: "5511999999999@s.whatsapp.net")
+          // Extract phone from remoteJid (format: "5511999999999@s.whatsapp.net" or "123456789@lid")
           const phone = remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '');
           
-          // Find contact
-          const { data: contacts } = await supabaseClient
+          console.log(`[PRESENCE] Looking for contact with remote_jid=${remoteJid} or phone=${phone}`);
+          
+          // Find contact - search by remote_jid OR phone
+          const { data: contacts, error: contactError } = await supabaseClient
             .from('inbox_contacts')
             .select('id')
             .or(`remote_jid.eq.${remoteJid},phone.eq.${phone}`)
             .limit(1);
+          
+          if (contactError) {
+            console.error(`[PRESENCE] Error finding contact:`, contactError);
+          }
+          
+          console.log(`[PRESENCE] Found contacts:`, contacts);
           
           if (contacts && contacts.length > 0) {
             contactId = contacts[0].id;
@@ -3765,27 +3775,52 @@ serve(async (req) => {
         }
         
         if (contactId) {
-          console.log(`[PRESENCE] Broadcasting typing event to contact ${contactId}`);
+          console.log(`[PRESENCE] Broadcasting ${presenceType} event to contact ${contactId}`);
           
-          // Broadcast typing event via Supabase Realtime
-          const channel = supabaseClient.channel(`typing:${contactId}`);
-          await channel.send({
-            type: 'broadcast',
-            event: 'typing',
-            payload: { 
-              contactId, 
-              presenceType,
-              timestamp: new Date().toISOString()
-            }
-          });
-          
-          // Unsubscribe from channel after sending
-          await supabaseClient.removeChannel(channel);
-          
-          console.log(`[PRESENCE] Typing broadcast sent for contact ${contactId}`);
+          try {
+            // Broadcast typing event via Supabase Realtime
+            // We need to subscribe first before sending a broadcast
+            const channel = supabaseClient.channel(`typing:${contactId}`);
+            
+            // Subscribe and wait for it to be ready
+            await new Promise<void>((resolve, reject) => {
+              channel.subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                  resolve();
+                } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                  reject(new Error(`Channel subscription failed: ${status}`));
+                }
+              });
+              
+              // Timeout after 5 seconds
+              setTimeout(() => reject(new Error('Channel subscription timeout')), 5000);
+            });
+            
+            // Now send the broadcast
+            const sendResult = await channel.send({
+              type: 'broadcast',
+              event: 'typing',
+              payload: { 
+                contactId, 
+                presenceType,
+                timestamp: new Date().toISOString()
+              }
+            });
+            
+            console.log(`[PRESENCE] Send result:`, sendResult);
+            
+            // Unsubscribe from channel after sending
+            await supabaseClient.removeChannel(channel);
+            
+            console.log(`[PRESENCE] Typing broadcast sent successfully for contact ${contactId}`);
+          } catch (broadcastError) {
+            console.error(`[PRESENCE] Error broadcasting typing event:`, broadcastError);
+          }
         } else {
-          console.log('[PRESENCE] Contact not found for typing indicator');
+          console.log(`[PRESENCE] Contact not found for remoteJid: ${remoteJid}`);
         }
+      } else {
+        console.log(`[PRESENCE] Ignoring presence type: ${presenceType} (only composing/recording are processed)`);
       }
       
       return new Response(JSON.stringify({ success: true, event: 'presence' }), {
