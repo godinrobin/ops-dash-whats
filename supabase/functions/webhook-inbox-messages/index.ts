@@ -3756,10 +3756,10 @@ serve(async (req) => {
           
           console.log(`[PRESENCE] Looking for contact with remote_jid=${remoteJid} or phone=${phone}`);
           
-          // Find contact - search by remote_jid OR phone
+          // Find contact - search by remote_jid OR phone, also get user_id
           const { data: contacts, error: contactError } = await supabaseClient
             .from('inbox_contacts')
-            .select('id')
+            .select('id, user_id')
             .or(`remote_jid.eq.${remoteJid},phone.eq.${phone}`)
             .limit(1);
           
@@ -3771,56 +3771,65 @@ serve(async (req) => {
           
           if (contacts && contacts.length > 0) {
             contactId = contacts[0].id;
+            const userId = contacts[0].user_id;
+            
+            // Map presenceType to status for the database
+            const status = presenceType === 'recording' ? 'recording' : 'typing';
+            
+            console.log(`[PRESENCE] Upserting activity for contact ${contactId}, status: ${status}`);
+            
+            // Upsert into inbox_contact_activity table - this triggers postgres_changes realtime
+            const { error: upsertError } = await supabaseClient
+              .from('inbox_contact_activity')
+              .upsert({
+                contact_id: contactId,
+                user_id: userId,
+                status: status,
+                updated_at: new Date().toISOString()
+              }, { onConflict: 'contact_id' });
+            
+            if (upsertError) {
+              console.error(`[PRESENCE] Error upserting activity:`, upsertError);
+            } else {
+              console.log(`[PRESENCE] Activity upserted successfully for contact ${contactId}`);
+            }
           }
         }
         
-        if (contactId) {
-          console.log(`[PRESENCE] Broadcasting ${presenceType} event to contact ${contactId}`);
-          
-          try {
-            // Broadcast typing event via Supabase Realtime
-            // We need to subscribe first before sending a broadcast
-            const channel = supabaseClient.channel(`typing:${contactId}`);
-            
-            // Subscribe and wait for it to be ready
-            await new Promise<void>((resolve, reject) => {
-              channel.subscribe((status) => {
-                if (status === 'SUBSCRIBED') {
-                  resolve();
-                } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                  reject(new Error(`Channel subscription failed: ${status}`));
-                }
-              });
-              
-              // Timeout after 5 seconds
-              setTimeout(() => reject(new Error('Channel subscription timeout')), 5000);
-            });
-            
-            // Now send the broadcast
-            const sendResult = await channel.send({
-              type: 'broadcast',
-              event: 'typing',
-              payload: { 
-                contactId, 
-                presenceType,
-                timestamp: new Date().toISOString()
-              }
-            });
-            
-            console.log(`[PRESENCE] Send result:`, sendResult);
-            
-            // Unsubscribe from channel after sending
-            await supabaseClient.removeChannel(channel);
-            
-            console.log(`[PRESENCE] Typing broadcast sent successfully for contact ${contactId}`);
-          } catch (broadcastError) {
-            console.error(`[PRESENCE] Error broadcasting typing event:`, broadcastError);
-          }
-        } else {
+        if (!contactId) {
           console.log(`[PRESENCE] Contact not found for remoteJid: ${remoteJid}`);
         }
+      } else if (presenceType === 'paused' || presenceType === 'available') {
+        // Clear activity status when user stops typing
+        console.log(`[PRESENCE] Clearing activity for ${remoteJid} (presenceType: ${presenceType})`);
+        
+        if (remoteJid) {
+          const phone = remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '');
+          
+          const { data: contacts } = await supabaseClient
+            .from('inbox_contacts')
+            .select('id')
+            .or(`remote_jid.eq.${remoteJid},phone.eq.${phone}`)
+            .limit(1);
+          
+          if (contacts && contacts.length > 0) {
+            const contactId = contacts[0].id;
+            
+            // Set status to null to clear the indicator
+            const { error: clearError } = await supabaseClient
+              .from('inbox_contact_activity')
+              .update({ status: null, updated_at: new Date().toISOString() })
+              .eq('contact_id', contactId);
+            
+            if (clearError) {
+              console.error(`[PRESENCE] Error clearing activity:`, clearError);
+            } else {
+              console.log(`[PRESENCE] Activity cleared for contact ${contactId}`);
+            }
+          }
+        }
       } else {
-        console.log(`[PRESENCE] Ignoring presence type: ${presenceType} (only composing/recording are processed)`);
+        console.log(`[PRESENCE] Ignoring presence type: ${presenceType}`);
       }
       
       return new Response(JSON.stringify({ success: true, event: 'presence' }), {

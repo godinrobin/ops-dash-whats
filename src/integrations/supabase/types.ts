@@ -1637,6 +1637,35 @@ export type Database = {
         }
         Relationships: []
       }
+      inbox_contact_activity: {
+        Row: {
+          contact_id: string
+          status: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          contact_id: string
+          status?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          contact_id?: string
+          status?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbox_contact_activity_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: true
+            referencedRelation: "inbox_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inbox_contacts: {
         Row: {
           ad_body: string | null

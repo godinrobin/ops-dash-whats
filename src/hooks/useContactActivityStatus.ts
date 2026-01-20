@@ -9,12 +9,12 @@ interface ActivityState {
 
 /**
  * Hook to manage activity status (typing/recording) for multiple contacts.
- * Subscribes to Supabase Realtime channels for each contact.
+ * Subscribes to Supabase Realtime postgres_changes on inbox_contact_activity table.
  */
 export const useContactActivityStatus = (contactIds: string[]) => {
   const [activityStates, setActivityStates] = useState<ActivityState>({});
   const timeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
-  const channelsRef = useRef<Map<string, ReturnType<typeof supabase.channel>>>(new Map());
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const clearActivity = useCallback((contactId: string) => {
     setActivityStates(prev => {
@@ -25,44 +25,31 @@ export const useContactActivityStatus = (contactIds: string[]) => {
   }, []);
 
   useEffect(() => {
-    // Clean up old channels that are no longer needed
-    const currentContactIds = new Set(contactIds);
-    
-    channelsRef.current.forEach((channel, contactId) => {
-      if (!currentContactIds.has(contactId)) {
-        supabase.removeChannel(channel);
-        channelsRef.current.delete(contactId);
-        
-        // Clear timeout if exists
-        const timeout = timeoutsRef.current.get(contactId);
-        if (timeout) {
-          clearTimeout(timeout);
-          timeoutsRef.current.delete(contactId);
-        }
-        
-        // Clear activity state
-        clearActivity(contactId);
-      }
-    });
+    if (contactIds.length === 0) return;
 
-    // Subscribe to new contacts
-    contactIds.forEach(contactId => {
-      if (channelsRef.current.has(contactId)) return;
-
-      const channel = supabase
-        .channel(`typing:${contactId}`,
-          {
-            config: {
-              // Broadcast MUST be enabled or 'on("broadcast")' may never fire
-              broadcast: { self: false },
-            },
-          }
-        )
-        .on('broadcast', { event: 'typing' }, (payload) => {
-          const presenceType = payload?.payload?.presenceType;
-
-          // If backend tells us it stopped typing/recording, clear immediately
-          if (presenceType === 'paused' || presenceType === 'available' || presenceType === 'none') {
+    // Subscribe to postgres_changes on inbox_contact_activity table
+    const channel = supabase
+      .channel('inbox_contact_activity_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'inbox_contact_activity',
+        },
+        (payload) => {
+          const { new: newRow, old: oldRow, eventType } = payload;
+          
+          // Get the contact_id from the payload
+          const contactId = (newRow as any)?.contact_id || (oldRow as any)?.contact_id;
+          
+          // Only process if this contact is in our list
+          if (!contactId || !contactIds.includes(contactId)) return;
+          
+          const status = (newRow as any)?.status as string | null;
+          
+          if (eventType === 'DELETE' || !status) {
+            // Clear activity
             clearActivity(contactId);
             const existingTimeout = timeoutsRef.current.get(contactId);
             if (existingTimeout) {
@@ -72,12 +59,12 @@ export const useContactActivityStatus = (contactIds: string[]) => {
             return;
           }
           
-          // Set status based on presence type
-          const status: ActivityStatus = presenceType === 'recording' ? 'recording' : 'typing';
+          // Set status based on value
+          const activityStatus: ActivityStatus = status === 'recording' ? 'recording' : 'typing';
           
           setActivityStates(prev => ({
             ...prev,
-            [contactId]: status
+            [contactId]: activityStatus
           }));
           
           // Clear any existing timeout for this contact
@@ -93,18 +80,22 @@ export const useContactActivityStatus = (contactIds: string[]) => {
           }, 5000);
           
           timeoutsRef.current.set(contactId, timeout);
-        })
-        .subscribe();
+        }
+      )
+      .subscribe((status, err) => {
+        if (err) {
+          console.error('[useContactActivityStatus] Subscription error:', err);
+        }
+      });
 
-      channelsRef.current.set(contactId, channel);
-    });
+    channelRef.current = channel;
 
     // Cleanup on unmount
     return () => {
-      channelsRef.current.forEach((channel) => {
-        supabase.removeChannel(channel);
-      });
-      channelsRef.current.clear();
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
       
       timeoutsRef.current.forEach((timeout) => {
         clearTimeout(timeout);
