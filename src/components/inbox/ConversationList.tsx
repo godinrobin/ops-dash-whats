@@ -443,10 +443,16 @@ export const ConversationList = ({
                 >
                   <div className="relative flex-shrink-0">
                     <Avatar className="h-10 w-10 border-2 border-background shadow-sm">
-                      <AvatarImage 
-                        src={contact.profile_pic_url || undefined} 
-                        alt={contact.name || contact.phone}
-                      />
+                      {contact.profile_pic_url && (
+                        <AvatarImage 
+                          src={contact.profile_pic_url} 
+                          alt={contact.name || contact.phone}
+                          onError={(e) => {
+                            // Hide the image on error so fallback shows
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      )}
                       <AvatarFallback className="bg-primary/10 text-primary font-medium text-sm">
                         {getInitials(contact.name, contact.phone)}
                       </AvatarFallback>

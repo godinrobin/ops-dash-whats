@@ -962,6 +962,14 @@ serve(async (req) => {
 
         const uazHasAdData = !!(uazAdSourceUrl || uazAdTitle || uazAdBody || uazCtwaClid);
         // === END UAZAPI AD DATA ===
+
+        // === UAZAPI: Extract profile picture URL from payload.chat ===
+        const uazChat = (payload as any)?.chat || {};
+        const uazProfilePicUrl = uazChat.profilePicUrl || uazChat.profilePictureUrl || uazChat.imgUrl || uazChat.profilePic || null;
+        if (uazProfilePicUrl) {
+          console.log(`[UAZAPI-WEBHOOK] Found profile pic URL in chat object: ${uazProfilePicUrl.substring(0, 80)}`);
+        }
+        // === END PROFILE PIC ===
         // Determine text content: prioritize interactive response fields, then content.text, then text
         let uazText = uazMsg.text || contentText || '';
         
@@ -1100,6 +1108,11 @@ serve(async (req) => {
             contactUpdates.name = uazSenderName;
           }
 
+          // Update profile pic if we have a new one and contact doesn't have one
+          if (uazProfilePicUrl && !existingContact.profile_pic_url) {
+            contactUpdates.profile_pic_url = uazProfilePicUrl;
+          }
+
           if (uazHasAdData) {
             if (uazAdSourceUrl && !existingContact.ad_source_url) contactUpdates.ad_source_url = uazAdSourceUrl;
             if (uazAdTitle && !existingContact.ad_title) contactUpdates.ad_title = uazAdTitle;
@@ -1125,6 +1138,11 @@ serve(async (req) => {
             remote_jid: uazChatid,
             status: 'active',
           };
+
+          // Add profile pic if available
+          if (uazProfilePicUrl) {
+            contactInsertData.profile_pic_url = uazProfilePicUrl;
+          }
 
           if (uazHasAdData) {
             if (uazAdSourceUrl) contactInsertData.ad_source_url = uazAdSourceUrl;
