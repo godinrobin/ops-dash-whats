@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { StartNode } from './nodes/StartNode';
 import { TextNode } from './nodes/TextNode';
 import { AITextNode } from './nodes/AITextNode';
+import { IAConverterNode } from './nodes/IAConverterNode';
 import { ImageNode } from './nodes/ImageNode';
 import { AudioNode } from './nodes/AudioNode';
 import { VideoNode } from './nodes/VideoNode';
@@ -48,6 +49,7 @@ const nodeTypes = {
   start: StartNode,
   text: TextNode,
   aiText: AITextNode,
+  iaConverter: IAConverterNode,
   image: ImageNode,
   audio: AudioNode,
   video: VideoNode,
@@ -281,6 +283,7 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
     const labels: Record<string, string> = {
       start: 'Início',
       text: 'Mensagem de Texto',
+      iaConverter: 'IA Converter',
       image: 'Enviar Imagem',
       audio: 'Enviar Áudio',
       video: 'Enviar Vídeo',
