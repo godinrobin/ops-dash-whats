@@ -688,7 +688,8 @@ Deno.serve(async (req) => {
 
     // All other actions require authentication
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.error('[AUTH] Missing or invalid Authorization header');
       return new Response(
         JSON.stringify({ success: false, error: 'Não autorizado' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -703,17 +704,35 @@ Deno.serve(async (req) => {
       );
     }
 
-    const supabaseUser = createClient(supabaseUrl, supabaseServiceKey, {
-      global: { headers: { Authorization: authHeader } }
+    // Validate JWT via direct call to Supabase Auth API (more reliable than getUser())
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
+    const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      method: 'GET',
+      headers: {
+        apikey: supabaseAnonKey,
+        Authorization: authHeader,
+      },
     });
 
-    const { data: { user }, error: userError } = await supabaseUser.auth.getUser();
-    if (userError || !user) {
+    if (!userRes.ok) {
+      const errText = await userRes.text().catch(() => '');
+      console.error('[AUTH] JWT validation failed:', userRes.status, errText);
       return new Response(
         JSON.stringify({ success: false, error: 'Usuário não autenticado' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const user = await userRes.json() as { id?: string; email?: string };
+    if (!user?.id) {
+      console.error('[AUTH] JWT validation failed: missing user id');
+      return new Response(
+        JSON.stringify({ success: false, error: 'Usuário não autenticado' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    console.log('[AUTH] User authenticated:', user.id);
 
     // Enhanced logging function with more details
     const logAction = async (
