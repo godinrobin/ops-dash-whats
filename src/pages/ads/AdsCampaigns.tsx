@@ -175,6 +175,8 @@ export default function AdsCampaigns() {
   const [adsets, setAdsets] = useState<AdSet[]>([]);
   const [ads, setAds] = useState<Ad[]>([]);
   const [adAccounts, setAdAccounts] = useState<any[]>([]);
+  const [salesByAd, setSalesByAd] = useState<Record<string, { count: number; value: number }>>({});
+  const [salesByCampaign, setSalesByCampaign] = useState<Record<string, { count: number; value: number }>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -297,6 +299,37 @@ export default function AdsCampaigns() {
 
       const { data: adsData } = await adsQuery;
       setAds(adsData || []);
+
+      // Load sales from ads_whatsapp_leads (vendas atribuídas)
+      const { data: salesData } = await supabase
+        .from("ads_whatsapp_leads")
+        .select("ad_id, campaign_id, purchase_value")
+        .eq("user_id", user.id)
+        .not("purchase_sent_at", "is", null);
+
+      // Group sales by ad_id and campaign_id
+      const adSalesMap: Record<string, { count: number; value: number }> = {};
+      const campaignSalesMap: Record<string, { count: number; value: number }> = {};
+      
+      (salesData || []).forEach(sale => {
+        if (sale.ad_id) {
+          if (!adSalesMap[sale.ad_id]) {
+            adSalesMap[sale.ad_id] = { count: 0, value: 0 };
+          }
+          adSalesMap[sale.ad_id].count++;
+          adSalesMap[sale.ad_id].value += sale.purchase_value || 0;
+        }
+        if (sale.campaign_id) {
+          if (!campaignSalesMap[sale.campaign_id]) {
+            campaignSalesMap[sale.campaign_id] = { count: 0, value: 0 };
+          }
+          campaignSalesMap[sale.campaign_id].count++;
+          campaignSalesMap[sale.campaign_id].value += sale.purchase_value || 0;
+        }
+      });
+      
+      setSalesByAd(adSalesMap);
+      setSalesByCampaign(campaignSalesMap);
       
       // Get last synced time
       if (campaignsData && campaignsData.length > 0) {
@@ -860,7 +893,15 @@ export default function AdsCampaigns() {
   };
 
   const renderCellContent = (item: any, columnKey: string) => {
-    const profit = (item.conversion_value || 0) - (item.spend || 0);
+    // Calculate profit using real sales data
+    const adId = item.ad_id;
+    const campaignId = item.campaign_id;
+    const realValue = adId && salesByAd[adId] 
+      ? salesByAd[adId].value 
+      : campaignId && salesByCampaign[campaignId]
+        ? salesByCampaign[campaignId].value
+        : 0;
+    const profit = realValue - (item.spend || 0);
     
     switch (columnKey) {
       case 'thumbnail':
@@ -920,9 +961,25 @@ export default function AdsCampaigns() {
       case 'messaging_conversations_started':
         return <span className="text-sm">{formatNumber(item.messaging_conversations_started || 0)}</span>;
       case 'meta_conversions':
-        return <span className="font-medium text-green-400 text-sm">{formatNumber(item.meta_conversions || 0)}</span>;
+        // Use real sales from ads_whatsapp_leads
+        const adId = item.ad_id;
+        const campaignId = item.campaign_id;
+        const salesCount = adId && salesByAd[adId] 
+          ? salesByAd[adId].count 
+          : campaignId && salesByCampaign[campaignId]
+            ? salesByCampaign[campaignId].count
+            : 0;
+        return <span className="font-medium text-green-400 text-sm">{formatNumber(salesCount)}</span>;
       case 'conversion_value':
-        return <span className="font-medium text-blue-400 text-sm">{formatCurrency(item.conversion_value || 0)}</span>;
+        // Use real revenue from ads_whatsapp_leads
+        const adIdVal = item.ad_id;
+        const campaignIdVal = item.campaign_id;
+        const salesValue = adIdVal && salesByAd[adIdVal] 
+          ? salesByAd[adIdVal].value 
+          : campaignIdVal && salesByCampaign[campaignIdVal]
+            ? salesByCampaign[campaignIdVal].value
+            : 0;
+        return <span className="font-medium text-blue-400 text-sm">{formatCurrency(salesValue)}</span>;
       case 'profit':
         return <span className={cn("font-medium text-sm", profit >= 0 ? "text-green-400" : "text-red-400")}>{formatCurrency(profit)}</span>;
       default:
