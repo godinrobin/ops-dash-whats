@@ -3654,14 +3654,18 @@ Regras IMPORTANTES:
 
         console.log(`[FETCH-GROUPS] Fetching groups for instance ${inst.instance_name}, provider: ${inst.api_provider || 'evolution'}`);
 
-        // Get global config for API details
+        // NOTE: use instance-aware config to ensure correct baseUrl even when global provider != instance provider
+        const instanceConfig = await getInstanceApiConfig(supabaseClient, instanceId);
         const globalConfig = await getGlobalApiConfig(supabaseClient);
 
         let groups: any[] = [];
 
         if (inst.api_provider === 'uazapi') {
           // UazAPI: GET /group/list with instance token (per documentation)
-          const uazapiBaseUrl = globalConfig.baseUrl;
+          const uazapiBaseUrl = (instanceConfig.provider === 'uazapi'
+            ? instanceConfig.baseUrl
+            : (globalConfig.provider === 'uazapi' ? globalConfig.baseUrl : 'https://zapdata.uazapi.com')
+          ).replace(/\/$/, '');
           const uazapiToken = inst.uazapi_token;
 
           if (!uazapiToken) {
@@ -3671,29 +3675,61 @@ Regras IMPORTANTES:
             });
           }
 
-          console.log(`[FETCH-GROUPS] UazAPI: GET ${uazapiBaseUrl}/group/list?noparticipants=true`);
-          
-          const groupsRes = await fetch(`${uazapiBaseUrl}/group/list?noparticipants=true`, {
-            method: 'GET',
-            headers: {
-              'token': uazapiToken,
-            },
-          });
-
-          if (!groupsRes.ok) {
-            const errorText = await groupsRes.text();
-            console.error(`[FETCH-GROUPS] UazAPI error:`, errorText);
-            return new Response(JSON.stringify({ error: 'Failed to fetch groups from UAZAPI' }), {
-              status: groupsRes.status,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          const fetchGroupsOnce = async (force: boolean) => {
+            const url = `${uazapiBaseUrl}/group/list?noparticipants=true&force=${force ? 'true' : 'false'}`;
+            console.log(`[FETCH-GROUPS] UazAPI: GET ${url}`);
+            const res = await fetch(url, {
+              method: 'GET',
+              headers: {
+                'token': uazapiToken,
+              },
             });
+            const text = await res.text(); // always consume body
+            return { res, text };
+          };
+
+          // First try cached, then force refresh if the API returns 5xx/503
+          let attempt = await fetchGroupsOnce(false);
+          if (!attempt.res.ok && (attempt.res.status === 500 || attempt.res.status === 503)) {
+            console.log(`[FETCH-GROUPS] UazAPI returned ${attempt.res.status}; retrying with force=true`);
+            attempt = await fetchGroupsOnce(true);
           }
 
-          const groupsData = await groupsRes.json();
+          if (!attempt.res.ok) {
+            console.error(`[FETCH-GROUPS] UazAPI error (status=${attempt.res.status}):`, attempt.text);
+
+            // IMPORTANT: return 200 to avoid FunctionsHttpError in the client.
+            result = {
+              success: false,
+              provider: 'uazapi',
+              status: attempt.res.status,
+              error: 'Failed to fetch groups from UAZAPI',
+              details: attempt.text?.slice?.(0, 1000) ?? null,
+              groups: [],
+              count: 0,
+            };
+            break;
+          }
+
+          let groupsData: any = null;
+          try {
+            groupsData = attempt.text ? JSON.parse(attempt.text) : null;
+          } catch (e) {
+            console.error('[FETCH-GROUPS] Failed to parse UazAPI JSON:', e);
+            result = {
+              success: false,
+              provider: 'uazapi',
+              status: 200,
+              error: 'Invalid JSON returned by UAZAPI',
+              details: attempt.text?.slice?.(0, 1000) ?? null,
+              groups: [],
+              count: 0,
+            };
+            break;
+          }
+
           console.log(`[FETCH-GROUPS] UazAPI response: ${JSON.stringify(groupsData).substring(0, 500)}`);
-          
-          // UazAPI returns { groups: [...] } per documentation
-          groups = Array.isArray(groupsData) ? groupsData : (groupsData.groups || []);
+          groups = Array.isArray(groupsData) ? groupsData : (groupsData?.groups || []);
           
         } else {
           // Evolution API: GET /group/fetchAllGroups/{instanceName}
@@ -3712,11 +3748,18 @@ Regras IMPORTANTES:
 
           if (!groupsRes.ok) {
             const errorText = await groupsRes.text();
-            console.error(`[FETCH-GROUPS] Evolution error:`, errorText);
-            return new Response(JSON.stringify({ error: 'Failed to fetch groups from Evolution API' }), {
+            console.error(`[FETCH-GROUPS] Evolution error (status=${groupsRes.status}):`, errorText);
+            // Also return 200 to avoid FunctionsHttpError in the client
+            result = {
+              success: false,
+              provider: 'evolution',
               status: groupsRes.status,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
+              error: 'Failed to fetch groups from Evolution API',
+              details: errorText?.slice?.(0, 1000) ?? null,
+              groups: [],
+              count: 0,
+            };
+            break;
           }
 
           const groupsData = await groupsRes.json();
