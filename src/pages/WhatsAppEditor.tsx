@@ -72,14 +72,21 @@ export default function WhatsAppEditor() {
 
       if (error) throw error;
 
-      // Map to include profile info (would need to fetch from API if available)
+      // Map to include profile info initially as null
       const instancesWithProfile = (data || []).map(inst => ({
         ...inst,
-        profile_name: null,
-        profile_pic_url: null,
+        profile_name: null as string | null,
+        profile_pic_url: null as string | null,
       }));
 
       setInstances(instancesWithProfile);
+
+      // Fetch profile info for connected instances from UazAPI
+      const connectedInstances = instancesWithProfile.filter(i => i.status === 'connected' && i.uazapi_token);
+      
+      if (connectedInstances.length > 0) {
+        fetchProfileInfo(connectedInstances);
+      }
     } catch (error) {
       console.error('Error fetching instances:', error);
       toast.error('Erro ao carregar instâncias');
@@ -88,6 +95,52 @@ export default function WhatsAppEditor() {
       setRefreshing(false);
     }
   }, [user, effectiveUserId]);
+
+  // Fetch profile info from UazAPI for connected instances
+  const fetchProfileInfo = async (connectedInstances: Array<{ id: string; uazapi_token: string | null }>) => {
+    const UAZAPI_BASE_URL = 'https://zapdata.uazapi.com';
+    
+    const profilePromises = connectedInstances.map(async (inst) => {
+      if (!inst.uazapi_token) return { id: inst.id, profileName: null, profilePicUrl: null };
+      
+      try {
+        const response = await fetch(`${UAZAPI_BASE_URL}/instance/status`, {
+          method: 'GET',
+          headers: {
+            'token': inst.uazapi_token,
+          },
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          return {
+            id: inst.id,
+            profileName: data.instance?.profileName || null,
+            profilePicUrl: data.instance?.profilePicUrl || null,
+          };
+        }
+      } catch (error) {
+        console.error(`Error fetching profile for instance ${inst.id}:`, error);
+      }
+      
+      return { id: inst.id, profileName: null, profilePicUrl: null };
+    });
+    
+    const profiles = await Promise.all(profilePromises);
+    
+    // Update instances with profile info
+    setInstances(prev => prev.map(inst => {
+      const profile = profiles.find(p => p.id === inst.id);
+      if (profile) {
+        return {
+          ...inst,
+          profile_name: profile.profileName,
+          profile_pic_url: profile.profilePicUrl,
+        };
+      }
+      return inst;
+    }));
+  };
 
   useEffect(() => {
     fetchInstances();
@@ -418,10 +471,18 @@ export default function WhatsAppEditor() {
                         />
 
                         {/* Avatar */}
-                        <Avatar className="h-12 w-12">
-                          <AvatarImage src={instance.profile_pic_url || undefined} />
-                          <AvatarFallback>
-                            <User className="h-5 w-5" />
+                        <Avatar className="h-12 w-12 border-2 border-muted">
+                          {instance.profile_pic_url && (
+                            <AvatarImage 
+                              src={instance.profile_pic_url} 
+                              alt={instance.profile_name || instance.phone_number || ''}
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          )}
+                          <AvatarFallback className="bg-muted">
+                            <User className="h-5 w-5 text-muted-foreground" />
                           </AvatarFallback>
                         </Avatar>
 
@@ -429,18 +490,18 @@ export default function WhatsAppEditor() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <p className="font-medium truncate">
-                              {instance.label || instance.instance_name}
+                              {instance.profile_name || formatPhoneDisplay(instance.phone_number || instance.instance_name)}
                             </p>
                             {getStatusBadge(instance.status)}
                           </div>
-                          {instance.phone_number && instance.phone_number !== instance.instance_name && (
+                          {instance.phone_number && (
                             <p className="text-sm text-muted-foreground">
                               {formatPhoneDisplay(instance.phone_number)}
                             </p>
                           )}
-                          {instance.profile_name && (
+                          {instance.label && instance.label !== instance.instance_name && (
                             <p className="text-xs text-muted-foreground">
-                              Nome: {instance.profile_name}
+                              Rótulo: {instance.label}
                             </p>
                           )}
                         </div>
