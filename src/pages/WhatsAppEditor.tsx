@@ -96,50 +96,37 @@ export default function WhatsAppEditor() {
     }
   }, [user, effectiveUserId]);
 
-  // Fetch profile info from UazAPI for connected instances
+  // Fetch profile info from UazAPI for connected instances via edge function
   const fetchProfileInfo = async (connectedInstances: Array<{ id: string; uazapi_token: string | null }>) => {
-    const UAZAPI_BASE_URL = 'https://zapdata.uazapi.com';
-    
-    const profilePromises = connectedInstances.map(async (inst) => {
-      if (!inst.uazapi_token) return { id: inst.id, profileName: null, profilePicUrl: null };
+    try {
+      const instanceIds = connectedInstances.map(i => i.id);
       
-      try {
-        const response = await fetch(`${UAZAPI_BASE_URL}/instance/status`, {
-          method: 'GET',
-          headers: {
-            'token': inst.uazapi_token,
-          },
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
+      const { data, error } = await supabase.functions.invoke('fetch-whatsapp-profiles', {
+        body: { instanceIds },
+      });
+
+      if (error) {
+        console.error('Error fetching profiles:', error);
+        return;
+      }
+
+      const profiles = data?.profiles || [];
+      
+      // Update instances with profile info
+      setInstances(prev => prev.map(inst => {
+        const profile = profiles.find((p: any) => p.id === inst.id);
+        if (profile) {
           return {
-            id: inst.id,
-            profileName: data.instance?.profileName || null,
-            profilePicUrl: data.instance?.profilePicUrl || null,
+            ...inst,
+            profile_name: profile.profileName,
+            profile_pic_url: profile.profilePicUrl,
           };
         }
-      } catch (error) {
-        console.error(`Error fetching profile for instance ${inst.id}:`, error);
-      }
-      
-      return { id: inst.id, profileName: null, profilePicUrl: null };
-    });
-    
-    const profiles = await Promise.all(profilePromises);
-    
-    // Update instances with profile info
-    setInstances(prev => prev.map(inst => {
-      const profile = profiles.find(p => p.id === inst.id);
-      if (profile) {
-        return {
-          ...inst,
-          profile_name: profile.profileName,
-          profile_pic_url: profile.profilePicUrl,
-        };
-      }
-      return inst;
-    }));
+        return inst;
+      }));
+    } catch (error) {
+      console.error('Error fetching profiles:', error);
+    }
   };
 
   useEffect(() => {
