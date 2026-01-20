@@ -108,12 +108,25 @@ async function getPyProxyUserList(accessToken: string, username?: string): Promi
 }
 
 // Get dynamic proxy host from PYPROXY API
-// proxy_type: 'resi' for residential, 'isp' for ISP, 'dc' for datacenter
+// Conforme documentação PyProxy (guide.pyproxy.com):
+// proxy_type: "1" = Residential, "2" = ISP, "3" = Mobile, "4" = Datacenter
 async function getPyProxyHost(accessToken: string, proxyType: string = 'resi'): Promise<{ host?: string; port?: string; error?: string }> {
+  // Mapear tipo de proxy para valor numérico conforme documentação PyProxy
+  const typeMapping: Record<string, string> = {
+    'resi': '1',        // Residential (Rotating)
+    'residential': '1',
+    'isp': '2',         // ISP (Static)
+    'mobile': '3',      // Mobile
+    'dc': '4',          // Datacenter
+    'datacenter': '4'
+  };
+  const numericType = typeMapping[proxyType.toLowerCase()] || '1';
+  
   const form = new FormData();
   form.append('access_token', accessToken);
-  // REQUIRED: proxy_type parameter (resi, isp, dc)
-  form.append('proxy_type', proxyType);
+  form.append('proxy_type', numericType);
+
+  console.log(`[PYPROXY] get_user_proxy_host request: proxyType="${proxyType}" -> numericType="${numericType}"`);
 
   try {
     const res = await fetch('https://api.pyproxy.com/g/open/get_user_proxy_host', {
@@ -122,7 +135,7 @@ async function getPyProxyHost(accessToken: string, proxyType: string = 'resi'): 
       body: form,
     });
     const data = await res.json();
-    console.log('[PYPROXY] get_user_proxy_host response (type=' + proxyType + '):', JSON.stringify(data));
+    console.log(`[PYPROXY] get_user_proxy_host response (type=${proxyType}/${numericType}):`, JSON.stringify(data));
     
     if (data?.ret === 0 && data?.code === 1 && data?.ret_data) {
       // Response can have different formats - handle both
@@ -130,6 +143,7 @@ async function getPyProxyHost(accessToken: string, proxyType: string = 'resi'): 
       const host = hostData.proxy_host || hostData.host || hostData.address;
       const port = String(hostData.proxy_port || hostData.port || '16666');
       if (host) {
+        console.log(`[PYPROXY] ✓ Got gateway for ${proxyType}: ${host}:${port}`);
         return { host, port };
       }
     }
