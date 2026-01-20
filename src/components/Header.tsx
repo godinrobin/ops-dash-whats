@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
+import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { Button } from "@/components/ui/button";
 import { LogOut, ArrowLeft, User, Shield, LayoutGrid, ShoppingBag, Megaphone, Menu, Settings } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -20,6 +21,7 @@ interface HeaderProps {
 export const Header = ({ mode, onModeChange, onSidebarToggle }: HeaderProps) => {
   const { signOut } = useAuth();
   const { isAdmin } = useAdminStatus();
+  const { isImpersonating } = useImpersonation();
   const navigate = useNavigate();
   const location = useLocation();
   const [profileOpen, setProfileOpen] = useState(false);
@@ -59,9 +61,12 @@ export const Header = ({ mode, onModeChange, onSidebarToggle }: HeaderProps) => 
     }
   ];
 
+  // When impersonating, offset the header below the banner (banner height ~40px)
+  const headerTopClass = isImpersonating ? "top-10" : "top-0";
+
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-b border-border z-50">
+      <header className={`fixed ${headerTopClass} left-0 right-0 bg-background/95 backdrop-blur-sm border-b border-border z-50`}>
         <div className="container mx-auto px-4 h-14 md:h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {/* Sidebar toggle - on all pages except auth and ads */}
