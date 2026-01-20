@@ -2921,6 +2921,55 @@ serve(async (req) => {
               console.log(`[ADS LEAD] Extracted fbclid from referral: ${fbclid}`);
             }
             
+            // 2.5. Extract source_id (Facebook Ad ID) from referral data
+            let adId: string | null = referralData.source_id || null;
+            let adIdSource = referralData.source_id ? 'referral_data' : 'none';
+            
+            // Also check in externalAdReply structure
+            if (!adId && externalAdReply.source_id) {
+              adId = externalAdReply.source_id;
+              adIdSource = 'external_ad_reply';
+            }
+            
+            // Try to extract from referral object in different locations
+            if (!adId && referral.source_id) {
+              adId = referral.source_id;
+              adIdSource = 'referral';
+            }
+            
+            // Check messageContextInfo
+            if (!adId && messageContextInfo.source_id) {
+              adId = messageContextInfo.source_id;
+              adIdSource = 'message_context_info';
+            }
+            
+            // Deep search for source_id in entire data object
+            if (!adId) {
+              const findSourceIdInObject = (obj: any, path: string = ''): string | null => {
+                if (!obj || typeof obj !== 'object') return null;
+                for (const [k, v] of Object.entries(obj)) {
+                  if (k === 'source_id' && typeof v === 'string') {
+                    console.log(`[ADS LEAD] Deep search found source_id at ${path}.${k}`);
+                    return v;
+                  }
+                  if (typeof v === 'object' && v !== null) {
+                    const found = findSourceIdInObject(v, `${path}.${k}`);
+                    if (found) return found;
+                  }
+                }
+                return null;
+              };
+              const deepSourceId = findSourceIdInObject(data, 'data');
+              if (deepSourceId) {
+                adId = deepSourceId;
+                adIdSource = 'deep_search';
+              }
+            }
+            
+            if (adId) {
+              console.log(`[ADS LEAD] Extracted ad_id (source_id): ${adId} (source: ${adIdSource})`);
+            }
+            
             // 3. Check for headline/body that might contain tracking info
             const adTitle = referral.title || externalAdReply.title || '';
             const adBody = referral.body || externalAdReply.body || '';
@@ -3007,8 +3056,34 @@ serve(async (req) => {
               // Get ad source URL (first valid URL from various sources)
               const adSourceUrl = sourceUrls[0] || null;
 
-              // Create new lead
-              const { error: leadError } = await supabaseClient
+              // Lookup campaign_id and adset_id from ads_ads table if we have ad_id
+              let campaignId: string | null = null;
+              let adsetId: string | null = null;
+              let adName: string | null = null;
+              
+              if (adId) {
+                try {
+                  const { data: adData } = await supabaseClient
+                    .from('ads_ads')
+                    .select('campaign_id, adset_id, name')
+                    .eq('ad_id', adId)
+                    .maybeSingle();
+                  
+                  if (adData) {
+                    campaignId = adData.campaign_id;
+                    adsetId = adData.adset_id;
+                    adName = adData.name;
+                    console.log(`[ADS LEAD] Found ad info: campaign=${campaignId}, adset=${adsetId}, name=${adName}`);
+                  } else {
+                    console.log(`[ADS LEAD] Ad not found in ads_ads table for ad_id: ${adId}`);
+                  }
+                } catch (adLookupError) {
+                  console.log('[ADS LEAD] Error looking up ad:', adLookupError);
+                }
+              }
+
+              // Create new lead with ad attribution
+              const { error: leadError, data: newLead } = await supabaseClient
                 .from('ads_whatsapp_leads')
                 .insert({
                   user_id: monitoredNumber.user_id,
@@ -3022,12 +3097,17 @@ serve(async (req) => {
                   first_contact_at: new Date().toISOString(),
                   ad_account_id: adAccountId,
                   ad_source_url: adSourceUrl,
-                });
+                  ad_id: adId,
+                  campaign_id: campaignId,
+                  adset_id: adsetId,
+                })
+                .select('id')
+                .single();
 
               if (leadError) {
                 console.error('[ADS LEAD] Error creating lead:', leadError);
               } else {
-                console.log(`[ADS LEAD] New lead created for phone ${phone} with ad_account_id ${adAccountId}, ad_source_url ${adSourceUrl}`);
+                console.log(`[ADS LEAD] New lead created for phone ${phone} with ad_id=${adId}, campaign_id=${campaignId}, adset_id=${adsetId}`);
               }
 
               // Update inbox_contact with ad metadata
