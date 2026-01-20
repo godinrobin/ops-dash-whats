@@ -725,40 +725,63 @@ Deno.serve(async (req) => {
       const gatewayPlanType = planType === 'residential' ? 'isp' : planType;
       console.log('[STEP 2] Mapping plan type for gateway:', planType, '→', gatewayPlanType);
       
-      const { data: gatewayConfig, error: gatewayError } = await supabaseAdmin
-        .from('proxy_gateway_config')
-        .select('*')
-        .eq('plan_type', gatewayPlanType)
-        .single();
+      // For mobile proxies, we need to get the gateway dynamically from PyProxy API
+      // because mobile uses a different infrastructure than ISP/residential
+      let gatewayConfig: GatewayConfig | null = null;
+      
+      if (planType === 'mobile') {
+        console.log('[STEP 2] Mobile proxy detected - will fetch dynamic gateway from PyProxy API');
+        // We'll get the gateway after obtaining access token in STEP 6
+        // For now, create a placeholder config that will be updated
+        gatewayConfig = {
+          id: 'dynamic-mobile',
+          plan_type: 'mobile',
+          gateway_pattern: 'dynamic',
+          gateway_host: 'pr.pyproxy.com', // Default, will be overwritten
+          gateway_port: '16666',
+          description: 'Mobile Proxy - Dynamic Gateway'
+        };
+      } else {
+        const { data: fetchedConfig, error: gatewayError } = await supabaseAdmin
+          .from('proxy_gateway_config')
+          .select('*')
+          .eq('plan_type', gatewayPlanType)
+          .single();
 
-      if (gatewayError || !gatewayConfig) {
-        console.error('[STEP 2] ✗ Gateway config not found for plan type:', planType);
-        await logAction('error', `Gateway não configurado para tipo: ${planType}`, gatewayError, { 
-          plan_type: planType,
-          error_code: 'GATEWAY_NOT_FOUND'
-        });
-        return new Response(
-          JSON.stringify({ success: false, error: `Gateway não configurado para tipo: ${planType}` }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        if (gatewayError || !fetchedConfig) {
+          console.error('[STEP 2] ✗ Gateway config not found for plan type:', planType);
+          await logAction('error', `Gateway não configurado para tipo: ${planType}`, gatewayError, { 
+            plan_type: planType,
+            error_code: 'GATEWAY_NOT_FOUND'
+          });
+          return new Response(
+            JSON.stringify({ success: false, error: `Gateway não configurado para tipo: ${planType}` }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        gatewayConfig = fetchedConfig;
       }
 
-      console.log('[STEP 2] ✓ Gateway config found:', {
-        plan_type: gatewayConfig.plan_type,
-        gateway_host: gatewayConfig.gateway_host,
-        gateway_port: gatewayConfig.gateway_port
+      // At this point gatewayConfig is guaranteed to be non-null
+      const finalGatewayConfig = gatewayConfig!;
+      
+      console.log('[STEP 2] ✓ Gateway config:', {
+        plan_type: finalGatewayConfig.plan_type,
+        gateway_host: finalGatewayConfig.gateway_host,
+        gateway_port: finalGatewayConfig.gateway_port,
+        is_dynamic: planType === 'mobile'
       });
 
       // ============= STEP 3: GATEWAY VALIDATION =============
-      console.log('[STEP 3] Validating gateway:', gatewayConfig.gateway_host);
+      console.log('[STEP 3] Validating gateway:', finalGatewayConfig.gateway_host);
       
-      const gatewayResult = await validateGateway(gatewayConfig.gateway_host, gatewayConfig.gateway_port);
+      const gatewayResult = await validateGateway(finalGatewayConfig.gateway_host, finalGatewayConfig.gateway_port);
       
       if (!gatewayResult.valid) {
-        console.error('[STEP 3] ✗ DNS validation FAILED for:', gatewayConfig.gateway_host);
-        await logAction('error', `Gateway inválido: ${gatewayConfig.gateway_host}`, null, {
+        console.error('[STEP 3] ✗ DNS validation FAILED for:', finalGatewayConfig.gateway_host);
+        await logAction('error', `Gateway inválido: ${finalGatewayConfig.gateway_host}`, null, {
           plan_type: planType,
-          gateway_host: gatewayConfig.gateway_host,
+          gateway_host: finalGatewayConfig.gateway_host,
           dns_result: gatewayResult.error,
           error_code: 'GATEWAY_VALIDATION_FAILED'
         });
@@ -766,7 +789,7 @@ Deno.serve(async (req) => {
         return new Response(
           JSON.stringify({ 
             success: false, 
-            error: `Gateway indisponível: ${gatewayConfig.gateway_host}`,
+            error: `Gateway indisponível: ${finalGatewayConfig.gateway_host}`,
             error_code: 'GATEWAY_VALIDATION_FAILED',
             details: gatewayResult.error
           }),
@@ -774,7 +797,7 @@ Deno.serve(async (req) => {
         );
       }
 
-      console.log('[STEP 3] ✓ Gateway validated:', gatewayConfig.gateway_host, '→', gatewayResult.ip);
+      console.log('[STEP 3] ✓ Gateway validated:', finalGatewayConfig.gateway_host, '→', gatewayResult.ip);
 
       // ============= STEP 4: CHECK USER WALLET BALANCE =============
       // Get price for this specific plan type from proxy_prices table
@@ -825,7 +848,7 @@ Deno.serve(async (req) => {
           user_id: user.id,
           status: 'pending',
           plan_type: planType,
-          gateway_used: `${gatewayConfig.gateway_host}:${gatewayConfig.gateway_port}`,
+          gateway_used: `${finalGatewayConfig.gateway_host}:${finalGatewayConfig.gateway_port}`,
           country: country,
           state: state || null,
           city: city || null
@@ -894,6 +917,45 @@ Deno.serve(async (req) => {
         }
 
         console.log('[STEP 6] ✓ PYPROXY access token obtained');
+
+        // ============= STEP 6.5: GET DYNAMIC GATEWAY FOR MOBILE PROXIES =============
+        // For mobile proxies, we need to fetch the correct gateway from PyProxy API
+        // because mobile uses different infrastructure than ISP/residential
+        if (planType === 'mobile') {
+          console.log('[STEP 6.5] Fetching dynamic gateway for mobile proxies...');
+          
+          // Try to get the mobile proxy host from PyProxy API
+          // The API accepts proxy_type values: 'resi', 'isp', 'dc', 'mobile'
+          const mobileHostResult = await getPyProxyHost(accessToken, 'mobile');
+          
+          if (mobileHostResult.host) {
+            console.log('[STEP 6.5] ✓ Mobile gateway from API:', mobileHostResult.host, ':', mobileHostResult.port);
+            // Update the gateway config with the dynamic values
+            finalGatewayConfig.gateway_host = mobileHostResult.host;
+            finalGatewayConfig.gateway_port = mobileHostResult.port || '16666';
+          } else {
+            // Fallback: try 'resi' type which sometimes includes mobile
+            console.log('[STEP 6.5] Mobile gateway not found, trying resi type...');
+            const resiHostResult = await getPyProxyHost(accessToken, 'resi');
+            
+            if (resiHostResult.host) {
+              console.log('[STEP 6.5] ✓ Using resi gateway as fallback:', resiHostResult.host);
+              finalGatewayConfig.gateway_host = resiHostResult.host;
+              finalGatewayConfig.gateway_port = resiHostResult.port || '16666';
+            } else {
+              console.warn('[STEP 6.5] ⚠ Could not get dynamic gateway, using default pr.pyproxy.com');
+              // Keep the default gateway
+            }
+          }
+          
+          // Update the order with the new gateway
+          await supabaseAdmin
+            .from('proxy_orders')
+            .update({ gateway_used: `${finalGatewayConfig.gateway_host}:${finalGatewayConfig.gateway_port}` })
+            .eq('id', order.id);
+          
+          console.log('[STEP 6.5] Final mobile gateway:', finalGatewayConfig.gateway_host, ':', finalGatewayConfig.gateway_port);
+        }
 
         // ============= STEP 7: PROVISION PROXY (DEDICATED vs ROTATING) =============
         
@@ -1105,7 +1167,7 @@ Deno.serve(async (req) => {
 
         console.log('[STEP 7] ROTATING PROXY: Creating PYPROXY user:', username, 'with 1GB limit_flow');
 
-        const remark = `lovable:${order.id}:${gatewayPlanType}:${gatewayConfig.gateway_host}`;
+        const remark = `lovable:${order.id}:${gatewayPlanType}:${finalGatewayConfig.gateway_host}`;
         console.log('[STEP 7] PyProxy remark:', remark);
 
         const userForm = new FormData();
@@ -1187,8 +1249,8 @@ Deno.serve(async (req) => {
         }
 
         // ============= STEP 9: FINALIZE ORDER =============
-        const host = gatewayConfig.gateway_host;
-        const port = gatewayConfig.gateway_port;
+        const host = finalGatewayConfig.gateway_host;
+        const port = finalGatewayConfig.gateway_port;
         const gatewayUsed = `${host}:${port}`;
 
         console.log('[STEP 9] Finalizing order with gateway:', gatewayUsed);
