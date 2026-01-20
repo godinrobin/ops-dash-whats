@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { 
   Globe, Copy, Check, Loader2, Shield, Zap, Clock, 
-  Eye, EyeOff, RefreshCw, RotateCcw, Minus, Plus, ChevronDown, ChevronRight, Pencil,
+  Eye, EyeOff, RefreshCw, RotateCcw, ChevronDown, ChevronRight, Pencil,
   Server, Wifi, Building2, PlayCircle, CheckCircle, XCircle, AlertCircle, ChevronsUpDown, Search
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -69,14 +69,27 @@ interface ProxiesTabProps {
 }
 
 type PlanType = 'isp' | 'mobile';
+type PackageType = 'unit' | 'pack10' | 'pack20';
 
-const PLAN_CONFIG: Record<PlanType, { label: string; icon: React.ReactNode; description: string; color: string; price: number; badge?: string }> = {
+interface ProxyPackage {
+  quantity: number;
+  price: number;
+  label: string;
+  savings?: string;
+}
+
+const PLAN_CONFIG: Record<PlanType, { label: string; icon: React.ReactNode; description: string; color: string; price: number; badge?: string; packages: Record<PackageType, ProxyPackage> }> = {
   isp: {
     label: 'Proxy Tradicional',
     icon: <Wifi className="h-4 w-4" />,
     description: 'IP residencial',
     color: 'bg-green-500/20 text-green-400 border-green-500/30',
-    price: 6.50
+    price: 6.50,
+    packages: {
+      unit: { quantity: 1, price: 6.50, label: 'Unitário' },
+      pack10: { quantity: 10, price: 50, label: '10 Proxies', savings: 'Economize R$15' },
+      pack20: { quantity: 20, price: 85, label: '20 Proxies', savings: 'Economize R$45' }
+    }
   },
   mobile: {
     label: 'Proxy Mobile',
@@ -84,7 +97,12 @@ const PLAN_CONFIG: Record<PlanType, { label: string; icon: React.ReactNode; desc
     description: 'IP mobile',
     color: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
     price: 14.50,
-    badge: 'Novidade'
+    badge: 'Novidade',
+    packages: {
+      unit: { quantity: 1, price: 14.50, label: 'Unitário' },
+      pack10: { quantity: 10, price: 100, label: '10 Proxies', savings: 'Economize R$45' },
+      pack20: { quantity: 20, price: 200, label: '20 Proxies', savings: 'Economize R$90' }
+    }
   }
 };
 
@@ -111,7 +129,6 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
   const [orders, setOrders] = useState<ProxyOrder[]>([]);
   const [price, setPrice] = useState<number | null>(null);
   const [prices, setPrices] = useState<Record<string, { price: number; description: string }>>({});
-  const [quantity, setQuantity] = useState(1);
   const [planType, setPlanType] = useState<PlanType>('isp');
   const [country, setCountry] = useState('br');
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -123,6 +140,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
   const [selectedCity, setSelectedCity] = useState('');
   const [stateOpen, setStateOpen] = useState(false);
   const [cityOpen, setCityOpen] = useState(false);
+  const [selectedPackage, setSelectedPackage] = useState<PackageType>('unit');
 
   // Memoized cities for selected state
   const availableCities = useMemo(() => {
@@ -166,14 +184,16 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
     }
   };
 
-  // Get current price for selected plan type
-  const currentPrice = prices[planType]?.price || PLAN_CONFIG[planType].price;
+  // Get current price and quantity based on selected package
+  const currentPackage = PLAN_CONFIG[planType].packages[selectedPackage];
+  const currentPrice = currentPackage.price;
+  const packageQuantity = currentPackage.quantity;
 
   const handlePurchase = async () => {
     if (!user) return;
 
-    const unitPrice = currentPrice;
-    const totalPrice = unitPrice * quantity;
+    const totalPrice = currentPrice;
+    const totalQuantity = packageQuantity;
 
     if (balance < totalPrice) {
       toast({
@@ -191,7 +211,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
       let successCount = 0;
       let lastError = '';
 
-      for (let i = 0; i < quantity; i++) {
+      for (let i = 0; i < totalQuantity; i++) {
         const purchaseBody: any = { action: 'purchase', planType, country };
         // Add state/city for Brazil targeting
         if (country === 'br' && selectedState !== 'random') {
@@ -218,16 +238,20 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
       }
 
       if (successCount > 0) {
+        // Calculate the cost per unit based on package price
+        const unitCost = totalPrice / totalQuantity;
+        const actualCost = unitCost * successCount;
+
         toast({
-          title: successCount === quantity ? "Proxies adquiridas!" : `${successCount}/${quantity} proxies adquiridas`,
-          description: successCount === quantity 
-            ? `${quantity} proxy(s) ${PLAN_CONFIG[planType].label} pronta(s) para uso.`
+          title: successCount === totalQuantity ? "Proxies adquiridas!" : `${successCount}/${totalQuantity} proxies adquiridas`,
+          description: successCount === totalQuantity 
+            ? `${totalQuantity} proxy(s) ${PLAN_CONFIG[planType].label} pronta(s) para uso.`
             : `Algumas compras falharam: ${lastError}`,
-          variant: successCount === quantity ? "success" : "default"
+          variant: successCount === totalQuantity ? "success" : "default"
         });
 
-        // Update balance locally
-        onBalanceChange(balance - (unitPrice * successCount));
+        // Update balance locally - charge proportionally for successes
+        onBalanceChange(balance - actualCost);
         
         // Reload orders
         loadData();
@@ -553,7 +577,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                         <button
                           key={type}
                           type="button"
-                          onClick={() => setPlanType(type)}
+                          onClick={() => { setPlanType(type); setSelectedPackage('unit'); }}
                           className={cn(
                             "flex flex-col items-start p-3 rounded-lg border-2 transition-all text-left",
                             isSelected 
@@ -590,6 +614,56 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                             R$ {typePrice.toFixed(2).replace('.', ',')}
                             <span className="text-xs font-normal text-muted-foreground">/mês</span>
                           </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Package Selector */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Pacote de Proxies</label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {(Object.keys(PLAN_CONFIG[planType].packages) as PackageType[]).map((pkg) => {
+                      const packageConfig = PLAN_CONFIG[planType].packages[pkg];
+                      const isSelected = selectedPackage === pkg;
+                      return (
+                        <button
+                          key={pkg}
+                          type="button"
+                          onClick={() => setSelectedPackage(pkg)}
+                          className={cn(
+                            "flex flex-col items-start p-3 rounded-lg border-2 transition-all text-left relative",
+                            isSelected 
+                              ? "border-accent bg-accent/10" 
+                              : "border-border hover:border-accent/50 bg-muted/30"
+                          )}
+                        >
+                          {packageConfig.savings && (
+                            <Badge className="absolute -top-2 -right-2 bg-green-500/20 text-green-400 border-green-500/30 text-[10px] px-1.5">
+                              {packageConfig.savings}
+                            </Badge>
+                          )}
+                          <span className={cn(
+                            "font-medium text-sm",
+                            isSelected ? "text-accent" : "text-foreground"
+                          )}>
+                            {packageConfig.label}
+                          </span>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {packageConfig.quantity === 1 ? '1 proxy' : `${packageConfig.quantity} proxies`}
+                          </p>
+                          <p className={cn(
+                            "text-lg font-bold mt-2",
+                            isSelected ? "text-accent" : "text-foreground"
+                          )}>
+                            R$ {packageConfig.price.toFixed(2).replace('.', ',')}
+                          </p>
+                          {packageConfig.quantity > 1 && (
+                            <p className="text-[10px] text-muted-foreground">
+                              R$ {(packageConfig.price / packageConfig.quantity).toFixed(2).replace('.', ',')} cada
+                            </p>
+                          )}
                         </button>
                       );
                     })}
@@ -744,45 +818,15 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-3xl font-bold text-accent">
-                      R$ {(currentPrice * quantity).toFixed(2).replace('.', ',')}
-                      <span className="text-sm font-normal text-muted-foreground">
-                        {quantity > 1 ? ` (${quantity}x R$ ${currentPrice.toFixed(2).replace('.', ',')})` : '/mês'}
+                      R$ {currentPrice.toFixed(2).replace('.', ',')}
+                      <span className="text-sm font-normal text-muted-foreground ml-2">
+                        {packageQuantity > 1 && `(${packageQuantity} proxies)`}
                       </span>
                     </p>
                   </div>
                 </div>
                 
                 <div className="flex items-center gap-3">
-                  {/* Quantity Selector */}
-                  <div className="flex items-center gap-2 bg-muted/50 rounded-lg p-1">
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                      disabled={quantity <= 1 || purchasing}
-                      className="h-8 w-8 p-0"
-                    >
-                      <Minus className="h-4 w-4" />
-                    </Button>
-                    <Input
-                      type="number"
-                      min="1"
-                      max="10"
-                      value={quantity}
-                      onChange={(e) => setQuantity(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
-                      className="w-14 h-8 text-center bg-transparent border-0"
-                    />
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={() => setQuantity(Math.min(10, quantity + 1))}
-                      disabled={quantity >= 10 || purchasing}
-                      className="h-8 w-8 p-0"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
-
                   <Button 
                     onClick={handlePurchase}
                     disabled={purchasing}
@@ -791,12 +835,12 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                     {purchasing ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Processando...
+                        Processando {packageQuantity} proxies...
                       </>
                     ) : (
                       <>
                         <Globe className="h-4 w-4 mr-2" />
-                        Contratar {quantity > 1 ? `${quantity} Proxies` : 'Agora'}
+                        Contratar {packageQuantity > 1 ? `${packageQuantity} Proxies` : 'Agora'}
                       </>
                     )}
                   </Button>
