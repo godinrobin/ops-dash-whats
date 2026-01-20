@@ -223,6 +223,7 @@ export const PropertiesPanel = ({
                 <SelectContent>
                   <SelectItem value="keyword">Palavra-chave</SelectItem>
                   <SelectItem value="all">Todas as mensagens</SelectItem>
+                  <SelectItem value="sale">Venda</SelectItem>
                 </SelectContent>
               </Select>
             </div>
