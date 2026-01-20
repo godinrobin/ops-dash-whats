@@ -360,7 +360,14 @@ export const ChatPanel = ({
     
     // Subscribe to a custom activity channel for this contact
     const channel = supabase
-      .channel(`typing:${contact.id}`)
+      .channel(`typing:${contact.id}`,
+        {
+          config: {
+            // Broadcast MUST be enabled or 'on("broadcast")' may never fire
+            broadcast: { self: false },
+          },
+        }
+      )
       .on('broadcast', { event: 'typing' }, (payload) => {
         console.log('[ChatPanel] Received activity event:', payload);
         const presenceType = payload?.payload?.presenceType;
@@ -382,7 +389,9 @@ export const ChatPanel = ({
           setActivityStatus(null);
         }, 5000);
       })
-      .subscribe();
+      .subscribe((status, err) => {
+        console.log('[ChatPanel] Activity channel status:', status, err);
+      });
     
     return () => {
       supabase.removeChannel(channel);
