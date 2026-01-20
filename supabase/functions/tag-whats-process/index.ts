@@ -888,18 +888,43 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
         }
       }
 
-      // Try to extract value from AI response
+      // Try to extract value from AI response with improved regex patterns
       if (aiResponse && typeof aiResponse === 'object') {
         const aiStr = JSON.stringify(aiResponse);
-        // Match patterns like "R$ 100,00", "R$100", "100,00", "valor: 50", "value: 100"
-        const valueMatch = aiStr.match(/R\$?\s*([\d.,]+)|valor[:\s]*([\d.,]+)|value[:\s]*([\d.,]+)/i);
-        if (valueMatch) {
-          const valueStr = (valueMatch[1] || valueMatch[2] || valueMatch[3]).replace(/\./g, '').replace(',', '.');
-          extractedValue = parseFloat(valueStr);
-          if (isNaN(extractedValue)) extractedValue = null;
+        // Enhanced patterns to match:
+        // - "R$ 100,00", "R$100", "R$ 1.234,56"
+        // - "valor: 50", "value: 100", "valor de R$ 50"
+        // - "valor_pix": 100, "payment_value": 50.00
+        // - Standalone values like "97,00" or "1234.56" near keywords
+        const valuePatterns = [
+          /(?:valor|value|amount|payment_value|valor_pix|montante)[:\s"]*R?\$?\s*([\d.,]+)/gi,
+          /R\$\s*([\d.,]+)/g,
+          /(?:pagamento|pix|transferido|transferência|recebido)[^0-9]{0,30}([\d]{1,3}(?:\.[\d]{3})*(?:,[\d]{2}))/gi,
+          /(?:total|quantia)[:\s]*R?\$?\s*([\d.,]+)/gi,
+        ];
+        
+        let bestValue: number | null = null;
+        
+        for (const pattern of valuePatterns) {
+          const matches = [...aiStr.matchAll(pattern)];
+          for (const match of matches) {
+            if (match[1]) {
+              // Clean the value: remove dots (thousand separator), replace comma with dot
+              const cleanedValue = match[1].replace(/\./g, '').replace(',', '.');
+              const parsed = parseFloat(cleanedValue);
+              if (!isNaN(parsed) && parsed > 0 && parsed < 1000000) {
+                // Prefer higher values (more likely to be the actual payment)
+                if (bestValue === null || parsed > bestValue) {
+                  bestValue = parsed;
+                }
+              }
+            }
+          }
         }
+        
+        extractedValue = bestValue;
       }
-      console.log("[TAG-WHATS] Attribution data:", { ctwaClid, fbclid, extractedValue });
+      console.log("[TAG-WHATS] Extracted PIX value:", extractedValue);
     }
 
     // Check if conversion tracking is enabled (support both old and new formats)
