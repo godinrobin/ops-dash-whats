@@ -1443,6 +1443,13 @@ Regras RIGOROSAS:
                   continueProcessing = false;
                 }
               }
+              
+              // CRITICAL FIX: Reset effectiveResumeFromTimeout after processing the timeout.
+              // This ensures that subsequent waitInput nodes in the flow will properly wait
+              // for user input instead of being skipped as if they were also timing out.
+              effectiveResumeFromTimeout = false;
+              console.log(`[${runId}] Reset effectiveResumeFromTimeout to false after processing timeout`);
+              
               break;
             }
             
