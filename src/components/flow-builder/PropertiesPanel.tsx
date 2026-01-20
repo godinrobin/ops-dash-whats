@@ -19,7 +19,7 @@ interface PropertiesPanelProps {
   onDeleteNode: (nodeId: string) => void;
   onDuplicateNode: (nodeId: string) => void;
   onSave: () => void;
-  triggerType?: 'keyword' | 'all' | 'schedule';
+  triggerType?: 'keyword' | 'all' | 'schedule' | 'sale';
   triggerKeywords?: string[];
   keywordMatchType?: 'exact' | 'contains' | 'not_contains';
   onUpdateFlowSettings?: (settings: { triggerType?: string; triggerKeywords?: string[]; keywordMatchType?: string }) => void;

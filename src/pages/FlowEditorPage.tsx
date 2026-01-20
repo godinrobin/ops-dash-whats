@@ -50,7 +50,7 @@ const FlowEditorPage = () => {
   const [saving, setSaving] = useState(false);
   const [flowName, setFlowName] = useState('');
   const [flowDescription, setFlowDescription] = useState('');
-  const [triggerType, setTriggerType] = useState<'keyword' | 'all' | 'schedule'>('keyword');
+  const [triggerType, setTriggerType] = useState<'keyword' | 'all' | 'schedule' | 'sale'>('keyword');
   const [triggerKeywords, setTriggerKeywords] = useState('');
   const [keywordMatchType, setKeywordMatchType] = useState<'exact' | 'contains' | 'not_contains'>('exact');
   const [isActive, setIsActive] = useState(false);
@@ -64,6 +64,7 @@ const FlowEditorPage = () => {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [assignedInstances, setAssignedInstances] = useState<string[]>([]);
   const [analyticsDateFilter, setAnalyticsDateFilter] = useState<DateFilter>('today');
+  const [pauseOtherFlows, setPauseOtherFlows] = useState(false);
 
   // Dynamic activity tracking based on route
   const isAutomatiZap = location.pathname.startsWith('/inbox');
@@ -145,17 +146,18 @@ const FlowEditorPage = () => {
           ...data,
           nodes: (data.nodes as unknown as FlowNode[]) || [],
           edges: (data.edges as unknown as FlowEdge[]) || [],
-          trigger_type: data.trigger_type as 'keyword' | 'all' | 'schedule',
+          trigger_type: data.trigger_type as 'keyword' | 'all' | 'schedule' | 'sale',
           trigger_keywords: data.trigger_keywords || [],
           assigned_instances: data.assigned_instances || [],
           reply_mode: (data.reply_mode as 'all' | 'interval') || 'all',
           reply_interval: data.reply_interval || 3,
+          pause_other_flows: data.pause_other_flows || false,
         };
 
         setFlow(flowData);
         setFlowName(data.name);
         setFlowDescription(data.description || '');
-        setTriggerType(data.trigger_type as 'keyword' | 'all' | 'schedule');
+        setTriggerType(data.trigger_type as 'keyword' | 'all' | 'schedule' | 'sale');
         setTriggerKeywords(data.trigger_keywords?.join(', ') || '');
         setKeywordMatchType((data as any).keyword_match_type || 'exact');
         setIsActive(data.is_active);
@@ -167,6 +169,7 @@ const FlowEditorPage = () => {
         setReplyMode((data.reply_mode as 'all' | 'interval') || 'all');
         setReplyInterval(data.reply_interval || 3);
         setAssignedInstances(data.assigned_instances || []);
+        setPauseOtherFlows(data.pause_other_flows || false);
       } catch (error: unknown) {
         console.error('Error fetching flow:', error);
         toast.error('Erro ao carregar fluxo');
@@ -211,6 +214,7 @@ const FlowEditorPage = () => {
           reply_to_last_message: replyToLastMessage,
           reply_mode: replyToLastMessage ? replyMode : 'all',
           reply_interval: replyToLastMessage && replyMode === 'interval' ? replyInterval : 3,
+          pause_other_flows: triggerType === 'sale' ? pauseOtherFlows : false,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)
@@ -316,7 +320,7 @@ const FlowEditorPage = () => {
                   <Label>Tipo de Gatilho</Label>
                   <Select
                     value={triggerType}
-                    onValueChange={(value) => setTriggerType(value as 'keyword' | 'all' | 'schedule')}
+                    onValueChange={(value) => setTriggerType(value as 'keyword' | 'all' | 'schedule' | 'sale')}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -325,9 +329,34 @@ const FlowEditorPage = () => {
                       <SelectItem value="keyword">Palavra-chave</SelectItem>
                       <SelectItem value="all">Todas as mensagens</SelectItem>
                       <SelectItem value="schedule">Agendado</SelectItem>
+                      <SelectItem value="sale">Venda</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Toggle para pausar outros fluxos - só aparece quando gatilho é 'sale' */}
+                {triggerType === 'sale' && (
+                  <div className="flex items-center justify-between p-3 border rounded-md bg-amber-500/10 border-amber-500/30">
+                    <div>
+                      <Label className="flex items-center gap-2">
+                        <span className="text-amber-500">⚡</span>
+                        Pausar outros fluxos
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Ao ativar, pausa todos os outros fluxos ativos do contato para priorizar este fluxo de venda
+                      </p>
+                    </div>
+                    <Switch
+                      checked={pauseOtherFlows}
+                      onCheckedChange={setPauseOtherFlows}
+                      className={
+                        pauseOtherFlows
+                          ? 'data-[state=checked]:bg-green-500'
+                          : 'data-[state=unchecked]:bg-red-500'
+                      }
+                    />
+                  </div>
+                )}
 
                 {triggerType === 'keyword' && (
                   <>
@@ -589,7 +618,7 @@ const FlowEditorPage = () => {
             triggerKeywords={triggerKeywords.split(',').map(k => k.trim()).filter(Boolean)}
             keywordMatchType={keywordMatchType}
             onUpdateFlowSettings={(settings) => {
-              if (settings.triggerType) setTriggerType(settings.triggerType as 'keyword' | 'all' | 'schedule');
+              if (settings.triggerType) setTriggerType(settings.triggerType as 'keyword' | 'all' | 'schedule' | 'sale');
               if (settings.triggerKeywords) setTriggerKeywords(settings.triggerKeywords.join(', '));
               if (settings.keywordMatchType) setKeywordMatchType(settings.keywordMatchType as 'exact' | 'contains' | 'not_contains');
             }}

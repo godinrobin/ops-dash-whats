@@ -1919,6 +1919,7 @@ export type Database = {
           name: string
           nodes: Json
           pause_on_media: boolean | null
+          pause_other_flows: boolean | null
           pause_schedule_enabled: boolean | null
           pause_schedule_end: string | null
           pause_schedule_start: string | null
@@ -1943,6 +1944,7 @@ export type Database = {
           name: string
           nodes?: Json
           pause_on_media?: boolean | null
+          pause_other_flows?: boolean | null
           pause_schedule_enabled?: boolean | null
           pause_schedule_end?: string | null
           pause_schedule_start?: string | null
@@ -1967,6 +1969,7 @@ export type Database = {
           name?: string
           nodes?: Json
           pause_on_media?: boolean | null
+          pause_other_flows?: boolean | null
           pause_schedule_enabled?: boolean | null
           pause_schedule_end?: string | null
           pause_schedule_start?: string | null
