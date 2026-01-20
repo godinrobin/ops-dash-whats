@@ -1189,27 +1189,33 @@ serve(async (req) => {
             contact = newContact;
             console.log(`[UAZAPI-WEBHOOK] Created new contact: ${contact.id} for instance ${instanceId}`);
             
-            // If contact was created WITHOUT a profile pic, fetch it from UazAPI (fire and forget)
+            // If contact was created WITHOUT a profile pic, fetch it from UazAPI
+            // We await the fetch to ensure the request is at least sent before the function ends
             if (!uazProfilePicUrl && contact.id) {
               try {
                 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
                 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-                console.log(`[PROFILE-PIC] Fetching profile pic for new contact ${contact.id}`);
-                fetch(`${supabaseUrl}/functions/v1/fetch-contact-profile-pic`, {
+                console.log(`[PROFILE-PIC] Initiating profile pic fetch for new contact ${contact.id}`);
+                
+                // Await the fetch to ensure the request is sent
+                const picResponse = await fetch(`${supabaseUrl}/functions/v1/fetch-contact-profile-pic`, {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${serviceRoleKey}`,
                   },
                   body: JSON.stringify({ contactId: contact.id }),
-                }).then(res => {
-                  console.log(`[PROFILE-PIC] Response status: ${res.status}`);
-                  return res.text();
-                }).then(text => {
+                });
+                
+                console.log(`[PROFILE-PIC] Response status: ${picResponse.status}`);
+                
+                // Don't block on reading the full response body
+                picResponse.text().then(text => {
                   console.log(`[PROFILE-PIC] Response: ${text.substring(0, 200)}`);
-                }).catch(err => console.log('[PROFILE-PIC] Fire and forget call failed:', err));
+                }).catch(() => {});
+                
               } catch (picErr) {
-                console.log('[PROFILE-PIC] Error calling fetch-contact-profile-pic:', picErr);
+                console.error('[PROFILE-PIC] Error initiating fetch:', picErr);
               }
             }
             
@@ -3705,6 +3711,68 @@ serve(async (req) => {
       }
       
       return new Response(JSON.stringify({ success: true, format: 'evolution' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Handle presence events (typing indicator)
+    // UazAPI sends event: "presence" when a contact is typing/recording
+    if (event === 'presence' || event === 'PRESENCE') {
+      console.log('[PRESENCE] Received presence event');
+      
+      // Extract presence data from UazAPI format
+      const presenceData = (payload as any).event || data;
+      const presenceType = presenceData?.presence || presenceData?.type || presenceData?.Type;
+      const remoteJid = presenceData?.from || presenceData?.remoteJid || presenceData?.jid || (payload as any)?.from;
+      
+      console.log(`[PRESENCE] Type: ${presenceType}, RemoteJid: ${remoteJid}`);
+      
+      // Only handle composing/recording (typing indicators)
+      if (presenceType === 'composing' || presenceType === 'recording') {
+        // Find the contact by remote_jid or phone
+        let contactId: string | null = null;
+        
+        if (remoteJid) {
+          // Extract phone from remoteJid (format: "5511999999999@s.whatsapp.net")
+          const phone = remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '');
+          
+          // Find contact
+          const { data: contacts } = await supabaseClient
+            .from('inbox_contacts')
+            .select('id')
+            .or(`remote_jid.eq.${remoteJid},phone.eq.${phone}`)
+            .limit(1);
+          
+          if (contacts && contacts.length > 0) {
+            contactId = contacts[0].id;
+          }
+        }
+        
+        if (contactId) {
+          console.log(`[PRESENCE] Broadcasting typing event to contact ${contactId}`);
+          
+          // Broadcast typing event via Supabase Realtime
+          const channel = supabaseClient.channel(`typing:${contactId}`);
+          await channel.send({
+            type: 'broadcast',
+            event: 'typing',
+            payload: { 
+              contactId, 
+              presenceType,
+              timestamp: new Date().toISOString()
+            }
+          });
+          
+          // Unsubscribe from channel after sending
+          await supabaseClient.removeChannel(channel);
+          
+          console.log(`[PRESENCE] Typing broadcast sent for contact ${contactId}`);
+        } else {
+          console.log('[PRESENCE] Contact not found for typing indicator');
+        }
+      }
+      
+      return new Response(JSON.stringify({ success: true, event: 'presence' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
