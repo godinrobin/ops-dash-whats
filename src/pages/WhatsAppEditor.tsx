@@ -276,8 +276,7 @@ export default function WhatsAppEditor() {
       }
 
       if (newName.trim()) {
-        // UazAPI limit: max 25 characters for profile name
-        payload.name = newName.trim().slice(0, 25);
+        payload.name = newName.trim();
       }
 
       if (removeImage) {
