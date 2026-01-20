@@ -560,9 +560,18 @@ export const ChatMessage = ({ message, allMessages = [], contact }: ChatMessageP
       isOutbound ? "justify-end" : "justify-start"
     )}>
       {/* Avatar for inbound messages */}
-      {isInbound && contact && (
+      {isInbound && (
         <Avatar className="h-8 w-8 flex-shrink-0 mt-auto">
-          <AvatarImage src={contact.profile_pic_url || undefined} />
+          {contact?.profile_pic_url && (
+            <AvatarImage 
+              src={contact.profile_pic_url} 
+              alt={contact?.name || 'Contato'}
+              onError={(e) => {
+                // Hide the image on error so fallback shows
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+            />
+          )}
           <AvatarFallback className="text-xs bg-muted">
             {getContactInitials()}
           </AvatarFallback>
