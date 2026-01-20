@@ -12,12 +12,13 @@ import { toast } from 'sonner';
 
 interface ConditionRule {
   id: string;
-  type: 'variable' | 'tag';
+  type: 'variable' | 'tag' | 'ia';
   variable?: string;
   operator?: string;
   value?: string;
   tagName?: string;
   tagCondition?: 'has' | 'not_has';
+  iaPrompt?: string;
 }
 
 interface ConditionEditorProps {
@@ -104,11 +105,15 @@ export const ConditionEditor = ({
 
   const generateId = () => Math.random().toString(36).substring(2, 9);
 
-  const addCondition = (type: 'variable' | 'tag') => {
+  const addCondition = (type: 'variable' | 'tag' | 'ia') => {
     const newCondition: ConditionRule = {
       id: generateId(),
       type,
-      ...(type === 'variable' ? { variable: '', operator: 'equals', value: '' } : { tagName: '', tagCondition: 'has' as const }),
+      ...(type === 'variable' 
+        ? { variable: '', operator: 'equals', value: '' } 
+        : type === 'tag'
+        ? { tagName: '', tagCondition: 'has' as const }
+        : { iaPrompt: '' }),
     };
     onUpdateConditions([...conditions, newCondition]);
   };
@@ -293,10 +298,14 @@ export const ConditionEditor = ({
                     <Variable className="h-3 w-3 mr-1" />
                     Variável
                   </Badge>
-                ) : (
+                ) : condition.type === 'tag' ? (
                   <Badge variant="outline" className="text-xs">
                     <Tag className="h-3 w-3 mr-1" />
                     Tag
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-xs bg-violet-500/10 border-violet-500/30 text-violet-400">
+                    🤖 IA
                   </Badge>
                 )}
                 {index > 0 && (
@@ -385,7 +394,7 @@ export const ConditionEditor = ({
                   )}
                 </div>
               </>
-            ) : (
+            ) : condition.type === 'tag' ? (
               <>
                 <div className="space-y-1">
                   <Label className="text-xs">Condição da Tag</Label>
@@ -434,6 +443,26 @@ export const ConditionEditor = ({
                       </SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="bg-violet-500/10 border border-violet-500/20 rounded p-2 mb-2">
+                  <p className="text-xs text-violet-400">
+                    🤖 A IA irá analisar as tags, contexto da conversa e última mensagem para decidir Sim ou Não.
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">O que a IA deve verificar?</Label>
+                  <Input
+                    className="h-8 text-xs"
+                    placeholder="Ex: O cliente demonstrou interesse em comprar?"
+                    value={condition.iaPrompt || ''}
+                    onChange={(e) => updateCondition(condition.id, { iaPrompt: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    A IA responderá apenas Sim ou Não baseado na análise.
+                  </p>
                 </div>
               </>
             )}
@@ -488,7 +517,7 @@ export const ConditionEditor = ({
       )}
 
       {/* Add condition buttons */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         <Button
           variant="outline"
           size="sm"
@@ -506,6 +535,14 @@ export const ConditionEditor = ({
         >
           <Tag className="h-3 w-3 mr-1" />
           + Tag
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full h-8 text-xs bg-primary/10 border-primary/30 text-primary hover:bg-primary/20"
+          onClick={() => addCondition('ia')}
+        >
+          🤖 + Condição IA
         </Button>
       </div>
 

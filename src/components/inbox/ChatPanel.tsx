@@ -963,6 +963,10 @@ export const ChatPanel = ({
                 message={message} 
                 allMessages={visibleMessages}
                 contact={contact}
+                onReply={(msg) => {
+                  // For now, just show a toast - full implementation requires ChatInput state management
+                  toast.info('Responder: ' + (msg.content?.slice(0, 30) || 'mídia') + '...');
+                }}
               />
             ))}
             {/* Activity indicator (typing/recording) */}
