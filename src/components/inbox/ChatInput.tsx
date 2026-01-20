@@ -131,16 +131,21 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactIns
   const handleSend = async () => {
     if (!message.trim() || sending) return;
 
+    const messageToSend = message.trim();
     setSending(true);
-    const result = await onSendMessage(message.trim());
+    
+    // Clear message immediately for better UX
+    setMessage('');
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+    
+    const result = await onSendMessage(messageToSend);
     
     if (result.error) {
       toast.error('Erro ao enviar mensagem: ' + result.error);
-    } else {
-      setMessage('');
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
-      }
+      // Restore message if failed
+      setMessage(messageToSend);
     }
     
     setSending(false);
