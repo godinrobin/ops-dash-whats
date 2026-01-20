@@ -73,7 +73,8 @@ export const useInboxConversations = (instanceId?: string) => {
         .from('inbox_contacts')
         .select('*')
         .eq('user_id', userId)
-        .order('last_message_at', { ascending: false, nullsFirst: false });
+        .order('last_message_at', { ascending: false, nullsFirst: false })
+        .limit(10000); // Remove 1000 default limit
 
       if (instanceId) {
         query = query.eq('instance_id', instanceId);

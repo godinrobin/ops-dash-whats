@@ -58,13 +58,14 @@ const TagWhatsSales = () => {
           .eq("user_id", userId);
         setInstances(instancesData || []);
 
-        // Fetch sales logs (label_applied = true means it was a sale)
+        // Fetch sales logs (label_applied = true means it was a sale) - remove limit
         const { data: logsData } = await (supabase
           .from("tag_whats_logs" as any)
           .select("id, contact_phone, instance_id, created_at, fb_event_status, fb_event_pixel_id, fb_event_error")
           .eq("user_id", userId)
           .eq("label_applied", true)
-          .order("created_at", { ascending: false }) as any);
+          .order("created_at", { ascending: false })
+          .limit(10000) as any);
 
         setSalesLogs(logsData || []);
       } catch (error) {
