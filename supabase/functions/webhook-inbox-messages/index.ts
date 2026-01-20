@@ -3171,9 +3171,9 @@ serve(async (req) => {
         const currentNode = flowNodes.find((n: { id: string }) => n.id === activeSession.current_node_id);
         
         // ATOMIC LOCK ACQUISITION - Prevents race conditions where multiple webhooks trigger process-inbox-flow
-        // Check if the current node is waiting for input
-        if (currentNode && (currentNode.type === 'waitInput' || currentNode.type === 'menu')) {
-          console.log(`Found active session ${activeSession.id} waiting for input at node ${currentNode.id}`);
+        // Check if the current node is waiting for input (waitInput, menu, interactiveBlock, or iaConverter)
+        if (currentNode && (currentNode.type === 'waitInput' || currentNode.type === 'menu' || currentNode.type === 'interactiveBlock' || currentNode.type === 'iaConverter')) {
+          console.log(`Found active session ${activeSession.id} waiting for input at node ${currentNode.id} (type: ${currentNode.type})`);
           
           // For waitInput/menu nodes: Accept ANY message type (text, audio, video, image, etc.)
           // The flow will continue regardless of message type
