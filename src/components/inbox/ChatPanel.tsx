@@ -302,6 +302,37 @@ export const ChatPanel = ({
     }
   }, [contact?.id]); // Only trigger when contact changes, not on every update
 
+  // Auto-fetch profile picture if contact doesn't have one
+  useEffect(() => {
+    if (!contact?.id || !contact.instance_id) return;
+    
+    // Skip if contact already has a profile picture
+    if (contact.profile_pic_url) return;
+    
+    const fetchProfilePic = async () => {
+      try {
+        console.log('[ChatPanel] Fetching profile pic for contact:', contact.id);
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        const response = await supabase.functions.invoke('fetch-contact-profile-pic', {
+          body: { contactId: contact.id },
+        });
+
+        if (response.data?.profilePicUrl && response.data?.updated) {
+          console.log('[ChatPanel] Profile pic fetched and saved:', response.data.profilePicUrl);
+          // The database is already updated by the edge function
+          // Trigger a refresh of the contact if available
+          onRefreshContact?.();
+        }
+      } catch (err) {
+        console.error('[ChatPanel] Error fetching profile pic:', err);
+      }
+    };
+
+    fetchProfilePic();
+  }, [contact?.id, contact?.instance_id, contact?.profile_pic_url, onRefreshContact]);
+
   // Always open the conversation at the latest message
   useEffect(() => {
     scrollToBottom();
