@@ -9,8 +9,7 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Clock,
-  ShoppingCart
+  Clock
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -23,7 +22,6 @@ import AdsCampaigns from "./AdsCampaigns";
 import AdsAlerts from "./AdsAlerts";
 import AdsTracker from "./AdsTracker";
 import AdsSettings from "./AdsSettings";
-import AdsSales from "./AdsSales";
 
 interface SidebarItem {
   icon: React.ElementType;
@@ -35,7 +33,6 @@ interface SidebarItem {
 const sidebarItems: SidebarItem[] = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/ads" },
   { icon: Megaphone, label: "Campanhas", path: "/ads/campaigns" },
-  { icon: ShoppingCart, label: "Vendas", path: "/ads/sales" },
   { icon: Bell, label: "Avisos", path: "/ads/alerts", comingSoon: true },
   { icon: MessageSquare, label: "Tracker WhatsApp", path: "/ads/tracker", comingSoon: true },
   { icon: Settings, label: "Configurações", path: "/ads/settings" },
@@ -160,7 +157,6 @@ export default function AdsLayout() {
             <Routes>
               <Route index element={<AdsDashboard />} />
               <Route path="campaigns" element={<AdsCampaigns />} />
-              <Route path="sales" element={<AdsSales />} />
               <Route path="alerts" element={isAdmin ? <AdsAlerts /> : <ComingSoonPage title="Avisos" />} />
               <Route path="tracker" element={isAdmin ? <AdsTracker /> : <ComingSoonPage title="Tracker WhatsApp" />} />
               <Route path="settings" element={<AdsSettings />} />
