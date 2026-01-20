@@ -3660,7 +3660,7 @@ Regras IMPORTANTES:
         let groups: any[] = [];
 
         if (inst.api_provider === 'uazapi') {
-          // UazAPI: GET /group/all with instance token
+          // UazAPI: GET /group/list with instance token (per documentation)
           const uazapiBaseUrl = globalConfig.baseUrl;
           const uazapiToken = inst.uazapi_token;
 
@@ -3671,9 +3671,9 @@ Regras IMPORTANTES:
             });
           }
 
-          console.log(`[FETCH-GROUPS] UazAPI: GET ${uazapiBaseUrl}/group/all`);
+          console.log(`[FETCH-GROUPS] UazAPI: GET ${uazapiBaseUrl}/group/list?noparticipants=true`);
           
-          const groupsRes = await fetch(`${uazapiBaseUrl}/group/all`, {
+          const groupsRes = await fetch(`${uazapiBaseUrl}/group/list?noparticipants=true`, {
             method: 'GET',
             headers: {
               'token': uazapiToken,
@@ -3692,7 +3692,7 @@ Regras IMPORTANTES:
           const groupsData = await groupsRes.json();
           console.log(`[FETCH-GROUPS] UazAPI response: ${JSON.stringify(groupsData).substring(0, 500)}`);
           
-          // UazAPI returns array of groups directly or { groups: [...] }
+          // UazAPI returns { groups: [...] } per documentation
           groups = Array.isArray(groupsData) ? groupsData : (groupsData.groups || []);
           
         } else {
