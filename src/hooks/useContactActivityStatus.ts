@@ -50,9 +50,27 @@ export const useContactActivityStatus = (contactIds: string[]) => {
       if (channelsRef.current.has(contactId)) return;
 
       const channel = supabase
-        .channel(`typing:${contactId}`)
+        .channel(`typing:${contactId}`,
+          {
+            config: {
+              // Broadcast MUST be enabled or 'on("broadcast")' may never fire
+              broadcast: { self: false },
+            },
+          }
+        )
         .on('broadcast', { event: 'typing' }, (payload) => {
           const presenceType = payload?.payload?.presenceType;
+
+          // If backend tells us it stopped typing/recording, clear immediately
+          if (presenceType === 'paused' || presenceType === 'available' || presenceType === 'none') {
+            clearActivity(contactId);
+            const existingTimeout = timeoutsRef.current.get(contactId);
+            if (existingTimeout) {
+              clearTimeout(existingTimeout);
+              timeoutsRef.current.delete(contactId);
+            }
+            return;
+          }
           
           // Set status based on presence type
           const status: ActivityStatus = presenceType === 'recording' ? 'recording' : 'typing';
