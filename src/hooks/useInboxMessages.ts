@@ -410,17 +410,19 @@ export const useInboxMessages = (contactId: string | null) => {
   }, [userId, contactId, fetchMessages, realtimeSubscribed]);
 
 
-  const sendMessage = useCallback(async (content: string, messageType: string = 'text', mediaUrl?: string, replyToMessageId?: string) => {
+  const sendMessage = useCallback(async (content: string, messageType: string = 'text', mediaUrl?: string, replyToMessageId?: string): Promise<{ error?: string; errorCode?: string; data?: any }> => {
     if (!userId || !contactId) return { error: 'Not authenticated or no contact selected' };
 
     // Generate a temporary ID for optimistic update
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const currentContactId = contactId;
+    const currentUserId = userId;
     
     // Create optimistic message for instant display
     const optimisticMessage: InboxMessage = {
       id: tempId,
-      contact_id: contactId,
-      user_id: userId,
+      contact_id: currentContactId,
+      user_id: currentUserId,
       direction: 'outbound',
       message_type: messageType as InboxMessage['message_type'],
       content,
@@ -434,145 +436,133 @@ export const useInboxMessages = (contactId: string | null) => {
       reply_to_message_id: replyToMessageId || null,
     };
 
-    // Add message to UI immediately (optimistic update)
+    // Add message to UI immediately (optimistic update) - SYNCHRONOUS before any await
     setMessages((prev) => {
       const updated = sortByCreatedAtAsc([...prev, optimisticMessage]);
-      if (contactId) messageCache.set(contactId, updated);
+      messageCache.set(currentContactId, updated);
       return updated;
     });
 
-    try {
-      // Fetch contact info and reply message in parallel for speed
-      const [contactResult, replyResult] = await Promise.all([
-        supabase
-          .from('inbox_contacts')
-          .select('instance_id, phone, remote_jid')
-          .eq('id', contactId)
-          .single(),
-        replyToMessageId 
-          ? supabase
-              .from('inbox_messages')
-              .select('remote_message_id')
-              .eq('id', replyToMessageId)
-              .single()
-          : Promise.resolve({ data: null, error: null })
-      ]);
+    // Run all async operations in background - use setTimeout to not block UI
+    setTimeout(async () => {
+      try {
+        // Fetch contact info and reply message in parallel for speed
+        const [contactResult, replyResult] = await Promise.all([
+          supabase
+            .from('inbox_contacts')
+            .select('instance_id, phone, remote_jid')
+            .eq('id', currentContactId)
+            .single(),
+          replyToMessageId 
+            ? supabase
+                .from('inbox_messages')
+                .select('remote_message_id')
+                .eq('id', replyToMessageId)
+                .single()
+            : Promise.resolve({ data: null, error: null })
+        ]);
 
-      if (!contactResult.data) throw new Error('Contact not found');
-      const contact = contactResult.data;
-      
-      // For @lid contacts, we need to use remote_jid for sending
-      const remoteJid = (contact as any).remote_jid || null;
-      const replyToRemoteId = replyResult.data?.remote_message_id || null;
+        if (!contactResult.data) throw new Error('Contact not found');
+        const contact = contactResult.data;
+        
+        // For @lid contacts, we need to use remote_jid for sending
+        const remoteJid = (contact as any).remote_jid || null;
+        const replyToRemoteId = replyResult.data?.remote_message_id || null;
 
-      // Get instance name - this needs to be separate since we need instance_id first
-      let instanceName = '';
-      if (contact.instance_id) {
-        const { data: instance } = await supabase
-          .from('maturador_instances')
-          .select('instance_name')
-          .eq('id', contact.instance_id)
-          .single();
-        instanceName = instance?.instance_name || '';
-      }
-
-      // Insert message with pending status
-      const { data: message, error: insertError } = await supabase
-        .from('inbox_messages')
-        .insert({
-          contact_id: contactId,
-          instance_id: contact.instance_id,
-          user_id: userId,
-          direction: 'outbound',
-          message_type: messageType,
-          content,
-          media_url: mediaUrl,
-          status: 'pending',
-          reply_to_message_id: replyToMessageId || null,
-        })
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-
-      // Replace optimistic message with real one
-      setMessages((prev) => {
-        const updated = prev.map((m) => 
-          m.id === tempId 
-            ? { ...message, direction: message.direction as 'inbound' | 'outbound', message_type: message.message_type as InboxMessage['message_type'], status: message.status as InboxMessage['status'] } as InboxMessage
-            : m
-        );
-        if (contactId) messageCache.set(contactId, updated);
-        return updated;
-      });
-
-      // Call edge function to send via Evolution API - pass the message ID, remote_jid and reply info
-      const { data: sendResult, error: sendError } = await supabase.functions.invoke('send-inbox-message', {
-        body: {
-          contactId,
-          instanceName,
-          phone: contact.phone,
-          remoteJid, // Include remote_jid for @lid contacts
-          content,
-          messageType,
-          mediaUrl,
-          messageId: message.id, // Pass the message ID so the edge function can update it
-          replyToRemoteMessageId: replyToRemoteId, // Pass the remote message ID for reply
+        // Get instance name - this needs to be separate since we need instance_id first
+        let instanceName = '';
+        if (contact.instance_id) {
+          const { data: instance } = await supabase
+            .from('maturador_instances')
+            .select('instance_name')
+            .eq('id', contact.instance_id)
+            .single();
+          instanceName = instance?.instance_name || '';
         }
-      });
 
-      if (sendError) {
-        console.error('Error sending message:', sendError);
-        // Update message status to failed in UI and database
+        // Insert message with pending status
+        const { data: message, error: insertError } = await supabase
+          .from('inbox_messages')
+          .insert({
+            contact_id: currentContactId,
+            instance_id: contact.instance_id,
+            user_id: currentUserId,
+            direction: 'outbound',
+            message_type: messageType,
+            content,
+            media_url: mediaUrl,
+            status: 'pending',
+            reply_to_message_id: replyToMessageId || null,
+          })
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+
+        // Replace optimistic message with real one
         setMessages((prev) => {
-          const updated = prev.map((m) => m.id === message.id ? { ...m, status: 'failed' as const } : m);
-          if (contactId) messageCache.set(contactId, updated);
+          const updated = prev.map((m) => 
+            m.id === tempId 
+              ? { ...message, direction: message.direction as 'inbound' | 'outbound', message_type: message.message_type as InboxMessage['message_type'], status: message.status as InboxMessage['status'] } as InboxMessage
+              : m
+          );
+          messageCache.set(currentContactId, updated);
           return updated;
         });
-        
-        await supabase
-          .from('inbox_messages')
-          .update({ status: 'failed' })
-          .eq('id', message.id);
-        
-        // Parse the error for user-friendly message and error code
-        let errorMsg = 'Erro ao enviar mensagem';
-        let errorCode = 'SEND_FAILED';
-        try {
-          const errorBody = (sendError as any)?.context?.body;
-          if (typeof errorBody === 'string') {
-            const parsed = JSON.parse(errorBody);
-            errorMsg = parsed.error || errorMsg;
-            errorCode = parsed.errorCode || errorCode;
-          } else if (errorBody?.error) {
-            errorMsg = errorBody.error;
-            errorCode = errorBody.errorCode || errorCode;
+
+        // Call edge function to send via Evolution API - pass the message ID, remote_jid and reply info
+        const { error: sendError } = await supabase.functions.invoke('send-inbox-message', {
+          body: {
+            contactId: currentContactId,
+            instanceName,
+            phone: contact.phone,
+            remoteJid, // Include remote_jid for @lid contacts
+            content,
+            messageType,
+            mediaUrl,
+            messageId: message.id, // Pass the message ID so the edge function can update it
+            replyToRemoteMessageId: replyToRemoteId, // Pass the remote message ID for reply
           }
-        } catch {
-          // Keep default error message
+        });
+
+        if (sendError) {
+          console.error('Error sending message:', sendError);
+          // Update message status to failed in UI and database
+          setMessages((prev) => {
+            const updated = prev.map((m) => m.id === message.id ? { ...m, status: 'failed' as const } : m);
+            messageCache.set(currentContactId, updated);
+            return updated;
+          });
+          
+          await supabase
+            .from('inbox_messages')
+            .update({ status: 'failed' })
+            .eq('id', message.id);
+          return;
         }
-        
-        // Return error with code instead of throwing
-        return { error: errorMsg, errorCode };
+
+        // Update contact's last_message_at (fire and forget)
+        supabase
+          .from('inbox_contacts')
+          .update({ last_message_at: new Date().toISOString() })
+          .eq('id', currentContactId)
+          .then(() => {});
+
+      } catch (err: any) {
+        console.error('sendMessage error:', err);
+        // Update optimistic message to failed status (don't remove, show error state)
+        setMessages((prev) => {
+          const updated = prev.map((m) => 
+            m.id === tempId ? { ...m, status: 'failed' as const } : m
+          );
+          messageCache.set(currentContactId, updated);
+          return updated;
+        });
       }
+    }, 0);
 
-      // Update contact's last_message_at
-      await supabase
-        .from('inbox_contacts')
-        .update({ last_message_at: new Date().toISOString() })
-        .eq('id', contactId);
-
-      return { data: message };
-    } catch (err: any) {
-      console.error('sendMessage error:', err);
-      // Remove optimistic message on error
-      setMessages((prev) => {
-        const updated = prev.filter((m) => m.id !== tempId);
-        if (contactId) messageCache.set(contactId, updated);
-        return updated;
-      });
-      return { error: err.message, errorCode: 'UNKNOWN_ERROR' };
-    }
+    // Return immediately - message already appears in UI
+    return { data: { id: tempId } };
   }, [userId, contactId]);
 
   return { messages, loading, error, refetch: fetchMessages, sendMessage };
