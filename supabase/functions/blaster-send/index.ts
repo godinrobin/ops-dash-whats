@@ -385,27 +385,28 @@ serve(async (req) => {
 
           if (apiProvider === 'uazapi') {
             // UazAPI v2 endpoints (per OpenAPI spec) - use token header
+            // Docs: /send/text and /send/media
             authHeader = { 'token': instance.uazapi_token || config.evolution_api_key };
             
             switch (mediaType) {
               case 'image':
-                apiEndpoint = `${baseUrl}/message/sendMedia`;
-                body = { number: phone, mediatype: 'image', media: mediaUrl, caption: message };
+                apiEndpoint = `${baseUrl}/send/media`;
+                body = { number: phone, type: 'image', file: mediaUrl, text: message };
                 break;
               case 'video':
-                apiEndpoint = `${baseUrl}/message/sendMedia`;
-                body = { number: phone, mediatype: 'video', media: mediaUrl, caption: message };
+                apiEndpoint = `${baseUrl}/send/media`;
+                body = { number: phone, type: 'video', file: mediaUrl, text: message };
                 break;
               case 'audio':
-                apiEndpoint = `${baseUrl}/message/sendAudio`;
-                body = { number: phone, audio: mediaUrl };
+                apiEndpoint = `${baseUrl}/send/media`;
+                body = { number: phone, type: 'audio', file: mediaUrl };
                 break;
               case 'document':
-                apiEndpoint = `${baseUrl}/message/sendMedia`;
-                body = { number: phone, mediatype: 'document', media: mediaUrl, caption: message, fileName: 'document' };
+                apiEndpoint = `${baseUrl}/send/media`;
+                body = { number: phone, type: 'document', file: mediaUrl, text: message, docName: 'document' };
                 break;
               default: // text
-                apiEndpoint = `${baseUrl}/message/sendText`;
+                apiEndpoint = `${baseUrl}/send/text`;
                 body = { number: phone, text: message };
             }
           } else {
@@ -785,32 +786,33 @@ async function sendMessage(
   const baseUrl = config.evolution_base_url?.replace(/\/$/, '') || '';
 
   if (apiProvider === 'uazapi') {
-    // UazAPI v2 endpoints - use token header and instance name in URL
+    // UazAPI v2 endpoints (OpenAPI): /send/text and /send/media
+    // NOTE: UAZAPI does NOT include instanceName in the URL; auth is via `token` header.
     authHeader = { 'token': instanceToken || config.evolution_api_key };
     
     switch (messageType) {
       case 'text':
-        endpoint = `/message/sendText/${instanceName}`;
+        endpoint = `/send/text`;
         body = { number: phone, text: content };
         break;
       case 'image':
-        endpoint = `/message/sendMedia/${instanceName}`;
-        body = { number: phone, mediatype: 'image', media: mediaUrl, caption: content };
+        endpoint = `/send/media`;
+        body = { number: phone, type: 'image', file: mediaUrl, text: content };
         break;
       case 'audio':
-        endpoint = `/message/sendAudio/${instanceName}`;
-        body = { number: phone, audio: mediaUrl };
+        endpoint = `/send/media`;
+        body = { number: phone, type: 'audio', file: mediaUrl };
         break;
       case 'video':
-        endpoint = `/message/sendMedia/${instanceName}`;
-        body = { number: phone, mediatype: 'video', media: mediaUrl, caption: content };
+        endpoint = `/send/media`;
+        body = { number: phone, type: 'video', file: mediaUrl, text: content };
         break;
       case 'document':
-        endpoint = `/message/sendMedia/${instanceName}`;
-        body = { number: phone, mediatype: 'document', media: mediaUrl, fileName: fileName || 'document', caption: content };
+        endpoint = `/send/media`;
+        body = { number: phone, type: 'document', file: mediaUrl, docName: fileName || 'document', text: content };
         break;
       default:
-        endpoint = `/message/sendText/${instanceName}`;
+        endpoint = `/send/text`;
         body = { number: phone, text: content };
     }
   } else {
