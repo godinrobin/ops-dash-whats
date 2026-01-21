@@ -1384,6 +1384,160 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
       }
     }
 
+    // ====== TRIGGER SALE FLOWS ======
+    // When a PIX payment is detected, trigger all active sale flows for this contact
+    if (isPixPayment && labelApplied) {
+      console.log("[TAG-WHATS] ====== TRIGGERING SALE FLOWS ======");
+      
+      try {
+        // Find the inbox_contact for this phone number on this instance
+        const { data: saleContact, error: saleContactError } = await supabase
+          .from("inbox_contacts")
+          .select("id, instance_id")
+          .eq("phone", phone)
+          .eq("user_id", instance.user_id)
+          .eq("instance_id", instance.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (saleContactError) {
+          console.error("[TAG-WHATS] Error finding contact for sale flow:", saleContactError);
+        } else if (saleContact) {
+          console.log(`[TAG-WHATS] Found contact ${saleContact.id} for sale flow trigger`);
+          
+          // Find all active sale flows for this user that match the instance
+          const { data: saleFlows, error: saleFlowsError } = await supabase
+            .from("inbox_flows")
+            .select("id, name, assigned_instances, pause_other_flows, nodes")
+            .eq("user_id", instance.user_id)
+            .eq("is_active", true)
+            .eq("trigger_type", "sale");
+
+          if (saleFlowsError) {
+            console.error("[TAG-WHATS] Error fetching sale flows:", saleFlowsError);
+          } else if (saleFlows && saleFlows.length > 0) {
+            console.log(`[TAG-WHATS] Found ${saleFlows.length} active sale flow(s)`);
+            
+            for (const flow of saleFlows) {
+              // Check if flow is assigned to this specific instance
+              const assignedInstances = Array.isArray(flow.assigned_instances) ? flow.assigned_instances : [];
+              
+              if (assignedInstances.length > 0 && !assignedInstances.includes(instance.id)) {
+                console.log(`[TAG-WHATS] Flow "${flow.name}" not assigned to instance ${instance.id}, skipping`);
+                continue;
+              }
+              
+              console.log(`[TAG-WHATS] Triggering sale flow "${flow.name}" (${flow.id}) for contact ${saleContact.id}`);
+              
+              try {
+                const nowIso = new Date().toISOString();
+                
+                // Find start node
+                const nodes = Array.isArray(flow.nodes) ? flow.nodes : [];
+                const startNode = nodes.find((n: any) => (n?.type ?? "").toLowerCase() === "start");
+                const startNodeId = startNode?.id ?? "start-1";
+                
+                // If pause_other_flows is enabled, pause all active sessions for this contact
+                if (flow.pause_other_flows) {
+                  const { data: activeSessions } = await supabase
+                    .from("inbox_flow_sessions")
+                    .select("id, flow_id, variables")
+                    .eq("contact_id", saleContact.id)
+                    .eq("user_id", instance.user_id)
+                    .eq("status", "active")
+                    .neq("flow_id", flow.id);
+
+                  if (activeSessions && activeSessions.length > 0) {
+                    console.log(`[TAG-WHATS] Pausing ${activeSessions.length} active session(s) for sale flow`);
+                    
+                    for (const sess of activeSessions) {
+                      // Cancel any pending delay jobs
+                      await supabase
+                        .from("inbox_flow_delay_jobs")
+                        .update({ status: "cancelled", updated_at: nowIso })
+                        .eq("session_id", sess.id)
+                        .eq("status", "scheduled");
+                      
+                      // Pause the session
+                      await supabase
+                        .from("inbox_flow_sessions")
+                        .update({ status: "paused", last_interaction: nowIso })
+                        .eq("id", sess.id);
+                    }
+                  }
+                }
+                
+                // Create/upsert the flow session
+                const baseVariables = {
+                  lastMessage: "",
+                  contactName: phone,
+                  _sent_node_ids: [],
+                  _triggered_by: "sale_tag_whats",
+                  _pix_value: extractedValue,
+                };
+                
+                const { data: sessionRow, error: sessionError } = await supabase
+                  .from("inbox_flow_sessions")
+                  .upsert(
+                    {
+                      flow_id: flow.id,
+                      contact_id: saleContact.id,
+                      instance_id: saleContact.instance_id,
+                      user_id: instance.user_id,
+                      current_node_id: startNodeId,
+                      variables: baseVariables,
+                      status: "active",
+                      started_at: nowIso,
+                      last_interaction: nowIso,
+                      processing: false,
+                      processing_started_at: null,
+                    },
+                    { onConflict: "flow_id,contact_id" }
+                  )
+                  .select("id")
+                  .maybeSingle();
+
+                if (sessionError) {
+                  console.error(`[TAG-WHATS] Error creating session for flow ${flow.id}:`, sessionError);
+                  continue;
+                }
+
+                const sessionId = sessionRow?.id;
+                if (!sessionId) {
+                  console.error(`[TAG-WHATS] Failed to create session for flow ${flow.id}`);
+                  continue;
+                }
+
+                console.log(`[TAG-WHATS] Created sale flow session ${sessionId}, invoking process-inbox-flow...`);
+
+                // Invoke process-inbox-flow to start the flow
+                const { error: invokeError } = await supabase.functions.invoke("process-inbox-flow", {
+                  body: { sessionId },
+                });
+
+                if (invokeError) {
+                  console.error(`[TAG-WHATS] Error invoking process-inbox-flow for sale:`, invokeError);
+                } else {
+                  console.log(`[TAG-WHATS] ✅ Sale flow "${flow.name}" triggered successfully!`);
+                }
+              } catch (flowErr) {
+                console.error(`[TAG-WHATS] Error triggering sale flow ${flow.id}:`, flowErr);
+              }
+            }
+          } else {
+            console.log("[TAG-WHATS] No active sale flows found for user");
+          }
+        } else {
+          console.log("[TAG-WHATS] No inbox_contact found for phone on this instance, cannot trigger sale flow");
+        }
+      } catch (saleFlowError) {
+        console.error("[TAG-WHATS] Error in sale flow triggering:", saleFlowError);
+        // Don't fail the main process for sale flow errors
+      }
+      
+      console.log("[TAG-WHATS] ====== SALE FLOWS COMPLETE ======");
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
