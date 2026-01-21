@@ -200,10 +200,10 @@ export default function AdsDashboard() {
         .eq("user_id", user.id);
 
       // Filter by selected accounts
-      const hasAllSelected = selectedAccounts.includes("all");
-      if (!hasAllSelected && selectedAccounts.length > 0) {
+      const hasAllSelectedForCampaigns = selectedAccounts.includes("all");
+      if (!hasAllSelectedForCampaigns && selectedAccounts.length > 0) {
         query = query.in("ad_account_id", selectedAccounts);
-      } else if (hasAllSelected && activeAccountIds.length > 0) {
+      } else if (hasAllSelectedForCampaigns && activeAccountIds.length > 0) {
         query = query.in("ad_account_id", activeAccountIds);
       }
 

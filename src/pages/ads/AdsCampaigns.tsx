@@ -34,7 +34,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { splashedToast } from "@/hooks/useSplashedToast";
 import { motion, AnimatePresence } from "framer-motion";
-import { format } from "date-fns";
+import { format, startOfDay, endOfDay, subDays } from "date-fns";
+import { fromZonedTime, toZonedTime } from "date-fns-tz";
 import { ptBR } from "date-fns/locale";
 import {
   Table,
@@ -121,6 +122,8 @@ type SortField = 'name' | 'status' | 'daily_budget' | 'spend' | 'impressions' | 
 type SortOrder = 'asc' | 'desc';
 type DateFilter = "today" | "yesterday" | "7days" | "30days" | "month";
 type ViewLevel = 'campaign' | 'adset' | 'ad';
+
+const SP_TIMEZONE = "America/Sao_Paulo";
 
 interface ColumnConfig {
   key: string;
@@ -232,7 +235,49 @@ export default function AdsCampaigns() {
     if (user) {
       loadData();
     }
-  }, [user, selectedAccounts]);
+  }, [user, selectedAccounts, dateFilter]);
+
+  const getDateRangeUTC = (filter: DateFilter) => {
+    const nowInSP = toZonedTime(new Date(), SP_TIMEZONE);
+
+    let spStart: Date;
+    let spEnd: Date;
+
+    switch (filter) {
+      case "today":
+        spStart = startOfDay(nowInSP);
+        spEnd = endOfDay(nowInSP);
+        break;
+      case "yesterday": {
+        const y = subDays(nowInSP, 1);
+        spStart = startOfDay(y);
+        spEnd = endOfDay(y);
+        break;
+      }
+      case "7days":
+        spStart = startOfDay(subDays(nowInSP, 6));
+        spEnd = endOfDay(nowInSP);
+        break;
+      case "30days":
+        spStart = startOfDay(subDays(nowInSP, 29));
+        spEnd = endOfDay(nowInSP);
+        break;
+      case "month": {
+        const firstDayOfMonth = new Date(nowInSP.getFullYear(), nowInSP.getMonth(), 1);
+        spStart = startOfDay(firstDayOfMonth);
+        spEnd = endOfDay(nowInSP);
+        break;
+      }
+      default:
+        spStart = startOfDay(nowInSP);
+        spEnd = endOfDay(nowInSP);
+    }
+
+    const utcStart = fromZonedTime(spStart, SP_TIMEZONE).toISOString();
+    const utcEnd = fromZonedTime(spEnd, SP_TIMEZONE).toISOString();
+
+    return { utcStart, utcEnd };
+  };
 
   const loadData = async () => {
     if (!user) return;
@@ -300,12 +345,22 @@ export default function AdsCampaigns() {
       const { data: adsData } = await adsQuery;
       setAds(adsData || []);
 
-      // Load sales from ads_whatsapp_leads (vendas atribuídas)
-      const { data: salesData } = await supabase
+      // Load sales from ads_whatsapp_leads (vendas atribuídas) - respeita filtro de data (fuso SP)
+      const { utcStart, utcEnd } = getDateRangeUTC(dateFilter);
+
+      let salesQuery = supabase
         .from("ads_whatsapp_leads")
-        .select("ad_id, campaign_id, purchase_value")
+        .select("ad_id, campaign_id, purchase_value, ad_account_id, purchase_sent_at")
         .eq("user_id", user.id)
-        .not("purchase_sent_at", "is", null);
+        .not("purchase_sent_at", "is", null)
+        .gte("purchase_sent_at", utcStart)
+        .lte("purchase_sent_at", utcEnd);
+
+      if (accountIdsToFilter.length > 0) {
+        salesQuery = salesQuery.in("ad_account_id", accountIdsToFilter);
+      }
+
+      const { data: salesData } = await salesQuery;
 
       // Group sales by ad_id and campaign_id
       const adSalesMap: Record<string, { count: number; value: number }> = {};
