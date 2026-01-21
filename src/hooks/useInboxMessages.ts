@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { InboxMessage } from '@/types/inbox';
 import { useAuth } from '@/contexts/AuthContext';
@@ -11,6 +11,19 @@ export const useInboxMessages = (contactId: string | null) => {
   const { user } = useAuth();
   const { effectiveUserId } = useEffectiveUser();
   const userId = effectiveUserId || user?.id;
+  
+  // Use refs for stable references to avoid re-renders
+  const contactIdRef = useRef(contactId);
+  const userIdRef = useRef(userId);
+  
+  // Update refs when values change
+  useEffect(() => {
+    contactIdRef.current = contactId;
+  }, [contactId]);
+  
+  useEffect(() => {
+    userIdRef.current = userId;
+  }, [userId]);
   
   // Initialize with cached messages if available for instant display
   const [messages, setMessages] = useState<InboxMessage[]>(() => {
@@ -165,17 +178,35 @@ export const useInboxMessages = (contactId: string | null) => {
   }, [contactId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Subscribe to realtime updates for this contact's messages
+  // Use refs inside callbacks to avoid stale closures
   useEffect(() => {
-    // Cleanup previous channel if exists
+    if (!userId || !contactId) {
+      // Cleanup if we don't need a channel
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+      setRealtimeSubscribed(false);
+      return;
+    }
+
+    // If we already have a channel for this contact, don't recreate
+    const existingChannelName = (channelRef.current as any)?._topic;
+    if (existingChannelName && existingChannelName.includes(contactId)) {
+      console.log(`Reusing existing channel for ${contactId}`);
+      return;
+    }
+
+    // Cleanup previous channel if exists (different contact)
     if (channelRef.current) {
+      console.log(`Cleaning up previous channel before creating new one`);
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
     }
 
     setRealtimeSubscribed(false);
 
-    if (!userId || !contactId) return;
-
+    // Use timestamp in name to ensure uniqueness with Supabase
     const channelName = `inbox-messages-${contactId}-${Date.now()}`;
     console.log(`Subscribing to realtime channel: ${channelName}`);
 
@@ -192,10 +223,15 @@ export const useInboxMessages = (contactId: string | null) => {
         (payload) => {
           console.log('Realtime INSERT received:', payload);
           const newMessage = payload.new as any;
+          const currentContactId = contactIdRef.current;
+          
+          // Ensure we're still on the same contact
+          if (newMessage.contact_id !== currentContactId) return;
+          
           const newRemoteNorm = normalizeRemoteMessageId(newMessage.remote_message_id);
 
           setMessages((prev) => {
-            // Skip if same row id
+            // Skip if same row id or temp id (optimistic message)
             if (prev.some((m) => m.id === newMessage.id)) return prev;
 
             // If it matches an existing message by normalized remote id, merge visually (keep best status)
@@ -225,7 +261,7 @@ export const useInboxMessages = (contactId: string | null) => {
                 next[idx] = merged;
                 const sorted = sortByCreatedAtAsc(next);
                 // Update cache
-                if (contactId) messageCache.set(contactId, sorted);
+                if (currentContactId) messageCache.set(currentContactId, sorted);
                 return sorted;
               }
             }
@@ -239,7 +275,7 @@ export const useInboxMessages = (contactId: string | null) => {
 
             const sorted = sortByCreatedAtAsc([...prev, appended]);
             // Update cache
-            if (contactId) messageCache.set(contactId, sorted);
+            if (currentContactId) messageCache.set(currentContactId, sorted);
             return sorted;
           });
         }
@@ -255,6 +291,11 @@ export const useInboxMessages = (contactId: string | null) => {
         (payload) => {
           console.log('Realtime UPDATE received:', payload);
           const updated = payload.new as any;
+          const currentContactId = contactIdRef.current;
+          
+          // Ensure we're still on the same contact
+          if (updated.contact_id !== currentContactId) return;
+          
           setMessages((prev) => {
             const sorted = sortByCreatedAtAsc(
               prev.map((m) =>
@@ -269,7 +310,7 @@ export const useInboxMessages = (contactId: string | null) => {
               )
             );
             // Update cache
-            if (contactId) messageCache.set(contactId, sorted);
+            if (currentContactId) messageCache.set(currentContactId, sorted);
             return sorted;
           });
         }
