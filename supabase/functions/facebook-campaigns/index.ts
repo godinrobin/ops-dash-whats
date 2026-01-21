@@ -409,7 +409,7 @@ serve(async (req) => {
           'actions', 'cost_per_action_type', 'action_values'
         ].join(',');
 
-        const adsUrl = `https://graph.facebook.com/v18.0/act_${adAccount.ad_account_id}/ads?fields=id,name,status,adset_id,campaign_id,creative{thumbnail_url},insights.date_preset(${mappedDatePreset}){${insightsFields}}&limit=500&access_token=${accessToken}`;
+        const adsUrl = `https://graph.facebook.com/v18.0/act_${adAccount.ad_account_id}/ads?fields=id,name,status,adset_id,campaign_id,creative{thumbnail_url,effective_object_story_id},insights.date_preset(${mappedDatePreset}){${insightsFields}}&limit=500&access_token=${accessToken}`;
         
         console.log(`Fetching ads for account ${adAccount.ad_account_id}...`);
         const adsResponse = await fetch(adsUrl);
@@ -429,6 +429,18 @@ serve(async (req) => {
 
         for (const ad of ads) {
           const metrics = extractMetrics(ad.insights);
+          
+          // Extract effective_object_story_id and build ad_post_url
+          const effectiveObjectStoryId = ad.creative?.effective_object_story_id || null;
+          let adPostUrl: string | null = null;
+          
+          if (effectiveObjectStoryId) {
+            // Format is "pageId_postId" - build Facebook post URL
+            const [pageId, postId] = effectiveObjectStoryId.split('_');
+            if (pageId && postId) {
+              adPostUrl = `https://www.facebook.com/${pageId}/posts/${postId}`;
+            }
+          }
 
           const adData = {
             ad_id: ad.id,
@@ -438,6 +450,8 @@ serve(async (req) => {
             status: ad.status,
             creative_id: ad.creative?.id || null,
             thumbnail_url: ad.creative?.thumbnail_url || null,
+            effective_object_story_id: effectiveObjectStoryId,
+            ad_post_url: adPostUrl,
             ...metrics,
             cost_per_result: 0,
             results: 0,

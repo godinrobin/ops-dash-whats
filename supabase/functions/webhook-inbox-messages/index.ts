@@ -3070,16 +3070,19 @@ serve(async (req) => {
                 // Get ad source URL (first valid URL from various sources)
                 const adSourceUrl = sourceUrls[0] || null;
 
-                // Lookup campaign_id and adset_id from ads_ads table if we have ad_id
+                // Lookup campaign_id and adset_id from ads_ads table
+                // Priority: 1) Use ad_id directly if available, 2) Match by ad_post_url
                 let campaignId: string | null = null;
                 let adsetId: string | null = null;
                 let adName: string | null = null;
+                let matchedAdAccountId: string | null = null;
                 
+                // First try: Direct ad_id lookup
                 if (adId) {
                   try {
                     const { data: adData } = await supabaseClient
                       .from('ads_ads')
-                      .select('campaign_id, adset_id, name')
+                      .select('campaign_id, adset_id, name, ad_account_id')
                       .eq('ad_id', adId)
                       .maybeSingle();
                     
@@ -3087,14 +3090,82 @@ serve(async (req) => {
                       campaignId = adData.campaign_id;
                       adsetId = adData.adset_id;
                       adName = adData.name;
-                      console.log(`[ADS LEAD] Found ad info: campaign=${campaignId}, adset=${adsetId}, name=${adName}`);
+                      matchedAdAccountId = adData.ad_account_id;
+                      console.log(`[ADS LEAD] Found ad by ad_id: campaign=${campaignId}, adset=${adsetId}, name=${adName}`);
                     } else {
                       console.log(`[ADS LEAD] Ad not found in ads_ads table for ad_id: ${adId}`);
                     }
                   } catch (adLookupError) {
-                    console.log('[ADS LEAD] Error looking up ad:', adLookupError);
+                    console.log('[ADS LEAD] Error looking up ad by id:', adLookupError);
                   }
                 }
+                
+                // Second try: Match by ad_post_url if no match yet and we have an adSourceUrl
+                if (!campaignId && adSourceUrl) {
+                  try {
+                    console.log(`[ADS LEAD] Trying to match by ad_post_url using source: ${adSourceUrl}`);
+                    
+                    // Try multiple URL patterns for matching
+                    // The adSourceUrl can be fb.me/xxx, facebook.com/xxx, or full post URLs
+                    // We need to match against stored ad_post_url patterns
+                    
+                    // First, check if adSourceUrl is a Facebook post URL directly
+                    let urlsToMatch: string[] = [];
+                    
+                    // Try to extract components from the source URL
+                    try {
+                      const sourceUrlObj = new URL(adSourceUrl);
+                      const pathname = sourceUrlObj.pathname;
+                      
+                      // If it's a fb.me short link, we can't expand it server-side easily
+                      // But we can try to match based on the stored URLs
+                      
+                      // For Facebook post URLs like facebook.com/pageId/posts/postId
+                      const postMatch = pathname.match(/\/(\d+)\/posts\/(\d+)/);
+                      if (postMatch) {
+                        const [, pageId, postId] = postMatch;
+                        urlsToMatch.push(`https://www.facebook.com/${pageId}/posts/${postId}`);
+                        urlsToMatch.push(`https://facebook.com/${pageId}/posts/${postId}`);
+                      }
+                      
+                      // Also add the original URL
+                      urlsToMatch.push(adSourceUrl);
+                    } catch (urlParseErr) {
+                      // If URL parsing fails, just use the original
+                      urlsToMatch.push(adSourceUrl);
+                    }
+                    
+                    // Query ads_ads for matching ad_post_url
+                    // Use ilike for case-insensitive matching and to handle www/non-www differences
+                    for (const urlToMatch of urlsToMatch) {
+                      const { data: matchedAd } = await supabaseClient
+                        .from('ads_ads')
+                        .select('ad_id, campaign_id, adset_id, name, ad_account_id, ad_post_url')
+                        .or(`ad_post_url.ilike.%${urlToMatch.replace('https://www.', '').replace('https://', '')}%`)
+                        .limit(1)
+                        .maybeSingle();
+                      
+                      if (matchedAd) {
+                        adId = matchedAd.ad_id;
+                        campaignId = matchedAd.campaign_id;
+                        adsetId = matchedAd.adset_id;
+                        adName = matchedAd.name;
+                        matchedAdAccountId = matchedAd.ad_account_id;
+                        console.log(`[ADS LEAD] Matched ad by URL: ad_id=${adId}, campaign=${campaignId}, adset=${adsetId}, matched_url=${matchedAd.ad_post_url}`);
+                        break;
+                      }
+                    }
+                    
+                    if (!campaignId) {
+                      console.log(`[ADS LEAD] No ad match found for URL patterns: ${urlsToMatch.join(', ')}`);
+                    }
+                  } catch (urlMatchError) {
+                    console.log('[ADS LEAD] Error matching ad by URL:', urlMatchError);
+                  }
+                }
+                
+                // Use matched ad_account_id if found, otherwise fallback to config
+                const finalAdAccountId = matchedAdAccountId || adAccountId;
 
                 // Create new lead with ad attribution
                 const { error: leadError, data: newLead } = await supabaseClient
@@ -3109,7 +3180,7 @@ serve(async (req) => {
                     fbclid: fbclid,
                     first_message: content?.substring(0, 500),
                     first_contact_at: new Date().toISOString(),
-                    ad_account_id: adAccountId,
+                    ad_account_id: finalAdAccountId,
                     ad_source_url: adSourceUrl,
                     ad_id: adId,
                     campaign_id: campaignId,
