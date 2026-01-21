@@ -93,12 +93,14 @@ serve(async (req) => {
     }
 
     // Fetch recent inbound messages with remote_message_id
+    // Look for messages that are NOT 'read' (could be 'received', 'delivered', 'sent', etc.)
     const { data: messages, error: messagesError } = await supabaseClient
       .from('inbox_messages')
       .select('id, remote_message_id, status')
       .eq('contact_id', contactId)
       .eq('direction', 'inbound')
       .not('remote_message_id', 'is', null)
+      .neq('status', 'read') // Only get messages that are NOT read
       .order('created_at', { ascending: false })
       .limit(50);
 
@@ -110,8 +112,10 @@ serve(async (req) => {
       });
     }
 
-    // Filter messages that are not already read
-    const unreadMessages = (messages || []).filter(m => m.status !== 'read' && m.remote_message_id);
+    // All messages returned are unread (we filtered in the query)
+    const unreadMessages = (messages || []).filter(m => m.remote_message_id);
+    
+    console.log(`[MARK-READ] Found ${unreadMessages.length} unread inbound messages`);
     
     if (unreadMessages.length === 0) {
       console.log('[MARK-READ] No unread messages to mark');
@@ -121,7 +125,7 @@ serve(async (req) => {
         .update({ unread_count: 0 })
         .eq('id', contactId);
       
-      return new Response(JSON.stringify({ success: true, message: 'No unread messages' }), {
+      return new Response(JSON.stringify({ success: true, message: 'No unread messages', markedCount: 0 }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

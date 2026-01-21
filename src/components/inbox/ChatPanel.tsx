@@ -287,35 +287,41 @@ export const ChatPanel = ({
 
   // Auto-mark as read when opening a conversation (if there are unread messages)
   // This also sends read receipts to WhatsApp via the edge function
+  // Mark messages as read on WhatsApp when opening a conversation
+  // This runs ALWAYS when contact changes (not just when unread_count > 0)
+  // because unread_count can be locally zeroed before the physical receipts are sent
   useEffect(() => {
     if (!contact || !contact.id) return;
     
-    // Check if there are unread messages
-    if (contact.unread_count && contact.unread_count > 0) {
-      // Mark as read when opening the chat - both locally and on WhatsApp
-      const markAsRead = async () => {
-        try {
-          // Call edge function to mark as read on WhatsApp (sends read receipts)
-          const { error: fnError } = await supabase.functions.invoke('mark-inbox-read', {
-            body: { contactId: contact.id },
-          });
-          
-          if (fnError) {
-            console.error('[ChatPanel] Error calling mark-inbox-read:', fnError);
-            // Still update local state even if edge function fails
-            await supabase
-              .from('inbox_contacts')
-              .update({ unread_count: 0 })
-              .eq('id', contact.id);
-          }
-          
-          console.log('[ChatPanel] Marked conversation as read on open (with WhatsApp receipts)');
-        } catch (err) {
-          console.error('[ChatPanel] Error marking as read:', err);
+    // Always call the edge function to mark as read on WhatsApp
+    // The edge function will check if there are actually unread messages
+    const markAsReadOnWhatsApp = async () => {
+      try {
+        console.log('[ChatPanel] Calling mark-inbox-read for contact:', contact.id);
+        
+        const { data, error: fnError } = await supabase.functions.invoke('mark-inbox-read', {
+          body: { contactId: contact.id },
+        });
+        
+        if (fnError) {
+          console.error('[ChatPanel] Error calling mark-inbox-read:', fnError);
+        } else {
+          console.log('[ChatPanel] mark-inbox-read result:', data);
         }
-      };
-      markAsRead();
-    }
+        
+        // Also update local unread_count if > 0
+        if (contact.unread_count && contact.unread_count > 0) {
+          await supabase
+            .from('inbox_contacts')
+            .update({ unread_count: 0 })
+            .eq('id', contact.id);
+        }
+      } catch (err) {
+        console.error('[ChatPanel] Error marking as read:', err);
+      }
+    };
+    
+    markAsReadOnWhatsApp();
   }, [contact?.id]); // Only trigger when contact changes, not on every update
 
   // Auto-fetch profile picture if contact doesn't have one
