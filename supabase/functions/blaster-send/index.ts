@@ -785,18 +785,24 @@ async function executeFlowForContact(
         
         const timeoutAt = timeoutEnabled ? new Date(Date.now() + timeoutMs).toISOString() : null;
         
+        // Use 'active' status so webhook-inbox-messages can detect and continue the session
+        // (webhook only checks for status='active' sessions waiting on waitInput/menu nodes)
         const { error: sessionError } = await supabaseClient
           .from('inbox_flow_sessions')
-          .insert({
+          .upsert({
             user_id: userId,
             flow_id: flow.id,
             contact_id: contactId,
             instance_id: instance.id,
             current_node_id: currentNodeId,
-            status: 'waiting',
+            status: 'active',
             variables,
             timeout_at: timeoutAt,
-          });
+            started_at: new Date().toISOString(),
+            last_interaction: new Date().toISOString(),
+            processing: false,
+            processing_started_at: null,
+          }, { onConflict: 'flow_id,contact_id' });
         
         if (sessionError) {
           console.error(`[${phone}] Error creating session:`, sessionError.message);
