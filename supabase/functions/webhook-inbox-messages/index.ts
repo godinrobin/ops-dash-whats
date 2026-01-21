@@ -3195,15 +3195,42 @@ serve(async (req) => {
           // For iaConverter nodes, retry with delay since AI processing can take time
           let lockResult = await tryAcquireSessionLock(supabaseClient, activeSession.id, 30000);
           
-          // If lock failed and it's an iaConverter node, retry up to 3 times with increasing delays
+          // If lock failed and it's an iaConverter node, persist the user input for later consumption
           if (!lockResult.acquired && currentNode.type === 'iaConverter') {
-            console.log(`[WAIT_INPUT] iaConverter node - will retry lock acquisition`);
-            for (let retry = 0; retry < 3 && !lockResult.acquired; retry++) {
-              const delayMs = (retry + 1) * 2000; // 2s, 4s, 6s
-              console.log(`[WAIT_INPUT] Retry ${retry + 1}/3 - waiting ${delayMs}ms before retry`);
-              await new Promise(resolve => setTimeout(resolve, delayMs));
-              lockResult = await tryAcquireSessionLock(supabaseClient, activeSession.id, 30000);
-            }
+            console.log(`[WAIT_INPUT] iaConverter node - session locked, will persist pending input`);
+            
+            // Persist the user input in session variables so process-inbox-flow can consume it later
+            const currentVariables = activeSession.variables || {};
+            await supabaseClient
+              .from('inbox_flow_sessions')
+              .update({
+                variables: { 
+                  ...currentVariables, 
+                  _pending_user_input: userInputValue,
+                  _pending_user_input_at: new Date().toISOString()
+                }
+              })
+              .eq('id', activeSession.id);
+            
+            // Schedule a retry job to process this input after the current processing completes
+            const executeAt = new Date(Date.now() + 3000); // 3 seconds from now
+            await supabaseClient
+              .from('inbox_flow_delay_jobs')
+              .insert({
+                session_id: activeSession.id,
+                execute_at: executeAt.toISOString(),
+                status: 'scheduled',
+                job_type: 'iaConverterPendingInput'
+              });
+            
+            console.log(`[WAIT_INPUT] iaConverter: persisted pending input and scheduled retry job for session ${activeSession.id}`);
+            return new Response(JSON.stringify({ 
+              success: true, 
+              pendingInputPersisted: true, 
+              reason: 'ia_converter_pending_input' 
+            }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
           }
           
           if (!lockResult.acquired) {
