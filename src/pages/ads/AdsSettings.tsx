@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { splashedToast } from "@/hooks/useSplashedToast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import FacebookConnectDialog from "@/components/ads/FacebookConnectDialog";
 
 interface FacebookAccount {
   id: string;
@@ -53,6 +54,7 @@ export default function AdsSettings() {
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
   const [expandedAccounts, setExpandedAccounts] = useState<Set<string>>(new Set());
   const [syncingAccounts, setSyncingAccounts] = useState<Set<string>>(new Set());
+  const [connectDialogOpen, setConnectDialogOpen] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -241,7 +243,7 @@ export default function AdsSettings() {
                 Conecte sua conta do Facebook para acessar os dados de anúncios
               </CardDescription>
             </div>
-            <Button onClick={handleConnectFacebook} disabled={connecting}>
+            <Button onClick={() => setConnectDialogOpen(true)} disabled={connecting}>
               {connecting ? (
                 <RefreshCcw className="h-4 w-4 mr-2 animate-spin" />
               ) : (
@@ -398,6 +400,13 @@ export default function AdsSettings() {
           <p>4. Os dados das campanhas serão sincronizados automaticamente.</p>
         </CardContent>
       </Card>
+
+      {/* Facebook Connect Dialog */}
+      <FacebookConnectDialog
+        open={connectDialogOpen}
+        onOpenChange={setConnectDialogOpen}
+        onContinueHere={handleConnectFacebook}
+      />
     </div>
   );
 }

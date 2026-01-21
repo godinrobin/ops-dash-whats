@@ -63,6 +63,7 @@ import QuickRepliesPage from "./pages/QuickRepliesPage";
 import DeliverableCreator from "./pages/DeliverableCreator";
 import Settings from "./pages/Settings";
 import SaleNotificationSettings from "./pages/SaleNotificationSettings";
+import OAuthFacebookCallback from "./pages/OAuthFacebookCallback";
 
 const queryClient = new QueryClient();
 
@@ -140,6 +141,9 @@ const AppContent = () => {
         
         {/* ADS MODULE */}
         <Route path="/ads/*" element={<MemberRoute featureName="ADS X1"><AdsLayout /></MemberRoute>} />
+        
+        {/* OAuth Callbacks (public pages for cross-browser auth) */}
+        <Route path="/oauth/facebook/callback" element={<OAuthFacebookCallback />} />
         
         {/* ADMIN ROUTES */}
         <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />
