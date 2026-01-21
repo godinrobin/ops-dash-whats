@@ -406,7 +406,7 @@ serve(async (req) => {
             .maybeSingle();
 
           const nodeId = String(activeSession?.current_node_id || '');
-          const isWaitingNode = nodeId.startsWith('waitInput') || nodeId.startsWith('menu');
+          const isWaitingNode = nodeId.startsWith('waitInput') || nodeId.startsWith('menu') || nodeId.startsWith('iaConverter');
 
           if (activeSession && isWaitingNode) {
             // Avoid calling while session is actively processing (lock)
