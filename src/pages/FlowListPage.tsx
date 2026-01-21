@@ -484,8 +484,7 @@ const FlowListPage = () => {
       return;
     }
 
-    const userId = effectiveUserId || user?.id;
-    if (!userId) {
+    if (!user) {
       toast.error('Usuário não autenticado');
       return;
     }
@@ -493,83 +492,37 @@ const FlowListPage = () => {
     setIsImportingFolder(true);
 
     try {
-      // Fetch the original folder by ID
-      const { data: originalFolder, error: folderFetchError } = await supabase
-        .from('inbox_flow_folders')
-        .select('*')
-        .eq('id', importFolderCode.trim())
-        .maybeSingle();
+      // Server-side import (bypasses cross-account RLS safely)
+      const { data, error } = await supabase.functions.invoke('import-flow-folder', {
+        body: {
+          folderId: importFolderCode.trim(),
+        },
+      });
 
-      if (folderFetchError || !originalFolder) {
-        toast.error('Pasta não encontrada. Verifique o código.');
-        setIsImportingFolder(false);
-        return;
-      }
-
-      // Fetch all flows in the folder
-      const { data: originalFlows, error: flowsFetchError } = await supabase
-        .from('inbox_flows')
-        .select('*')
-        .eq('folder_id', importFolderCode.trim());
-
-      if (flowsFetchError) {
-        toast.error('Erro ao buscar fluxos da pasta');
-        setIsImportingFolder(false);
-        return;
-      }
-
-      // Create the new folder for the current user
-      const { data: newFolder, error: folderInsertError } = await supabase
-        .from('inbox_flow_folders')
-        .insert({
-          user_id: userId,
-          name: `${originalFolder.name} (Importado)`,
-        })
-        .select()
-        .single();
-
-      if (folderInsertError || !newFolder) {
-        toast.error('Erro ao criar pasta: ' + (folderInsertError?.message || 'Erro desconhecido'));
-        setIsImportingFolder(false);
-        return;
-      }
-
-      // Import all flows into the new folder
-      let importedCount = 0;
-      for (const originalFlow of (originalFlows || [])) {
-        const { error: flowInsertError } = await supabase
-          .from('inbox_flows')
-          .insert({
-            user_id: userId,
-            folder_id: newFolder.id,
-            name: `${originalFlow.name} (Importado)`,
-            description: originalFlow.description,
-            nodes: originalFlow.nodes,
-            edges: originalFlow.edges,
-            trigger_type: originalFlow.trigger_type,
-            trigger_keywords: originalFlow.trigger_keywords,
-            assigned_instances: [], // Don't copy instances
-            is_active: false, // Start as inactive
-            priority: originalFlow.priority,
-            pause_on_media: originalFlow.pause_on_media,
-            pause_schedule_enabled: originalFlow.pause_schedule_enabled,
-            pause_schedule_start: originalFlow.pause_schedule_start,
-            pause_schedule_end: originalFlow.pause_schedule_end,
-            reply_to_last_message: originalFlow.reply_to_last_message,
-            reply_mode: originalFlow.reply_mode,
-            reply_interval: originalFlow.reply_interval,
-            pause_other_flows: originalFlow.pause_other_flows,
-            knowledge_base: (originalFlow as any).knowledge_base,
-          });
-
-        if (!flowInsertError) {
-          importedCount++;
+      if (error) {
+        console.error('Error importing folder:', error);
+        const msg = (error as any)?.message?.toLowerCase?.() || '';
+        if (msg.includes('unauthorized') || msg.includes('jwt')) {
+          toast.error('Sua sessão expirou. Recarregue a página e tente novamente.');
+        } else if (msg.includes('404') || msg.includes('not found')) {
+          toast.error('Pasta não encontrada. Verifique o código.');
         } else {
-          console.error('Error importing flow:', originalFlow.name, flowInsertError);
+          toast.error('Erro ao importar pasta');
         }
+        return;
       }
 
-      toast.success(`Pasta importada com ${importedCount} fluxo(s)!`);
+      if (!(data as any)?.ok) {
+        const serverError = (data as any)?.error as string | undefined;
+        if (serverError?.toLowerCase?.().includes('not found')) {
+          toast.error('Pasta não encontrada. Verifique o código.');
+        } else {
+          toast.error('Erro ao importar pasta' + (serverError ? `: ${serverError}` : ''));
+        }
+        return;
+      }
+
+      toast.success(`Pasta importada com ${(data as any).importedFlows ?? 0} fluxo(s)!`);
       setShowImportFolderDialog(false);
       setImportFolderCode('');
       fetchFolders();
