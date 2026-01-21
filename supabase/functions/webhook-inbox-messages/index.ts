@@ -1837,7 +1837,7 @@ serve(async (req) => {
                           variables: { 
                             nome: contact.name || '',
                             telefone: phone,
-                            resposta: '',
+                            resposta: uazText || '',
                             lastMessage: uazText || '',
                             contactName: contact.name || phone,
                             ultima_mensagem: uazText || '',
@@ -3909,7 +3909,7 @@ serve(async (req) => {
               variables: { 
                 nome: contact.name || '',
                 telefone: phone,
-                resposta: '',
+                resposta: content,
                 lastMessage: content,
                 contactName: contact.name || phone,
                 ultima_mensagem: content,
