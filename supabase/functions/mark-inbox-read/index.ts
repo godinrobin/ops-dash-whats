@@ -92,6 +92,10 @@ serve(async (req) => {
       });
     }
 
+    // Get remoteJid for the contact
+    const remoteJid = contact.remote_jid || `${contact.phone}@s.whatsapp.net`;
+    console.log(`[MARK-READ] Remote JID: ${remoteJid}`);
+
     // Fetch recent inbound messages with remote_message_id
     // Look for messages that are NOT 'read' (could be 'received', 'delivered', 'sent', etc.)
     const { data: messages, error: messagesError } = await supabaseClient
@@ -106,55 +110,10 @@ serve(async (req) => {
 
     if (messagesError) {
       console.error('[MARK-READ] Error fetching messages:', messagesError);
-      return new Response(JSON.stringify({ error: 'Error fetching messages' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
     }
 
-    // All messages returned are unread (we filtered in the query)
     const unreadMessages = (messages || []).filter(m => m.remote_message_id);
-    
     console.log(`[MARK-READ] Found ${unreadMessages.length} unread inbound messages`);
-    
-    if (unreadMessages.length === 0) {
-      console.log('[MARK-READ] No unread messages to mark');
-      // Still update unread_count
-      await supabaseClient
-        .from('inbox_contacts')
-        .update({ unread_count: 0 })
-        .eq('id', contactId);
-      
-      return new Response(JSON.stringify({ success: true, message: 'No unread messages', markedCount: 0 }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Extract remote message IDs
-    const messageIds = unreadMessages
-      .map(m => {
-        // Handle "owner:ID" format - extract just the ID
-        const id = String(m.remote_message_id || '');
-        if (id.includes(':')) {
-          const parts = id.split(':').filter(Boolean);
-          return parts[parts.length - 1];
-        }
-        return id;
-      })
-      .filter(id => id && id.length > 5);
-
-    console.log(`[MARK-READ] Found ${messageIds.length} message IDs to mark as read`);
-
-    if (messageIds.length === 0) {
-      await supabaseClient
-        .from('inbox_contacts')
-        .update({ unread_count: 0 })
-        .eq('id', contactId);
-      
-      return new Response(JSON.stringify({ success: true, message: 'No valid message IDs' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
 
     // Handle based on API provider
     if (instance.api_provider === 'uazapi') {
@@ -175,35 +134,44 @@ serve(async (req) => {
 
       const baseUrl = apiConfig.uazapi_base_url.replace(/\/$/, '');
       
-      // UAZAPI: POST /message/markread with { id: [...] }
-      console.log(`[MARK-READ] Calling UAZAPI /message/markread with ${messageIds.length} IDs`);
+      // UAZAPI: Use POST /chat/read to mark the ENTIRE CHAT as read
+      // This is more reliable than marking individual messages
+      // API: { number: "5511999999999@s.whatsapp.net", read: true }
+      console.log(`[MARK-READ] Calling UAZAPI POST /chat/read for: ${remoteJid}`);
       
-      const response = await fetch(`${baseUrl}/message/markread`, {
+      const response = await fetch(`${baseUrl}/chat/read`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'token': instance.uazapi_token,
         },
-        body: JSON.stringify({ id: messageIds }),
+        body: JSON.stringify({ 
+          number: remoteJid,
+          read: true 
+        }),
       });
 
-      const result = await response.json();
-      console.log(`[MARK-READ] UAZAPI response: ${response.status}`, JSON.stringify(result));
+      let result: any;
+      try {
+        result = await response.json();
+      } catch {
+        result = await response.text();
+      }
+      console.log(`[MARK-READ] UAZAPI /chat/read response: ${response.status}`, JSON.stringify(result));
 
       if (!response.ok) {
-        console.error('[MARK-READ] UAZAPI error:', result);
-        // Still update local state even if API fails
-      } else {
-        // Update local message statuses to 'read'
-        for (const msg of unreadMessages) {
-          await supabaseClient
-            .from('inbox_messages')
-            .update({ status: 'read' })
-            .eq('id', msg.id);
-        }
+        console.error('[MARK-READ] UAZAPI /chat/read error:', result);
+      }
+      
+      // Update local message statuses to 'read'
+      for (const msg of unreadMessages) {
+        await supabaseClient
+          .from('inbox_messages')
+          .update({ status: 'read' })
+          .eq('id', msg.id);
       }
     } else {
-      // Evolution API: POST /chat/markMessageAsRead/{instanceName}
+      // Evolution API: PUT /chat/markMessageAsRead/{instanceName}
       // Get Evolution config
       let baseUrl = '';
       let apiKey = '';
@@ -248,11 +216,20 @@ serve(async (req) => {
         }
       }
 
-      if (baseUrl && apiKey) {
-        // Evolution API endpoint
-        const remoteJid = contact.remote_jid || `${contact.phone}@s.whatsapp.net`;
-        
-        console.log(`[MARK-READ] Calling Evolution /chat/markMessageAsRead/${instance.instance_name}`);
+      if (baseUrl && apiKey && unreadMessages.length > 0) {
+        // Extract message IDs for Evolution API
+        const messageIds = unreadMessages
+          .map(m => {
+            const id = String(m.remote_message_id || '');
+            if (id.includes(':')) {
+              const parts = id.split(':').filter(Boolean);
+              return parts[parts.length - 1];
+            }
+            return id;
+          })
+          .filter(id => id && id.length > 5);
+
+        console.log(`[MARK-READ] Calling Evolution /chat/markMessageAsRead/${instance.instance_name} with ${messageIds.length} IDs`);
         
         const response = await fetch(`${baseUrl}/chat/markMessageAsRead/${instance.instance_name}`, {
           method: 'PUT',
@@ -281,7 +258,7 @@ serve(async (req) => {
           }
         }
       } else {
-        console.log('[MARK-READ] No Evolution config found');
+        console.log('[MARK-READ] No Evolution config found or no unread messages');
       }
     }
 
@@ -295,7 +272,7 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ 
       success: true, 
-      markedCount: messageIds.length,
+      markedCount: unreadMessages.length,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
