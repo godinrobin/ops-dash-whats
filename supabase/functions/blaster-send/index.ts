@@ -157,6 +157,45 @@ serve(async (req) => {
           throw new Error(senderResult.error || 'Failed to create UAZAPI campaign');
         }
 
+        // Update campaign with UAZAPI folder ID and mark as running
+        // UAZAPI handles the sending, so we mark all as "sent" (queued in UAZAPI)
+        const totalPhones = phoneNumbers.length;
+        await supabaseClient
+          .from('blaster_campaigns')
+          .update({
+            status: 'running',
+            started_at: campaign.started_at || new Date().toISOString(),
+            uazapi_folder_id: senderResult.folder_id,
+            current_index: totalPhones,
+            sent_count: totalPhones,
+            failed_count: 0,
+          })
+          .eq('id', campaignId);
+
+        // Log all messages as sent (they're queued in UAZAPI)
+        const logsToInsert = phoneNumbers.map((phone, index) => ({
+          campaign_id: campaignId,
+          user_id: campaign.user_id,
+          phone: phone.replace(/\D/g, ''),
+          message: messageVariations.length > 0 ? messageVariations[index % messageVariations.length] : `[${mediaType}]`,
+          instance_id: instance.id,
+          status: 'sent',
+          sent_at: new Date().toISOString(),
+        }));
+
+        await supabaseClient.from('blaster_logs').insert(logsToInsert);
+
+        // Mark campaign as completed since UAZAPI handles from here
+        await supabaseClient
+          .from('blaster_campaigns')
+          .update({ 
+            status: 'completed',
+            completed_at: new Date().toISOString()
+          })
+          .eq('id', campaignId);
+
+        console.log(`Campaign ${campaignId} queued in UAZAPI with folder ${senderResult.folder_id}`);
+
         return new Response(
           JSON.stringify({ 
             success: true, 
