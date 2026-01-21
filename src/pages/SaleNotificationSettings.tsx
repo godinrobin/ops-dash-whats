@@ -75,8 +75,8 @@ export default function SaleNotificationSettings() {
       
       if (profileError && profileError.code !== 'PGRST116') throw profileError;
       
-      const DEFAULT_TITLE = "💰 Nova Venda!";
-      const DEFAULT_BODY = "Parabéns! Você acabou de vender por R$ {valor}!";
+      const DEFAULT_TITLE = "💰 Pix Recebido!";
+      const DEFAULT_BODY = "Pix pago no valor de R$ {valor}!";
       
       let finalTemplates = templatesData || [];
       
@@ -159,8 +159,8 @@ export default function SaleNotificationSettings() {
     try {
       const newTemplate = {
         user_id: user.id,
-        title_template: "💰 Nova Venda!",
-        body_template: "Parabéns! Você acabou de vender por R$ {valor}!",
+        title_template: "💰 Pix Recebido!",
+        body_template: "Pix pago no valor de R$ {valor}!",
         is_active: true,
         sort_order: templates.length,
       };
