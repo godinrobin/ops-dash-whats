@@ -203,3 +203,6 @@ verify_jwt = true
 
 [functions.test-push-event]
 verify_jwt = true
+
+[functions.admin-backfill-sales-attribution]
+verify_jwt = false
