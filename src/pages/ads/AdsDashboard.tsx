@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { motion, Reorder } from "framer-motion";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
+import { fromZonedTime, toZonedTime } from "date-fns-tz";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { splashedToast } from "@/hooks/useSplashedToast";
@@ -37,6 +38,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+
+const SP_TIMEZONE = "America/Sao_Paulo";
 
 interface MetricCard {
   id: string;
@@ -105,6 +108,30 @@ export default function AdsDashboard() {
   const [hasAccounts, setHasAccounts] = useState(false);
   const [salesByAd, setSalesByAd] = useState<SaleByAd[]>([]);
 
+  const getDateRange = useCallback((filter: DateFilter) => {
+    const now = toZonedTime(new Date(), SP_TIMEZONE);
+
+    switch (filter) {
+      case "today":
+        return { start: startOfDay(now), end: endOfDay(now) };
+      case "yesterday": {
+        const y = subDays(now, 1);
+        return { start: startOfDay(y), end: endOfDay(y) };
+      }
+      case "7days": {
+        // Inclui hoje + 6 dias anteriores
+        const start = startOfDay(subDays(now, 6));
+        return { start, end: endOfDay(now) };
+      }
+      case "30days": {
+        const start = startOfDay(subDays(now, 29));
+        return { start, end: endOfDay(now) };
+      }
+      default:
+        return { start: startOfDay(now), end: endOfDay(now) };
+    }
+  }, []);
+
   // Only show active ad accounts
   const activeAdAccounts = adAccounts.filter(acc => acc.is_selected === true);
 
@@ -166,7 +193,6 @@ export default function AdsDashboard() {
       const totalImpressions = campaigns?.reduce((sum, c) => sum + (c.impressions || 0), 0) || 0;
       const totalClicks = campaigns?.reduce((sum, c) => sum + (c.clicks || 0), 0) || 0;
       const totalConversions = campaigns?.reduce((sum, c) => sum + ((c as any).meta_conversions || 0), 0) || 0;
-      const totalConversionValue = campaigns?.reduce((sum, c) => sum + ((c as any).conversion_value || 0), 0) || 0;
       const totalMessaging = campaigns?.reduce((sum, c) => sum + ((c as any).messaging_conversations_started || 0), 0) || 0;
       const costPerConversation = totalMessaging > 0 ? totalSpend / totalMessaging : 0;
 
@@ -180,24 +206,39 @@ export default function AdsDashboard() {
         setLastSyncedAt(mostRecent);
       }
 
-      // Get leads data for funnel
-      const { data: leads } = await supabase
+      // =========================
+      // SALES (Tag Whats) — Filtra por período selecionado (fuso SP)
+      // =========================
+      const dateRange = getDateRange(dateFilter);
+      const utcStart = fromZonedTime(dateRange.start, SP_TIMEZONE).toISOString();
+      const utcEnd = fromZonedTime(dateRange.end, SP_TIMEZONE).toISOString();
+
+      let leadsQuery = supabase
         .from("ads_whatsapp_leads")
-        .select("*")
-        .eq("user_id", user.id);
+        .select("id, ad_id, ad_account_id, purchase_sent_at, purchase_value")
+        .eq("user_id", user.id)
+        .not("purchase_sent_at", "is", null)
+        .gte("purchase_sent_at", utcStart)
+        .lte("purchase_sent_at", utcEnd)
+        .range(0, 9999);
 
-      const totalMessages = leads?.length || 0;
-      const totalPurchases = leads?.filter(l => l.purchase_sent_at)?.length || 0;
-      const totalRevenue = leads?.reduce((sum, l) => sum + (l.purchase_value || 0), 0) || 0;
+      // Quando o usuário escolhe contas específicas, filtrar vendas por essas contas
+      const hasAllSelectedForSales = selectedAccounts.includes("all");
+      if (!hasAllSelectedForSales && selectedAccounts.length > 0) {
+        leadsQuery = leadsQuery.in("ad_account_id", selectedAccounts);
+      }
 
-      // Get sales with ad attribution and group by ad
-      const salesWithPurchase = leads?.filter(l => l.purchase_sent_at) || [];
+      const { data: salesWithPurchase } = await leadsQuery;
+      const totalSalesCount = salesWithPurchase?.length || 0;
+      const totalSalesRevenue =
+        salesWithPurchase?.reduce((sum, l) => sum + (l.purchase_value || 0), 0) || 0;
       
       // Load ads for name lookup
       const { data: adsData } = await supabase
         .from("ads_ads")
         .select("ad_id, name")
-        .eq("user_id", user.id);
+        .eq("user_id", user.id)
+        .range(0, 9999);
       
       const adsMap: Record<string, string> = {};
       (adsData || []).forEach(ad => {
@@ -206,7 +247,7 @@ export default function AdsDashboard() {
 
       // Group sales by ad_id
       const salesGrouped: Record<string, { count: number; value: number; adName: string | null }> = {};
-      salesWithPurchase.forEach(sale => {
+      (salesWithPurchase || []).forEach(sale => {
         const key = sale.ad_id || "unknown";
         if (!salesGrouped[key]) {
           salesGrouped[key] = { 
@@ -229,16 +270,17 @@ export default function AdsDashboard() {
         spend: totalSpend,
         impressions: totalImpressions,
         clicks: totalClicks,
-        conversions: totalConversions,
+        // Mostra "Vendas" no dashboard (baseado em Tag Whats)
+        conversions: totalSalesCount,
         cpm: totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0,
         ctr: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
         cpc: totalClicks > 0 ? totalSpend / totalClicks : 0,
-        roas: totalSpend > 0 ? totalConversionValue / totalSpend : 0,
-        revenue: totalConversionValue,
-        profit: totalConversionValue - totalSpend,
+        roas: totalSpend > 0 ? totalSalesRevenue / totalSpend : 0,
+        revenue: totalSalesRevenue,
+        profit: totalSalesRevenue - totalSpend,
         totalMessages: totalMessaging,
-        totalPurchases: totalConversions,
-        conversionValue: totalConversionValue,
+        totalPurchases: totalSalesCount,
+        conversionValue: totalSalesRevenue,
         costPerConversation
       });
     } catch (error) {
@@ -698,7 +740,7 @@ export default function AdsDashboard() {
                         </span>
                         <div className="flex items-center gap-3 text-right">
                           <span className="text-muted-foreground">{item.count} vendas</span>
-                          <span className="font-semibold text-green-500">R$ {item.value.toFixed(2)}</span>
+                           <span className="font-semibold text-primary">R$ {item.value.toFixed(2)}</span>
                         </div>
                       </div>
                       <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -706,7 +748,7 @@ export default function AdsDashboard() {
                           initial={{ width: 0 }}
                           animate={{ width: `${barWidth}%` }}
                           transition={{ duration: 0.6, delay: index * 0.1 }}
-                          className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full"
+                           className="h-full bg-gradient-to-r from-primary to-accent rounded-full"
                         />
                       </div>
                     </div>
