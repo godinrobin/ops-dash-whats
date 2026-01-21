@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ExternalLink, Copy, Check, Loader2, Clock } from "lucide-react";
+import { ExternalLink, Copy, Check, Loader2, Clock, Link } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { splashedToast } from "@/hooks/useSplashedToast";
 
@@ -21,6 +21,41 @@ export default function FacebookConnectDialog({
   const [generating, setGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
+  const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
+
+  // Countdown timer effect
+  useEffect(() => {
+    if (!expiresAt) {
+      setRemainingSeconds(0);
+      return;
+    }
+
+    const updateRemaining = () => {
+      const now = new Date().getTime();
+      const expiry = expiresAt.getTime();
+      const diff = Math.max(0, Math.floor((expiry - now) / 1000));
+      setRemainingSeconds(diff);
+
+      // If expired, reset the link
+      if (diff <= 0) {
+        setOauthLink(null);
+        setExpiresAt(null);
+      }
+    };
+
+    // Update immediately
+    updateRemaining();
+
+    // Update every second
+    const interval = setInterval(updateRemaining, 1000);
+    return () => clearInterval(interval);
+  }, [expiresAt]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const handleGenerateLink = async () => {
     setGenerating(true);
@@ -71,6 +106,7 @@ export default function FacebookConnectDialog({
       setOauthLink(null);
       setCopied(false);
       setExpiresAt(null);
+      setRemainingSeconds(0);
     }
     onOpenChange(newOpen);
   };
@@ -99,7 +135,7 @@ export default function FacebookConnectDialog({
             className="w-full h-auto p-4 justify-start gap-3 hover:bg-accent"
             onClick={handleContinueHere}
           >
-            <ExternalLink className="h-5 w-5 text-primary shrink-0" />
+            <ExternalLink className="h-5 w-5 text-orange-500 shrink-0" />
             <div className="text-left">
               <p className="font-medium">Continuar neste navegador</p>
               <p className="text-xs text-muted-foreground font-normal">
@@ -118,9 +154,9 @@ export default function FacebookConnectDialog({
                 disabled={generating}
               >
                 {generating ? (
-                  <Loader2 className="h-5 w-5 animate-spin text-primary shrink-0" />
+                  <Loader2 className="h-5 w-5 animate-spin text-orange-500 shrink-0" />
                 ) : (
-                  <Copy className="h-5 w-5 text-primary shrink-0" />
+                  <Link className="h-5 w-5 text-orange-500 shrink-0" />
                 )}
                 <div className="text-left">
                   <p className="font-medium">
@@ -133,16 +169,20 @@ export default function FacebookConnectDialog({
               </Button>
             ) : (
               <div className="p-4 border rounded-lg space-y-3 bg-accent/30">
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-green-500" />
-                  <p className="text-sm font-medium text-green-600 dark:text-green-400">
-                    Link gerado com sucesso!
-                  </p>
-                </div>
-                
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Clock className="h-3 w-3" />
-                  <span>Expira em 5 minutos</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-green-500" />
+                    <p className="text-sm font-medium text-green-600 dark:text-green-400">
+                      Link gerado!
+                    </p>
+                  </div>
+                  
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <Clock className="h-3.5 w-3.5 text-orange-500" />
+                    <span className={remainingSeconds < 60 ? "text-red-500 font-medium" : "text-muted-foreground"}>
+                      Expira em {formatTime(remainingSeconds)}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="flex gap-2">
