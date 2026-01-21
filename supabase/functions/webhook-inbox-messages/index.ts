@@ -3105,43 +3105,79 @@ serve(async (req) => {
                   try {
                     console.log(`[ADS LEAD] Trying to match by ad_post_url using source: ${adSourceUrl}`);
                     
-                    // Try multiple URL patterns for matching
-                    // The adSourceUrl can be fb.me/xxx, facebook.com/xxx, or full post URLs
-                    // We need to match against stored ad_post_url patterns
-                    
-                    // First, check if adSourceUrl is a Facebook post URL directly
                     let urlsToMatch: string[] = [];
+                    let expandedUrl = adSourceUrl;
                     
-                    // Try to extract components from the source URL
+                    // Try to expand short links (fb.me, instagram.com/p/, etc.)
+                    const sourceUrlObj = new URL(adSourceUrl);
+                    const isShortLink = sourceUrlObj.hostname === 'fb.me' || 
+                                        sourceUrlObj.hostname === 'l.facebook.com' ||
+                                        (sourceUrlObj.hostname.includes('instagram.com') && sourceUrlObj.pathname.startsWith('/p/'));
+                    
+                    if (isShortLink) {
+                      console.log(`[ADS LEAD] Detected short link, attempting to expand: ${adSourceUrl}`);
+                      try {
+                        // Follow redirects to get the final URL
+                        const expandResponse = await fetch(adSourceUrl, { 
+                          method: 'HEAD', 
+                          redirect: 'follow',
+                          headers: { 'User-Agent': 'Mozilla/5.0' }
+                        });
+                        if (expandResponse.url && expandResponse.url !== adSourceUrl) {
+                          expandedUrl = expandResponse.url;
+                          console.log(`[ADS LEAD] Expanded short link to: ${expandedUrl}`);
+                        }
+                      } catch (expandErr) {
+                        console.log(`[ADS LEAD] Could not expand short link: ${expandErr}`);
+                      }
+                    }
+                    
+                    // Try to extract Facebook post components from URL
                     try {
-                      const sourceUrlObj = new URL(adSourceUrl);
-                      const pathname = sourceUrlObj.pathname;
+                      const urlToAnalyze = new URL(expandedUrl);
+                      const pathname = urlToAnalyze.pathname;
                       
-                      // If it's a fb.me short link, we can't expand it server-side easily
-                      // But we can try to match based on the stored URLs
-                      
-                      // For Facebook post URLs like facebook.com/pageId/posts/postId
+                      // Match facebook.com/pageId/posts/postId pattern
                       const postMatch = pathname.match(/\/(\d+)\/posts\/(\d+)/);
                       if (postMatch) {
                         const [, pageId, postId] = postMatch;
                         urlsToMatch.push(`https://www.facebook.com/${pageId}/posts/${postId}`);
                         urlsToMatch.push(`https://facebook.com/${pageId}/posts/${postId}`);
+                        console.log(`[ADS LEAD] Extracted post URL pattern: pageId=${pageId}, postId=${postId}`);
                       }
                       
-                      // Also add the original URL
-                      urlsToMatch.push(adSourceUrl);
-                    } catch (urlParseErr) {
-                      // If URL parsing fails, just use the original
+                      // Match facebook.com/pageName/posts/postId pattern (page name instead of ID)
+                      const namedPostMatch = pathname.match(/\/([^\/]+)\/posts\/(\d+)/);
+                      if (namedPostMatch && !postMatch) {
+                        const [, pageName, postId] = namedPostMatch;
+                        // We can try to match by just the postId since it should be unique
+                        console.log(`[ADS LEAD] Detected named page post: pageName=${pageName}, postId=${postId}`);
+                      }
+                      
+                      // Match Instagram reel/post IDs from expanded URLs
+                      const igReelMatch = pathname.match(/\/reel\/([A-Za-z0-9_-]+)/);
+                      const igPostMatch = pathname.match(/\/p\/([A-Za-z0-9_-]+)/);
+                      if (igReelMatch || igPostMatch) {
+                        const igId = igReelMatch?.[1] || igPostMatch?.[1];
+                        console.log(`[ADS LEAD] Detected Instagram post/reel: ${igId}`);
+                      }
+                    } catch (parseErr) {
+                      console.log(`[ADS LEAD] URL parse error: ${parseErr}`);
+                    }
+                    
+                    // Add expanded and original URLs for matching
+                    urlsToMatch.push(expandedUrl);
+                    if (expandedUrl !== adSourceUrl) {
                       urlsToMatch.push(adSourceUrl);
                     }
                     
                     // Query ads_ads for matching ad_post_url
-                    // Use ilike for case-insensitive matching and to handle www/non-www differences
                     for (const urlToMatch of urlsToMatch) {
+                      const cleanUrl = urlToMatch.replace('https://www.', '').replace('https://', '').replace('http://', '');
                       const { data: matchedAd } = await supabaseClient
                         .from('ads_ads')
                         .select('ad_id, campaign_id, adset_id, name, ad_account_id, ad_post_url')
-                        .or(`ad_post_url.ilike.%${urlToMatch.replace('https://www.', '').replace('https://', '')}%`)
+                        .ilike('ad_post_url', `%${cleanUrl}%`)
                         .limit(1)
                         .maybeSingle();
                       
