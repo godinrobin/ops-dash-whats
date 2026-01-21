@@ -17,8 +17,7 @@ import {
   Banknote,
   Sparkles,
   MousePointer2,
-  Megaphone,
-  MessageSquareHeart
+  Megaphone
 } from 'lucide-react';
 
 const nodeCategories = [
@@ -27,7 +26,6 @@ const nodeCategories = [
     nodes: [
       { type: 'text', label: 'Texto', icon: MessageSquare, color: 'bg-blue-500' },
       { type: 'aiText', label: 'Texto com IA', icon: Sparkles, color: 'bg-gradient-to-r from-violet-500 to-purple-500' },
-      { type: 'iaConverter', label: 'IA Converter', icon: MessageSquareHeart, color: 'bg-gradient-to-r from-emerald-500 to-teal-500' },
       { type: 'image', label: 'Imagem', icon: Image, color: 'bg-purple-500' },
       { type: 'audio', label: 'Áudio', icon: Mic, color: 'bg-orange-500' },
       { type: 'video', label: 'Vídeo', icon: Video, color: 'bg-pink-500' },
