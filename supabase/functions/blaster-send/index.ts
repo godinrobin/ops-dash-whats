@@ -528,6 +528,7 @@ async function executeFlowForContact(
         break;
 
       case 'text':
+      case 'aiText':
         const message = replaceVariables(currentNode.data.message as string || '', variables);
         if (message) {
           await sendMessage(config, instance.instance_name, formattedPhone, message, 'text', undefined, undefined, instance.api_provider || 'evolution', instance.uazapi_token);
