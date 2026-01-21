@@ -3106,6 +3106,7 @@ serve(async (req) => {
                     console.log(`[ADS LEAD] Trying to match by ad_post_url using source: ${adSourceUrl}`);
                     
                     let urlsToMatch: string[] = [];
+                    let postIdsToMatch: string[] = [];
                     let expandedUrl = adSourceUrl;
                     
                     // Try to expand short links (fb.me, instagram.com/p/, etc.)
@@ -3117,11 +3118,10 @@ serve(async (req) => {
                     if (isShortLink) {
                       console.log(`[ADS LEAD] Detected short link, attempting to expand: ${adSourceUrl}`);
                       try {
-                        // Follow redirects to get the final URL
                         const expandResponse = await fetch(adSourceUrl, { 
-                          method: 'HEAD', 
+                          method: 'GET', 
                           redirect: 'follow',
-                          headers: { 'User-Agent': 'Mozilla/5.0' }
+                          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
                         });
                         if (expandResponse.url && expandResponse.url !== adSourceUrl) {
                           expandedUrl = expandResponse.url;
@@ -3136,30 +3136,43 @@ serve(async (req) => {
                     try {
                       const urlToAnalyze = new URL(expandedUrl);
                       const pathname = urlToAnalyze.pathname;
+                      const searchParams = urlToAnalyze.searchParams;
+                      
+                      // Extract story_fbid from query params (common in redirected URLs)
+                      const storyFbid = searchParams.get('story_fbid');
+                      const postIdParam = searchParams.get('post_id');
+                      
+                      if (storyFbid) {
+                        postIdsToMatch.push(storyFbid);
+                        console.log(`[ADS LEAD] Extracted story_fbid from query: ${storyFbid}`);
+                      }
+                      
+                      if (postIdParam) {
+                        // post_id format can be "pageId_postId"
+                        const parts = postIdParam.split('_');
+                        if (parts.length === 2) {
+                          postIdsToMatch.push(parts[1]); // the actual post ID
+                        }
+                        postIdsToMatch.push(postIdParam);
+                        console.log(`[ADS LEAD] Extracted post_id from query: ${postIdParam}`);
+                      }
                       
                       // Match facebook.com/pageId/posts/postId pattern
                       const postMatch = pathname.match(/\/(\d+)\/posts\/(\d+)/);
                       if (postMatch) {
                         const [, pageId, postId] = postMatch;
                         urlsToMatch.push(`https://www.facebook.com/${pageId}/posts/${postId}`);
-                        urlsToMatch.push(`https://facebook.com/${pageId}/posts/${postId}`);
+                        postIdsToMatch.push(postId);
                         console.log(`[ADS LEAD] Extracted post URL pattern: pageId=${pageId}, postId=${postId}`);
                       }
                       
-                      // Match facebook.com/pageName/posts/postId pattern (page name instead of ID)
-                      const namedPostMatch = pathname.match(/\/([^\/]+)\/posts\/(\d+)/);
-                      if (namedPostMatch && !postMatch) {
-                        const [, pageName, postId] = namedPostMatch;
-                        // We can try to match by just the postId since it should be unique
-                        console.log(`[ADS LEAD] Detected named page post: pageName=${pageName}, postId=${postId}`);
-                      }
-                      
-                      // Match Instagram reel/post IDs from expanded URLs
+                      // Match Instagram reel/post IDs
                       const igReelMatch = pathname.match(/\/reel\/([A-Za-z0-9_-]+)/);
                       const igPostMatch = pathname.match(/\/p\/([A-Za-z0-9_-]+)/);
                       if (igReelMatch || igPostMatch) {
                         const igId = igReelMatch?.[1] || igPostMatch?.[1];
                         console.log(`[ADS LEAD] Detected Instagram post/reel: ${igId}`);
+                        // Instagram matching would need a different approach
                       }
                     } catch (parseErr) {
                       console.log(`[ADS LEAD] URL parse error: ${parseErr}`);
@@ -3171,13 +3184,15 @@ serve(async (req) => {
                       urlsToMatch.push(adSourceUrl);
                     }
                     
-                    // Query ads_ads for matching ad_post_url
-                    for (const urlToMatch of urlsToMatch) {
-                      const cleanUrl = urlToMatch.replace('https://www.', '').replace('https://', '').replace('http://', '');
+                    // First: Try matching by post IDs in effective_object_story_id or ad_post_url
+                    for (const postId of postIdsToMatch) {
+                      if (campaignId) break;
+                      
+                      // Try matching by effective_object_story_id (format: pageId_postId)
                       const { data: matchedAd } = await supabaseClient
                         .from('ads_ads')
-                        .select('ad_id, campaign_id, adset_id, name, ad_account_id, ad_post_url')
-                        .ilike('ad_post_url', `%${cleanUrl}%`)
+                        .select('ad_id, campaign_id, adset_id, name, ad_account_id, ad_post_url, effective_object_story_id')
+                        .or(`effective_object_story_id.ilike.%${postId}%,ad_post_url.ilike.%${postId}%`)
                         .limit(1)
                         .maybeSingle();
                       
@@ -3187,13 +3202,65 @@ serve(async (req) => {
                         adsetId = matchedAd.adset_id;
                         adName = matchedAd.name;
                         matchedAdAccountId = matchedAd.ad_account_id;
-                        console.log(`[ADS LEAD] Matched ad by URL: ad_id=${adId}, campaign=${campaignId}, adset=${adsetId}, matched_url=${matchedAd.ad_post_url}`);
+                        console.log(`[ADS LEAD] Matched ad by postId ${postId}: ad_id=${adId}, campaign=${campaignId}`);
                         break;
                       }
                     }
                     
+                    // Second: Try matching by full URLs
                     if (!campaignId) {
-                      console.log(`[ADS LEAD] No ad match found for URL patterns: ${urlsToMatch.join(', ')}`);
+                      for (const urlToMatch of urlsToMatch) {
+                        const cleanUrl = urlToMatch.replace('https://www.', '').replace('https://', '').replace('http://', '');
+                        const { data: matchedAd } = await supabaseClient
+                          .from('ads_ads')
+                          .select('ad_id, campaign_id, adset_id, name, ad_account_id, ad_post_url')
+                          .ilike('ad_post_url', `%${cleanUrl}%`)
+                          .limit(1)
+                          .maybeSingle();
+                        
+                        if (matchedAd) {
+                          adId = matchedAd.ad_id;
+                          campaignId = matchedAd.campaign_id;
+                          adsetId = matchedAd.adset_id;
+                          adName = matchedAd.name;
+                          matchedAdAccountId = matchedAd.ad_account_id;
+                          console.log(`[ADS LEAD] Matched ad by URL: ad_id=${adId}, campaign=${campaignId}, matched_url=${matchedAd.ad_post_url}`);
+                          break;
+                        }
+                      }
+                    }
+                    
+                    // Third: Fallback - try matching by prefix of post ID (first 10 digits often identify the ad group)
+                    if (!campaignId && postIdsToMatch.length > 0) {
+                      for (const postId of postIdsToMatch) {
+                        if (campaignId) break;
+                        if (postId.length < 12) continue;
+                        
+                        // Extract prefix (first 10 chars) to find similar ads
+                        const prefix = postId.substring(0, 10);
+                        console.log(`[ADS LEAD] Trying prefix match with: ${prefix}`);
+                        
+                        const { data: matchedAd } = await supabaseClient
+                          .from('ads_ads')
+                          .select('ad_id, campaign_id, adset_id, name, ad_account_id, ad_post_url, effective_object_story_id')
+                          .ilike('effective_object_story_id', `%${prefix}%`)
+                          .limit(1)
+                          .maybeSingle();
+                        
+                        if (matchedAd) {
+                          adId = matchedAd.ad_id;
+                          campaignId = matchedAd.campaign_id;
+                          adsetId = matchedAd.adset_id;
+                          adName = matchedAd.name;
+                          matchedAdAccountId = matchedAd.ad_account_id;
+                          console.log(`[ADS LEAD] Matched ad by prefix ${prefix}: ad_id=${adId}, campaign=${campaignId}`);
+                          break;
+                        }
+                      }
+                    }
+                    
+                    if (!campaignId) {
+                      console.log(`[ADS LEAD] No ad match found. URLs tried: ${urlsToMatch.join(', ')}. PostIDs tried: ${postIdsToMatch.join(', ')}`);
                     }
                   } catch (urlMatchError) {
                     console.log('[ADS LEAD] Error matching ad by URL:', urlMatchError);
