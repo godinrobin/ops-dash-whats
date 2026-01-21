@@ -661,7 +661,7 @@ export const ChatMessage = ({ message, allMessages = [], contact, onReply, onMes
     <>
       <div 
         className={cn(
-          "flex animate-in fade-in slide-in-from-bottom-2 duration-200 gap-2 group relative px-8 py-1 -mx-4 rounded-lg transition-colors",
+          "flex animate-in fade-in slide-in-from-bottom-2 duration-200 gap-2 group relative pl-10 pr-10 py-1 rounded-lg transition-colors",
           isOutbound ? "justify-end" : "justify-start",
           "hover:bg-muted/30",
           isDeleting && "opacity-60 pointer-events-none"
@@ -678,7 +678,7 @@ export const ChatMessage = ({ message, allMessages = [], contact, onReply, onMes
                   "absolute top-1/2 -translate-y-1/2 transition-all z-10",
                   "p-1.5 rounded-full bg-card border border-border shadow-sm hover:bg-accent",
                   "opacity-0 group-hover:opacity-100",
-                  "left-1"
+                  "left-2"
                 )}
               >
                 <MoreVertical className="h-3.5 w-3.5 text-muted-foreground" />
@@ -723,7 +723,7 @@ export const ChatMessage = ({ message, allMessages = [], contact, onReply, onMes
               "absolute top-1/2 -translate-y-1/2 transition-all z-10",
               "p-1.5 rounded-full bg-card border border-border shadow-sm hover:bg-accent",
               "opacity-0 group-hover:opacity-100",
-              "right-1"
+              "right-2"
             )}
             title="Responder"
           >
