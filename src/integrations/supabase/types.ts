@@ -1211,6 +1211,7 @@ export type Database = {
           assigned_instances: string[] | null
           completed_at: string | null
           created_at: string
+          csv_variables: Json | null
           current_index: number
           delay_max: number
           delay_min: number
@@ -1235,6 +1236,7 @@ export type Database = {
           assigned_instances?: string[] | null
           completed_at?: string | null
           created_at?: string
+          csv_variables?: Json | null
           current_index?: number
           delay_max?: number
           delay_min?: number
@@ -1259,6 +1261,7 @@ export type Database = {
           assigned_instances?: string[] | null
           completed_at?: string | null
           created_at?: string
+          csv_variables?: Json | null
           current_index?: number
           delay_max?: number
           delay_min?: number
