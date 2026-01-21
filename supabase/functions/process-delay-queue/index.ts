@@ -114,8 +114,6 @@ serve(async (req) => {
         const isDelayNode = currentNode?.type === 'delay';
         const isPaymentIdentifier = currentNode?.type === 'paymentIdentifier';
         
-        // Check if this is an iaConverterPendingInput job type
-        const isIaConverterPendingInputJob = (job as any).job_type === 'iaConverterPendingInput';
         const hasPendingUserInput = sessionVars._pending_user_input !== undefined;
         
         // CRITICAL FIX: If current node is waitInput/menu and there's a timeout_at set,
@@ -136,7 +134,7 @@ serve(async (req) => {
         const paymentNoResponseDelayKey = `_payment_no_response_delay_${session.current_node_id}`;
         const hasPaymentNoResponseDelay = sessionVars[paymentNoResponseDelayKey] !== undefined;
         
-        console.log(`[process-delay-queue] Session ${job.session_id}: isTimeoutJob=${isTimeoutJob}, isWaitingForInput=${isWaitingForInput}, isActuallyWaitingForInput=${isActuallyWaitingForInput}, isDelayNode=${isDelayNode}, isPaymentIdentifier=${isPaymentIdentifier}, hasValidPendingDelay=${hasValidPendingDelay}, hasPendingDelayNotReady=${hasPendingDelayNotReady}, hasPaymentNoResponseDelay=${hasPaymentNoResponseDelay}, hasPauseScheduled=${hasPauseScheduled}, pauseReady=${pauseReady}, nodeType=${currentNode?.type}, isIaConverterPendingInputJob=${isIaConverterPendingInputJob}, hasPendingUserInput=${hasPendingUserInput}`);
+        console.log(`[process-delay-queue] Session ${job.session_id}: isTimeoutJob=${isTimeoutJob}, isWaitingForInput=${isWaitingForInput}, isActuallyWaitingForInput=${isActuallyWaitingForInput}, isDelayNode=${isDelayNode}, isPaymentIdentifier=${isPaymentIdentifier}, hasValidPendingDelay=${hasValidPendingDelay}, hasPendingDelayNotReady=${hasPendingDelayNotReady}, hasPaymentNoResponseDelay=${hasPaymentNoResponseDelay}, hasPauseScheduled=${hasPauseScheduled}, pauseReady=${pauseReady}, nodeType=${currentNode?.type}, hasPendingUserInput=${hasPendingUserInput}`);
 
         const rescheduleIfLocked = async (invokeResult: unknown) => {
           const isLockedSkip =
@@ -185,7 +183,7 @@ serve(async (req) => {
         // === HANDLE iaConverterPendingInput JOB TYPE ===
         // This job was scheduled when a new message arrived while iaConverter was processing
         // Now we need to resume the flow to process the pending user input
-        if (isIaConverterPendingInputJob || (isIaConverterNode && hasPendingUserInput)) {
+        if (isIaConverterNode && hasPendingUserInput) {
           console.log(`[process-delay-queue] iaConverter pending input job for session ${job.session_id}, invoking process-inbox-flow`);
 
           const { data: invokeResult, error: invokeError } = await supabase.functions.invoke("process-inbox-flow", {
