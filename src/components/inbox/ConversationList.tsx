@@ -438,7 +438,7 @@ export const ConversationList = ({
       </div>
 
       {/* Lista de Conversas */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1" orientation="vertical">
         {loading ? (
           <div className="p-4 space-y-4">
             {[1, 2, 3, 4, 5].map(i => (
@@ -515,11 +515,11 @@ export const ConversationList = ({
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="font-medium text-sm truncate">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-medium text-sm truncate flex-1 min-w-0">
                         {getDisplayName(contact)}
                       </span>
-                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                      <span className="text-[10px] text-muted-foreground whitespace-nowrap flex-shrink-0">
                         {formatTime(contact.last_message_at)}
                       </span>
                     </div>
