@@ -452,17 +452,34 @@ serve(async (req) => {
       let endpoint = '';
       let body: Record<string, unknown> = {};
 
+      // UazAPI reply param: spec uses `replyid` (send/text and send/media)
+      // Some docs/versions also accept `quoted`, so we send both for compatibility.
+      const normalizeReplyId = (id: unknown): string | null => {
+        if (!id) return null;
+        const raw = String(id).trim();
+        if (!raw) return null;
+        if (raw.includes(':')) {
+          const parts = raw.split(':').filter(Boolean);
+          const last = parts[parts.length - 1];
+          return last || null;
+        }
+        return raw;
+      };
+
+      const replyId = normalizeReplyId(replyToRemoteMessageId);
+
       if (messageType === 'text') {
         endpoint = '/send/text';
         body = {
           number: String(sendDestination),
           text: typeof content === 'string' ? content : String(content ?? ''),
         };
-        
-        // Add reply support for UazAPI
-        if (replyToRemoteMessageId) {
-          body.quoted = replyToRemoteMessageId;
-          console.log(`[UAZAPI] Adding quoted message ID: ${replyToRemoteMessageId}`);
+
+        // Reply support (quote the selected message on WhatsApp)
+        if (replyId) {
+          (body as any).replyid = replyId;
+          (body as any).quoted = replyId;
+          console.log(`[UAZAPI] Reply enabled: replyid=${replyId}`);
         }
         
         // Text messages don't need retry
@@ -539,6 +556,13 @@ serve(async (req) => {
             type: uazType,
             file: persistedMediaUrl,
           };
+
+          // Reply support for media
+          if (replyId) {
+            (urlBody as any).replyid = replyId;
+            (urlBody as any).quoted = replyId;
+            console.log(`[UAZAPI] Reply enabled (media URL): replyid=${replyId}`);
+          }
           
           // Add text for non-audio messages
           if (typeof content === 'string' && content && messageType !== 'audio') {
@@ -580,6 +604,13 @@ serve(async (req) => {
               ? { docName: typeof content === 'string' && content ? content : 'document' }
               : {}),
           };
+
+          // Reply support for media
+          if (replyId) {
+            (body as any).replyid = replyId;
+            (body as any).quoted = replyId;
+            console.log(`[UAZAPI] Reply enabled (media base64): replyid=${replyId}`);
+          }
 
           const retryResult = await tryPostWithRetry(endpoint, body, 2);
           apiResponse = retryResult.res;

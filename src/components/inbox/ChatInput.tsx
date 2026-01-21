@@ -211,7 +211,11 @@ export const ChatInput = ({ onSendMessage, flows = [], onTriggerFlow, contactIns
         contentToSend = mediaFile.name;
       }
 
-      const result = await onSendMessage(contentToSend || '', attachDialog.type, mediaUrl);
+      const replyToId = replyToMessage?.id;
+      // Clear reply state before sending so UI resets immediately
+      onCancelReply?.();
+
+      const result = await onSendMessage(contentToSend || '', attachDialog.type, mediaUrl, replyToId);
       
       if (result.error) {
         toast.error('Erro ao enviar: ' + result.error);
