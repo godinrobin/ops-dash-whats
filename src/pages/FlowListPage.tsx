@@ -501,7 +501,8 @@ const FlowListPage = () => {
           </Badge>
           <Badge variant="outline">
             {flow.trigger_type === 'keyword' ? 'Palavra-chave' : 
-             flow.trigger_type === 'all' ? 'Todas mensagens' : 'Agendado'}
+             flow.trigger_type === 'all' ? 'Todas mensagens' : 
+             flow.trigger_type === 'sale' ? 'Venda' : 'Agendado'}
           </Badge>
         </div>
 
