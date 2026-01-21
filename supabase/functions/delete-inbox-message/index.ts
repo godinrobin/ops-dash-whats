@@ -127,7 +127,7 @@ serve(async (req) => {
     // Fetch instance config
     const { data: instance, error: instanceError } = await supabaseClient
       .from("maturador_instances")
-      .select("instance_name, uazapi_url, uazapi_token, api_provider")
+      .select("instance_name, uazapi_token, api_provider, evolution_base_url, evolution_api_key")
       .eq("id", message.instance_id)
       .single();
 
@@ -139,6 +139,20 @@ serve(async (req) => {
       });
     }
 
+    // Get UazAPI base URL from admin config or user config
+    const { data: adminConfig } = await supabaseClient
+      .from("whatsapp_admin_api_config")
+      .select("uazapi_base_url")
+      .maybeSingle();
+
+    const { data: userConfig } = await supabaseClient
+      .from("whatsapp_user_api_config")
+      .select("uazapi_base_url")
+      .eq("user_id", userId)
+      .maybeSingle();
+    
+    const uazapiBaseUrl = userConfig?.uazapi_base_url || adminConfig?.uazapi_base_url || "https://zapdata.uazapi.com";
+
     // Determine API provider
     const provider = instance.api_provider || 'uazapi';
     let deleteSuccess = false;
@@ -146,17 +160,16 @@ serve(async (req) => {
 
     if (provider === 'uazapi') {
       // UazAPI: POST /message/delete
-      const baseUrl = instance.uazapi_url || '';
       const token = instance.uazapi_token || '';
       
-      if (!baseUrl || !token) {
+      if (!token) {
         return new Response(JSON.stringify({ error: "Instância UazAPI não configurada" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      const deleteUrl = `${baseUrl}/message/delete`;
+      const deleteUrl = `${uazapiBaseUrl}/message/delete`;
       console.log(`[DELETE-MESSAGE] Calling UazAPI: ${deleteUrl}`);
 
       try {
@@ -185,20 +198,9 @@ serve(async (req) => {
       }
     } else if (provider === 'evolution') {
       // Evolution API: DELETE /chat/deleteMessageForEveryone/{instanceName}
-      // Get Evolution API config
-      const { data: userConfig } = await supabaseClient
-        .from("whatsapp_user_api_config")
-        .select("evolution_base_url, evolution_api_key")
-        .eq("user_id", userId)
-        .maybeSingle();
-      
-      const { data: adminConfig } = await supabaseClient
-        .from("whatsapp_admin_api_config")
-        .select("evolution_base_url, evolution_api_key")
-        .maybeSingle();
-
-      const evolutionUrl = userConfig?.evolution_base_url || adminConfig?.evolution_base_url || Deno.env.get("EVOLUTION_BASE_URL");
-      const evolutionKey = userConfig?.evolution_api_key || adminConfig?.evolution_api_key || Deno.env.get("EVOLUTION_API_KEY");
+      // Use instance-level config first, then env as fallback
+      const evolutionUrl = instance.evolution_base_url || Deno.env.get("EVOLUTION_BASE_URL");
+      const evolutionKey = instance.evolution_api_key || Deno.env.get("EVOLUTION_API_KEY");
 
       if (!evolutionUrl || !evolutionKey) {
         return new Response(JSON.stringify({ error: "Evolution API não configurada" }), {
