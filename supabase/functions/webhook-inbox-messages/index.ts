@@ -3157,53 +3157,14 @@ serve(async (req) => {
 
       // === FLOW SESSION HANDLING ===
       // First, check for active flow sessions waiting for input (waitInput or menu)
-      let activeSession = await (async () => {
-        // Primary lookup: by contact_id
-        const { data: sessionByContact } = await supabaseClient
-          .from('inbox_flow_sessions')
-          .select('*, flow:inbox_flows(*)')
-          .eq('contact_id', contact.id)
-          .eq('status', 'active')
-          .order('last_interaction', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        
-        if (sessionByContact) return sessionByContact;
-        
-        // Fallback lookup: find any active session for same phone+instance (handles contact recreation/duplication)
-        // This is especially important for iaConverter nodes where the contact may have been recreated
-        const { data: otherContactsWithSamePhone } = await supabaseClient
-          .from('inbox_contacts')
-          .select('id')
-          .eq('phone', phone)
-          .eq('instance_id', instanceId)
-          .neq('id', contact.id);
-        
-        if (otherContactsWithSamePhone && otherContactsWithSamePhone.length > 0) {
-          const otherContactIds = otherContactsWithSamePhone.map(c => c.id);
-          const { data: sessionByPhone } = await supabaseClient
-            .from('inbox_flow_sessions')
-            .select('*, flow:inbox_flows(*)')
-            .in('contact_id', otherContactIds)
-            .eq('status', 'active')
-            .order('last_interaction', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          
-          if (sessionByPhone) {
-            console.log(`[FLOW-FALLBACK] Found active session ${sessionByPhone.id} via phone+instance fallback (original contact may have been recreated)`);
-            // Update the session to use the new contact_id for consistency
-            await supabaseClient
-              .from('inbox_flow_sessions')
-              .update({ contact_id: contact.id })
-              .eq('id', sessionByPhone.id);
-            console.log(`[FLOW-FALLBACK] Updated session ${sessionByPhone.id} to use new contact_id ${contact.id}`);
-            return sessionByPhone;
-          }
-        }
-        
-        return null;
-      })();
+      const { data: activeSession } = await supabaseClient
+        .from('inbox_flow_sessions')
+        .select('*, flow:inbox_flows(*)')
+        .eq('contact_id', contact.id)
+        .eq('status', 'active')
+        .order('last_interaction', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       if (activeSession) {
         const flowNodes = (activeSession.flow?.nodes || []) as Array<{ id: string; type: string; data: Record<string, unknown> }>;
