@@ -61,16 +61,34 @@ serve(async (req) => {
         throw new Error('Instance not found');
       }
 
-      // Get user config for base URL
-      const { data: config } = await supabaseClient
-        .from('maturador_config')
-        .select('evolution_base_url')
+      // For UAZAPI, get base URL from whatsapp_api_config
+      let baseUrl = '';
+      
+      const { data: apiConfig } = await supabaseClient
+        .from('whatsapp_api_config')
+        .select('uazapi_base_url')
         .limit(1)
         .single();
 
+      if (apiConfig?.uazapi_base_url) {
+        baseUrl = apiConfig.uazapi_base_url.replace(/\/$/, '');
+        console.log(`Using UAZAPI base URL from whatsapp_api_config: ${baseUrl}`);
+      }
+
+      // Fallback to maturador_config if whatsapp_api_config not available
+      if (!baseUrl) {
+        const { data: config } = await supabaseClient
+          .from('maturador_config')
+          .select('evolution_base_url')
+          .limit(1)
+          .single();
+        
+        baseUrl = config?.evolution_base_url?.replace(/\/$/, '') || '';
+      }
+
       return {
         token: instance.uazapi_token,
-        baseUrl: config?.evolution_base_url?.replace(/\/$/, '') || '',
+        baseUrl,
         instanceName: instance.instance_name,
         apiProvider: instance.api_provider
       };
