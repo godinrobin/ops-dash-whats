@@ -1833,13 +1833,13 @@ Se não encontrar valor, responda: 0`;
               console.error("[TAG-WHATS] Error fetching notification templates:", templatesError);
             }
             
-            // Build notification title and message
-            let notificationTitle = "💰 Nova Venda!";
+            // Build notification title and message using the same defaults as the UI
+            let notificationTitle = "💰 Pix Recebido!";
             let notificationMessage = extractedValue 
-              ? `Pix Pago! Valor: R$ ${extractedValue.toFixed(2)} 🔥` 
-              : "Pix Pago no x1! 🔥";
+              ? `Pix pago no valor de R$ ${extractedValue.toFixed(2)}!` 
+              : "Pix pago no valor de R$ 0.00!";
             
-            // Use custom templates if available
+            // Use custom templates if available - alternates randomly
             if (templates && templates.length > 0) {
               // Pick a random template from active ones
               const randomIndex = Math.floor(Math.random() * templates.length);
@@ -1868,7 +1868,7 @@ Se não encontrar valor, responda: 0`;
               console.log("[TAG-WHATS] No custom templates found, using default notification");
               
               // Apply hide value setting to default message too
-              if (ownerProfile.hide_sale_value_in_notification && extractedValue) {
+              if (ownerProfile.hide_sale_value_in_notification) {
                 notificationMessage = "Pix Pago! Nova venda realizada! 🔥";
               }
             }
