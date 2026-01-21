@@ -118,7 +118,7 @@ const KanbanCard = ({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "bg-card border border-border rounded-lg p-2.5 cursor-pointer hover:border-accent transition-all group w-full",
+        "bg-card border border-border rounded-lg p-2.5 cursor-pointer hover:border-accent transition-all group w-full max-w-full overflow-hidden",
         isDragging && "shadow-lg ring-2 ring-accent"
       )}
       onClick={onClick}
@@ -187,7 +187,7 @@ const KanbanCard = ({
 
         {/* Unread badge */}
         {contact.unread_count > 0 && (
-          <Badge className="bg-green-500 text-white text-[10px] px-1.5 py-0 flex-shrink-0">
+          <Badge className="bg-positive text-accent-foreground text-[10px] px-1.5 py-0 flex-shrink-0">
             {contact.unread_count}
           </Badge>
         )}
@@ -214,6 +214,7 @@ const SortableKanbanColumn = ({
   onCardClick: (contact: KanbanContact) => void;
   onToggleVisibility: (tag: string) => void;
 }) => {
+  const isLocked = tag === 'Sem etiqueta';
   const {
     attributes,
     listeners,
@@ -221,7 +222,7 @@ const SortableKanbanColumn = ({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: `column-${tag}` });
+  } = useSortable({ id: `column-${tag}`, disabled: isLocked });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -234,7 +235,7 @@ const SortableKanbanColumn = ({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "flex-shrink-0 w-[300px] min-w-[300px] max-w-[300px] bg-muted/30 rounded-lg border border-border",
+        "flex-shrink-0 w-[300px] min-w-[300px] max-w-[300px] bg-muted/30 rounded-lg border border-border overflow-hidden",
         isDragging && "ring-2 ring-accent"
       )}
     >
@@ -245,9 +246,12 @@ const SortableKanbanColumn = ({
       >
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
           <div 
-            {...attributes}
-            {...listeners}
-            className="cursor-grab active:cursor-grabbing"
+            {...(!isLocked ? attributes : {})}
+            {...(!isLocked ? listeners : {})}
+            className={cn(
+              "select-none",
+              isLocked ? "cursor-not-allowed opacity-60" : "cursor-grab active:cursor-grabbing"
+            )}
           >
             <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
           </div>
@@ -265,8 +269,10 @@ const SortableKanbanColumn = ({
             variant="ghost"
             size="icon"
             className="h-6 w-6"
+            disabled={isLocked}
             onClick={(e) => {
               e.stopPropagation();
+              if (isLocked) return;
               onToggleVisibility(tag);
             }}
           >
@@ -276,8 +282,8 @@ const SortableKanbanColumn = ({
       </div>
 
       {/* Column content */}
-      <ScrollArea className="h-[calc(100vh-280px)]">
-        <div className="p-1.5 space-y-1.5">
+      <ScrollArea className="h-[calc(100vh-280px)]" orientation="vertical">
+        <div className="p-1.5 space-y-1.5 overflow-x-hidden">
           <SortableContext 
             items={contacts.map(c => c.id)} 
             strategy={verticalListSortingStrategy}
@@ -387,13 +393,13 @@ const ContactDetailModal = ({
 
           {/* Ad source */}
           {contact.ad_source_url && (
-            <div className="p-3 bg-blue-500/10 rounded-lg">
+            <div className="p-3 bg-accent/10 rounded-lg">
               <p className="text-sm text-muted-foreground mb-1">Origem do anúncio:</p>
               <a 
                 href={contact.ad_source_url} 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="text-sm text-blue-500 hover:underline truncate block"
+                className="text-sm text-accent hover:underline truncate block"
               >
                 {contact.ad_source_url}
               </a>
@@ -465,7 +471,10 @@ export default function InboxKanbanPage() {
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY_HIDDEN_COLUMNS);
-      return stored ? new Set(JSON.parse(stored)) : new Set();
+      const set = stored ? new Set<string>(JSON.parse(stored)) : new Set<string>();
+      // Coluna fixa: nunca pode ser ocultada
+      set.delete('Sem etiqueta');
+      return set;
     } catch {
       return new Set();
     }
@@ -491,7 +500,9 @@ export default function InboxKanbanPage() {
 
   // Save hidden columns to localStorage
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_HIDDEN_COLUMNS, JSON.stringify(Array.from(hiddenColumns)));
+    const safe = new Set(hiddenColumns);
+    safe.delete('Sem etiqueta');
+    localStorage.setItem(STORAGE_KEY_HIDDEN_COLUMNS, JSON.stringify(Array.from(safe)));
   }, [hiddenColumns]);
 
   // Fetch data with increased limit
@@ -650,7 +661,7 @@ export default function InboxKanbanPage() {
 
   // Visible columns based on order and hidden state
   const visibleColumns = useMemo(() => {
-    return columnOrder.filter(tag => !hiddenColumns.has(tag));
+    return columnOrder.filter(tag => tag === 'Sem etiqueta' || !hiddenColumns.has(tag));
   }, [columnOrder, hiddenColumns]);
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -730,6 +741,7 @@ export default function InboxKanbanPage() {
   };
 
   const toggleColumnVisibility = (tag: string) => {
+    if (tag === 'Sem etiqueta') return; // coluna fixa
     setHiddenColumns(prev => {
       const next = new Set(prev);
       if (next.has(tag)) {
@@ -852,8 +864,12 @@ export default function InboxKanbanPage() {
                 {columnOrder.map(tag => (
                   <DropdownMenuCheckboxItem
                     key={tag}
-                    checked={!hiddenColumns.has(tag)}
-                    onCheckedChange={() => toggleColumnVisibility(tag)}
+                    disabled={tag === 'Sem etiqueta'}
+                    checked={tag === 'Sem etiqueta' ? true : !hiddenColumns.has(tag)}
+                    onCheckedChange={() => {
+                      if (tag === 'Sem etiqueta') return;
+                      toggleColumnVisibility(tag);
+                    }}
                   >
                     <div className="flex items-center gap-2">
                       <div 
