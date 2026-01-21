@@ -368,54 +368,10 @@ serve(async (req) => {
     }
 
 
-    // For @lid contacts, skip the WhatsApp number check (we can't verify LID contacts)
-    // For regular phone contacts, verify if the number exists on WhatsApp (Evolution only)
-    if (!isLidContact && apiProvider === 'evolution') {
-      console.log('Checking if number exists on WhatsApp...');
-      try {
-        const checkResponse = await fetch(`${API_BASE_URL}/chat/whatsappNumbers/${instanceName}`, {
-          method: 'POST',
-          headers: {
-            'apikey': API_KEY,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ numbers: [sendDestination] }),
-        });
+    // OPTIMIZATION: Skip WhatsApp number verification for existing contacts
+    // The user is already conversing with this contact, so checking is redundant and slow
+    console.log(`[SEND-MESSAGE] Skipping number verification for existing contact: ${sendDestination}`);
 
-        const checkResult = await checkResponse.json();
-        console.log('WhatsApp number check result:', JSON.stringify(checkResult, null, 2));
-
-        // Check if the number exists on WhatsApp
-        const numberInfo = checkResult?.[0] || checkResult;
-        const exists = numberInfo?.exists === true || numberInfo?.numberExists === true;
-        
-        if (!exists && checkResponse.ok) {
-          console.log('Number does not exist on WhatsApp');
-          
-          // Update message status to failed if we have messageId
-          if (messageId) {
-            await supabaseAdmin
-              .from('inbox_messages')
-              .update({ status: 'failed' })
-              .eq('id', messageId);
-          }
-          
-          return new Response(JSON.stringify({ 
-            error: 'Este número não possui WhatsApp',
-            errorCode: 'NUMBER_NOT_ON_WHATSAPP',
-            details: checkResult 
-          }), {
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-      } catch (checkErr) {
-        // If the check fails, log and continue - the send might still work
-        console.warn('WhatsApp number check failed, continuing with send:', checkErr);
-      }
-    } else if (isLidContact) {
-      console.log('[LID] Skipping WhatsApp number check for @lid contact');
-    }
 
     // Use the persisted URL for sending
     let urlToSend = persistedMediaUrl || mediaUrl;

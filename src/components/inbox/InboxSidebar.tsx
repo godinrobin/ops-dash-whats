@@ -57,17 +57,20 @@ export const InboxSidebar = ({ selectedInstanceId, onInstanceChange }: InboxSide
     let totalImported = 0;
 
     try {
-      for (const instance of instances) {
-        const { data, error } = await supabase.functions.invoke('sync-inbox-contacts', {
-          body: { instanceId: instance.id }
-        });
+      // Run all instance syncs in parallel for faster completion
+      const results = await Promise.allSettled(
+        instances.map(instance => 
+          supabase.functions.invoke('sync-inbox-contacts', {
+            body: { instanceId: instance.id }
+          })
+        )
+      );
 
-        if (error) {
-          console.error('Sync error for instance:', instance.instance_name, error);
-          continue;
+      // Count successful imports
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value.data) {
+          totalImported += result.value.data.imported || 0;
         }
-
-        totalImported += data?.imported || 0;
       }
 
       if (totalImported > 0) {

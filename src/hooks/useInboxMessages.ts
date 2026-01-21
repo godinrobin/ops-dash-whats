@@ -336,16 +336,30 @@ export const useInboxMessages = (contactId: string | null) => {
     if (!userId || !contactId) return { error: 'Not authenticated or no contact selected' };
 
     try {
-      // Get contact info for instance_id, phone, and remote_jid
-      const { data: contact } = await supabase
-        .from('inbox_contacts')
-        .select('instance_id, phone, remote_jid')
-        .eq('id', contactId)
-        .single();
+      // Fetch contact info and reply message in parallel for speed
+      const [contactResult, replyResult] = await Promise.all([
+        supabase
+          .from('inbox_contacts')
+          .select('instance_id, phone, remote_jid')
+          .eq('id', contactId)
+          .single(),
+        replyToMessageId 
+          ? supabase
+              .from('inbox_messages')
+              .select('remote_message_id')
+              .eq('id', replyToMessageId)
+              .single()
+          : Promise.resolve({ data: null, error: null })
+      ]);
 
-      if (!contact) throw new Error('Contact not found');
+      if (!contactResult.data) throw new Error('Contact not found');
+      const contact = contactResult.data;
+      
+      // For @lid contacts, we need to use remote_jid for sending
+      const remoteJid = (contact as any).remote_jid || null;
+      const replyToRemoteId = replyResult.data?.remote_message_id || null;
 
-      // Get instance name
+      // Get instance name - this needs to be separate since we need instance_id first
       let instanceName = '';
       if (contact.instance_id) {
         const { data: instance } = await supabase
@@ -354,20 +368,6 @@ export const useInboxMessages = (contactId: string | null) => {
           .eq('id', contact.instance_id)
           .single();
         instanceName = instance?.instance_name || '';
-      }
-      
-      // For @lid contacts, we need to use remote_jid for sending
-      const remoteJid = (contact as any).remote_jid || null;
-
-      // Get the remote_message_id of the message being replied to (if any)
-      let replyToRemoteId: string | null = null;
-      if (replyToMessageId) {
-        const { data: replyMsg } = await supabase
-          .from('inbox_messages')
-          .select('remote_message_id')
-          .eq('id', replyToMessageId)
-          .single();
-        replyToRemoteId = replyMsg?.remote_message_id || null;
       }
 
       // Insert message with pending status
