@@ -886,6 +886,33 @@ export type Database = {
           },
         ]
       }
+      ads_oauth_tokens: {
+        Row: {
+          created_at: string | null
+          expires_at: string
+          id: string
+          token: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          expires_at: string
+          id?: string
+          token: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          expires_at?: string
+          id?: string
+          token?: string
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       ads_pixels: {
         Row: {
           ad_account_id: string
@@ -4359,6 +4386,7 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      cleanup_expired_oauth_tokens: { Args: never; Returns: undefined }
       cleanup_old_data: { Args: never; Returns: undefined }
       cleanup_old_webhook_diagnostics: { Args: never; Returns: undefined }
       get_deliverable_prompt_usage: {
