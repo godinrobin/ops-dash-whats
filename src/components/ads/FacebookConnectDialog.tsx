@@ -64,8 +64,9 @@ export default function FacebookConnectDialog({
     setCopied(false);
     
     try {
+      const redirectUri = `${window.location.origin}/oauth-callback.html`;
       const { data, error } = await supabase.functions.invoke("facebook-oauth", {
-        body: { action: "generate_oauth_link" }
+        body: { action: "generate_oauth_link", redirect_uri: redirectUri }
       });
 
       if (error) throw error;
