@@ -36,8 +36,9 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { sessionId, userInput, resumeFromDelay, resumeFromTimeout } = await req.json();
+    const { sessionId, userInput: rawUserInput, resumeFromDelay, resumeFromTimeout } = await req.json();
     let effectiveResumeFromTimeout = !!resumeFromTimeout;
+    let userInput = rawUserInput;
     console.log(`[${runId}] SessionId: ${sessionId}, Input: ${userInput}, ResumeFromDelay: ${resumeFromDelay}, ResumeFromTimeout: ${resumeFromTimeout}, EffectiveResumeFromTimeout: ${effectiveResumeFromTimeout}`);
 
     // Get session with flow data
@@ -65,6 +66,25 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true, skipped: true, reason: 'session_completed' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // === CONSUME PENDING USER INPUT ===
+    // If no userInput was provided but session has _pending_user_input, consume it
+    // This handles the case where a message arrived while the session was locked (e.g., iaConverter processing)
+    const sessionVariables = (session.variables || {}) as Record<string, unknown>;
+    if (!userInput && sessionVariables._pending_user_input) {
+      userInput = sessionVariables._pending_user_input as string;
+      console.log(`[${runId}] Consumed pending user input: "${userInput?.substring(0, 50)}..."`);
+      
+      // Clear the pending input from session variables
+      delete sessionVariables._pending_user_input;
+      delete sessionVariables._pending_user_input_at;
+      
+      // Update session to clear pending input
+      await supabaseClient
+        .from('inbox_flow_sessions')
+        .update({ variables: sessionVariables })
+        .eq('id', sessionId);
     }
 
     // === LOCK ACQUISITION ===

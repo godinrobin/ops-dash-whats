@@ -109,9 +109,14 @@ serve(async (req) => {
         const isTimeoutJob = session.timeout_at !== null;
         const flowNodes = (session.flow?.nodes || []) as Array<{ id: string; type: string }>;
         const currentNode = flowNodes.find(n => n.id === session.current_node_id);
-        const isWaitingForInput = currentNode?.type === 'waitInput' || currentNode?.type === 'menu';
+        const isWaitingForInput = currentNode?.type === 'waitInput' || currentNode?.type === 'menu' || currentNode?.type === 'iaConverter' || currentNode?.type === 'interactiveBlock';
+        const isIaConverterNode = currentNode?.type === 'iaConverter';
         const isDelayNode = currentNode?.type === 'delay';
         const isPaymentIdentifier = currentNode?.type === 'paymentIdentifier';
+        
+        // Check if this is an iaConverterPendingInput job type
+        const isIaConverterPendingInputJob = (job as any).job_type === 'iaConverterPendingInput';
+        const hasPendingUserInput = sessionVars._pending_user_input !== undefined;
         
         // CRITICAL FIX: If current node is waitInput/menu and there's a timeout_at set,
         // this session is waiting for user input - don't process delay jobs that aren't timeouts!
@@ -131,7 +136,7 @@ serve(async (req) => {
         const paymentNoResponseDelayKey = `_payment_no_response_delay_${session.current_node_id}`;
         const hasPaymentNoResponseDelay = sessionVars[paymentNoResponseDelayKey] !== undefined;
         
-        console.log(`[process-delay-queue] Session ${job.session_id}: isTimeoutJob=${isTimeoutJob}, isWaitingForInput=${isWaitingForInput}, isActuallyWaitingForInput=${isActuallyWaitingForInput}, isDelayNode=${isDelayNode}, isPaymentIdentifier=${isPaymentIdentifier}, hasValidPendingDelay=${hasValidPendingDelay}, hasPendingDelayNotReady=${hasPendingDelayNotReady}, hasPaymentNoResponseDelay=${hasPaymentNoResponseDelay}, hasPauseScheduled=${hasPauseScheduled}, pauseReady=${pauseReady}, nodeType=${currentNode?.type}`);
+        console.log(`[process-delay-queue] Session ${job.session_id}: isTimeoutJob=${isTimeoutJob}, isWaitingForInput=${isWaitingForInput}, isActuallyWaitingForInput=${isActuallyWaitingForInput}, isDelayNode=${isDelayNode}, isPaymentIdentifier=${isPaymentIdentifier}, hasValidPendingDelay=${hasValidPendingDelay}, hasPendingDelayNotReady=${hasPendingDelayNotReady}, hasPaymentNoResponseDelay=${hasPaymentNoResponseDelay}, hasPauseScheduled=${hasPauseScheduled}, pauseReady=${pauseReady}, nodeType=${currentNode?.type}, isIaConverterPendingInputJob=${isIaConverterPendingInputJob}, hasPendingUserInput=${hasPendingUserInput}`);
 
         const rescheduleIfLocked = async (invokeResult: unknown) => {
           const isLockedSkip =
@@ -175,6 +180,50 @@ serve(async (req) => {
 
           console.log(`[process-delay-queue] Job rescheduled to ${new Date(pendingDelay!.resumeAt).toISOString()}`);
           continue; // Skip to next job
+        }
+
+        // === HANDLE iaConverterPendingInput JOB TYPE ===
+        // This job was scheduled when a new message arrived while iaConverter was processing
+        // Now we need to resume the flow to process the pending user input
+        if (isIaConverterPendingInputJob || (isIaConverterNode && hasPendingUserInput)) {
+          console.log(`[process-delay-queue] iaConverter pending input job for session ${job.session_id}, invoking process-inbox-flow`);
+
+          const { data: invokeResult, error: invokeError } = await supabase.functions.invoke("process-inbox-flow", {
+            body: {
+              sessionId: job.session_id,
+              // No userInput - process-inbox-flow will consume _pending_user_input from session.variables
+            },
+          });
+
+          if (invokeError) {
+            console.error(`[process-delay-queue] Error invoking process-inbox-flow for iaConverter pending input ${job.session_id}:`, invokeError);
+            const newStatus = job.attempts >= 2 ? "failed" : "scheduled";
+            await supabase
+              .from("inbox_flow_delay_jobs")
+              .update({ 
+                status: newStatus,
+                last_error: invokeError.message || "Unknown error",
+                run_at: new Date(Date.now() + 5000).toISOString(), // Retry in 5 seconds
+                updated_at: new Date().toISOString()
+              })
+              .eq("session_id", job.session_id);
+            failed++;
+            continue;
+          }
+
+          if (await rescheduleIfLocked(invokeResult)) {
+            continue;
+          }
+
+          console.log(`[process-delay-queue] iaConverter pending input job result for ${job.session_id}:`, invokeResult);
+          
+          // Mark job as done
+          await supabase
+            .from("inbox_flow_delay_jobs")
+            .update({ status: "done", updated_at: new Date().toISOString() })
+            .eq("session_id", job.session_id);
+          processed++;
+          continue;
         }
 
         // If this is a timeout job and session is still waiting for input, trigger timeout
