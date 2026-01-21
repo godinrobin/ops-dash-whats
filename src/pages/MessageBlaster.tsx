@@ -842,7 +842,7 @@ const MessageBlaster = () => {
 
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <Card>
+          <Card className="bg-black border-2 border-accent">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-blue-500/10">
@@ -855,7 +855,7 @@ const MessageBlaster = () => {
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-black border-2 border-accent">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-green-500/10">
@@ -870,7 +870,7 @@ const MessageBlaster = () => {
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-black border-2 border-accent">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-red-500/10">
@@ -886,7 +886,7 @@ const MessageBlaster = () => {
             </CardContent>
           </Card>
           <Card 
-            className="cursor-pointer hover:shadow-md transition-shadow"
+            className="cursor-pointer hover:shadow-md transition-shadow bg-black border-2 border-accent"
             onClick={() => setShowInstancesDialog(true)}
           >
             <CardContent className="p-4">
@@ -904,7 +904,7 @@ const MessageBlaster = () => {
         </div>
 
         {/* Flows Section */}
-        <Card className="mb-6">
+        <Card className="mb-6 bg-black border-2 border-accent">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
@@ -937,7 +937,7 @@ const MessageBlaster = () => {
                 {availableFlows.slice(0, 6).map(flow => (
                   <div 
                     key={flow.id} 
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                    className="flex items-center justify-between p-3 border-2 border-accent rounded-lg bg-black/50 hover:bg-black/80 transition-colors"
                   >
                     <div 
                       className="flex items-center gap-3 flex-1 cursor-pointer"
@@ -1013,7 +1013,7 @@ const MessageBlaster = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {campaigns.map(campaign => (
-              <Card key={campaign.id} className="hover:shadow-md transition-shadow">
+              <Card key={campaign.id} className="hover:shadow-md transition-shadow bg-black border-2 border-accent">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -1044,15 +1044,15 @@ const MessageBlaster = () => {
 
                   {/* Stats */}
                   <div className="grid grid-cols-3 gap-2 text-center mb-4">
-                    <div className="p-2 bg-muted rounded">
+                    <div className="p-2 bg-black/50 border border-accent/30 rounded">
                       <p className="text-lg font-bold text-green-500">{campaign.sent_count}</p>
                       <p className="text-xs text-muted-foreground">Enviadas</p>
                     </div>
-                    <div className="p-2 bg-muted rounded">
+                    <div className="p-2 bg-black/50 border border-accent/30 rounded">
                       <p className="text-lg font-bold text-red-500">{campaign.failed_count}</p>
                       <p className="text-xs text-muted-foreground">Falhas</p>
                     </div>
-                    <div className="p-2 bg-muted rounded">
+                    <div className="p-2 bg-black/50 border border-accent/30 rounded">
                       <p className="text-lg font-bold">{campaign.total_count}</p>
                       <p className="text-xs text-muted-foreground">Total</p>
                     </div>
