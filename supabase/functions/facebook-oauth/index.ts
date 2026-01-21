@@ -8,12 +8,6 @@ const corsHeaders = {
 
 const FACEBOOK_APP_ID = Deno.env.get("FACEBOOK_APP_ID");
 const FACEBOOK_APP_SECRET = Deno.env.get("FACEBOOK_APP_SECRET");
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-
-// Redirect URI for cross-browser OAuth - standalone HTML page that doesn't require React/auth
-const CROSS_BROWSER_REDIRECT_URI = "https://zapdata.co/oauth-callback.html";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -21,142 +15,15 @@ serve(async (req) => {
   }
 
   try {
-    const body = await req.json();
-    const { action } = body;
-
-    // ============================================================
-    // ACTION: exchange_code_with_token (NO AUTH REQUIRED)
-    // Used when user completes OAuth in another browser
-    // ============================================================
-    if (action === "exchange_code_with_token") {
-      const { code, token, redirect_uri } = body;
-
-      if (!code || !token) {
-        return new Response(JSON.stringify({ error: "code and token are required" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      {
+        global: {
+          headers: { Authorization: req.headers.get("Authorization")! },
+        },
       }
-
-      // Use service role to validate token (user is not authenticated in this browser)
-      const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-      // Find valid token
-      const { data: tokenData, error: tokenError } = await supabaseAdmin
-        .from("ads_oauth_tokens")
-        .select("*")
-        .eq("token", token)
-        .is("used_at", null)
-        .gt("expires_at", new Date().toISOString())
-        .single();
-
-      if (tokenError || !tokenData) {
-        console.error("Invalid or expired token:", tokenError);
-        return new Response(JSON.stringify({ error: "Token inválido ou expirado" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      // Mark token as used immediately
-      await supabaseAdmin
-        .from("ads_oauth_tokens")
-        .update({ used_at: new Date().toISOString() })
-        .eq("id", tokenData.id);
-
-      const userId = tokenData.user_id;
-      const finalRedirectUri = redirect_uri || CROSS_BROWSER_REDIRECT_URI;
-
-      console.log("Cross-browser OAuth: exchanging code for user:", userId);
-
-      // Exchange code for token
-      const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token?client_id=${FACEBOOK_APP_ID}&redirect_uri=${encodeURIComponent(finalRedirectUri)}&client_secret=${FACEBOOK_APP_SECRET}&code=${code}`;
-      const tokenResponse = await fetch(tokenUrl);
-      const fbTokenData = await tokenResponse.json();
-
-      if (fbTokenData.error) {
-        console.error("Facebook token error:", fbTokenData.error);
-        return new Response(JSON.stringify({ error: fbTokenData.error.message }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      // Exchange for long-lived token
-      const longLivedUrl = `https://graph.facebook.com/v18.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${FACEBOOK_APP_ID}&client_secret=${FACEBOOK_APP_SECRET}&fb_exchange_token=${fbTokenData.access_token}`;
-      const longLivedResponse = await fetch(longLivedUrl);
-      const longLivedData = await longLivedResponse.json();
-
-      if (longLivedData.error) {
-        console.error("Long-lived token error:", longLivedData.error);
-        return new Response(JSON.stringify({ error: longLivedData.error.message }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const accessToken = longLivedData.access_token;
-      const expiresIn = longLivedData.expires_in || 5184000;
-
-      // Get user info from Facebook
-      const userInfoUrl = `https://graph.facebook.com/v18.0/me?fields=id,name,email,picture&access_token=${accessToken}`;
-      const userInfoResponse = await fetch(userInfoUrl);
-      const userInfo = await userInfoResponse.json();
-
-      console.log("Cross-browser OAuth: Facebook user:", userInfo.id, userInfo.name);
-
-      const tokenExpiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
-
-      // Save or update Facebook account using service role
-      const { data: existingAccount } = await supabaseAdmin
-        .from("ads_facebook_accounts")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("facebook_user_id", userInfo.id)
-        .maybeSingle();
-
-      if (existingAccount) {
-        await supabaseAdmin
-          .from("ads_facebook_accounts")
-          .update({
-            access_token: accessToken,
-            token_expires_at: tokenExpiresAt,
-            name: userInfo.name,
-            email: userInfo.email,
-            profile_pic_url: userInfo.picture?.data?.url,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existingAccount.id);
-      } else {
-        await supabaseAdmin.from("ads_facebook_accounts").insert({
-          user_id: userId,
-          facebook_user_id: userInfo.id,
-          access_token: accessToken,
-          token_expires_at: tokenExpiresAt,
-          name: userInfo.name,
-          email: userInfo.email,
-          profile_pic_url: userInfo.picture?.data?.url,
-        });
-      }
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          facebookUserId: userInfo.id,
-          name: userInfo.name,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // ============================================================
-    // All other actions require authentication
-    // ============================================================
-    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: {
-        headers: { Authorization: req.headers.get("Authorization")! },
-      },
-    });
+    );
 
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
     if (userError || !user) {
@@ -167,59 +34,9 @@ serve(async (req) => {
       });
     }
 
+    const body = await req.json();
+    const { action } = body;
     console.log("Facebook OAuth action:", action, "for user:", user.id);
-
-    // ============================================================
-    // ACTION: generate_oauth_link
-    // Generates a link with pre-authorized token for cross-browser OAuth
-    // ============================================================
-    if (action === "generate_oauth_link") {
-      // Generate unique token
-      const token = crypto.randomUUID();
-      const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-
-      // Save token to database
-      const { error: insertError } = await supabaseClient
-        .from("ads_oauth_tokens")
-        .insert({
-          user_id: user.id,
-          token,
-          expires_at: expiresAt.toISOString(),
-        });
-
-      if (insertError) {
-        console.error("Error saving OAuth token:", insertError);
-        return new Response(JSON.stringify({ error: "Failed to generate link" }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      // Build OAuth URL with state containing the token
-      const scopes = [
-        "ads_management",
-        "ads_read",
-        "business_management",
-        "pages_read_engagement",
-        "pages_show_list"
-      ].join(",");
-
-      const state = encodeURIComponent(JSON.stringify({ token }));
-      const redirectUri = encodeURIComponent(CROSS_BROWSER_REDIRECT_URI);
-
-      const oauthLink = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${FACEBOOK_APP_ID}&redirect_uri=${redirectUri}&scope=${scopes}&response_type=code&state=${state}`;
-
-      console.log("Generated cross-browser OAuth link for user:", user.id);
-
-      return new Response(
-        JSON.stringify({ 
-          oauth_link: oauthLink, 
-          expires_in: 300,
-          expires_at: expiresAt.toISOString()
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
 
     // Generate Facebook OAuth login URL
     if (action === "get_login_url") {
