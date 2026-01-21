@@ -2847,9 +2847,10 @@ serve(async (req) => {
       }
 
       // === ADS LEAD TRACKING ===
-      // Check if this WhatsApp number is being monitored for ads leads
+      // Auto-create leads when ctwa_clid is present (no manual registration needed)
       if (!isFromMe) {
         try {
+          // First check if there's a monitored number (legacy flow)
           const { data: monitoredNumber } = await supabaseClient
             .from('ads_whatsapp_numbers')
             .select('id, user_id')
@@ -2857,7 +2858,12 @@ serve(async (req) => {
             .eq('is_active', true)
             .maybeSingle();
 
-          if (monitoredNumber) {
+          // Get the effective user_id: from monitored number OR from contact's owner
+          const effectiveUserId = monitoredNumber?.user_id || userId;
+          const whatsappNumberId = monitoredNumber?.id || null;
+
+          // Always check for ads tracking data, even without monitored number
+          if (effectiveUserId) {
             console.log(`[ADS LEAD] Monitored number found for instance ${instanceId}`);
             
             // Extract ctwa_clid from message content (Click-to-WhatsApp tracking ID)
@@ -3021,116 +3027,125 @@ serve(async (req) => {
             // Store extraction metadata for debugging
             const extractionMeta = { ctwaSource, fbclidSource, adTitle: adTitle?.substring(0, 50), adBody: adBody?.substring(0, 50) };
             
-            // Check if lead already exists
-            const { data: existingLead } = await supabaseClient
-              .from('ads_whatsapp_leads')
-              .select('id')
-              .eq('phone', phone)
-              .eq('whatsapp_number_id', monitoredNumber.id)
-              .maybeSingle();
-
-            if (!existingLead) {
-              // Try to identify the ad account from tag_whats_configs
-              let adAccountId: string | null = null;
-              try {
-                const { data: tagConfig } = await supabaseClient
-                  .from('tag_whats_configs')
-                  .select('ad_account_id, selected_ad_account_ids')
-                  .eq('instance_id', instanceId)
-                  .eq('user_id', monitoredNumber.user_id)
-                  .maybeSingle();
-                
-                if (tagConfig) {
-                  // Use selected_ad_account_ids if available, fallback to ad_account_id
-                  if (tagConfig.selected_ad_account_ids && tagConfig.selected_ad_account_ids.length > 0) {
-                    adAccountId = tagConfig.selected_ad_account_ids[0];
-                  } else if (tagConfig.ad_account_id) {
-                    adAccountId = tagConfig.ad_account_id;
-                  }
-                  console.log(`[ADS LEAD] Found ad_account_id from config: ${adAccountId}`);
-                }
-              } catch (configError) {
-                console.log('[ADS LEAD] Could not fetch tag_whats_configs:', configError);
+            // Only proceed if we have ad tracking data
+            if (ctwaClid || fbclid || adId) {
+              // Check if lead already exists for this phone + user
+              const leadQuery = supabaseClient
+                .from('ads_whatsapp_leads')
+                .select('id')
+                .eq('phone', phone)
+                .eq('user_id', effectiveUserId);
+              
+              // Add whatsapp_number_id filter only if we have it
+              if (whatsappNumberId) {
+                leadQuery.eq('whatsapp_number_id', whatsappNumberId);
               }
               
-              // Get ad source URL (first valid URL from various sources)
-              const adSourceUrl = sourceUrls[0] || null;
+              const { data: existingLead } = await leadQuery.maybeSingle();
 
-              // Lookup campaign_id and adset_id from ads_ads table if we have ad_id
-              let campaignId: string | null = null;
-              let adsetId: string | null = null;
-              let adName: string | null = null;
-              
-              if (adId) {
+              if (!existingLead) {
+                // Try to identify the ad account from tag_whats_configs
+                let adAccountId: string | null = null;
                 try {
-                  const { data: adData } = await supabaseClient
-                    .from('ads_ads')
-                    .select('campaign_id, adset_id, name')
-                    .eq('ad_id', adId)
+                  const { data: tagConfig } = await supabaseClient
+                    .from('tag_whats_configs')
+                    .select('ad_account_id, selected_ad_account_ids')
+                    .eq('instance_id', instanceId)
+                    .eq('user_id', effectiveUserId)
                     .maybeSingle();
                   
-                  if (adData) {
-                    campaignId = adData.campaign_id;
-                    adsetId = adData.adset_id;
-                    adName = adData.name;
-                    console.log(`[ADS LEAD] Found ad info: campaign=${campaignId}, adset=${adsetId}, name=${adName}`);
-                  } else {
-                    console.log(`[ADS LEAD] Ad not found in ads_ads table for ad_id: ${adId}`);
+                  if (tagConfig) {
+                    // Use selected_ad_account_ids if available, fallback to ad_account_id
+                    if (tagConfig.selected_ad_account_ids && tagConfig.selected_ad_account_ids.length > 0) {
+                      adAccountId = tagConfig.selected_ad_account_ids[0];
+                    } else if (tagConfig.ad_account_id) {
+                      adAccountId = tagConfig.ad_account_id;
+                    }
+                    console.log(`[ADS LEAD] Found ad_account_id from config: ${adAccountId}`);
                   }
-                } catch (adLookupError) {
-                  console.log('[ADS LEAD] Error looking up ad:', adLookupError);
+                } catch (configError) {
+                  console.log('[ADS LEAD] Could not fetch tag_whats_configs:', configError);
                 }
-              }
+                
+                // Get ad source URL (first valid URL from various sources)
+                const adSourceUrl = sourceUrls[0] || null;
 
-              // Create new lead with ad attribution
-              const { error: leadError, data: newLead } = await supabaseClient
-                .from('ads_whatsapp_leads')
-                .insert({
-                  user_id: monitoredNumber.user_id,
-                  phone,
-                  name: validPushName,
-                  whatsapp_number_id: monitoredNumber.id,
-                  instance_id: instanceId,
-                  ctwa_clid: ctwaClid,
-                  fbclid: fbclid,
-                  first_message: content?.substring(0, 500),
-                  first_contact_at: new Date().toISOString(),
-                  ad_account_id: adAccountId,
-                  ad_source_url: adSourceUrl,
-                  ad_id: adId,
-                  campaign_id: campaignId,
-                  adset_id: adsetId,
-                })
-                .select('id')
-                .single();
+                // Lookup campaign_id and adset_id from ads_ads table if we have ad_id
+                let campaignId: string | null = null;
+                let adsetId: string | null = null;
+                let adName: string | null = null;
+                
+                if (adId) {
+                  try {
+                    const { data: adData } = await supabaseClient
+                      .from('ads_ads')
+                      .select('campaign_id, adset_id, name')
+                      .eq('ad_id', adId)
+                      .maybeSingle();
+                    
+                    if (adData) {
+                      campaignId = adData.campaign_id;
+                      adsetId = adData.adset_id;
+                      adName = adData.name;
+                      console.log(`[ADS LEAD] Found ad info: campaign=${campaignId}, adset=${adsetId}, name=${adName}`);
+                    } else {
+                      console.log(`[ADS LEAD] Ad not found in ads_ads table for ad_id: ${adId}`);
+                    }
+                  } catch (adLookupError) {
+                    console.log('[ADS LEAD] Error looking up ad:', adLookupError);
+                  }
+                }
 
-              if (leadError) {
-                console.error('[ADS LEAD] Error creating lead:', leadError);
-              } else {
-                console.log(`[ADS LEAD] New lead created for phone ${phone} with ad_id=${adId}, campaign_id=${campaignId}, adset_id=${adsetId}`);
-              }
-
-              // Update inbox_contact with ad metadata
-              if (adSourceUrl || adTitle || adBody || ctwaClid) {
-                const { error: contactUpdateError } = await supabaseClient
-                  .from('inbox_contacts')
-                  .update({
-                    ad_source_url: adSourceUrl,
-                    ad_title: adTitle || null,
-                    ad_body: adBody || null,
+                // Create new lead with ad attribution
+                const { error: leadError, data: newLead } = await supabaseClient
+                  .from('ads_whatsapp_leads')
+                  .insert({
+                    user_id: effectiveUserId,
+                    phone,
+                    name: validPushName,
+                    whatsapp_number_id: whatsappNumberId,
+                    instance_id: instanceId,
                     ctwa_clid: ctwaClid,
+                    fbclid: fbclid,
+                    first_message: content?.substring(0, 500),
+                    first_contact_at: new Date().toISOString(),
+                    ad_account_id: adAccountId,
+                    ad_source_url: adSourceUrl,
+                    ad_id: adId,
+                    campaign_id: campaignId,
+                    adset_id: adsetId,
                   })
-                  .eq('phone', phone)
-                  .eq('user_id', monitoredNumber.user_id);
+                  .select('id')
+                  .single();
 
-                if (contactUpdateError) {
-                  console.error('[ADS LEAD] Error updating contact with ad metadata:', contactUpdateError);
+                if (leadError) {
+                  console.error('[ADS LEAD] Error creating lead:', leadError);
                 } else {
-                  console.log(`[ADS LEAD] Updated contact ${phone} with ad metadata`);
+                  console.log(`[ADS LEAD] New lead created for phone ${phone} with ad_id=${adId}, campaign_id=${campaignId}, adset_id=${adsetId}`);
                 }
+
+                // Update inbox_contact with ad metadata
+                if (adSourceUrl || adTitle || adBody || ctwaClid) {
+                  const { error: contactUpdateError } = await supabaseClient
+                    .from('inbox_contacts')
+                    .update({
+                      ad_source_url: adSourceUrl,
+                      ad_title: adTitle || null,
+                      ad_body: adBody || null,
+                      ctwa_clid: ctwaClid,
+                    })
+                    .eq('phone', phone)
+                    .eq('user_id', effectiveUserId);
+
+                  if (contactUpdateError) {
+                    console.error('[ADS LEAD] Error updating contact with ad metadata:', contactUpdateError);
+                  } else {
+                    console.log(`[ADS LEAD] Updated contact ${phone} with ad metadata`);
+                  }
+                }
+              } else {
+                console.log(`[ADS LEAD] Lead already exists for phone ${phone}`);
               }
-            } else {
-              console.log(`[ADS LEAD] Lead already exists for phone ${phone}`);
             }
           }
         } catch (leadTrackingError) {
