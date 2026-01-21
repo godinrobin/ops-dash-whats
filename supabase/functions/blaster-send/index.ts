@@ -785,32 +785,32 @@ async function sendMessage(
   const baseUrl = config.evolution_base_url?.replace(/\/$/, '') || '';
 
   if (apiProvider === 'uazapi') {
-    // UazAPI v2 endpoints (per OpenAPI spec) - use token header
+    // UazAPI v2 endpoints - use token header and instance name in URL
     authHeader = { 'token': instanceToken || config.evolution_api_key };
     
     switch (messageType) {
       case 'text':
-        endpoint = '/message/sendText';
+        endpoint = `/message/sendText/${instanceName}`;
         body = { number: phone, text: content };
         break;
       case 'image':
-        endpoint = '/message/sendMedia';
+        endpoint = `/message/sendMedia/${instanceName}`;
         body = { number: phone, mediatype: 'image', media: mediaUrl, caption: content };
         break;
       case 'audio':
-        endpoint = '/message/sendAudio';
+        endpoint = `/message/sendAudio/${instanceName}`;
         body = { number: phone, audio: mediaUrl };
         break;
       case 'video':
-        endpoint = '/message/sendMedia';
+        endpoint = `/message/sendMedia/${instanceName}`;
         body = { number: phone, mediatype: 'video', media: mediaUrl, caption: content };
         break;
       case 'document':
-        endpoint = '/message/sendMedia';
+        endpoint = `/message/sendMedia/${instanceName}`;
         body = { number: phone, mediatype: 'document', media: mediaUrl, fileName: fileName || 'document', caption: content };
         break;
       default:
-        endpoint = '/message/sendText';
+        endpoint = `/message/sendText/${instanceName}`;
         body = { number: phone, text: content };
     }
   } else {
