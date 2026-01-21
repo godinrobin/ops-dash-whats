@@ -1236,6 +1236,76 @@ Se não encontrar valor, responda: 0`;
 
     const logId = logRecord?.id;
 
+    // ====== SYNC TO ADS_WHATSAPP_LEADS FOR DASHBOARD ======
+    // When a PIX payment is detected, create or update ads_whatsapp_leads so it shows on ADS dashboard
+    if (isPixPayment && labelApplied) {
+      console.log("[TAG-WHATS] ====== SYNCING TO ADS_WHATSAPP_LEADS ======");
+      
+      try {
+        // Check if lead already exists for this phone
+        const { data: existingLead, error: leadCheckError } = await supabase
+          .from("ads_whatsapp_leads")
+          .select("id, purchase_sent_at")
+          .eq("phone", phone)
+          .eq("user_id", instance.user_id)
+          .maybeSingle();
+
+        if (leadCheckError) {
+          console.error("[TAG-WHATS] Error checking existing lead:", leadCheckError);
+        } else if (existingLead) {
+          // Update existing lead with purchase info
+          const { error: updateError } = await supabase
+            .from("ads_whatsapp_leads")
+            .update({
+              purchase_sent_at: new Date().toISOString(),
+              purchase_value: extractedValue || 0,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", existingLead.id);
+
+          if (updateError) {
+            console.error("[TAG-WHATS] Error updating lead with purchase:", updateError);
+          } else {
+            console.log(`[TAG-WHATS] ✅ Updated existing lead ${existingLead.id} with purchase value ${extractedValue}`);
+          }
+        } else {
+          // Create new lead with purchase info
+          // Try to get ad_account_id from user's selected account
+          const { data: selectedAccount } = await supabase
+            .from("ads_ad_accounts")
+            .select("id, ad_account_id")
+            .eq("user_id", instance.user_id)
+            .eq("is_selected", true)
+            .maybeSingle();
+
+          const { error: insertError } = await supabase
+            .from("ads_whatsapp_leads")
+            .insert({
+              user_id: instance.user_id,
+              phone: phone,
+              first_contact_at: new Date().toISOString(),
+              purchase_sent_at: new Date().toISOString(),
+              purchase_value: extractedValue || 0,
+              ad_account_id: selectedAccount?.id || null,
+              instance_id: instance.id,
+              name: null,
+              ctwa_clid: ctwaClid || null,
+            });
+
+          if (insertError) {
+            console.error("[TAG-WHATS] Error creating new lead:", insertError);
+          } else {
+            console.log(`[TAG-WHATS] ✅ Created new lead for phone ${phone} with purchase value ${extractedValue}`);
+          }
+        }
+      } catch (syncError) {
+        console.error("[TAG-WHATS] Error syncing to ads_whatsapp_leads:", syncError);
+        // Don't fail the main process for sync errors
+      }
+      
+      console.log("[TAG-WHATS] ====== ADS_WHATSAPP_LEADS SYNC COMPLETE ======");
+    }
+
     // Send Facebook events to user's configured pixels when a sale is detected
     if (isPixPayment && (labelApplied || (config.disable_label_on_charge && config.auto_charge_enabled))) {
       console.log("[TAG-WHATS] ====== SENDING FB EVENTS TO USER PIXELS ======");
