@@ -108,28 +108,49 @@ export default function AdsDashboard() {
   const [hasAccounts, setHasAccounts] = useState(false);
   const [salesByAd, setSalesByAd] = useState<SaleByAd[]>([]);
 
-  const getDateRange = useCallback((filter: DateFilter) => {
-    const now = toZonedTime(new Date(), SP_TIMEZONE);
-
+  // Retorna datas em UTC prontas para query no Supabase
+  const getDateRangeUTC = useCallback((filter: DateFilter) => {
+    // Pega o horário atual em São Paulo
+    const nowInSP = toZonedTime(new Date(), SP_TIMEZONE);
+    
+    let spStart: Date;
+    let spEnd: Date;
+    
     switch (filter) {
       case "today":
-        return { start: startOfDay(now), end: endOfDay(now) };
+        spStart = startOfDay(nowInSP);
+        spEnd = endOfDay(nowInSP);
+        break;
       case "yesterday": {
-        const y = subDays(now, 1);
-        return { start: startOfDay(y), end: endOfDay(y) };
+        const y = subDays(nowInSP, 1);
+        spStart = startOfDay(y);
+        spEnd = endOfDay(y);
+        break;
       }
       case "7days": {
-        // Inclui hoje + 6 dias anteriores
-        const start = startOfDay(subDays(now, 6));
-        return { start, end: endOfDay(now) };
+        spStart = startOfDay(subDays(nowInSP, 6));
+        spEnd = endOfDay(nowInSP);
+        break;
       }
       case "30days": {
-        const start = startOfDay(subDays(now, 29));
-        return { start, end: endOfDay(now) };
+        spStart = startOfDay(subDays(nowInSP, 29));
+        spEnd = endOfDay(nowInSP);
+        break;
       }
       default:
-        return { start: startOfDay(now), end: endOfDay(now) };
+        spStart = startOfDay(nowInSP);
+        spEnd = endOfDay(nowInSP);
     }
+    
+    // Converte de "horário SP" para UTC para query correta no banco
+    // Ex: 00:00 SP = 03:00 UTC, 23:59 SP = 02:59 UTC do dia seguinte
+    const utcStart = fromZonedTime(spStart, SP_TIMEZONE);
+    const utcEnd = fromZonedTime(spEnd, SP_TIMEZONE);
+    
+    return { 
+      start: utcStart.toISOString(), 
+      end: utcEnd.toISOString() 
+    };
   }, []);
 
   // Only show active ad accounts
@@ -209,9 +230,9 @@ export default function AdsDashboard() {
       // =========================
       // SALES (Tag Whats) — Filtra por período selecionado (fuso SP)
       // =========================
-      const dateRange = getDateRange(dateFilter);
-      const utcStart = fromZonedTime(dateRange.start, SP_TIMEZONE).toISOString();
-      const utcEnd = fromZonedTime(dateRange.end, SP_TIMEZONE).toISOString();
+      const dateRange = getDateRangeUTC(dateFilter);
+      const utcStart = dateRange.start;
+      const utcEnd = dateRange.end;
 
       let leadsQuery = supabase
         .from("ads_whatsapp_leads")
