@@ -476,7 +476,7 @@ export const ConversationList = ({
                   key={contact.id}
                   onClick={() => onSelectContact(contact)}
                   className={cn(
-                    "flex items-start gap-3 p-3 pr-4 cursor-pointer hover:bg-accent/50 transition-colors border-b border-border/50 min-h-0 overflow-hidden",
+                    "flex items-start gap-3 p-3 pr-3 cursor-pointer hover:bg-accent/50 transition-colors border-b border-border/50",
                     selectedContact?.id === contact.id && "bg-accent"
                   )}
                 >
