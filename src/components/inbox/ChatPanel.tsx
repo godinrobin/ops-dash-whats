@@ -373,6 +373,39 @@ export const ChatPanel = ({
     }
   }, [contact?.id]);
 
+  // Listen for flow_paused changes via postgres_changes on inbox_contacts
+  useEffect(() => {
+    if (!contact?.id) return;
+    
+    const channel = supabase
+      .channel(`contact-pause:${contact.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'inbox_contacts',
+          filter: `id=eq.${contact.id}`,
+        },
+        (payload) => {
+          const newRow = payload.new as { flow_paused?: boolean; is_ignored?: boolean };
+          console.log('[ChatPanel] Contact updated via realtime:', newRow);
+          
+          if (typeof newRow.flow_paused === 'boolean') {
+            setFlowPaused(newRow.flow_paused);
+          }
+          if (typeof newRow.is_ignored === 'boolean') {
+            setIsIgnored(newRow.is_ignored);
+          }
+        }
+      )
+      .subscribe();
+    
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [contact?.id]);
+
   // Listen for activity events (typing/recording) via postgres_changes on inbox_contact_activity
   useEffect(() => {
     if (!contact?.id) return;
@@ -750,6 +783,14 @@ export const ChatPanel = ({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-medium">{getDisplayName()}</h3>
+              {flowPaused && (
+                <Badge 
+                  className="bg-orange-500 text-white text-[10px] px-1.5 py-0 h-4 flex items-center gap-1 animate-pulse"
+                >
+                  <Pause className="h-2.5 w-2.5" />
+                  Pausado
+                </Badge>
+              )}
               {contactLabels.map((label) => (
                 <Badge 
                   key={label} 
