@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ArrowLeft, Plus, Phone, User, Tag, Hash, GripVertical, Search, X, MessageSquare, Loader2 } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
+import { ArrowLeft, Plus, Phone, User, Tag, Hash, GripVertical, Search, X, MessageSquare, Loader2, Eye, EyeOff, Columns, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
@@ -14,7 +15,6 @@ import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { formatPhoneDisplay } from '@/utils/phoneFormatter';
-import automatizapIcon from '@/assets/automatizap-icon.png';
 
 import {
   DndContext,
@@ -33,6 +33,8 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
   useSortable,
+  arrayMove,
+  horizontalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
@@ -113,20 +115,20 @@ const KanbanCard = ({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "bg-card border border-border rounded-lg p-3 cursor-pointer hover:border-accent transition-all group",
+        "bg-card border border-border rounded-lg p-2.5 cursor-pointer hover:border-accent transition-all group w-full",
         isDragging && "shadow-lg ring-2 ring-accent"
       )}
       onClick={onClick}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-2">
         {/* Drag handle */}
         <div 
           {...attributes} 
           {...listeners}
-          className="mt-1 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity"
+          className="mt-1 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
           onClick={(e) => e.stopPropagation()}
         >
-          <GripVertical className="h-4 w-4 text-muted-foreground" />
+          <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
         </div>
 
         {/* Profile pic */}
@@ -135,52 +137,54 @@ const KanbanCard = ({
             <img 
               src={contact.profile_pic_url} 
               alt={contact.name || 'Contact'} 
-              className="w-10 h-10 rounded-full object-cover"
+              className="w-8 h-8 rounded-full object-cover"
             />
           ) : (
-            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-              <User className="h-5 w-5 text-muted-foreground" />
+            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+              <User className="h-4 w-4 text-muted-foreground" />
             </div>
           )}
         </div>
 
         {/* Contact info */}
-        <div className="flex-1 min-w-0">
-          <p className="font-medium text-sm truncate">
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <p className="font-medium text-xs truncate">
             {contact.name || formatPhoneDisplay(contact.phone)}
           </p>
-          <p className="text-xs text-muted-foreground truncate">
+          <p className="text-[10px] text-muted-foreground truncate">
             {formatPhoneDisplay(contact.phone)}
           </p>
           
           {/* Tags */}
-          <div className="flex flex-wrap gap-1 mt-2">
-            {contact.tags.slice(0, 2).map(tag => (
-              <Badge 
-                key={tag}
-                className="text-[10px] px-1.5 py-0 text-white"
-                style={{ backgroundColor: getTagColor(tag, customTags) }}
-              >
-                {tag}
-              </Badge>
-            ))}
-            {contact.tags.length > 2 && (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                +{contact.tags.length - 2}
-              </Badge>
-            )}
-          </div>
+          {contact.tags.length > 0 && (
+            <div className="flex flex-wrap gap-0.5 mt-1">
+              {contact.tags.slice(0, 2).map(tag => (
+                <Badge 
+                  key={tag}
+                  className="text-[8px] px-1 py-0 text-white leading-tight"
+                  style={{ backgroundColor: getTagColor(tag, customTags) }}
+                >
+                  {tag}
+                </Badge>
+              ))}
+              {contact.tags.length > 2 && (
+                <Badge variant="secondary" className="text-[8px] px-1 py-0 leading-tight">
+                  +{contact.tags.length - 2}
+                </Badge>
+              )}
+            </div>
+          )}
 
           {/* Instance number */}
-          <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
-            <Phone className="h-3 w-3" />
+          <div className="flex items-center gap-1 mt-1 text-[10px] text-muted-foreground">
+            <Phone className="h-2.5 w-2.5 flex-shrink-0" />
             <span className="truncate">{formatPhoneDisplay(instanceLabel)}</span>
           </div>
         </div>
 
         {/* Unread badge */}
         {contact.unread_count > 0 && (
-          <Badge className="bg-green-500 text-white text-xs">
+          <Badge className="bg-green-500 text-white text-[10px] px-1.5 py-0 flex-shrink-0">
             {contact.unread_count}
           </Badge>
         )}
@@ -189,14 +193,15 @@ const KanbanCard = ({
   );
 };
 
-// Column component
-const KanbanColumn = ({ 
+// Sortable Column component
+const SortableKanbanColumn = ({ 
   tag, 
   contacts, 
   instances, 
   customTags, 
   color,
   onCardClick,
+  onToggleVisibility,
 }: {
   tag: string;
   contacts: KanbanContact[];
@@ -204,29 +209,72 @@ const KanbanColumn = ({
   customTags: InboxTag[];
   color: string;
   onCardClick: (contact: KanbanContact) => void;
+  onToggleVisibility: (tag: string) => void;
 }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: `column-${tag}` });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.7 : 1,
+  };
+
   return (
-    <div className="flex-shrink-0 w-[300px] bg-muted/30 rounded-lg border border-border">
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "flex-shrink-0 w-[240px] min-w-[240px] max-w-[240px] bg-muted/30 rounded-lg border border-border",
+        isDragging && "ring-2 ring-accent"
+      )}
+    >
       {/* Column header */}
       <div 
-        className="p-3 border-b border-border flex items-center justify-between"
+        className="p-2 border-b border-border flex items-center justify-between gap-1"
         style={{ borderTopColor: color, borderTopWidth: 3, borderTopLeftRadius: 8, borderTopRightRadius: 8 }}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
           <div 
-            className="w-3 h-3 rounded-full" 
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing"
+          >
+            <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
+          </div>
+          <div 
+            className="w-2.5 h-2.5 rounded-full flex-shrink-0" 
             style={{ backgroundColor: color }} 
           />
-          <h3 className="font-semibold text-sm">{tag}</h3>
+          <h3 className="font-semibold text-xs truncate">{tag}</h3>
         </div>
-        <Badge variant="secondary" className="text-xs">
-          {contacts.length}
-        </Badge>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <Badge variant="secondary" className="text-[10px] px-1.5">
+            {contacts.length}
+          </Badge>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleVisibility(tag);
+            }}
+          >
+            <EyeOff className="h-3 w-3 text-muted-foreground" />
+          </Button>
+        </div>
       </div>
 
       {/* Column content */}
-      <ScrollArea className="h-[calc(100vh-300px)]">
-        <div className="p-2 space-y-2">
+      <ScrollArea className="h-[calc(100vh-280px)]">
+        <div className="p-1.5 space-y-1.5">
           <SortableContext 
             items={contacts.map(c => c.id)} 
             strategy={verticalListSortingStrategy}
@@ -243,8 +291,8 @@ const KanbanColumn = ({
           </SortableContext>
           
           {contacts.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground text-sm">
-              <Tag className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <div className="text-center py-6 text-muted-foreground text-xs">
+              <Tag className="h-6 w-6 mx-auto mb-1.5 opacity-50" />
               <p>Nenhum lead</p>
             </div>
           )}
@@ -392,6 +440,9 @@ const ContactDetailModal = ({
   );
 };
 
+const STORAGE_KEY_HIDDEN_COLUMNS = 'kanban_hidden_columns';
+const STORAGE_KEY_COLUMN_ORDER = 'kanban_column_order';
+
 export default function InboxKanbanPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -406,6 +457,17 @@ export default function InboxKanbanPage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [selectedContact, setSelectedContact] = useState<KanbanContact | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+
+  // Column visibility and order
+  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_HIDDEN_COLUMNS);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  const [columnOrder, setColumnOrder] = useState<string[]>([]);
 
   // Create tag modal
   const [createTagModalOpen, setCreateTagModalOpen] = useState(false);
@@ -424,7 +486,12 @@ export default function InboxKanbanPage() {
 
   const userId = effectiveUserId || user?.id;
 
-  // Fetch data
+  // Save hidden columns to localStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_HIDDEN_COLUMNS, JSON.stringify(Array.from(hiddenColumns)));
+  }, [hiddenColumns]);
+
+  // Fetch data with increased limit
   const fetchData = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
@@ -436,7 +503,8 @@ export default function InboxKanbanPage() {
           .select('id, name, phone, profile_pic_url, tags, instance_id, last_message_at, unread_count, notes, ad_source_url, created_at')
           .eq('user_id', userId)
           .eq('status', 'active')
-          .order('last_message_at', { ascending: false }),
+          .order('last_message_at', { ascending: false })
+          .limit(10000), // Increased limit from 1000 to 10000
         supabase
           .from('maturador_instances')
           .select('id, instance_name, phone_number, label')
@@ -467,7 +535,7 @@ export default function InboxKanbanPage() {
     fetchData();
   }, [fetchData]);
 
-  // All available tags (predefined + custom)
+  // All available tags (predefined + user's custom tags only)
   const allTags = useMemo(() => {
     const predefinedNames = predefinedLabels.map(l => l.name);
     const customNames = customTags.map(t => t.name);
@@ -477,6 +545,44 @@ export default function InboxKanbanPage() {
     const combined = new Set([...predefinedNames, ...customNames, ...Array.from(contactTags)]);
     return Array.from(combined);
   }, [customTags, contacts]);
+
+  // Initialize column order when allTags changes
+  useEffect(() => {
+    const predefinedNames = predefinedLabels.map(l => l.name);
+    const customNames = customTags.map(t => t.name);
+    const otherTags = allTags.filter(t => 
+      !predefinedNames.includes(t) && !customNames.includes(t) && t !== 'Sem etiqueta'
+    );
+    
+    // Try to load saved order
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_COLUMN_ORDER);
+      if (stored) {
+        const savedOrder = JSON.parse(stored) as string[];
+        // Merge saved order with current tags (keep order for existing, append new ones)
+        const allCurrentTags = ['Sem etiqueta', ...predefinedNames, ...customNames, ...otherTags];
+        const validSaved = savedOrder.filter(t => allCurrentTags.includes(t));
+        const newTags = allCurrentTags.filter(t => !validSaved.includes(t));
+        
+        // Ensure "Sem etiqueta" is always first
+        const finalOrder = validSaved.filter(t => t !== 'Sem etiqueta');
+        setColumnOrder(['Sem etiqueta', ...finalOrder, ...newTags.filter(t => t !== 'Sem etiqueta')]);
+        return;
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    
+    // Default order: "Sem etiqueta" first, then predefined, then custom, then others
+    setColumnOrder(['Sem etiqueta', ...predefinedNames, ...customNames, ...otherTags]);
+  }, [allTags, customTags]);
+
+  // Save column order to localStorage
+  useEffect(() => {
+    if (columnOrder.length > 0) {
+      localStorage.setItem(STORAGE_KEY_COLUMN_ORDER, JSON.stringify(columnOrder));
+    }
+  }, [columnOrder]);
 
   // Filter contacts by search
   const filteredContacts = useMemo(() => {
@@ -516,15 +622,10 @@ export default function InboxKanbanPage() {
     return grouped;
   }, [filteredContacts, allTags]);
 
-  // Ordered columns (predefined first, then custom, then "Sem etiqueta" at the end)
-  const orderedColumns = useMemo(() => {
-    const predefinedNames = predefinedLabels.map(l => l.name);
-    const customNames = customTags.map(t => t.name);
-    const otherTags = allTags.filter(t => 
-      !predefinedNames.includes(t) && !customNames.includes(t)
-    );
-    return [...predefinedNames, ...customNames, ...otherTags, 'Sem etiqueta'];
-  }, [allTags, customTags]);
+  // Visible columns based on order and hidden state
+  const visibleColumns = useMemo(() => {
+    return columnOrder.filter(tag => !hiddenColumns.has(tag));
+  }, [columnOrder, hiddenColumns]);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
@@ -536,15 +637,46 @@ export default function InboxKanbanPage() {
 
     if (!over) return;
 
-    // Find which column the card was dropped into
-    const activeContact = contacts.find(c => c.id === active.id);
+    const activeIdStr = active.id as string;
+    const overIdStr = over.id as string;
+
+    // Check if it's a column being dragged
+    if (activeIdStr.startsWith('column-') && overIdStr.startsWith('column-')) {
+      const activeTag = activeIdStr.replace('column-', '');
+      const overTag = overIdStr.replace('column-', '');
+      
+      if (activeTag !== overTag) {
+        const oldIndex = columnOrder.indexOf(activeTag);
+        const newIndex = columnOrder.indexOf(overTag);
+        
+        if (oldIndex !== -1 && newIndex !== -1) {
+          // Don't allow moving anything before "Sem etiqueta" (index 0)
+          const finalNewIndex = newIndex === 0 && activeTag !== 'Sem etiqueta' ? 1 : newIndex;
+          const newOrder = arrayMove(columnOrder, oldIndex, finalNewIndex);
+          
+          // Ensure "Sem etiqueta" stays first
+          const semEtiquetaIndex = newOrder.indexOf('Sem etiqueta');
+          if (semEtiquetaIndex !== 0) {
+            newOrder.splice(semEtiquetaIndex, 1);
+            newOrder.unshift('Sem etiqueta');
+          }
+          
+          setColumnOrder(newOrder);
+          toast.success('Colunas reordenadas');
+        }
+      }
+      return;
+    }
+
+    // Handle card drag
+    const activeContact = contacts.find(c => c.id === activeIdStr);
     if (!activeContact) return;
 
     // Determine target column from the over element
     let targetTag: string | null = null;
     
     // Check if dropped on another card
-    const overContact = contacts.find(c => c.id === over.id);
+    const overContact = contacts.find(c => c.id === overIdStr);
     if (overContact) {
       targetTag = overContact.tags[0] || 'Sem etiqueta';
     }
@@ -569,6 +701,18 @@ export default function InboxKanbanPage() {
 
   const handleDragOver = (_event: DragOverEvent) => {
     // We could add visual feedback here
+  };
+
+  const toggleColumnVisibility = (tag: string) => {
+    setHiddenColumns(prev => {
+      const next = new Set(prev);
+      if (next.has(tag)) {
+        next.delete(tag);
+      } else {
+        next.add(tag);
+      }
+      return next;
+    });
   };
 
   const updateContactTags = async (contactId: string, newTags: string[]) => {
@@ -639,10 +783,11 @@ export default function InboxKanbanPage() {
   };
 
   const activeContact = activeId ? contacts.find(c => c.id === activeId) : null;
+  const isColumnDrag = activeId?.startsWith('column-');
 
   return (
     <SystemLayout>
-      <div className="space-y-4">
+      <div className="space-y-4 h-full">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
@@ -657,8 +802,8 @@ export default function InboxKanbanPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <div className="relative flex-1 sm:w-64">
+          <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+            <div className="relative flex-1 sm:w-56">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Buscar leads..."
@@ -667,8 +812,40 @@ export default function InboxKanbanPage() {
                 className="pl-9"
               />
             </div>
-            <Button onClick={() => setCreateTagModalOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
+            
+            {/* Column visibility dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon">
+                  <Columns className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 max-h-80 overflow-y-auto">
+                <DropdownMenuLabel>Colunas visíveis</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {columnOrder.map(tag => (
+                  <DropdownMenuCheckboxItem
+                    key={tag}
+                    checked={!hiddenColumns.has(tag)}
+                    onCheckedChange={() => toggleColumnVisibility(tag)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div 
+                        className="w-2.5 h-2.5 rounded-full" 
+                        style={{ backgroundColor: tag === 'Sem etiqueta' ? '#6b7280' : getTagColor(tag, customTags) }} 
+                      />
+                      <span className="truncate">{tag}</span>
+                      <Badge variant="secondary" className="text-[10px] ml-auto">
+                        {contactsByTag[tag]?.length || 0}
+                      </Badge>
+                    </div>
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Button onClick={() => setCreateTagModalOpen(true)} size="sm">
+              <Plus className="h-4 w-4 mr-1" />
               Nova Etiqueta
             </Button>
           </div>
@@ -687,54 +864,68 @@ export default function InboxKanbanPage() {
             onDragEnd={handleDragEnd}
             onDragOver={handleDragOver}
           >
-            <div className="flex gap-4 overflow-x-auto pb-4">
-              {orderedColumns.map(tag => {
-                const columnContacts = contactsByTag[tag] || [];
-                const color = tag === 'Sem etiqueta' ? '#6b7280' : getTagColor(tag, customTags);
-                
-                return (
-                  <KanbanColumn
-                    key={tag}
-                    tag={tag}
-                    contacts={columnContacts}
-                    instances={instances}
-                    customTags={customTags}
-                    color={color}
-                    onCardClick={(contact) => {
-                      setSelectedContact(contact);
-                      setDetailModalOpen(true);
-                    }}
-                  />
-                );
-              })}
+            <div className="overflow-x-auto pb-4">
+              <SortableContext 
+                items={visibleColumns.map(tag => `column-${tag}`)} 
+                strategy={horizontalListSortingStrategy}
+              >
+                <div className="flex gap-3 min-w-min">
+                  {visibleColumns.map(tag => {
+                    const columnContacts = contactsByTag[tag] || [];
+                    const color = tag === 'Sem etiqueta' ? '#6b7280' : getTagColor(tag, customTags);
+                    
+                    return (
+                      <SortableKanbanColumn
+                        key={tag}
+                        tag={tag}
+                        contacts={columnContacts}
+                        instances={instances}
+                        customTags={customTags}
+                        color={color}
+                        onCardClick={(contact) => {
+                          setSelectedContact(contact);
+                          setDetailModalOpen(true);
+                        }}
+                        onToggleVisibility={toggleColumnVisibility}
+                      />
+                    );
+                  })}
+                </div>
+              </SortableContext>
             </div>
 
             <DragOverlay>
-              {activeContact && (
-                <div className="bg-card border border-accent rounded-lg p-3 shadow-xl w-[280px] opacity-90">
-                  <div className="flex items-center gap-3">
+              {isColumnDrag && activeId ? (
+                <div className="w-[240px] bg-muted/50 rounded-lg border-2 border-accent p-4 shadow-xl">
+                  <div className="text-center text-sm font-medium">
+                    {activeId.replace('column-', '')}
+                  </div>
+                </div>
+              ) : activeContact ? (
+                <div className="bg-card border border-accent rounded-lg p-2.5 shadow-xl w-[220px] opacity-90">
+                  <div className="flex items-center gap-2">
                     {activeContact.profile_pic_url ? (
                       <img 
                         src={activeContact.profile_pic_url} 
                         alt={activeContact.name || 'Contact'} 
-                        className="w-10 h-10 rounded-full object-cover"
+                        className="w-8 h-8 rounded-full object-cover"
                       />
                     ) : (
-                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                        <User className="h-5 w-5 text-muted-foreground" />
+                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                        <User className="h-4 w-4 text-muted-foreground" />
                       </div>
                     )}
-                    <div>
-                      <p className="font-medium text-sm">
+                    <div className="min-w-0">
+                      <p className="font-medium text-xs truncate">
                         {activeContact.name || formatPhoneDisplay(activeContact.phone)}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-[10px] text-muted-foreground truncate">
                         {formatPhoneDisplay(activeContact.phone)}
                       </p>
                     </div>
                   </div>
                 </div>
-              )}
+              ) : null}
             </DragOverlay>
           </DndContext>
         )}
