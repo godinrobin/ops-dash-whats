@@ -3212,16 +3212,64 @@ serve(async (req) => {
               })
               .eq('id', activeSession.id);
             
-            // Schedule a retry job to process this input after the current processing completes
-            const executeAt = new Date(Date.now() + 3000); // 3 seconds from now
-            await supabaseClient
+            // Schedule a retry job to process this input after the current processing completes.
+            // NOTE: inbox_flow_delay_jobs uses `run_at` (no `execute_at`) and has no `job_type`.
+            // Also, the table is keyed by `session_id`, so we upsert.
+            const runAtIso = new Date(Date.now() + 10_000).toISOString(); // ~10s from now (queue runs periodically)
+            const { error: scheduleError } = await supabaseClient
               .from('inbox_flow_delay_jobs')
-              .insert({
-                session_id: activeSession.id,
-                execute_at: executeAt.toISOString(),
-                status: 'scheduled',
-                job_type: 'iaConverterPendingInput'
-              });
+              .upsert(
+                {
+                  session_id: activeSession.id,
+                  run_at: runAtIso,
+                  status: 'scheduled',
+                  attempts: 0,
+                  last_error: null,
+                  updated_at: new Date().toISOString(),
+                },
+                { onConflict: 'session_id' }
+              );
+
+            if (scheduleError) {
+              console.error('[WAIT_INPUT] iaConverter: failed to schedule retry job:', scheduleError);
+            }
+
+            // Fast path: also try to resume in background without waiting for the queue tick.
+            // If it stays locked, the scheduled job above is the fallback.
+            try {
+              // EdgeRuntime.waitUntil is available in this runtime; keep it guarded just in case.
+              // @ts-ignore
+              if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) {
+                // @ts-ignore
+                EdgeRuntime.waitUntil((async () => {
+                  const delays = [2000, 4000, 8000];
+                  for (const delayMs of delays) {
+                    await new Promise(resolve => setTimeout(resolve, delayMs));
+                    const retryLock = await tryAcquireSessionLock(supabaseClient, activeSession.id, 30000);
+                    if (!retryLock.acquired) continue;
+
+                    const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
+                    const resp = await fetch(processUrl, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                      },
+                      body: JSON.stringify({ sessionId: activeSession.id }),
+                    });
+
+                    if (!resp.ok) {
+                      console.error('[WAIT_INPUT] iaConverter background resume failed:', await resp.text());
+                    } else {
+                      console.log('[WAIT_INPUT] iaConverter background resume succeeded');
+                    }
+                    return;
+                  }
+                })());
+              }
+            } catch (bgErr) {
+              console.error('[WAIT_INPUT] iaConverter background resume exception:', bgErr);
+            }
             
             console.log(`[WAIT_INPUT] iaConverter: persisted pending input and scheduled retry job for session ${activeSession.id}`);
             return new Response(JSON.stringify({ 
