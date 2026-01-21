@@ -177,35 +177,61 @@ serve(async (req) => {
     // Fallback: Individual message sending (for Evolution API, flows, or UAZAPI fallback)
     console.log('Using individual message sending mode');
 
-    // Fetch user's Evolution API config
-    let { data: config } = await supabaseClient
-      .from('maturador_config')
-      .select('*')
-      .eq('user_id', campaign.user_id)
-      .single();
+    // Resolve WhatsApp API config using the same strategy used elsewhere:
+    // 1) Environment variables (preferred for reliability)
+    // 2) User config (maturador_config)
+    // 3) Admin fallback config (first row)
+    const envBaseUrl = (Deno.env.get('EVOLUTION_BASE_URL') || '').replace(/\/$/, '');
+    const envApiKey = Deno.env.get('EVOLUTION_API_KEY') || '';
 
-    // If user doesn't have config, fallback to admin config
-    if (!config?.evolution_base_url || !config?.evolution_api_key) {
-      console.log('User has no Evolution API config, trying admin fallback...');
-      
+    let resolvedBaseUrl = envBaseUrl;
+    let resolvedApiKey = envApiKey;
+    let configSource = resolvedBaseUrl && resolvedApiKey ? 'env' : 'none';
+
+    if (!resolvedBaseUrl || !resolvedApiKey) {
+      const { data: userConfig } = await supabaseClient
+        .from('maturador_config')
+        .select('evolution_base_url, evolution_api_key')
+        .eq('user_id', campaign.user_id)
+        .maybeSingle();
+
+      if (userConfig?.evolution_base_url && userConfig?.evolution_api_key) {
+        resolvedBaseUrl = userConfig.evolution_base_url.replace(/\/$/, '');
+        resolvedApiKey = userConfig.evolution_api_key;
+        configSource = 'user';
+      }
+    }
+
+    if (!resolvedBaseUrl || !resolvedApiKey) {
+      console.log('User has no WhatsApp API config, trying admin fallback...');
+
       const { data: adminConfig } = await supabaseClient
         .from('maturador_config')
-        .select('*')
+        .select('evolution_base_url, evolution_api_key')
         .limit(1)
-        .single();
-      
+        .maybeSingle();
+
       if (adminConfig?.evolution_base_url && adminConfig?.evolution_api_key) {
-        config = adminConfig;
-        console.log('Using admin Evolution API config as fallback');
-      } else {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Evolution API not configured and no admin fallback available' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        resolvedBaseUrl = adminConfig.evolution_base_url.replace(/\/$/, '');
+        resolvedApiKey = adminConfig.evolution_api_key;
+        configSource = 'admin';
       }
-    } else {
-      console.log('Using user Evolution API config');
     }
+
+    if (!resolvedBaseUrl || !resolvedApiKey) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'WhatsApp API not configured' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`Using WhatsApp API config source: ${configSource}`);
+
+    // Keep the same shape used throughout this file
+    const config = {
+      evolution_base_url: resolvedBaseUrl,
+      evolution_api_key: resolvedApiKey,
+    };
 
     // Update campaign status to running
     await supabaseClient
