@@ -177,18 +177,43 @@ serve(async (req) => {
     // Fallback: Individual message sending (for Evolution API, flows, or UAZAPI fallback)
     console.log('Using individual message sending mode');
 
-    // Resolve WhatsApp API config using the same strategy used elsewhere:
-    // 1) Environment variables (preferred for reliability)
-    // 2) User config (maturador_config)
-    // 3) Admin fallback config (first row)
-    const envBaseUrl = (Deno.env.get('EVOLUTION_BASE_URL') || '').replace(/\/$/, '');
-    const envApiKey = Deno.env.get('EVOLUTION_API_KEY') || '';
+    // Check if we're using UAZAPI provider - if so, get config from whatsapp_api_config
+    const isUazapiProvider = firstInstance.api_provider === 'uazapi';
+    
+    let resolvedBaseUrl = '';
+    let resolvedApiKey = '';
+    let configSource = 'none';
 
-    let resolvedBaseUrl = envBaseUrl;
-    let resolvedApiKey = envApiKey;
-    let configSource = resolvedBaseUrl && resolvedApiKey ? 'env' : 'none';
+    if (isUazapiProvider) {
+      // For UAZAPI: get base URL from whatsapp_api_config
+      const { data: apiConfig } = await supabaseClient
+        .from('whatsapp_api_config')
+        .select('uazapi_base_url')
+        .limit(1)
+        .single();
 
-    if (!resolvedBaseUrl || !resolvedApiKey) {
+      if (apiConfig?.uazapi_base_url) {
+        resolvedBaseUrl = apiConfig.uazapi_base_url.replace(/\/$/, '');
+        // For UAZAPI, the API key comes from the instance's uazapi_token (handled per-message)
+        resolvedApiKey = 'uazapi-instance-token'; // placeholder, actual token used per instance
+        configSource = 'whatsapp_api_config';
+        console.log(`Using UAZAPI base URL: ${resolvedBaseUrl}`);
+      }
+    }
+
+    // For Evolution or if UAZAPI config not found, use standard resolution
+    if (!resolvedBaseUrl) {
+      const envBaseUrl = (Deno.env.get('EVOLUTION_BASE_URL') || '').replace(/\/$/, '');
+      const envApiKey = Deno.env.get('EVOLUTION_API_KEY') || '';
+
+      if (envBaseUrl && envApiKey) {
+        resolvedBaseUrl = envBaseUrl;
+        resolvedApiKey = envApiKey;
+        configSource = 'env';
+      }
+    }
+
+    if (!resolvedBaseUrl) {
       const { data: userConfig } = await supabaseClient
         .from('maturador_config')
         .select('evolution_base_url, evolution_api_key')
@@ -202,7 +227,7 @@ serve(async (req) => {
       }
     }
 
-    if (!resolvedBaseUrl || !resolvedApiKey) {
+    if (!resolvedBaseUrl) {
       console.log('User has no WhatsApp API config, trying admin fallback...');
 
       const { data: adminConfig } = await supabaseClient
@@ -218,14 +243,14 @@ serve(async (req) => {
       }
     }
 
-    if (!resolvedBaseUrl || !resolvedApiKey) {
+    if (!resolvedBaseUrl) {
       return new Response(
         JSON.stringify({ success: false, error: 'WhatsApp API not configured' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`Using WhatsApp API config source: ${configSource}`);
+    console.log(`Using WhatsApp API config source: ${configSource}, URL: ${resolvedBaseUrl}`);
 
     // Keep the same shape used throughout this file
     const config = {
