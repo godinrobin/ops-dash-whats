@@ -62,6 +62,7 @@ import NotifyAdminAddNumber from "./pages/NotifyAdminAddNumber";
 import QuickRepliesPage from "./pages/QuickRepliesPage";
 import DeliverableCreator from "./pages/DeliverableCreator";
 import Settings from "./pages/Settings";
+import SaleNotificationSettings from "./pages/SaleNotificationSettings";
 
 const queryClient = new QueryClient();
 
@@ -135,6 +136,7 @@ const AppContent = () => {
         <Route path="/whatsapp-editor" element={<MemberRoute featureName="Edição de WhatsApp"><WhatsAppEditor /></MemberRoute>} />
         <Route path="/whatsapp-editor/add-number" element={<MemberRoute featureName="Edição de WhatsApp"><WhatsAppEditorAddNumber /></MemberRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+        <Route path="/settings/sale-notifications" element={<ProtectedRoute><SaleNotificationSettings /></ProtectedRoute>} />
         
         {/* ADS MODULE */}
         <Route path="/ads/*" element={<MemberRoute featureName="ADS X1"><AdsLayout /></MemberRoute>} />

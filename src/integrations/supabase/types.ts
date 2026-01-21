@@ -2836,6 +2836,7 @@ export type Database = {
           fb_event_enabled: boolean | null
           fb_event_on_sale: string | null
           fb_event_value: number | null
+          hide_sale_value_in_notification: boolean | null
           id: string
           is_full_member: boolean
           lead_rotation_limit: number | null
@@ -2855,6 +2856,7 @@ export type Database = {
           fb_event_enabled?: boolean | null
           fb_event_on_sale?: string | null
           fb_event_value?: number | null
+          hide_sale_value_in_notification?: boolean | null
           id: string
           is_full_member?: boolean
           lead_rotation_limit?: number | null
@@ -2874,6 +2876,7 @@ export type Database = {
           fb_event_enabled?: boolean | null
           fb_event_on_sale?: string | null
           fb_event_value?: number | null
+          hide_sale_value_in_notification?: boolean | null
           id?: string
           is_full_member?: boolean
           lead_rotation_limit?: number | null
@@ -3089,6 +3092,39 @@ export type Database = {
           processed?: boolean | null
           subscription_ids?: string[]
           title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      sale_notification_templates: {
+        Row: {
+          body_template: string
+          created_at: string
+          id: string
+          is_active: boolean
+          sort_order: number
+          title_template: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          body_template?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          sort_order?: number
+          title_template?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          body_template?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          sort_order?: number
+          title_template?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
