@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conectando conta - Zapdata</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      color: #fff;
+    }
+    
+    .card {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 420px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+    
+    .icon-container {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      font-size: 40px;
+    }
+    
+    .icon-container.processing {
+      background: rgba(59, 130, 246, 0.2);
+      animation: pulse 2s infinite;
+    }
+    
+    .icon-container.success {
+      background: rgba(34, 197, 94, 0.2);
+    }
+    
+    .icon-container.error {
+      background: rgba(239, 68, 68, 0.2);
+    }
+    
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.05); opacity: 0.8; }
+    }
+    
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(59, 130, 246, 0.3);
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #fff;
+    }
+    
+    .description {
+      font-size: 15px;
+      color: rgba(255, 255, 255, 0.7);
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+    
+    .account-name {
+      font-weight: 600;
+      color: #22c55e;
+    }
+    
+    .buttons {
+      display: flex;
+      gap: 12px;
+    }
+    
+    .btn {
+      flex: 1;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: #fff;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px -10px rgba(59, 130, 246, 0.5);
+    }
+    
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+    
+    .hint {
+      margin-top: 20px;
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.5);
+    }
+    
+    .hidden {
+      display: none !important;
+    }
+    
+    .logo {
+      width: 120px;
+      margin-bottom: 24px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <!-- Processing State -->
+    <div id="state-processing">
+      <div class="icon-container processing">
+        <div class="spinner"></div>
+      </div>
+      <h1>Conectando conta...</h1>
+      <p class="description">Aguarde enquanto conectamos sua conta do Meta Ads</p>
+    </div>
+    
+    <!-- Success State -->
+    <div id="state-success" class="hidden">
+      <div class="icon-container success">
+        ✓
+      </div>
+      <h1>Conta conectada!</h1>
+      <p class="description">
+        <span id="success-message">Sua conta do Meta Ads foi conectada com sucesso!</span>
+      </p>
+      <div class="buttons">
+        <button class="btn btn-secondary" onclick="closeWindow()">Fechar janela</button>
+        <a class="btn btn-primary" href="https://zapdata.co/#/ads/settings">Ir para Configurações</a>
+      </div>
+      <p class="hint">Você pode fechar esta janela e voltar ao Zapdata.</p>
+    </div>
+    
+    <!-- Error State -->
+    <div id="state-error" class="hidden">
+      <div class="icon-container error">
+        ✕
+      </div>
+      <h1>Erro na conexão</h1>
+      <p class="description" id="error-message">Ocorreu um erro ao conectar sua conta.</p>
+      <div class="buttons">
+        <button class="btn btn-secondary" onclick="closeWindow()">Fechar</button>
+        <a class="btn btn-primary" href="https://zapdata.co/#/ads/settings">Tentar novamente</a>
+      </div>
+      <p class="hint">Tente novamente ou entre em contato com o suporte.</p>
+    </div>
+  </div>
+
+  <script>
+    // Supabase Edge Function URL
+    const SUPABASE_URL = 'https://dcjizoulbggsavizbukq.supabase.co';
+    
+    function closeWindow() {
+      window.close();
+      // Fallback if window.close() doesn't work (some browsers block it)
+      setTimeout(() => {
+        window.location.href = 'https://zapdata.co/#/ads/settings';
+      }, 500);
+    }
+    
+    function showState(state) {
+      document.getElementById('state-processing').classList.add('hidden');
+      document.getElementById('state-success').classList.add('hidden');
+      document.getElementById('state-error').classList.add('hidden');
+      document.getElementById('state-' + state).classList.remove('hidden');
+    }
+    
+    function showSuccess(name) {
+      const messageEl = document.getElementById('success-message');
+      if (name) {
+        messageEl.innerHTML = 'Conta <span class="account-name">' + name + '</span> conectada com sucesso ao Zapdata!';
+      }
+      showState('success');
+    }
+    
+    function showError(message) {
+      document.getElementById('error-message').textContent = message || 'Ocorreu um erro ao conectar sua conta.';
+      showState('error');
+    }
+    
+    async function processCallback() {
+      try {
+        // Get parameters from URL (query string)
+        const params = new URLSearchParams(window.location.search);
+        
+        const code = params.get('code');
+        const stateParam = params.get('state');
+        const errorParam = params.get('error');
+        const errorDescription = params.get('error_description');
+        
+        // Check for Facebook OAuth errors
+        if (errorParam) {
+          throw new Error(errorDescription || errorParam);
+        }
+        
+        if (!code) {
+          throw new Error('Código de autorização não encontrado');
+        }
+        
+        if (!stateParam) {
+          throw new Error('Token de validação não encontrado');
+        }
+        
+        // Parse state to get token
+        let token;
+        try {
+          const stateData = JSON.parse(decodeURIComponent(stateParam));
+          token = stateData.token;
+        } catch (e) {
+          throw new Error('Token de validação inválido');
+        }
+        
+        if (!token) {
+          throw new Error('Token não encontrado no state');
+        }
+        
+        // Call edge function to exchange code with token (no auth required)
+        const response = await fetch(SUPABASE_URL + '/functions/v1/facebook-oauth', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'exchange_code_with_token',
+            code: code,
+            token: token,
+            redirect_uri: window.location.origin + window.location.pathname,
+          }),
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.error || 'Erro ao conectar conta');
+        }
+        
+        // Success!
+        showSuccess(data.name);
+        
+        // Clean URL (remove query params)
+        window.history.replaceState({}, document.title, window.location.pathname);
+        
+      } catch (err) {
+        console.error('OAuth callback error:', err);
+        showError(err.message || 'Erro desconhecido');
+      }
+    }
+    
+    // Start processing immediately
+    processCallback();
+  </script>
+</body>
+</html>
