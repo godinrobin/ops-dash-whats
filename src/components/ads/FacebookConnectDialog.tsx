@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ExternalLink, Copy, Check, Loader2, Clock, Link } from "lucide-react";
+import { ExternalLink, Copy, Check, Loader2, Clock, Link, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { splashedToast } from "@/hooks/useSplashedToast";
 
@@ -22,6 +22,8 @@ export default function FacebookConnectDialog({
   const [copied, setCopied] = useState(false);
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
+  const [checking, setChecking] = useState(false);
+  const [connected, setConnected] = useState(false);
 
   // Countdown timer effect
   useEffect(() => {
@@ -100,6 +102,36 @@ export default function FacebookConnectDialog({
     onContinueHere();
   };
 
+  const handleCheckConnection = async () => {
+    setChecking(true);
+    try {
+      const { data: accounts, error } = await supabase
+        .from("ads_facebook_accounts")
+        .select("id, name")
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+
+      if (accounts && accounts.length > 0) {
+        setConnected(true);
+        splashedToast.success(`Conta conectada: ${accounts[0].name || "Facebook"}`);
+        // Fechar modal após 1.5s
+        setTimeout(() => {
+          onOpenChange(false);
+          window.location.reload();
+        }, 1500);
+      } else {
+        splashedToast.info("Nenhuma conta conectada ainda. Complete a autenticação no outro navegador.");
+      }
+    } catch (err) {
+      console.error("Error checking connection:", err);
+      splashedToast.error("Erro ao verificar conexão");
+    } finally {
+      setChecking(false);
+    }
+  };
+
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
       // Reset state when closing
@@ -107,6 +139,7 @@ export default function FacebookConnectDialog({
       setCopied(false);
       setExpiresAt(null);
       setRemainingSeconds(0);
+      setConnected(false);
     }
     onOpenChange(newOpen);
   };
@@ -202,21 +235,40 @@ export default function FacebookConnectDialog({
 
               <p className="text-xs text-muted-foreground">
                 Cole este link no seu navegador multilogin e complete a autenticação com o Facebook.
-                Após concluir, volte aqui e atualize a página.
+                Após concluir, clique em "Verificar conexão".
               </p>
 
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="w-full text-xs"
-                onClick={handleGenerateLink}
-                disabled={generating}
-              >
-                {generating ? (
-                  <Loader2 className="h-3 w-3 mr-2 animate-spin" />
-                ) : null}
-                Gerar novo link
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  variant={connected ? "default" : "outline"}
+                  size="sm" 
+                  className="flex-1 text-xs"
+                  onClick={handleCheckConnection}
+                  disabled={checking || connected}
+                >
+                  {checking ? (
+                    <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+                  ) : connected ? (
+                    <Check className="h-3 w-3 mr-2" />
+                  ) : (
+                    <RefreshCw className="h-3 w-3 mr-2" />
+                  )}
+                  {connected ? "Conectado!" : "Verificar conexão"}
+                </Button>
+
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-xs"
+                  onClick={handleGenerateLink}
+                  disabled={generating}
+                >
+                  {generating ? (
+                    <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+                  ) : null}
+                  Novo link
+                </Button>
+              </div>
             </div>
           )}
         </div>
