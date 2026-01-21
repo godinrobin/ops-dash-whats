@@ -4,12 +4,21 @@ import { InboxMessage } from '@/types/inbox';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 
+// Simple in-memory cache for messages per contact (survives contact switching)
+const messageCache = new Map<string, InboxMessage[]>();
+
 export const useInboxMessages = (contactId: string | null) => {
   const { user } = useAuth();
   const { effectiveUserId } = useEffectiveUser();
   const userId = effectiveUserId || user?.id;
   
-  const [messages, setMessages] = useState<InboxMessage[]>([]);
+  // Initialize with cached messages if available for instant display
+  const [messages, setMessages] = useState<InboxMessage[]>(() => {
+    if (contactId && messageCache.has(contactId)) {
+      return messageCache.get(contactId) || [];
+    }
+    return [];
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -124,7 +133,14 @@ export const useInboxMessages = (contactId: string | null) => {
         status: msg.status as InboxMessage['status'],
       }));
 
-      setMessages(sortByCreatedAtAsc(next));
+      const sorted = sortByCreatedAtAsc(next);
+      
+      // Update cache for this contact
+      if (contactId) {
+        messageCache.set(contactId, sorted);
+      }
+      
+      setMessages(sorted);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -132,12 +148,20 @@ export const useInboxMessages = (contactId: string | null) => {
     }
   }, [userId, contactId]);
 
-  // Fetch messages when contactId changes - clear immediately for faster perceived switch
+  // Fetch messages when contactId changes - use cache for instant display
   useEffect(() => {
-    // Clear messages immediately when switching contacts for instant feedback
-    setMessages([]);
     setError(null);
-    fetchMessages(true);
+    
+    // Try to load from cache first for instant display
+    if (contactId && messageCache.has(contactId)) {
+      setMessages(messageCache.get(contactId) || []);
+      // Still fetch fresh data in background (no loading indicator)
+      fetchMessages(false);
+    } else {
+      // No cache, clear and show loading
+      setMessages([]);
+      fetchMessages(true);
+    }
   }, [contactId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Subscribe to realtime updates for this contact's messages
@@ -199,7 +223,10 @@ export const useInboxMessages = (contactId: string | null) => {
 
                 const next = [...prev];
                 next[idx] = merged;
-                return sortByCreatedAtAsc(next);
+                const sorted = sortByCreatedAtAsc(next);
+                // Update cache
+                if (contactId) messageCache.set(contactId, sorted);
+                return sorted;
               }
             }
 
@@ -210,7 +237,10 @@ export const useInboxMessages = (contactId: string | null) => {
               status: newMessage.status as InboxMessage['status'],
             } as InboxMessage;
 
-            return sortByCreatedAtAsc([...prev, appended]);
+            const sorted = sortByCreatedAtAsc([...prev, appended]);
+            // Update cache
+            if (contactId) messageCache.set(contactId, sorted);
+            return sorted;
           });
         }
       )
@@ -225,8 +255,8 @@ export const useInboxMessages = (contactId: string | null) => {
         (payload) => {
           console.log('Realtime UPDATE received:', payload);
           const updated = payload.new as any;
-          setMessages((prev) =>
-            sortByCreatedAtAsc(
+          setMessages((prev) => {
+            const sorted = sortByCreatedAtAsc(
               prev.map((m) =>
                 m.id === updated.id
                   ? ({
@@ -237,8 +267,11 @@ export const useInboxMessages = (contactId: string | null) => {
                     } as InboxMessage)
                   : m
               )
-            )
-          );
+            );
+            // Update cache
+            if (contactId) messageCache.set(contactId, sorted);
+            return sorted;
+          });
         }
       )
       .subscribe((status) => {
