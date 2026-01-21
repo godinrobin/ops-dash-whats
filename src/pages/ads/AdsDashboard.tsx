@@ -244,9 +244,11 @@ export default function AdsDashboard() {
         .range(0, 9999);
 
       // Quando o usuário escolhe contas específicas, filtrar vendas por essas contas
+      // Sempre inclui vendas sem atribuição (ad_account_id = NULL) para não perder vendas
       const hasAllSelectedForSales = selectedAccounts.includes("all");
       if (!hasAllSelectedForSales && selectedAccounts.length > 0) {
-        leadsQuery = leadsQuery.in("ad_account_id", selectedAccounts);
+        // Use OR filter to include both: sales from selected accounts AND unattributed sales
+        leadsQuery = leadsQuery.or(`ad_account_id.in.(${selectedAccounts.join(',')}),ad_account_id.is.null`);
       }
 
       const { data: salesWithPurchase } = await leadsQuery;
