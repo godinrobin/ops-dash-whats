@@ -742,15 +742,38 @@ async function executeFlowForContact(
         // This respects the wait input node instead of skipping it
         console.log(`[${phone}] Reached interactive node: ${currentNode.type} - Creating session to wait for response`);
         
-        // Create inbox contact if doesn't exist
-        const { data: existingContact } = await supabaseClient
+        // IMPORTANT (DisparaZap): Contacts can exist per-instance.
+        // If we bind the session to a contact from a different instance, the inbound reply webhook
+        // will resolve a different contact_id and won't find this session to resume.
+        // So we must first try to find the contact for THIS instance.
+        const { data: existingContactSameInstance } = await supabaseClient
           .from('inbox_contacts')
-          .select('id')
+          .select('id, instance_id')
           .eq('user_id', userId)
           .eq('phone', formattedPhone)
+          .eq('instance_id', instance.id)
           .maybeSingle();
-        
-        let contactId = existingContact?.id;
+
+        let contactId = existingContactSameInstance?.id;
+
+        // Fallback: if there is a contact without instance_id (legacy), claim it for this instance.
+        if (!contactId) {
+          const { data: existingContactNoInstance } = await supabaseClient
+            .from('inbox_contacts')
+            .select('id, instance_id')
+            .eq('user_id', userId)
+            .eq('phone', formattedPhone)
+            .is('instance_id', null)
+            .maybeSingle();
+
+          if (existingContactNoInstance?.id) {
+            contactId = existingContactNoInstance.id;
+            await supabaseClient
+              .from('inbox_contacts')
+              .update({ instance_id: instance.id })
+              .eq('id', contactId);
+          }
+        }
         
         if (!contactId) {
           const { data: newContact, error: contactError } = await supabaseClient
@@ -787,6 +810,8 @@ async function executeFlowForContact(
         
         // Use 'active' status so webhook-inbox-messages can detect and continue the session
         // (webhook only checks for status='active' sessions waiting on waitInput/menu nodes)
+        variables._source = 'disparazap';
+        variables._source_instance_id = instance.id;
         const { error: sessionError } = await supabaseClient
           .from('inbox_flow_sessions')
           .upsert({
