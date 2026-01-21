@@ -283,9 +283,9 @@ const SortableKanbanColumn = ({
       </div>
 
       {/* Column content */}
-      <ScrollArea className="h-[calc(100vh-280px)] overflow-x-hidden" orientation="vertical">
-        {/* Extra horizontal padding keeps cards fully inside the column borders */}
-        <div className="px-2 py-1.5 space-y-1.5 overflow-x-hidden">
+      {/* NOTE: add extra right padding to keep card borders from being visually cut by the vertical scrollbar */}
+      <ScrollArea className="h-[calc(100vh-280px)]" orientation="vertical">
+        <div className="pl-2 pr-5 py-1.5 space-y-1.5 overflow-x-hidden">
           <SortableContext 
             items={contacts.map(c => c.id)} 
             strategy={verticalListSortingStrategy}
