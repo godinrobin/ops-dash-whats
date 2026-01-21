@@ -12,8 +12,8 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-// Redirect URI for cross-browser OAuth (public callback page)
-const CROSS_BROWSER_REDIRECT_URI = "https://zapdata.co/#/oauth/facebook/callback";
+// Redirect URI - same as the original working one (Facebook blocks URIs with fragments)
+const CROSS_BROWSER_REDIRECT_URI = "https://zapdata.co/";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
