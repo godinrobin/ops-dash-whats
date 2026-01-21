@@ -65,6 +65,9 @@ interface InboxTag {
   color: string;
 }
 
+const CONTACTS_PAGE_SIZE = 1000;
+const CONTACTS_MAX_TOTAL = 50000;
+
 const predefinedLabels = [
   { name: 'Lead', color: '#3b82f6' },
   { name: 'Pendente', color: '#eab308' },
@@ -176,9 +179,9 @@ const KanbanCard = ({
           )}
 
           {/* Instance number */}
-          <div className="flex items-center gap-1 mt-1 text-[10px] text-muted-foreground">
-            <Phone className="h-2.5 w-2.5 flex-shrink-0" />
-            <span className="truncate">{formatPhoneDisplay(instanceLabel)}</span>
+          <div className="flex items-center gap-1 mt-1 text-[10px]">
+            <Phone className="h-2.5 w-2.5 flex-shrink-0 text-muted-foreground" />
+            <span className="truncate text-accent">{formatPhoneDisplay(instanceLabel)}</span>
           </div>
         </div>
 
@@ -231,7 +234,7 @@ const SortableKanbanColumn = ({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "flex-shrink-0 w-[240px] min-w-[240px] max-w-[240px] bg-muted/30 rounded-lg border border-border",
+        "flex-shrink-0 w-[300px] min-w-[300px] max-w-[300px] bg-muted/30 rounded-lg border border-border",
         isDragging && "ring-2 ring-accent"
       )}
     >
@@ -364,7 +367,7 @@ const ContactDetailModal = ({
           <div className="flex items-center gap-2 text-sm">
             <Phone className="h-4 w-4 text-muted-foreground" />
             <span className="text-muted-foreground">Número fonte:</span>
-            <span>{formatPhoneDisplay(instanceLabel)}</span>
+            <span className="text-accent">{formatPhoneDisplay(instanceLabel)}</span>
           </div>
 
           {/* Created at */}
@@ -497,14 +500,36 @@ export default function InboxKanbanPage() {
     setLoading(true);
 
     try {
-      const [contactsRes, instancesRes, tagsRes] = await Promise.all([
-        supabase
-          .from('inbox_contacts')
-          .select('id, name, phone, profile_pic_url, tags, instance_id, last_message_at, unread_count, notes, ad_source_url, created_at')
-          .eq('user_id', userId)
-          .eq('status', 'active')
-          .order('last_message_at', { ascending: false })
-          .limit(10000), // Increased limit from 1000 to 10000
+      // IMPORTANT: Some backends enforce a hard per-request cap (commonly 1000 rows).
+      // To reliably load more than 1000 leads, we paginate in batches.
+      const contactsPromise = (async () => {
+        const all: any[] = [];
+        let from = 0;
+
+        while (from < CONTACTS_MAX_TOTAL) {
+          const to = from + CONTACTS_PAGE_SIZE - 1;
+          const res = await supabase
+            .from('inbox_contacts')
+            .select('id, name, phone, profile_pic_url, tags, instance_id, last_message_at, unread_count, notes, ad_source_url, created_at')
+            .eq('user_id', userId)
+            .eq('status', 'active')
+            .order('last_message_at', { ascending: false })
+            .range(from, to);
+
+          if (res.error) throw res.error;
+
+          const batch = res.data ?? [];
+          all.push(...batch);
+
+          if (batch.length < CONTACTS_PAGE_SIZE) break;
+          from += CONTACTS_PAGE_SIZE;
+        }
+
+        return all as KanbanContact[];
+      })();
+
+      const [contactsData, instancesRes, tagsRes] = await Promise.all([
+        contactsPromise,
         supabase
           .from('maturador_instances')
           .select('id, instance_name, phone_number, label')
@@ -515,12 +540,13 @@ export default function InboxKanbanPage() {
           .eq('user_id', userId),
       ]);
 
-      if (contactsRes.data) {
-        setContacts(contactsRes.data.map(c => ({
+      setContacts(
+        (contactsData ?? []).map((c: any) => ({
           ...c,
-          tags: Array.isArray(c.tags) ? c.tags as string[] : [],
-        })));
-      }
+          tags: Array.isArray(c.tags) ? (c.tags as string[]) : [],
+        }))
+      );
+
       if (instancesRes.data) setInstances(instancesRes.data);
       if (tagsRes.data) setCustomTags(tagsRes.data);
     } catch (error) {
@@ -896,13 +922,13 @@ export default function InboxKanbanPage() {
 
             <DragOverlay>
               {isColumnDrag && activeId ? (
-                <div className="w-[240px] bg-muted/50 rounded-lg border-2 border-accent p-4 shadow-xl">
+                <div className="w-[300px] bg-muted/50 rounded-lg border-2 border-accent p-4 shadow-xl">
                   <div className="text-center text-sm font-medium">
                     {activeId.replace('column-', '')}
                   </div>
                 </div>
               ) : activeContact ? (
-                <div className="bg-card border border-accent rounded-lg p-2.5 shadow-xl w-[220px] opacity-90">
+                <div className="bg-card border border-accent rounded-lg p-2.5 shadow-xl w-[280px] opacity-90">
                   <div className="flex items-center gap-2">
                     {activeContact.profile_pic_url ? (
                       <img 
