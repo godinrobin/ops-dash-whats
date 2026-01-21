@@ -661,8 +661,10 @@ export const ChatMessage = ({ message, allMessages = [], contact, onReply, onMes
     <>
       <div 
         className={cn(
-          "flex animate-in fade-in slide-in-from-bottom-2 duration-200 gap-2 group relative px-4",
-          isOutbound ? "justify-end" : "justify-start"
+          "flex animate-in fade-in slide-in-from-bottom-2 duration-200 gap-2 group relative px-4 py-1 -mx-4 rounded-lg transition-colors",
+          isOutbound ? "justify-end" : "justify-start",
+          "hover:bg-muted/30",
+          isDeleting && "opacity-60 pointer-events-none"
         )}
         onMouseEnter={() => setShowActions(true)}
         onMouseLeave={() => setShowActions(false)}
@@ -757,13 +759,23 @@ export const ChatMessage = ({ message, allMessages = [], contact, onReply, onMes
           )}
           
           <div className={cn(
-            "rounded-lg px-3 py-2 shadow-sm transition-all",
+            "rounded-lg px-3 py-2 shadow-sm transition-all relative",
             isOutbound 
               ? "bg-primary text-primary-foreground rounded-br-none" 
               : "bg-card border border-border rounded-bl-none",
             message.status === 'pending' && "opacity-70",
             message.status === 'failed' && "border-destructive bg-destructive/10"
           )}>
+            {/* Deleting overlay */}
+            {isDeleting && (
+              <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-[1px] rounded-lg z-10">
+                <div className="flex items-center gap-2 text-sm">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <span className="text-muted-foreground">Apagando...</span>
+                </div>
+              </div>
+            )}
+            
             {renderRepliedMessage()}
             {renderContent()}
             
