@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
@@ -101,7 +102,7 @@ const MessageBlaster = () => {
   const [dispatchesPerInstance, setDispatchesPerInstance] = useState(1);
   const [useFlow, setUseFlow] = useState(false);
   const [selectedFlowId, setSelectedFlowId] = useState<string>('');
-
+  const [flowToDelete, setFlowToDelete] = useState<string | null>(null);
   const fetchCampaigns = useCallback(async () => {
     if (!user) return;
     
@@ -394,13 +395,13 @@ const MessageBlaster = () => {
     }
   };
 
-  const deleteFlow = async (flowId: string) => {
-    if (!confirm('Tem certeza que deseja excluir este fluxo?')) return;
+  const confirmDeleteFlow = async () => {
+    if (!flowToDelete) return;
 
     const { error } = await supabase
       .from('inbox_flows')
       .delete()
-      .eq('id', flowId);
+      .eq('id', flowToDelete);
 
     if (error) {
       toast.error('Erro ao excluir fluxo');
@@ -408,6 +409,7 @@ const MessageBlaster = () => {
       toast.success('Fluxo excluído');
       fetchFlows();
     }
+    setFlowToDelete(null);
   };
 
   const getStatusBadge = (status: string) => {
@@ -966,7 +968,7 @@ const MessageBlaster = () => {
                         className="h-8 w-8 text-destructive hover:text-destructive"
                         onClick={(e) => {
                           e.stopPropagation();
-                          deleteFlow(flow.id);
+                          setFlowToDelete(flow.id);
                         }}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -1144,6 +1146,24 @@ const MessageBlaster = () => {
           </div>
         )}
       </div>
+
+      {/* Flow Delete Confirmation Dialog */}
+      <AlertDialog open={!!flowToDelete} onOpenChange={(open) => !open && setFlowToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Fluxo</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir este fluxo? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteFlow} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
