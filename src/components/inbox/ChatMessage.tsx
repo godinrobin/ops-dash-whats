@@ -1,22 +1,95 @@
-import { Check, CheckCheck, Clock, XCircle, Play, Pause, Download, Loader2, FileText, ImageOff, AlertCircle, Volume2, RefreshCw, Reply } from 'lucide-react';
+import { Check, CheckCheck, Clock, XCircle, Play, Pause, Download, Loader2, FileText, ImageOff, AlertCircle, Volume2, RefreshCw, Reply, Trash2, ChevronDown, MoreVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { InboxMessage, InboxMessageWithReply, InboxContact } from '@/types/inbox';
 import { format } from 'date-fns';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useToast } from '@/hooks/useSplashedToast';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface ChatMessageProps {
   message: InboxMessageWithReply;
   allMessages?: InboxMessage[];
   contact?: InboxContact | null;
   onReply?: (message: InboxMessageWithReply) => void;
+  onMessageDeleted?: (messageId: string) => void;
 }
 
-export const ChatMessage = ({ message, allMessages = [], contact, onReply }: ChatMessageProps) => {
+export const ChatMessage = ({ message, allMessages = [], contact, onReply, onMessageDeleted }: ChatMessageProps) => {
+  const { toast } = useToast();
   const isOutbound = message.direction === 'outbound';
   const isInbound = message.direction === 'inbound';
   const [showActions, setShowActions] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeleted, setIsDeleted] = useState(message.status === 'deleted' as any);
+  
+  // Check if message can be deleted (outbound and less than 1 hour old)
+  const canDelete = useCallback(() => {
+    if (!isOutbound || isDeleted) return false;
+    const messageDate = new Date(message.created_at);
+    const now = new Date();
+    const hoursDiff = (now.getTime() - messageDate.getTime()) / (1000 * 60 * 60);
+    return hoursDiff <= 1;
+  }, [isOutbound, message.created_at, isDeleted]);
+
+  const handleDeleteMessage = async () => {
+    if (!canDelete()) {
+      toast({
+        variant: "destructive",
+        title: "Não é possível apagar",
+        description: "O WhatsApp permite apagar mensagens para todos apenas dentro de 1 hora após o envio.",
+      });
+      return;
+    }
+
+    setIsDeleting(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('delete-inbox-message', {
+        body: { messageId: message.id }
+      });
+      
+      if (error) throw error;
+      
+      if (data.success) {
+        setIsDeleted(true);
+        toast({ title: "Mensagem apagada para todos" });
+        onMessageDeleted?.(message.id);
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Erro ao apagar",
+          description: data.error || data.details || "Não foi possível apagar a mensagem",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: error.message || "Não foi possível apagar a mensagem",
+      });
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteDialog(false);
+    }
+  };
   
   // Get contact display info
   const getContactInitials = () => {
@@ -556,96 +629,198 @@ export const ChatMessage = ({ message, allMessages = [], contact, onReply }: Cha
     );
   };
 
-  return (
-    <div 
-      className={cn(
-        "flex animate-in fade-in slide-in-from-bottom-2 duration-200 gap-2 group relative px-4",
-        isOutbound ? "justify-end" : "justify-start"
-      )}
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
-    >
-      {/* Reply action button - positioned inside padding area */}
-      {onReply && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onReply(message);
-          }}
-          className={cn(
-            "absolute top-1/2 -translate-y-1/2 transition-all z-10",
-            "p-1.5 rounded-full bg-card border border-border shadow-sm hover:bg-accent",
-            "opacity-0 group-hover:opacity-100",
-            isOutbound ? "left-1" : "right-1"
-          )}
-          title="Responder"
-        >
-          <Reply className="h-3.5 w-3.5 text-muted-foreground" />
-        </button>
-      )}
-      
-      {/* Avatar for inbound messages */}
-      {isInbound && (
-        <Avatar className="h-8 w-8 flex-shrink-0 mt-auto">
-          {contact?.profile_pic_url && (
-            <AvatarImage 
-              src={contact.profile_pic_url} 
-              alt={contact?.name || 'Contato'}
-              onError={(e) => {
-                // Hide the image on error so fallback shows
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
-            />
-          )}
-          <AvatarFallback className="text-xs bg-muted">
-            {getContactInitials()}
-          </AvatarFallback>
-        </Avatar>
-      )}
-      
-      <div className="flex flex-col max-w-[70%]">
-        {/* Contact name for inbound messages */}
-        {isInbound && getContactName() && (
-          <span className="text-xs font-medium text-muted-foreground mb-1 ml-1">
-            {getContactName()}
-          </span>
+  // If message was deleted, show deleted indicator
+  if (isDeleted) {
+    return (
+      <div 
+        className={cn(
+          "flex animate-in fade-in slide-in-from-bottom-2 duration-200 gap-2 group relative px-4",
+          isOutbound ? "justify-end" : "justify-start"
         )}
-        
-        <div className={cn(
-          "rounded-lg px-3 py-2 shadow-sm transition-all",
-          isOutbound 
-            ? "bg-primary text-primary-foreground rounded-br-none" 
-            : "bg-card border border-border rounded-bl-none",
-          message.status === 'pending' && "opacity-70",
-          message.status === 'failed' && "border-destructive bg-destructive/10"
-        )}>
-          {renderRepliedMessage()}
-          {renderContent()}
-          
+      >
+        <div className="flex flex-col max-w-[70%]">
           <div className={cn(
-            "flex items-center justify-end gap-1 mt-1",
-            isOutbound ? "text-primary-foreground/70" : "text-muted-foreground"
+            "rounded-lg px-3 py-2 shadow-sm transition-all italic",
+            isOutbound 
+              ? "bg-muted text-muted-foreground rounded-br-none" 
+              : "bg-card border border-border rounded-bl-none text-muted-foreground"
           )}>
-            <span className="text-[10px]">
-              {format(new Date(message.created_at), 'HH:mm')}
-            </span>
-            {isOutbound && (
-              <span className="flex items-center">
-                {getStatusIcon()}
+            <p className="text-sm">🚫 Mensagem apagada</p>
+            <div className="flex items-center justify-end gap-1 mt-1">
+              <span className="text-[10px]">
+                {format(new Date(message.created_at), 'HH:mm')}
               </span>
-            )}
+            </div>
           </div>
-          
-          {message.status === 'failed' && (
-            <p className={cn(
-              "text-[10px] mt-1",
-              isOutbound ? "text-primary-foreground/70" : "text-destructive"
-            )}>
-              Falha no envio
-            </p>
-          )}
         </div>
       </div>
-    </div>
+    );
+  }
+
+  return (
+    <>
+      <div 
+        className={cn(
+          "flex animate-in fade-in slide-in-from-bottom-2 duration-200 gap-2 group relative px-4",
+          isOutbound ? "justify-end" : "justify-start"
+        )}
+        onMouseEnter={() => setShowActions(true)}
+        onMouseLeave={() => setShowActions(false)}
+      >
+        {/* Actions dropdown for outbound messages */}
+        {isOutbound && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className={cn(
+                  "absolute top-1/2 -translate-y-1/2 transition-all z-10",
+                  "p-1.5 rounded-full bg-card border border-border shadow-sm hover:bg-accent",
+                  "opacity-0 group-hover:opacity-100",
+                  "left-1"
+                )}
+              >
+                <MoreVertical className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="min-w-[140px]">
+              {onReply && (
+                <DropdownMenuItem onClick={() => onReply(message)}>
+                  <Reply className="h-4 w-4 mr-2" />
+                  Responder
+                </DropdownMenuItem>
+              )}
+              {canDelete() ? (
+                <DropdownMenuItem 
+                  onClick={() => setShowDeleteDialog(true)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Apagar para todos
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem 
+                  disabled
+                  className="text-muted-foreground"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Apagar (expirado)
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+        
+        {/* Reply action button for inbound messages */}
+        {onReply && isInbound && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onReply(message);
+            }}
+            className={cn(
+              "absolute top-1/2 -translate-y-1/2 transition-all z-10",
+              "p-1.5 rounded-full bg-card border border-border shadow-sm hover:bg-accent",
+              "opacity-0 group-hover:opacity-100",
+              "right-1"
+            )}
+            title="Responder"
+          >
+            <Reply className="h-3.5 w-3.5 text-muted-foreground" />
+          </button>
+        )}
+        
+        {/* Avatar for inbound messages */}
+        {isInbound && (
+          <Avatar className="h-8 w-8 flex-shrink-0 mt-auto">
+            {contact?.profile_pic_url && (
+              <AvatarImage 
+                src={contact.profile_pic_url} 
+                alt={contact?.name || 'Contato'}
+                onError={(e) => {
+                  // Hide the image on error so fallback shows
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            )}
+            <AvatarFallback className="text-xs bg-muted">
+              {getContactInitials()}
+            </AvatarFallback>
+          </Avatar>
+        )}
+        
+        <div className="flex flex-col max-w-[70%]">
+          {/* Contact name for inbound messages */}
+          {isInbound && getContactName() && (
+            <span className="text-xs font-medium text-muted-foreground mb-1 ml-1">
+              {getContactName()}
+            </span>
+          )}
+          
+          <div className={cn(
+            "rounded-lg px-3 py-2 shadow-sm transition-all",
+            isOutbound 
+              ? "bg-primary text-primary-foreground rounded-br-none" 
+              : "bg-card border border-border rounded-bl-none",
+            message.status === 'pending' && "opacity-70",
+            message.status === 'failed' && "border-destructive bg-destructive/10"
+          )}>
+            {renderRepliedMessage()}
+            {renderContent()}
+            
+            <div className={cn(
+              "flex items-center justify-end gap-1 mt-1",
+              isOutbound ? "text-primary-foreground/70" : "text-muted-foreground"
+            )}>
+              <span className="text-[10px]">
+                {format(new Date(message.created_at), 'HH:mm')}
+              </span>
+              {isOutbound && (
+                <span className="flex items-center">
+                  {getStatusIcon()}
+                </span>
+              )}
+            </div>
+            
+            {message.status === 'failed' && (
+              <p className={cn(
+                "text-[10px] mt-1",
+                isOutbound ? "text-primary-foreground/70" : "text-destructive"
+              )}>
+                Falha no envio
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apagar mensagem para todos?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação irá apagar a mensagem para você e para o destinatário. Não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteMessage}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Apagando...
+                </>
+              ) : (
+                "Apagar"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };

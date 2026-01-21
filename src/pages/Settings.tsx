@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { Bell, Megaphone, ChevronLeft, Settings as SettingsIcon } from "lucide-react";
+import { Bell, Megaphone, ChevronLeft, Settings as SettingsIcon, ShoppingBag, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -28,7 +28,14 @@ export default function Settings() {
       id: "notifications" as const,
       label: "Notificações Push",
       icon: Bell,
-      description: "Configure alertas e dispositivos"
+      description: "Configure alertas e dispositivos",
+      submenu: [
+        {
+          label: "Personalizar Vendas",
+          icon: ShoppingBag,
+          onClick: () => navigate('/settings/sale-notifications'),
+        }
+      ]
     },
     {
       id: "pixel" as const,
@@ -77,27 +84,50 @@ export default function Settings() {
           <ScrollArea className="flex-1 p-4">
             <nav className="space-y-2">
               {menuItems.map((item) => (
-                <motion.button
-                  key={item.id}
-                  onClick={() => setActiveSection(item.id)}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className={cn(
-                    "w-full flex items-start gap-3 p-3 rounded-lg text-left transition-all",
-                    activeSection === item.id
-                      ? "bg-accent/10 border border-accent/50 text-accent"
-                      : "hover:bg-secondary/50 border border-transparent"
+                <div key={item.id}>
+                  <motion.button
+                    onClick={() => setActiveSection(item.id)}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className={cn(
+                      "w-full flex items-start gap-3 p-3 rounded-lg text-left transition-all",
+                      activeSection === item.id
+                        ? "bg-accent/10 border border-accent/50 text-accent"
+                        : "hover:bg-secondary/50 border border-transparent"
+                    )}
+                  >
+                    <item.icon className={cn(
+                      "h-5 w-5 mt-0.5",
+                      activeSection === item.id ? "text-accent" : "text-muted-foreground"
+                    )} />
+                    <div className="flex-1">
+                      <span className="font-medium text-sm">{item.label}</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
+                    </div>
+                  </motion.button>
+                  
+                  {/* Submenu items */}
+                  {activeSection === item.id && item.submenu && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="ml-8 mt-1 space-y-1"
+                    >
+                      {item.submenu.map((subItem, idx) => (
+                        <button
+                          key={idx}
+                          onClick={subItem.onClick}
+                          className="w-full flex items-center gap-2 p-2 rounded-md text-left text-sm hover:bg-secondary/50 text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          <subItem.icon className="h-4 w-4" />
+                          <span>{subItem.label}</span>
+                          <ChevronRight className="h-3 w-3 ml-auto" />
+                        </button>
+                      ))}
+                    </motion.div>
                   )}
-                >
-                  <item.icon className={cn(
-                    "h-5 w-5 mt-0.5",
-                    activeSection === item.id ? "text-accent" : "text-muted-foreground"
-                  )} />
-                  <div>
-                    <span className="font-medium text-sm">{item.label}</span>
-                    <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
-                  </div>
-                </motion.button>
+                </div>
               ))}
             </nav>
           </ScrollArea>
