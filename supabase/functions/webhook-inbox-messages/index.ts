@@ -1556,6 +1556,46 @@ serve(async (req) => {
               const flowNodes = (activeSession.flow?.nodes || []) as Array<{ id: string; type: string; data: Record<string, unknown> }>;
               const currentNode = flowNodes.find((n: { id: string }) => n.id === activeSession.current_node_id);
               
+              // ========== PAUSE_ON_MEDIA CHECK FOR UAZAPI ==========
+              // If this is an image or document (PDF) and the flow has pause_on_media enabled,
+              // pause the flow immediately and don't continue processing
+              const flowPauseOnMedia = activeSession.flow?.pause_on_media === true;
+              if ((messageType === 'image' || messageType === 'document') && flowPauseOnMedia) {
+                console.log(`[UAZAPI-PAUSE_ON_MEDIA] Media message (${messageType}) received for active session ${activeSession.id}`);
+                console.log(`[UAZAPI-PAUSE_ON_MEDIA] Flow "${activeSession.flow?.name}" has pause_on_media enabled - PAUSING FLOW`);
+                
+                // Pause the flow for this contact
+                await supabaseClient
+                  .from('inbox_contacts')
+                  .update({ flow_paused: true })
+                  .eq('id', contact.id);
+                
+                // Also pause the active session
+                await supabaseClient
+                  .from('inbox_flow_sessions')
+                  .update({ status: 'paused' })
+                  .eq('id', activeSession.id);
+                
+                // Cancel any pending delay jobs for this session
+                await supabaseClient
+                  .from('inbox_flow_delay_jobs')
+                  .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+                  .eq('session_id', activeSession.id)
+                  .in('status', ['pending', 'scheduled']);
+                
+                console.log(`[UAZAPI-PAUSE_ON_MEDIA] Flow paused for contact ${contact.id}`);
+                
+                return new Response(JSON.stringify({ 
+                  success: true, 
+                  flowPausedByMedia: true,
+                  messageType,
+                  contactId: contact.id 
+                }), {
+                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                });
+              }
+              // ========== END PAUSE_ON_MEDIA CHECK ==========
+              
               // Check if session is locked
               if (activeSession.processing) {
                 const lockAge = activeSession.processing_started_at 
