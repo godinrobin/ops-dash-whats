@@ -372,6 +372,34 @@ export const useInboxMessages = (contactId: string | null) => {
   const sendMessage = useCallback(async (content: string, messageType: string = 'text', mediaUrl?: string, replyToMessageId?: string) => {
     if (!userId || !contactId) return { error: 'Not authenticated or no contact selected' };
 
+    // Generate a temporary ID for optimistic update
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Create optimistic message for instant display
+    const optimisticMessage: InboxMessage = {
+      id: tempId,
+      contact_id: contactId,
+      user_id: userId,
+      direction: 'outbound',
+      message_type: messageType as InboxMessage['message_type'],
+      content,
+      media_url: mediaUrl || null,
+      status: 'pending',
+      is_from_flow: false,
+      created_at: new Date().toISOString(),
+      instance_id: null,
+      flow_id: null,
+      remote_message_id: null,
+      reply_to_message_id: replyToMessageId || null,
+    };
+
+    // Add message to UI immediately (optimistic update)
+    setMessages((prev) => {
+      const updated = sortByCreatedAtAsc([...prev, optimisticMessage]);
+      if (contactId) messageCache.set(contactId, updated);
+      return updated;
+    });
+
     try {
       // Fetch contact info and reply message in parallel for speed
       const [contactResult, replyResult] = await Promise.all([
@@ -426,6 +454,17 @@ export const useInboxMessages = (contactId: string | null) => {
 
       if (insertError) throw insertError;
 
+      // Replace optimistic message with real one
+      setMessages((prev) => {
+        const updated = prev.map((m) => 
+          m.id === tempId 
+            ? { ...message, direction: message.direction as 'inbound' | 'outbound', message_type: message.message_type as InboxMessage['message_type'], status: message.status as InboxMessage['status'] } as InboxMessage
+            : m
+        );
+        if (contactId) messageCache.set(contactId, updated);
+        return updated;
+      });
+
       // Call edge function to send via Evolution API - pass the message ID, remote_jid and reply info
       const { data: sendResult, error: sendError } = await supabase.functions.invoke('send-inbox-message', {
         body: {
@@ -443,7 +482,13 @@ export const useInboxMessages = (contactId: string | null) => {
 
       if (sendError) {
         console.error('Error sending message:', sendError);
-        // Update message status to failed
+        // Update message status to failed in UI and database
+        setMessages((prev) => {
+          const updated = prev.map((m) => m.id === message.id ? { ...m, status: 'failed' as const } : m);
+          if (contactId) messageCache.set(contactId, updated);
+          return updated;
+        });
+        
         await supabase
           .from('inbox_messages')
           .update({ status: 'failed' })
@@ -479,6 +524,12 @@ export const useInboxMessages = (contactId: string | null) => {
       return { data: message };
     } catch (err: any) {
       console.error('sendMessage error:', err);
+      // Remove optimistic message on error
+      setMessages((prev) => {
+        const updated = prev.filter((m) => m.id !== tempId);
+        if (contactId) messageCache.set(contactId, updated);
+        return updated;
+      });
       return { error: err.message, errorCode: 'UNKNOWN_ERROR' };
     }
   }, [userId, contactId]);
