@@ -444,6 +444,7 @@ export type Database = {
         Row: {
           ad_account_id: string | null
           ad_id: string
+          ad_post_url: string | null
           adset_id: string
           campaign_id: string
           clicks: number | null
@@ -455,6 +456,7 @@ export type Database = {
           created_at: string
           creative_id: string | null
           ctr: number | null
+          effective_object_story_id: string | null
           id: string
           impressions: number | null
           last_synced_at: string | null
@@ -472,6 +474,7 @@ export type Database = {
         Insert: {
           ad_account_id?: string | null
           ad_id: string
+          ad_post_url?: string | null
           adset_id: string
           campaign_id: string
           clicks?: number | null
@@ -483,6 +486,7 @@ export type Database = {
           created_at?: string
           creative_id?: string | null
           ctr?: number | null
+          effective_object_story_id?: string | null
           id?: string
           impressions?: number | null
           last_synced_at?: string | null
@@ -500,6 +504,7 @@ export type Database = {
         Update: {
           ad_account_id?: string | null
           ad_id?: string
+          ad_post_url?: string | null
           adset_id?: string
           campaign_id?: string
           clicks?: number | null
@@ -511,6 +516,7 @@ export type Database = {
           created_at?: string
           creative_id?: string | null
           ctr?: number | null
+          effective_object_story_id?: string | null
           id?: string
           impressions?: number | null
           last_synced_at?: string | null
