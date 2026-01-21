@@ -344,131 +344,17 @@ serve(async (req) => {
 
       try {
         if (flowId && flow) {
-          // === DisparaZap Flow Mode ===
-          // Instead of executing the flow internally, we create a session and call process-inbox-flow
-          // This makes it work EXACTLY like Automati-Zap: messages are saved to inbox_messages,
-          // the flow continues normally when user replies, etc.
+          // Execute flow for this contact
           console.log(`Executing flow for ${phone} via ${instance.instance_name}`);
           
-          const formattedPhone = phone.replace(/\D/g, '');
-          
-          // 1. Get or create inbox contact (same instance)
-          let contactId: string | null = null;
-          
-          // First try to find contact for THIS instance
-          const { data: existingContactSameInstance } = await supabaseClient
-            .from('inbox_contacts')
-            .select('id, name')
-            .eq('user_id', campaign.user_id)
-            .eq('phone', formattedPhone)
-            .eq('instance_id', instance.id)
-            .maybeSingle();
-          
-          if (existingContactSameInstance?.id) {
-            contactId = existingContactSameInstance.id;
-          } else {
-            // Fallback: contact without instance_id (legacy), claim it
-            const { data: existingContactNoInstance } = await supabaseClient
-              .from('inbox_contacts')
-              .select('id, name')
-              .eq('user_id', campaign.user_id)
-              .eq('phone', formattedPhone)
-              .is('instance_id', null)
-              .maybeSingle();
-            
-            if (existingContactNoInstance?.id) {
-              contactId = existingContactNoInstance.id;
-              await supabaseClient
-                .from('inbox_contacts')
-                .update({ instance_id: instance.id })
-                .eq('id', contactId);
-            }
-          }
-          
-          // Create contact if doesn't exist
-          if (!contactId) {
-            const { data: newContact, error: contactError } = await supabaseClient
-              .from('inbox_contacts')
-              .insert({
-                user_id: campaign.user_id,
-                phone: formattedPhone,
-                instance_id: instance.id,
-                name: formattedPhone,
-                status: 'active',
-                remote_jid: `${formattedPhone}@s.whatsapp.net`,
-              })
-              .select('id')
-              .single();
-            
-            if (contactError) {
-              console.error(`[${phone}] Error creating contact:`, contactError.message);
-              failedCount++;
-              continue;
-            }
-            contactId = newContact.id;
-          }
-          
-          // 2. Create flow session (like Automati-Zap does when a keyword triggers)
-          const sessionPayload = {
-            flow_id: flow.id,
-            contact_id: contactId,
-            instance_id: instance.id,
-            user_id: campaign.user_id,
-            current_node_id: 'start-1',
-            variables: {
-              nome: '',
-              telefone: formattedPhone,
-              phone: formattedPhone,
-              contactName: formattedPhone,
-              resposta: '',
-              lastMessage: '',
-              ultima_mensagem: '',
-              _source: 'disparazap',
-              _campaign_id: campaignId,
-            },
-            status: 'active',
-            processing: false,
-            processing_started_at: null,
-          };
-          
-          // Use upsert to handle case where session already exists
-          const { data: session, error: sessionError } = await supabaseClient
-            .from('inbox_flow_sessions')
-            .upsert(sessionPayload, { 
-              onConflict: 'flow_id,contact_id',
-              ignoreDuplicates: false 
-            })
-            .select('id')
-            .single();
-          
-          if (sessionError) {
-            console.error(`[${phone}] Error creating session:`, sessionError.message);
-            failedCount++;
-            continue;
-          }
-          
-          // 3. Call process-inbox-flow (same as Automati-Zap)
-          // This will execute the flow, save messages to inbox_messages, handle delays, etc.
-          try {
-            const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
-            const processResponse = await fetch(processUrl, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-              },
-              body: JSON.stringify({ sessionId: session.id }),
-            });
-            
-            if (!processResponse.ok) {
-              const errorText = await processResponse.text();
-              console.error(`[${phone}] Error processing flow:`, errorText);
-            } else {
-              console.log(`[${phone}] Flow started via process-inbox-flow`);
-            }
-          } catch (flowError: any) {
-            console.error(`[${phone}] Error calling process-inbox-flow:`, flowError.message);
-          }
+          await executeFlowForContact(
+            supabaseClient,
+            config,
+            flow,
+            phone,
+            instance,
+            campaign.user_id
+          );
           
           sentCount++;
           console.log(`Flow executed for ${phone}`);
@@ -856,38 +742,15 @@ async function executeFlowForContact(
         // This respects the wait input node instead of skipping it
         console.log(`[${phone}] Reached interactive node: ${currentNode.type} - Creating session to wait for response`);
         
-        // IMPORTANT (DisparaZap): Contacts can exist per-instance.
-        // If we bind the session to a contact from a different instance, the inbound reply webhook
-        // will resolve a different contact_id and won't find this session to resume.
-        // So we must first try to find the contact for THIS instance.
-        const { data: existingContactSameInstance } = await supabaseClient
+        // Create inbox contact if doesn't exist
+        const { data: existingContact } = await supabaseClient
           .from('inbox_contacts')
-          .select('id, instance_id')
+          .select('id')
           .eq('user_id', userId)
           .eq('phone', formattedPhone)
-          .eq('instance_id', instance.id)
           .maybeSingle();
-
-        let contactId = existingContactSameInstance?.id;
-
-        // Fallback: if there is a contact without instance_id (legacy), claim it for this instance.
-        if (!contactId) {
-          const { data: existingContactNoInstance } = await supabaseClient
-            .from('inbox_contacts')
-            .select('id, instance_id')
-            .eq('user_id', userId)
-            .eq('phone', formattedPhone)
-            .is('instance_id', null)
-            .maybeSingle();
-
-          if (existingContactNoInstance?.id) {
-            contactId = existingContactNoInstance.id;
-            await supabaseClient
-              .from('inbox_contacts')
-              .update({ instance_id: instance.id })
-              .eq('id', contactId);
-          }
-        }
+        
+        let contactId = existingContact?.id;
         
         if (!contactId) {
           const { data: newContact, error: contactError } = await supabaseClient
@@ -924,8 +787,6 @@ async function executeFlowForContact(
         
         // Use 'active' status so webhook-inbox-messages can detect and continue the session
         // (webhook only checks for status='active' sessions waiting on waitInput/menu nodes)
-        variables._source = 'disparazap';
-        variables._source_instance_id = instance.id;
         const { error: sessionError } = await supabaseClient
           .from('inbox_flow_sessions')
           .upsert({
