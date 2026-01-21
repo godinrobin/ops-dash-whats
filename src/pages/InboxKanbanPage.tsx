@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
-import { ArrowLeft, Plus, Phone, User, Tag, Hash, GripVertical, Search, X, MessageSquare, Loader2, Eye, EyeOff, Columns, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Plus, Phone, User, Tag, Hash, GripVertical, Search, X, MessageSquare, Loader2, Eye, EyeOff, Columns, ChevronLeft, ChevronRight, StickyNote, Edit3, Check } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
@@ -323,6 +324,7 @@ const ContactDetailModal = ({
   allTags,
   onNavigateToChat,
   onTagChange,
+  onNotesChange,
 }: {
   contact: KanbanContact | null;
   open: boolean;
@@ -332,7 +334,20 @@ const ContactDetailModal = ({
   allTags: string[];
   onNavigateToChat: (contactId: string) => void;
   onTagChange: (contactId: string, newTags: string[]) => void;
+  onNotesChange: (contactId: string, notes: string) => void;
 }) => {
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [notesValue, setNotesValue] = useState('');
+  const [savingNotes, setSavingNotes] = useState(false);
+
+  // Sync notes value when contact changes or modal opens
+  useEffect(() => {
+    if (contact) {
+      setNotesValue(contact.notes || '');
+      setIsEditingNotes(false);
+    }
+  }, [contact?.id, open]);
+
   if (!contact) return null;
 
   const instance = instances.find(i => i.id === contact.instance_id);
@@ -343,6 +358,16 @@ const ContactDetailModal = ({
       ? contact.tags.filter(t => t !== tag)
       : [...contact.tags, tag];
     onTagChange(contact.id, newTags);
+  };
+
+  const handleSaveNotes = async () => {
+    setSavingNotes(true);
+    try {
+      await onNotesChange(contact.id, notesValue);
+      setIsEditingNotes(false);
+    } finally {
+      setSavingNotes(false);
+    }
   };
 
   return (
@@ -385,13 +410,66 @@ const ContactDetailModal = ({
             <span>{new Date(contact.created_at).toLocaleDateString('pt-BR')}</span>
           </div>
 
-          {/* Notes */}
-          {contact.notes && (
-            <div className="p-3 bg-muted/50 rounded-lg">
-              <p className="text-sm text-muted-foreground mb-1">Notas:</p>
-              <p className="text-sm">{contact.notes}</p>
+          {/* Notes - always visible */}
+          <div className="p-3 bg-muted/50 rounded-lg">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <StickyNote className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Notas:</p>
+              </div>
+              {!isEditingNotes && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => setIsEditingNotes(true)}
+                >
+                  <Edit3 className="h-3 w-3" />
+                </Button>
+              )}
             </div>
-          )}
+            
+            {isEditingNotes ? (
+              <div className="space-y-2">
+                <Textarea
+                  value={notesValue}
+                  onChange={(e) => setNotesValue(e.target.value)}
+                  placeholder="Adicione notas sobre este contato..."
+                  className="min-h-[80px] text-sm resize-none"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={handleSaveNotes}
+                    disabled={savingNotes}
+                    className="flex-1"
+                  >
+                    {savingNotes ? (
+                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                    ) : (
+                      <Check className="h-3 w-3 mr-1" />
+                    )}
+                    Salvar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setNotesValue(contact.notes || '');
+                      setIsEditingNotes(false);
+                    }}
+                    disabled={savingNotes}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm whitespace-pre-wrap">
+                {contact.notes || <span className="text-muted-foreground italic">Nenhuma nota adicionada</span>}
+              </p>
+            )}
+          </div>
 
           {/* Ad source */}
           {contact.ad_source_url && (
@@ -781,6 +859,32 @@ export default function InboxKanbanPage() {
     }
   };
 
+  const updateContactNotes = async (contactId: string, notes: string) => {
+    try {
+      const { error } = await supabase
+        .from('inbox_contacts')
+        .update({ notes })
+        .eq('id', contactId);
+
+      if (error) throw error;
+
+      // Update local state
+      setContacts(prev => prev.map(c => 
+        c.id === contactId ? { ...c, notes } : c
+      ));
+
+      // Update selected contact if it's the same
+      if (selectedContact?.id === contactId) {
+        setSelectedContact(prev => prev ? { ...prev, notes } : null);
+      }
+
+      toast.success('Notas salvas com sucesso');
+    } catch (error) {
+      console.error('Error updating notes:', error);
+      toast.error('Erro ao salvar notas');
+    }
+  };
+
   const handleCreateTag = async () => {
     if (!newTagName.trim() || !userId) return;
 
@@ -984,6 +1088,7 @@ export default function InboxKanbanPage() {
           allTags={allTags}
           onNavigateToChat={handleNavigateToChat}
           onTagChange={updateContactTags}
+          onNotesChange={updateContactNotes}
         />
 
         {/* Create tag modal */}
