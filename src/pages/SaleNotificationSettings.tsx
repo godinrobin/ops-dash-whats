@@ -75,7 +75,32 @@ export default function SaleNotificationSettings() {
       
       if (profileError && profileError.code !== 'PGRST116') throw profileError;
       
-      setTemplates(templatesData || []);
+      // If no templates exist, create the default one
+      if (!templatesData || templatesData.length === 0) {
+        const defaultTemplate = {
+          user_id: user.id,
+          title_template: "💰 Nova Venda!",
+          body_template: "Parabéns! Você acabou de vender por R$ {valor}!",
+          is_active: true,
+          sort_order: 0,
+        };
+        
+        const { data: newTemplate, error: insertError } = await supabase
+          .from("sale_notification_templates")
+          .insert(defaultTemplate)
+          .select()
+          .single();
+        
+        if (insertError) {
+          console.error("Error creating default template:", insertError);
+          setTemplates([]);
+        } else {
+          setTemplates([newTemplate]);
+        }
+      } else {
+        setTemplates(templatesData);
+      }
+      
       setHideSaleValue(profileData?.hide_sale_value_in_notification || false);
     } catch (error: any) {
       toast({ variant: "destructive", title: "Erro", description: error.message });

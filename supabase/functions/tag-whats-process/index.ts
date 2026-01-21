@@ -1800,7 +1800,7 @@ Se não encontrar valor, responda: 0`;
         // FIXED: Only notify the instance owner (instance.user_id), not all users
         const { data: ownerProfile, error: ownerError } = await supabase
           .from("profiles")
-          .select("id, push_subscription_ids, notify_on_sale, push_webhook_enabled")
+          .select("id, push_subscription_ids, notify_on_sale, push_webhook_enabled, hide_sale_value_in_notification")
           .eq("id", instance.user_id)
           .single();
 
@@ -1821,13 +1821,65 @@ Se não encontrar valor, responda: 0`;
               Array.isArray(ownerProfile.push_subscription_ids) && 
               ownerProfile.push_subscription_ids.length > 0) {
             
+            // Fetch user's custom notification templates
+            const { data: templates, error: templatesError } = await supabase
+              .from("sale_notification_templates")
+              .select("title_template, body_template")
+              .eq("user_id", ownerProfile.id)
+              .eq("is_active", true)
+              .order("sort_order", { ascending: true });
+            
+            if (templatesError) {
+              console.error("[TAG-WHATS] Error fetching notification templates:", templatesError);
+            }
+            
+            // Build notification title and message
+            let notificationTitle = "💰 Nova Venda!";
+            let notificationMessage = extractedValue 
+              ? `Pix Pago! Valor: R$ ${extractedValue.toFixed(2)} 🔥` 
+              : "Pix Pago no x1! 🔥";
+            
+            // Use custom templates if available
+            if (templates && templates.length > 0) {
+              // Pick a random template from active ones
+              const randomIndex = Math.floor(Math.random() * templates.length);
+              const selectedTemplate = templates[randomIndex];
+              
+              console.log(`[TAG-WHATS] Using custom template ${randomIndex + 1}/${templates.length}:`, {
+                title: selectedTemplate.title_template,
+                body: selectedTemplate.body_template?.substring(0, 50)
+              });
+              
+              notificationTitle = selectedTemplate.title_template || notificationTitle;
+              
+              // Replace {valor} placeholder with actual value
+              let body = selectedTemplate.body_template || notificationMessage;
+              
+              // Check if user wants to hide sale value
+              if (ownerProfile.hide_sale_value_in_notification) {
+                body = body.replace(/\{valor\}/gi, "***");
+              } else {
+                const formattedValue = extractedValue ? extractedValue.toFixed(2) : "0.00";
+                body = body.replace(/\{valor\}/gi, formattedValue);
+              }
+              
+              notificationMessage = body;
+            } else {
+              console.log("[TAG-WHATS] No custom templates found, using default notification");
+              
+              // Apply hide value setting to default message too
+              if (ownerProfile.hide_sale_value_in_notification && extractedValue) {
+                notificationMessage = "Pix Pago! Nova venda realizada! 🔥";
+              }
+            }
+            
             const { error: insertError } = await supabase
               .from("push_notification_queue")
               .insert({
                 user_id: ownerProfile.id,
                 subscription_ids: ownerProfile.push_subscription_ids,
-                title: "💰 Nova Venda!",
-                message: extractedValue ? `Pix Pago! Valor: R$ ${extractedValue.toFixed(2)} 🔥` : "Pix Pago no x1! 🔥",
+                title: notificationTitle,
+                message: notificationMessage,
                 icon_url: "https://zapdata.com.br/favicon.png",
               });
             
