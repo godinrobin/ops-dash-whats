@@ -313,9 +313,31 @@ serve(async (req) => {
     const mediaType = campaign.media_type || 'text';
     const mediaUrl = campaign.media_url || '';
     const dispatchesPerInstance = campaign.dispatches_per_instance || 1;
+    const csvVariables = campaign.csv_variables as { columns: string[]; data: string[][] } | null;
     let currentIndex = campaign.current_index || 0;
     let sentCount = campaign.sent_count || 0;
     let failedCount = campaign.failed_count || 0;
+    
+    // Helper to replace CSV variables in a message
+    const replaceCsvVariables = (text: string, phoneIndex: number): string => {
+      if (!csvVariables || !csvVariables.columns || !csvVariables.data || csvVariables.data.length === 0) {
+        return text;
+      }
+      
+      // Get the row for this phone index (cycles through if more phones than rows)
+      const rowIndex = phoneIndex % csvVariables.data.length;
+      const row = csvVariables.data[rowIndex];
+      
+      let result = text;
+      csvVariables.columns.forEach((col, colIndex) => {
+        const value = row[colIndex] || '';
+        // Replace both {{column}} and {column} formats
+        result = result.replace(new RegExp(`\\{\\{${col}\\}\\}`, 'g'), value);
+        result = result.replace(new RegExp(`\\{${col}\\}`, 'g'), value);
+      });
+      
+      return result;
+    };
 
     // Process messages in batches
     const batchSize = flowId ? 5 : 10; // Smaller batch for flows since they have more processing
@@ -373,9 +395,12 @@ serve(async (req) => {
             });
         } else {
           // Regular message sending
-          const message = messageVariations.length > 0 
+          let message = messageVariations.length > 0 
             ? messageVariations[Math.floor(Math.random() * messageVariations.length)]
             : '';
+          
+          // Apply CSV variables if present
+          message = replaceCsvVariables(message, i);
 
           const apiProvider = instance.api_provider || 'evolution';
           const baseUrl = config.evolution_base_url?.replace(/\/$/, '') || '';

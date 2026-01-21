@@ -122,13 +122,16 @@ const MessageBlaster = () => {
       console.error('Error fetching campaigns:', error);
       toast.error('Erro ao carregar campanhas');
     } else {
-      setCampaigns((data || []).map(c => ({
-        ...c,
-        message_variations: c.message_variations as string[],
-        phone_numbers: c.phone_numbers as string[],
-        assigned_instances: c.assigned_instances || [],
-        csv_variables: c.csv_variables as Campaign['csv_variables'],
-      })) as Campaign[]);
+      setCampaigns((data || []).map(c => {
+        const csvVars = (c as any).csv_variables as Campaign['csv_variables'];
+        return {
+          ...c,
+          message_variations: c.message_variations as string[],
+          phone_numbers: c.phone_numbers as string[],
+          assigned_instances: c.assigned_instances || [],
+          csv_variables: csvVars,
+        };
+      }) as Campaign[]);
     }
     setLoading(false);
   }, [user]);
