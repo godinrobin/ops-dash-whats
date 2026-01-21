@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
+import { ColoredSwitch } from '@/components/ui/colored-switch';
 import { 
   Plus, 
   SendHorizonal, 
@@ -31,8 +31,10 @@ import {
   Video,
   FileText,
   Music,
-  GitBranch,
-  Eye
+  Loader2,
+  Zap,
+  Table,
+  X
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -59,14 +61,7 @@ interface Campaign {
   media_type?: string;
   media_url?: string;
   dispatches_per_instance?: number;
-  flow_id?: string;
-}
-
-interface InboxFlow {
-  id: string;
-  name: string;
-  description: string | null;
-  is_active: boolean;
+  csv_variables?: { columns: string[]; data: string[][] };
 }
 
 interface Instance {
@@ -86,7 +81,6 @@ const MessageBlaster = () => {
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showInstancesDialog, setShowInstancesDialog] = useState(false);
-  const [availableFlows, setAvailableFlows] = useState<InboxFlow[]>([]);
   
   // Form state
   const [campaignName, setCampaignName] = useState('');
@@ -95,15 +89,26 @@ const MessageBlaster = () => {
   const [delayMin, setDelayMin] = useState(5);
   const [delayMax, setDelayMax] = useState(15);
   const [useFixedDelay, setUseFixedDelay] = useState(false);
+  const [noDelay, setNoDelay] = useState(false);
   const [selectedInstances, setSelectedInstances] = useState<string[]>([]);
   const [importMethod, setImportMethod] = useState<'manual' | 'file'>('manual');
   const [mediaType, setMediaType] = useState<'text' | 'image' | 'video' | 'audio' | 'document'>('text');
   const [mediaUrl, setMediaUrl] = useState('');
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
   const [dispatchesPerInstance, setDispatchesPerInstance] = useState(1);
-  const [useFlow, setUseFlow] = useState(false);
-  const [selectedFlowId, setSelectedFlowId] = useState<string>('');
-  const [flowToDelete, setFlowToDelete] = useState<string | null>(null);
   const [campaignToDelete, setCampaignToDelete] = useState<string | null>(null);
+  
+  // CSV Variables state
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvData, setCsvData] = useState<string[][]>([]);
+  const [csvColumns, setCsvColumns] = useState<string[]>([]);
+  const [selectedVariables, setSelectedVariables] = useState<string[]>([]);
+  
+  // Number validation state
+  const [validatingNumbers, setValidatingNumbers] = useState(false);
+  const [validationResults, setValidationResults] = useState<{ valid: string[]; invalid: string[] } | null>(null);
+
   const fetchCampaigns = useCallback(async () => {
     if (!user) return;
     
@@ -122,6 +127,7 @@ const MessageBlaster = () => {
         message_variations: c.message_variations as string[],
         phone_numbers: c.phone_numbers as string[],
         assigned_instances: c.assigned_instances || [],
+        csv_variables: c.csv_variables as Campaign['csv_variables'],
       })) as Campaign[]);
     }
     setLoading(false);
@@ -141,25 +147,10 @@ const MessageBlaster = () => {
     }
   }, [user]);
 
-  const fetchFlows = useCallback(async () => {
-    if (!user) return;
-    
-    const { data } = await supabase
-      .from('inbox_flows')
-      .select('id, name, description, is_active')
-      .eq('user_id', user.id)
-      .order('name');
-    
-    if (data) {
-      setAvailableFlows(data);
-    }
-  }, [user]);
-
   useEffect(() => {
     fetchCampaigns();
     fetchInstances();
-    fetchFlows();
-  }, [fetchCampaigns, fetchInstances, fetchFlows]);
+  }, [fetchCampaigns, fetchInstances]);
 
   // Real-time subscription
   useEffect(() => {
@@ -226,6 +217,191 @@ const MessageBlaster = () => {
     reader.readAsText(file);
   };
 
+  // Handle media file upload
+  const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    setUploadingMedia(true);
+    setMediaFile(file);
+
+    try {
+      const fileName = `blaster/${user.id}/${Date.now()}_${file.name}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('inbox-media')
+        .upload(fileName, file);
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data: publicUrl } = supabase.storage
+        .from('inbox-media')
+        .getPublicUrl(fileName);
+
+      setMediaUrl(publicUrl.publicUrl);
+      toast.success('Arquivo enviado com sucesso!');
+    } catch (error: any) {
+      console.error('Error uploading media:', error);
+      toast.error('Erro ao enviar arquivo: ' + error.message);
+      setMediaFile(null);
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
+  const removeMediaFile = () => {
+    setMediaFile(null);
+    setMediaUrl('');
+  };
+
+  // Handle CSV upload
+  const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      if (lines.length < 2) {
+        toast.error('CSV deve ter pelo menos uma linha de cabeçalho e uma de dados');
+        return;
+      }
+
+      const headers = lines[0].split(',').map(h => h.trim().replace(/["']/g, ''));
+      const data = lines.slice(1).map(line => 
+        line.split(',').map(c => c.trim().replace(/["']/g, ''))
+      );
+
+      setCsvFile(file);
+      setCsvColumns(headers);
+      setCsvData(data);
+      setSelectedVariables(headers); // Select all by default
+      toast.success(`CSV carregado: ${headers.length} colunas, ${data.length} linhas`);
+    };
+    reader.readAsText(file);
+  };
+
+  const toggleVariable = (col: string) => {
+    setSelectedVariables(prev => 
+      prev.includes(col) 
+        ? prev.filter(v => v !== col)
+        : [...prev, col]
+    );
+  };
+
+  const removeCsv = () => {
+    setCsvFile(null);
+    setCsvColumns([]);
+    setCsvData([]);
+    setSelectedVariables([]);
+  };
+
+  // Validate WhatsApp numbers
+  const validateNumbers = async () => {
+    if (selectedInstances.length === 0) {
+      toast.error('Selecione uma instância para validar');
+      return;
+    }
+
+    const numbers = parsePhoneNumbers(phoneNumbers);
+    if (numbers.length === 0) {
+      toast.error('Adicione números para validar');
+      return;
+    }
+
+    if (numbers.length > 100) {
+      toast.error('Limite de 100 números por validação');
+      return;
+    }
+
+    setValidatingNumbers(true);
+    setValidationResults(null);
+
+    try {
+      // Get instance info
+      const instance = instances.find(i => i.id === selectedInstances[0]);
+      if (!instance) {
+        throw new Error('Instância não encontrada');
+      }
+
+      // Get instance token and API config
+      const { data: instanceData } = await supabase
+        .from('maturador_instances')
+        .select('uazapi_token, api_provider')
+        .eq('id', selectedInstances[0])
+        .single();
+
+      if (!instanceData?.uazapi_token) {
+        toast.error('Token da instância não encontrado. Apenas instâncias UAZAPI suportam validação.');
+        setValidatingNumbers(false);
+        return;
+      }
+
+      const { data: apiConfig } = await supabase
+        .from('whatsapp_api_config')
+        .select('uazapi_base_url')
+        .limit(1)
+        .single();
+
+      if (!apiConfig?.uazapi_base_url) {
+        throw new Error('Configuração UAZAPI não encontrada');
+      }
+
+      const baseUrl = apiConfig.uazapi_base_url.replace(/\/$/, '');
+
+      // Call UAZAPI /chat/check endpoint
+      const response = await fetch(`${baseUrl}/chat/check`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'token': instanceData.uazapi_token,
+        },
+        body: JSON.stringify({ numbers }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Erro na validação');
+      }
+
+      const result = await response.json();
+      
+      // Parse results
+      const valid: string[] = [];
+      const invalid: string[] = [];
+
+      if (Array.isArray(result)) {
+        for (const item of result) {
+          const number = item.query || item.number || '';
+          if (item.isInWhatsapp || item.exists) {
+            valid.push(number);
+          } else {
+            invalid.push(number);
+          }
+        }
+      }
+
+      setValidationResults({ valid, invalid });
+      toast.success(`${valid.length} números válidos, ${invalid.length} inválidos`);
+    } catch (error: any) {
+      console.error('Error validating numbers:', error);
+      toast.error('Erro ao validar números: ' + error.message);
+    } finally {
+      setValidatingNumbers(false);
+    }
+  };
+
+  const keepOnlyValidNumbers = () => {
+    if (validationResults) {
+      setPhoneNumbers(validationResults.valid.join('\n'));
+      setValidationResults(null);
+      toast.success('Apenas números válidos mantidos');
+    }
+  };
+
   const handleCreateCampaign = async () => {
     if (!user) return;
     
@@ -234,20 +410,14 @@ const MessageBlaster = () => {
       return;
     }
 
-    // Validations - flow requires either flow or messages
     const validMessages = messageVariations.filter(m => m.trim());
-    if (!useFlow && validMessages.length === 0 && mediaType === 'text') {
+    if (validMessages.length === 0 && mediaType === 'text') {
       toast.error('Adicione pelo menos uma variação de mensagem');
       return;
     }
 
-    if (useFlow && !selectedFlowId) {
-      toast.error('Selecione um fluxo para enviar');
-      return;
-    }
-
-    if (!useFlow && mediaType !== 'text' && !mediaUrl.trim()) {
-      toast.error('Adicione a URL da mídia');
+    if (mediaType !== 'text' && !mediaUrl.trim()) {
+      toast.error('Faça upload do arquivo de mídia');
       return;
     }
 
@@ -262,25 +432,38 @@ const MessageBlaster = () => {
       return;
     }
 
-    const finalDelayMin = useFixedDelay ? delayMin : delayMin;
-    const finalDelayMax = useFixedDelay ? delayMin : delayMax;
+    // Calculate delays
+    let finalDelayMin = delayMin;
+    let finalDelayMax = delayMax;
+
+    if (noDelay) {
+      finalDelayMin = 0;
+      finalDelayMax = 0;
+    } else if (useFixedDelay) {
+      finalDelayMax = delayMin;
+    }
+
+    // Prepare CSV variables if present
+    const csvVariables = csvFile && csvColumns.length > 0 && csvData.length > 0
+      ? { columns: selectedVariables, data: csvData }
+      : null;
 
     const { error } = await supabase
       .from('blaster_campaigns')
       .insert({
         user_id: user.id,
         name: campaignName,
-        message_variations: useFlow ? [] : validMessages,
+        message_variations: validMessages,
         phone_numbers: numbers,
         delay_min: finalDelayMin,
         delay_max: finalDelayMax,
         total_count: numbers.length,
         assigned_instances: selectedInstances,
         status: 'draft',
-        media_type: useFlow ? 'flow' : mediaType,
-        media_url: !useFlow && mediaType !== 'text' ? mediaUrl : null,
+        media_type: mediaType,
+        media_url: mediaType !== 'text' ? mediaUrl : null,
         dispatches_per_instance: dispatchesPerInstance,
-        flow_id: useFlow ? selectedFlowId : null,
+        csv_variables: csvVariables,
       });
 
     if (error) {
@@ -300,17 +483,21 @@ const MessageBlaster = () => {
     setDelayMin(5);
     setDelayMax(15);
     setUseFixedDelay(false);
+    setNoDelay(false);
     setSelectedInstances([]);
     setMediaType('text');
     setMediaUrl('');
+    setMediaFile(null);
     setDispatchesPerInstance(1);
-    setUseFlow(false);
-    setSelectedFlowId('');
+    setCsvFile(null);
+    setCsvColumns([]);
+    setCsvData([]);
+    setSelectedVariables([]);
+    setValidationResults(null);
   };
 
   const startCampaign = async (campaignId: string) => {
     try {
-      // Get campaign to check assigned instances
       const campaign = campaigns.find(c => c.id === campaignId);
       
       const response = await supabase.functions.invoke('blaster-send', {
@@ -320,9 +507,7 @@ const MessageBlaster = () => {
       if (response.error) {
         const errorMessage = response.error.message || String(response.error);
         
-        // Check if error indicates disconnection
         if (isDisconnectionError(errorMessage) && campaign?.assigned_instances?.length) {
-          // Check each assigned instance
           for (const instanceId of campaign.assigned_instances) {
             const wasDisconnected = await checkAndNotifyDisconnection(instanceId, 'disparazap');
             if (wasDisconnected) return;
@@ -335,7 +520,6 @@ const MessageBlaster = () => {
       if (response.data?.error) {
         const errorMessage = response.data.error;
         
-        // Check if error indicates disconnection
         if (isDisconnectionError(errorMessage) && campaign?.assigned_instances?.length) {
           for (const instanceId of campaign.assigned_instances) {
             const wasDisconnected = await checkAndNotifyDisconnection(instanceId, 'disparazap');
@@ -397,23 +581,6 @@ const MessageBlaster = () => {
     setCampaignToDelete(null);
   };
 
-  const confirmDeleteFlow = async () => {
-    if (!flowToDelete) return;
-
-    const { error } = await supabase
-      .from('inbox_flows')
-      .delete()
-      .eq('id', flowToDelete);
-
-    if (error) {
-      toast.error('Erro ao excluir fluxo');
-    } else {
-      toast.success('Fluxo excluído');
-      fetchFlows();
-    }
-    setFlowToDelete(null);
-  };
-
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<string, { label: string; className: string }> = {
       draft: { label: 'Rascunho', className: 'bg-gray-500' },
@@ -433,7 +600,6 @@ const MessageBlaster = () => {
       case 'video': return <Video className="h-3 w-3" />;
       case 'audio': return <Music className="h-3 w-3" />;
       case 'document': return <FileText className="h-3 w-3" />;
-      case 'flow': return <GitBranch className="h-3 w-3" />;
       default: return <MessageSquare className="h-3 w-3" />;
     }
   };
@@ -486,167 +652,180 @@ const MessageBlaster = () => {
                   />
                 </div>
 
-                {/* Use Flow Toggle */}
-                <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/30">
-                  <div className="flex items-center gap-3">
-                    <GitBranch className="h-5 w-5 text-primary" />
-                    <div>
-                      <Label htmlFor="use-flow" className="cursor-pointer">Usar Fluxo de Mensagens</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Envie todas as mensagens de um fluxo criado
-                      </p>
-                    </div>
-                  </div>
-                  <Switch
-                    id="use-flow"
-                    checked={useFlow}
-                    onCheckedChange={(checked) => {
-                      setUseFlow(checked);
-                      if (checked) {
-                        setMediaType('text');
-                        setMediaUrl('');
-                      }
-                    }}
-                    className={useFlow ? 'data-[state=checked]:bg-green-500' : 'data-[state=unchecked]:bg-red-500'}
-                  />
+                {/* Media Type */}
+                <div className="space-y-2">
+                  <Label>Tipo de Conteúdo</Label>
+                  <Select value={mediaType} onValueChange={(v) => {
+                    setMediaType(v as any);
+                    setMediaFile(null);
+                    setMediaUrl('');
+                  }}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="text">
+                        <div className="flex items-center gap-2">
+                          <MessageSquare className="h-4 w-4" />
+                          Texto
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="image">
+                        <div className="flex items-center gap-2">
+                          <ImageIcon className="h-4 w-4" />
+                          Imagem
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="video">
+                        <div className="flex items-center gap-2">
+                          <Video className="h-4 w-4" />
+                          Vídeo
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="audio">
+                        <div className="flex items-center gap-2">
+                          <Music className="h-4 w-4" />
+                          Áudio
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="document">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4" />
+                          Documento
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                {/* Flow Selection */}
-                {useFlow ? (
+                {/* Media Upload */}
+                {mediaType !== 'text' && (
                   <div className="space-y-2">
-                    <Label>Selecionar Fluxo</Label>
-                    {availableFlows.length === 0 ? (
-                      <div className="p-4 border rounded-lg text-center">
-                        <p className="text-sm text-muted-foreground mb-2">Nenhum fluxo encontrado</p>
-                        <Button variant="outline" size="sm" onClick={() => navigate('/disparazap/fluxos/novo')}>
-                          <Plus className="h-4 w-4 mr-1" />
-                          Criar Fluxo
-                        </Button>
+                    <Label>Upload de {mediaType === 'image' ? 'Imagem' : mediaType === 'video' ? 'Vídeo' : mediaType === 'audio' ? 'Áudio' : 'Documento'}</Label>
+                    {!mediaFile ? (
+                      <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+                        <Input
+                          type="file"
+                          accept={
+                            mediaType === 'image' ? 'image/*' :
+                            mediaType === 'video' ? 'video/*' :
+                            mediaType === 'audio' ? 'audio/*' :
+                            '.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.ppt,.pptx'
+                          }
+                          onChange={handleMediaUpload}
+                          disabled={uploadingMedia}
+                          className="cursor-pointer"
+                        />
+                        {uploadingMedia && (
+                          <div className="flex items-center justify-center mt-2">
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            <span className="text-sm text-muted-foreground">Enviando...</span>
+                          </div>
+                        )}
                       </div>
                     ) : (
-                      <>
-                        <Select value={selectedFlowId} onValueChange={setSelectedFlowId}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione um fluxo..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableFlows.map(flow => (
-                              <SelectItem key={flow.id} value={flow.id}>
-                                <div className="flex items-center gap-2">
-                                  <GitBranch className="h-4 w-4" />
-                                  {flow.name}
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground">
-                          O fluxo será executado para cada contato da lista
-                        </p>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    {/* Media Type */}
-                    <div className="space-y-2">
-                      <Label>Tipo de Conteúdo</Label>
-                      <Select value={mediaType} onValueChange={(v) => setMediaType(v as any)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="text">
-                            <div className="flex items-center gap-2">
-                              <MessageSquare className="h-4 w-4" />
-                              Texto
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="image">
-                            <div className="flex items-center gap-2">
-                              <ImageIcon className="h-4 w-4" />
-                              Imagem
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="video">
-                            <div className="flex items-center gap-2">
-                              <Video className="h-4 w-4" />
-                              Vídeo
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="audio">
-                            <div className="flex items-center gap-2">
-                              <Music className="h-4 w-4" />
-                              Áudio
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="document">
-                            <div className="flex items-center gap-2">
-                              <FileText className="h-4 w-4" />
-                              Documento
-                            </div>
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Media URL */}
-                    {mediaType !== 'text' && (
-                      <div className="space-y-2">
-                        <Label>URL da Mídia</Label>
-                        <Input
-                          placeholder="https://exemplo.com/arquivo.jpg"
-                          value={mediaUrl}
-                          onChange={(e) => setMediaUrl(e.target.value)}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Cole a URL direta do arquivo ({mediaType})
-                        </p>
+                      <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+                        <div className="flex items-center gap-2">
+                          {getMediaIcon(mediaType)}
+                          <span className="text-sm truncate max-w-[200px]">{mediaFile.name}</span>
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={removeMediaFile}>
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
                     )}
-                  </>
+                  </div>
                 )}
 
-                {/* Message Variations - Only show if not using flow */}
-                {!useFlow && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label>
-                        {mediaType !== 'text' ? 'Legenda (opcional)' : 'Variações de Mensagem'} ({messageVariations.length}/5)
-                      </Label>
-                      {messageVariations.length < 5 && (
-                        <Button variant="outline" size="sm" onClick={addMessageVariation}>
-                          <Plus className="h-3 w-3 mr-1" />
-                          Adicionar
+                {/* Message Variations */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>
+                      {mediaType !== 'text' ? 'Legenda (opcional)' : 'Variações de Mensagem'} ({messageVariations.length}/5)
+                    </Label>
+                    {messageVariations.length < 5 && (
+                      <Button variant="outline" size="sm" onClick={addMessageVariation}>
+                        <Plus className="h-3 w-3 mr-1" />
+                        Adicionar
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Use {'{nome}'} para inserir o nome do contato
+                    {selectedVariables.length > 0 && (
+                      <>, ou {selectedVariables.map(v => `{${v}}`).join(', ')} do seu CSV</>
+                    )}
+                  </p>
+                  {messageVariations.map((msg, index) => (
+                    <div key={index} className="flex gap-2">
+                      <Textarea
+                        placeholder={mediaType !== 'text' ? `Legenda ${index + 1}...` : `Mensagem ${index + 1}...`}
+                        value={msg}
+                        onChange={(e) => updateMessageVariation(index, e.target.value)}
+                        rows={2}
+                        className="flex-1"
+                      />
+                      {messageVariations.length > 1 && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeMessageVariation(index)}
+                          className="text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground mb-2">
-                      Use {'{nome}'} para inserir o nome do contato
-                    </p>
-                    {messageVariations.map((msg, index) => (
-                      <div key={index} className="flex gap-2">
-                        <Textarea
-                          placeholder={mediaType !== 'text' ? `Legenda ${index + 1}...` : `Mensagem ${index + 1}...`}
-                          value={msg}
-                          onChange={(e) => updateMessageVariation(index, e.target.value)}
-                          rows={2}
-                          className="flex-1"
-                        />
-                        {messageVariations.length > 1 && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeMessageVariation(index)}
-                            className="text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    ))}
+                  ))}
+                </div>
+
+                {/* CSV Variables Section */}
+                <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
+                  <div className="flex items-center gap-2">
+                    <Table className="h-4 w-4 text-primary" />
+                    <Label>Variáveis do CSV (opcional)</Label>
                   </div>
-                )}
+                  <p className="text-xs text-muted-foreground">
+                    Suba um arquivo CSV para usar variáveis personalizadas. As variáveis são aplicadas sequencialmente por contato.
+                  </p>
+                  
+                  {!csvFile ? (
+                    <Input 
+                      type="file" 
+                      accept=".csv" 
+                      onChange={handleCsvUpload}
+                      className="cursor-pointer"
+                    />
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between p-2 border rounded bg-background">
+                        <span className="text-sm">{csvFile.name}</span>
+                        <Button variant="ghost" size="icon" onClick={removeCsv}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">Colunas detectadas (clique para usar como variável):</p>
+                        <div className="flex flex-wrap gap-2">
+                          {csvColumns.map(col => (
+                            <Badge 
+                              key={col}
+                              variant={selectedVariables.includes(col) ? "default" : "outline"}
+                              className="cursor-pointer"
+                              onClick={() => toggleVariable(col)}
+                            >
+                              {`{${col}}`}
+                            </Badge>
+                          ))}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {csvData.length} linhas de dados - variáveis aplicadas sequencialmente
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 {/* Phone Numbers */}
                 <div className="space-y-2">
@@ -666,7 +845,10 @@ const MessageBlaster = () => {
                       <Textarea
                         placeholder="Cole os números aqui (um por linha ou separados por vírgula)&#10;Ex: 5511999999999&#10;5521888888888"
                         value={phoneNumbers}
-                        onChange={(e) => setPhoneNumbers(e.target.value)}
+                        onChange={(e) => {
+                          setPhoneNumbers(e.target.value);
+                          setValidationResults(null);
+                        }}
                         rows={5}
                       />
                     </TabsContent>
@@ -684,39 +866,80 @@ const MessageBlaster = () => {
                       </div>
                     </TabsContent>
                   </Tabs>
-                  <p className="text-xs text-muted-foreground">
-                    {parsePhoneNumbers(phoneNumbers).length} números válidos encontrados
-                  </p>
-                </div>
-
-                {/* Delay Settings */}
-                <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <Label>Delay entre mensagens</Label>
-                    <div className="flex items-center gap-2">
-                      <Label htmlFor="fixed-delay" className="text-sm font-normal">Delay fixo</Label>
-                      <Switch
-                        id="fixed-delay"
-                        checked={useFixedDelay}
-                        onCheckedChange={setUseFixedDelay}
-                      />
-                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {parsePhoneNumbers(phoneNumbers).length} números válidos encontrados
+                    </p>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={validateNumbers}
+                      disabled={validatingNumbers || !phoneNumbers.trim() || selectedInstances.length === 0}
+                    >
+                      {validatingNumbers ? (
+                        <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Validando...</>
+                      ) : (
+                        <><CheckCircle className="h-3 w-3 mr-1" /> Validar Números</>
+                      )}
+                    </Button>
                   </div>
                   
-                  {useFixedDelay ? (
-                    <div className="space-y-2">
-                      <Label>Delay Fixo (segundos)</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={delayMin}
-                        onChange={(e) => setDelayMin(parseInt(e.target.value) || 5)}
-                      />
+                  {validationResults && (
+                    <div className="p-3 border rounded-lg bg-muted/30 space-y-2">
+                      <div className="flex items-center gap-4 text-sm">
+                        <span className="text-green-500 font-medium">{validationResults.valid.length} válidos</span>
+                        <span className="text-red-500 font-medium">{validationResults.invalid.length} inválidos</span>
+                      </div>
+                      {validationResults.invalid.length > 0 && (
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={keepOnlyValidNumbers}
+                          className="w-full"
+                        >
+                          Manter apenas números válidos
+                        </Button>
+                      )}
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-4">
+                  )}
+                </div>
+
+                {/* No Delay Option */}
+                <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/30">
+                  <div className="flex items-center gap-3">
+                    <Zap className="h-5 w-5 text-yellow-500" />
+                    <div>
+                      <Label htmlFor="no-delay" className="cursor-pointer">Disparar sem delay</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Enviar mensagens instantaneamente (sem intervalo)
+                      </p>
+                    </div>
+                  </div>
+                  <ColoredSwitch
+                    id="no-delay"
+                    checked={noDelay}
+                    onCheckedChange={setNoDelay}
+                  />
+                </div>
+
+                {/* Delay Settings - Only show if not using noDelay */}
+                {!noDelay && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <Label>Delay entre mensagens</Label>
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="fixed-delay" className="text-sm font-normal">Delay fixo</Label>
+                        <ColoredSwitch
+                          id="fixed-delay"
+                          checked={useFixedDelay}
+                          onCheckedChange={setUseFixedDelay}
+                        />
+                      </div>
+                    </div>
+                    
+                    {useFixedDelay ? (
                       <div className="space-y-2">
-                        <Label>Delay Mínimo (segundos)</Label>
+                        <Label>Delay Fixo (segundos)</Label>
                         <Input
                           type="number"
                           min={1}
@@ -724,18 +947,30 @@ const MessageBlaster = () => {
                           onChange={(e) => setDelayMin(parseInt(e.target.value) || 5)}
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label>Delay Máximo (segundos)</Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          value={delayMax}
-                          onChange={(e) => setDelayMax(parseInt(e.target.value) || 15)}
-                        />
+                    ) : (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Delay Mínimo (segundos)</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={delayMin}
+                            onChange={(e) => setDelayMin(parseInt(e.target.value) || 5)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Delay Máximo (segundos)</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={delayMax}
+                            onChange={(e) => setDelayMax(parseInt(e.target.value) || 15)}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Dispatches per Instance */}
                 <div className="space-y-2">
@@ -907,89 +1142,6 @@ const MessageBlaster = () => {
           </Card>
         </div>
 
-        {/* Flows Section */}
-        <Card className="mb-6 bg-black border-2 border-accent">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <GitBranch className="h-5 w-5 text-primary" />
-                  Fluxos de Mensagem
-                </CardTitle>
-                <CardDescription>
-                  Crie e gerencie fluxos para envio automático
-                </CardDescription>
-              </div>
-              <Button onClick={() => navigate('/disparazap/fluxos/novo')} className="bg-primary hover:bg-primary/90">
-                <Plus className="h-4 w-4 mr-2" />
-                Criar Fluxo
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {availableFlows.length === 0 ? (
-              <div className="text-center py-8 border border-dashed rounded-lg">
-                <GitBranch className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-                <p className="text-sm text-muted-foreground mb-3">Nenhum fluxo criado ainda</p>
-                <Button variant="outline" onClick={() => navigate('/disparazap/fluxos/novo')}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Criar Primeiro Fluxo
-                </Button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {availableFlows.slice(0, 6).map(flow => (
-                  <div 
-                    key={flow.id} 
-                    className="flex items-center justify-between p-3 border-2 border-accent rounded-lg bg-black/50 hover:bg-black/80 transition-colors"
-                  >
-                    <div 
-                      className="flex items-center gap-3 flex-1 cursor-pointer"
-                      onClick={() => navigate(`/disparazap/fluxos/${flow.id}`)}
-                    >
-                      <div className={`p-2 rounded-lg ${flow.is_active ? 'bg-green-500/10' : 'bg-muted'}`}>
-                        <GitBranch className={`h-4 w-4 ${flow.is_active ? 'text-green-500' : 'text-muted-foreground'}`} />
-                      </div>
-                      <div>
-                        <p className="font-medium text-sm">{flow.name}</p>
-                        <p className="text-xs text-muted-foreground">{flow.description || 'Sem descrição'}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-8 w-8"
-                        onClick={() => navigate(`/disparazap/fluxos/${flow.id}`)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setFlowToDelete(flow.id);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {availableFlows.length > 6 && (
-              <div className="text-center mt-4">
-                <Button variant="outline" onClick={() => navigate('/disparazap/fluxos')}>
-                  Ver todos os {availableFlows.length} fluxos
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
         {/* Campaigns List */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1074,11 +1226,19 @@ const MessageBlaster = () => {
                     </Badge>
                     <Badge variant="outline">
                       <Clock className="h-3 w-3 mr-1" />
-                      {campaign.delay_min === campaign.delay_max 
-                        ? `${campaign.delay_min}s` 
-                        : `${campaign.delay_min}-${campaign.delay_max}s`
+                      {campaign.delay_min === 0 && campaign.delay_max === 0
+                        ? 'Sem delay'
+                        : campaign.delay_min === campaign.delay_max 
+                          ? `${campaign.delay_min}s` 
+                          : `${campaign.delay_min}-${campaign.delay_max}s`
                       }
                     </Badge>
+                    {campaign.csv_variables && (
+                      <Badge variant="outline">
+                        <Table className="h-3 w-3 mr-1" />
+                        CSV
+                      </Badge>
+                    )}
                   </div>
 
                   {/* Actions */}
@@ -1148,24 +1308,6 @@ const MessageBlaster = () => {
           </div>
         )}
       </div>
-
-      {/* Flow Delete Confirmation Dialog */}
-      <AlertDialog open={!!flowToDelete} onOpenChange={(open) => !open && setFlowToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir Fluxo</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tem certeza que deseja excluir este fluxo? Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeleteFlow} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Excluir
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Campaign Delete Confirmation Dialog */}
       <AlertDialog open={!!campaignToDelete} onOpenChange={(open) => !open && setCampaignToDelete(null)}>

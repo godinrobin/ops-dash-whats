@@ -286,19 +286,30 @@ export const ChatPanel = ({
   }, [contact]);
 
   // Auto-mark as read when opening a conversation (if there are unread messages)
+  // This also sends read receipts to WhatsApp via the edge function
   useEffect(() => {
     if (!contact || !contact.id) return;
     
     // Check if there are unread messages
     if (contact.unread_count && contact.unread_count > 0) {
-      // Mark as read when opening the chat
+      // Mark as read when opening the chat - both locally and on WhatsApp
       const markAsRead = async () => {
         try {
-          await supabase
-            .from('inbox_contacts')
-            .update({ unread_count: 0 })
-            .eq('id', contact.id);
-          console.log('[ChatPanel] Marked conversation as read on open');
+          // Call edge function to mark as read on WhatsApp (sends read receipts)
+          const { error: fnError } = await supabase.functions.invoke('mark-inbox-read', {
+            body: { contactId: contact.id },
+          });
+          
+          if (fnError) {
+            console.error('[ChatPanel] Error calling mark-inbox-read:', fnError);
+            // Still update local state even if edge function fails
+            await supabase
+              .from('inbox_contacts')
+              .update({ unread_count: 0 })
+              .eq('id', contact.id);
+          }
+          
+          console.log('[ChatPanel] Marked conversation as read on open (with WhatsApp receipts)');
         } catch (err) {
           console.error('[ChatPanel] Error marking as read:', err);
         }
@@ -532,12 +543,20 @@ export const ChatPanel = ({
   const handleMarkAsRead = async () => {
     if (!contact) return;
     try {
-      const { error } = await supabase
-        .from('inbox_contacts')
-        .update({ unread_count: 0 })
-        .eq('id', contact.id);
+      // Call edge function to mark as read on WhatsApp (sends read receipts)
+      const { error: fnError } = await supabase.functions.invoke('mark-inbox-read', {
+        body: { contactId: contact.id },
+      });
       
-      if (error) throw error;
+      if (fnError) {
+        console.error('Error calling mark-inbox-read:', fnError);
+        // Still update local state
+        await supabase
+          .from('inbox_contacts')
+          .update({ unread_count: 0 })
+          .eq('id', contact.id);
+      }
+      
       toast.success('Marcado como lido');
       onRefreshContact?.();
     } catch (err) {
