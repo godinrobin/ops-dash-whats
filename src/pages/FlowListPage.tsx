@@ -72,6 +72,14 @@ const FlowListPage = () => {
   const [importCode, setImportCode] = useState('');
   const [isImporting, setIsImporting] = useState(false);
 
+  // Folder Export/Import states
+  const [showExportFolderDialog, setShowExportFolderDialog] = useState(false);
+  const [exportFolderCode, setExportFolderCode] = useState('');
+  const [exportFolderName, setExportFolderName] = useState('');
+  const [showImportFolderDialog, setShowImportFolderDialog] = useState(false);
+  const [importFolderCode, setImportFolderCode] = useState('');
+  const [isImportingFolder, setIsImportingFolder] = useState(false);
+
   useEffect(() => {
     if (user) {
       fetchInstances();
@@ -457,6 +465,123 @@ const FlowListPage = () => {
     toast.success('Código copiado!');
   };
 
+  // Export folder handler
+  const handleExportFolder = (folder: FlowFolder) => {
+    setExportFolderCode(folder.id);
+    setExportFolderName(folder.name);
+    setShowExportFolderDialog(true);
+  };
+
+  const copyExportFolderCode = () => {
+    navigator.clipboard.writeText(exportFolderCode);
+    toast.success('Código da pasta copiado!');
+  };
+
+  // Import folder handler
+  const handleImportFolder = async () => {
+    if (!importFolderCode.trim()) {
+      toast.error('Cole o código da pasta');
+      return;
+    }
+
+    const userId = effectiveUserId || user?.id;
+    if (!userId) {
+      toast.error('Usuário não autenticado');
+      return;
+    }
+
+    setIsImportingFolder(true);
+
+    try {
+      // Fetch the original folder by ID
+      const { data: originalFolder, error: folderFetchError } = await supabase
+        .from('inbox_flow_folders')
+        .select('*')
+        .eq('id', importFolderCode.trim())
+        .maybeSingle();
+
+      if (folderFetchError || !originalFolder) {
+        toast.error('Pasta não encontrada. Verifique o código.');
+        setIsImportingFolder(false);
+        return;
+      }
+
+      // Fetch all flows in the folder
+      const { data: originalFlows, error: flowsFetchError } = await supabase
+        .from('inbox_flows')
+        .select('*')
+        .eq('folder_id', importFolderCode.trim());
+
+      if (flowsFetchError) {
+        toast.error('Erro ao buscar fluxos da pasta');
+        setIsImportingFolder(false);
+        return;
+      }
+
+      // Create the new folder for the current user
+      const { data: newFolder, error: folderInsertError } = await supabase
+        .from('inbox_flow_folders')
+        .insert({
+          user_id: userId,
+          name: `${originalFolder.name} (Importado)`,
+        })
+        .select()
+        .single();
+
+      if (folderInsertError || !newFolder) {
+        toast.error('Erro ao criar pasta: ' + (folderInsertError?.message || 'Erro desconhecido'));
+        setIsImportingFolder(false);
+        return;
+      }
+
+      // Import all flows into the new folder
+      let importedCount = 0;
+      for (const originalFlow of (originalFlows || [])) {
+        const { error: flowInsertError } = await supabase
+          .from('inbox_flows')
+          .insert({
+            user_id: userId,
+            folder_id: newFolder.id,
+            name: `${originalFlow.name} (Importado)`,
+            description: originalFlow.description,
+            nodes: originalFlow.nodes,
+            edges: originalFlow.edges,
+            trigger_type: originalFlow.trigger_type,
+            trigger_keywords: originalFlow.trigger_keywords,
+            assigned_instances: [], // Don't copy instances
+            is_active: false, // Start as inactive
+            priority: originalFlow.priority,
+            pause_on_media: originalFlow.pause_on_media,
+            pause_schedule_enabled: originalFlow.pause_schedule_enabled,
+            pause_schedule_start: originalFlow.pause_schedule_start,
+            pause_schedule_end: originalFlow.pause_schedule_end,
+            reply_to_last_message: originalFlow.reply_to_last_message,
+            reply_mode: originalFlow.reply_mode,
+            reply_interval: originalFlow.reply_interval,
+            pause_other_flows: originalFlow.pause_other_flows,
+            knowledge_base: (originalFlow as any).knowledge_base,
+          });
+
+        if (!flowInsertError) {
+          importedCount++;
+        } else {
+          console.error('Error importing flow:', originalFlow.name, flowInsertError);
+        }
+      }
+
+      toast.success(`Pasta importada com ${importedCount} fluxo(s)!`);
+      setShowImportFolderDialog(false);
+      setImportFolderCode('');
+      fetchFolders();
+      refetch();
+
+    } catch (err: any) {
+      toast.error('Erro ao importar pasta: ' + err.message);
+    } finally {
+      setIsImportingFolder(false);
+    }
+  };
+
   const renderFlowCard = (flow: typeof flows[0], inFolder: boolean = false) => (
     <Card 
       key={flow.id} 
@@ -671,10 +796,16 @@ const FlowListPage = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Import Folder Button */}
+            <Button variant="outline" onClick={() => setShowImportFolderDialog(true)}>
+              <Upload className="h-4 w-4 mr-2" />
+              Importar Pasta
+            </Button>
+
             {/* Import Flow Button */}
             <Button variant="outline" onClick={() => setShowImportDialog(true)}>
               <Upload className="h-4 w-4 mr-2" />
-              Importar
+              Importar Fluxo
             </Button>
 
             {/* Create Folder Button */}
@@ -819,6 +950,15 @@ const FlowListPage = () => {
                       </Badge>
                     </button>
                     <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => handleExportFolder(folder)}
+                        title="Exportar pasta"
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -1009,6 +1149,69 @@ const FlowListPage = () => {
               </Button>
               <Button onClick={handleImportFlow} disabled={isImporting || !importCode.trim()}>
                 {isImporting ? 'Importando...' : 'Importar'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Export Folder Dialog */}
+      <Dialog open={showExportFolderDialog} onOpenChange={setShowExportFolderDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Exportar Pasta: {exportFolderName}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <p className="text-sm text-muted-foreground">
+              Use o código abaixo para compartilhar esta pasta com todos os fluxos. Quem importar receberá a pasta e todos os fluxos dentro dela.
+            </p>
+            <div className="flex gap-2">
+              <Input
+                readOnly
+                value={exportFolderCode}
+                className="font-mono text-sm"
+              />
+              <Button onClick={copyExportFolderCode}>
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => setShowExportFolderDialog(false)}>
+                Fechar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Folder Dialog */}
+      <Dialog open={showImportFolderDialog} onOpenChange={setShowImportFolderDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Importar Pasta</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <p className="text-sm text-muted-foreground">
+              Cole o código da pasta que deseja importar. A pasta e todos os fluxos serão copiados para sua conta como inativos.
+            </p>
+            <div className="space-y-2">
+              <Label>Código da Pasta</Label>
+              <Input
+                placeholder="Cole o código da pasta aqui..."
+                value={importFolderCode}
+                onChange={(e) => setImportFolderCode(e.target.value)}
+                className="font-mono text-sm"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => {
+                setShowImportFolderDialog(false);
+                setImportFolderCode('');
+              }}>
+                Cancelar
+              </Button>
+              <Button onClick={handleImportFolder} disabled={isImportingFolder || !importFolderCode.trim()}>
+                {isImportingFolder ? 'Importando...' : 'Importar Pasta'}
               </Button>
             </div>
           </div>
