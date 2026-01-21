@@ -1236,16 +1236,191 @@ Se não encontrar valor, responda: 0`;
 
     const logId = logRecord?.id;
 
-    // ====== SYNC TO ADS_WHATSAPP_LEADS FOR DASHBOARD ======
-    // When a PIX payment is detected, create or update ads_whatsapp_leads so it shows on ADS dashboard
+    // ====== SYNC TO ADS_WHATSAPP_LEADS FOR DASHBOARD (with URL Attribution) ======
+    // When a PIX payment is detected, create or update ads_whatsapp_leads with proper ad attribution
     if (isPixPayment && labelApplied) {
-      console.log("[TAG-WHATS] ====== SYNCING TO ADS_WHATSAPP_LEADS ======");
+      console.log("[TAG-WHATS] ====== SYNCING TO ADS_WHATSAPP_LEADS (URL Attribution) ======");
       
       try {
+        // Get contact's ad_source_url from inbox_contacts for attribution
+        const { data: inboxContact } = await supabase
+          .from("inbox_contacts")
+          .select("id, ad_source_url, ctwa_clid")
+          .eq("phone", phone)
+          .eq("user_id", instance.user_id)
+          .eq("instance_id", instance.id)
+          .limit(1)
+          .maybeSingle();
+
+        let adId: string | null = null;
+        let adsetId: string | null = null;
+        let campaignId: string | null = null;
+        let matchedAdAccountId: string | null = null;
+        const adSourceUrl = inboxContact?.ad_source_url;
+        const contactCtwaClid = inboxContact?.ctwa_clid || ctwaClid;
+
+        // ====== URL-based Attribution Logic ======
+        if (adSourceUrl) {
+          console.log(`[TAG-WHATS] Attempting URL attribution with ad_source_url: ${adSourceUrl}`);
+          
+          let expandedUrl = adSourceUrl;
+          const postIdsToMatch: string[] = [];
+          const urlsToMatch: string[] = [adSourceUrl];
+
+          // Try to expand short links (fb.me, l.facebook.com, instagram.com/p/)
+          try {
+            const sourceUrlObj = new URL(adSourceUrl);
+            const isShortLink = sourceUrlObj.hostname === 'fb.me' || 
+                                sourceUrlObj.hostname === 'l.facebook.com' ||
+                                (sourceUrlObj.hostname.includes('instagram.com') && sourceUrlObj.pathname.startsWith('/p/'));
+            
+            if (isShortLink) {
+              console.log(`[TAG-WHATS] Detected short link, attempting to expand: ${adSourceUrl}`);
+              try {
+                const expandResponse = await fetch(adSourceUrl, { 
+                  method: 'GET', 
+                  redirect: 'follow',
+                  headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+                });
+                if (expandResponse.url && expandResponse.url !== adSourceUrl) {
+                  expandedUrl = expandResponse.url;
+                  urlsToMatch.push(expandedUrl);
+                  console.log(`[TAG-WHATS] Expanded short link to: ${expandedUrl}`);
+                }
+              } catch (expandErr) {
+                console.log(`[TAG-WHATS] Could not expand short link: ${expandErr}`);
+              }
+            }
+          } catch (urlParseErr) {
+            console.log(`[TAG-WHATS] URL parse error: ${urlParseErr}`);
+          }
+
+          // Extract Facebook post components from URL
+          try {
+            const urlToAnalyze = new URL(expandedUrl);
+            const pathname = urlToAnalyze.pathname;
+            const searchParams = urlToAnalyze.searchParams;
+            
+            // Extract story_fbid from query params
+            const storyFbid = searchParams.get('story_fbid');
+            const postIdParam = searchParams.get('post_id');
+            
+            if (storyFbid) {
+              postIdsToMatch.push(storyFbid);
+              console.log(`[TAG-WHATS] Extracted story_fbid: ${storyFbid}`);
+            }
+            
+            if (postIdParam) {
+              const parts = postIdParam.split('_');
+              if (parts.length === 2) {
+                postIdsToMatch.push(parts[1]);
+              }
+              postIdsToMatch.push(postIdParam);
+              console.log(`[TAG-WHATS] Extracted post_id: ${postIdParam}`);
+            }
+            
+            // Match facebook.com/pageId/posts/postId pattern
+            const postMatch = pathname.match(/\/(\d+)\/posts\/(\d+)/);
+            if (postMatch) {
+              const [, pageId, postId] = postMatch;
+              urlsToMatch.push(`https://www.facebook.com/${pageId}/posts/${postId}`);
+              postIdsToMatch.push(postId);
+              console.log(`[TAG-WHATS] Extracted post pattern: pageId=${pageId}, postId=${postId}`);
+            }
+            
+            // Match /p/{shortcode} pattern for Instagram
+            const igMatch = pathname.match(/\/p\/([A-Za-z0-9_-]+)/);
+            if (igMatch) {
+              postIdsToMatch.push(igMatch[1]);
+              console.log(`[TAG-WHATS] Extracted Instagram shortcode: ${igMatch[1]}`);
+            }
+          } catch (parseErr) {
+            console.log(`[TAG-WHATS] URL component extraction error: ${parseErr}`);
+          }
+
+          // Strategy 1: Match by post IDs in effective_object_story_id or ad_post_url
+          for (const postId of postIdsToMatch) {
+            if (campaignId) break;
+            
+            const { data: matchedAd } = await supabase
+              .from('ads_ads')
+              .select('ad_id, campaign_id, adset_id, name, ad_account_id')
+              .eq('user_id', instance.user_id)
+              .or(`effective_object_story_id.ilike.%${postId}%,ad_post_url.ilike.%${postId}%`)
+              .limit(1)
+              .maybeSingle();
+            
+            if (matchedAd) {
+              adId = matchedAd.ad_id;
+              campaignId = matchedAd.campaign_id;
+              adsetId = matchedAd.adset_id;
+              matchedAdAccountId = matchedAd.ad_account_id;
+              console.log(`[TAG-WHATS] ✅ Matched ad by postId ${postId}: ad_id=${adId}, campaign_id=${campaignId}`);
+            }
+          }
+
+          // Strategy 2: Match by cleaned URL
+          if (!campaignId) {
+            for (const urlToMatch of urlsToMatch) {
+              if (campaignId) break;
+              
+              const cleanedUrl = urlToMatch.replace(/^https?:\/\/(www\.)?/, '').split('?')[0];
+              
+              const { data: matchedAd } = await supabase
+                .from('ads_ads')
+                .select('ad_id, campaign_id, adset_id, name, ad_account_id')
+                .eq('user_id', instance.user_id)
+                .ilike('ad_post_url', `%${cleanedUrl}%`)
+                .limit(1)
+                .maybeSingle();
+              
+              if (matchedAd) {
+                adId = matchedAd.ad_id;
+                campaignId = matchedAd.campaign_id;
+                adsetId = matchedAd.adset_id;
+                matchedAdAccountId = matchedAd.ad_account_id;
+                console.log(`[TAG-WHATS] ✅ Matched ad by URL ${cleanedUrl}: ad_id=${adId}, campaign_id=${campaignId}`);
+              }
+            }
+          }
+
+          // Strategy 3: Prefix matching (first 10 digits of postId)
+          if (!campaignId && postIdsToMatch.length > 0) {
+            for (const postId of postIdsToMatch) {
+              if (campaignId) break;
+              if (postId.length < 10) continue;
+              
+              const prefix = postId.substring(0, 10);
+              
+              const { data: matchedAd } = await supabase
+                .from('ads_ads')
+                .select('ad_id, campaign_id, adset_id, name, ad_account_id')
+                .eq('user_id', instance.user_id)
+                .ilike('effective_object_story_id', `%${prefix}%`)
+                .limit(1)
+                .maybeSingle();
+              
+              if (matchedAd) {
+                adId = matchedAd.ad_id;
+                campaignId = matchedAd.campaign_id;
+                adsetId = matchedAd.adset_id;
+                matchedAdAccountId = matchedAd.ad_account_id;
+                console.log(`[TAG-WHATS] ✅ Matched ad by prefix ${prefix}: ad_id=${adId}, campaign_id=${campaignId}`);
+              }
+            }
+          }
+
+          if (!campaignId) {
+            console.log(`[TAG-WHATS] No ad match found for URL: ${adSourceUrl}`);
+          }
+        } else {
+          console.log("[TAG-WHATS] No ad_source_url found for contact, skipping URL attribution");
+        }
+
         // Check if lead already exists for this phone
         const { data: existingLead, error: leadCheckError } = await supabase
           .from("ads_whatsapp_leads")
-          .select("id, purchase_sent_at")
+          .select("id, purchase_sent_at, ad_id, campaign_id")
           .eq("phone", phone)
           .eq("user_id", instance.user_id)
           .maybeSingle();
@@ -1253,27 +1428,38 @@ Se não encontrar valor, responda: 0`;
         if (leadCheckError) {
           console.error("[TAG-WHATS] Error checking existing lead:", leadCheckError);
         } else if (existingLead) {
-          // Update existing lead with purchase info
+          // Update existing lead with purchase info and attribution if not already set
+          const updateData: any = {
+            purchase_sent_at: new Date().toISOString(),
+            purchase_value: extractedValue || 0,
+            updated_at: new Date().toISOString(),
+          };
+
+          // Only update attribution if not already set and we found a match
+          if (!existingLead.ad_id && adId) {
+            updateData.ad_id = adId;
+          }
+          if (!existingLead.campaign_id && campaignId) {
+            updateData.campaign_id = campaignId;
+            updateData.adset_id = adsetId;
+            updateData.ad_account_id = matchedAdAccountId;
+          }
+
           const { error: updateError } = await supabase
             .from("ads_whatsapp_leads")
-            .update({
-              purchase_sent_at: new Date().toISOString(),
-              purchase_value: extractedValue || 0,
-              updated_at: new Date().toISOString(),
-            })
+            .update(updateData)
             .eq("id", existingLead.id);
 
           if (updateError) {
             console.error("[TAG-WHATS] Error updating lead with purchase:", updateError);
           } else {
-            console.log(`[TAG-WHATS] ✅ Updated existing lead ${existingLead.id} with purchase value ${extractedValue}`);
+            console.log(`[TAG-WHATS] ✅ Updated lead ${existingLead.id} - purchase: ${extractedValue}, ad_id: ${adId || existingLead.ad_id || 'none'}`);
           }
         } else {
-          // Create new lead with purchase info
-          // Try to get ad_account_id from user's selected account
+          // Create new lead with purchase info and attribution
           const { data: selectedAccount } = await supabase
             .from("ads_ad_accounts")
-            .select("id, ad_account_id")
+            .select("id")
             .eq("user_id", instance.user_id)
             .eq("is_selected", true)
             .maybeSingle();
@@ -1286,21 +1472,23 @@ Se não encontrar valor, responda: 0`;
               first_contact_at: new Date().toISOString(),
               purchase_sent_at: new Date().toISOString(),
               purchase_value: extractedValue || 0,
-              ad_account_id: selectedAccount?.id || null,
+              ad_id: adId,
+              adset_id: adsetId,
+              campaign_id: campaignId,
+              ad_account_id: matchedAdAccountId || selectedAccount?.id || null,
               instance_id: instance.id,
-              name: null,
-              ctwa_clid: ctwaClid || null,
+              ctwa_clid: contactCtwaClid || null,
+              ad_source_url: adSourceUrl || null,
             });
 
           if (insertError) {
             console.error("[TAG-WHATS] Error creating new lead:", insertError);
           } else {
-            console.log(`[TAG-WHATS] ✅ Created new lead for phone ${phone} with purchase value ${extractedValue}`);
+            console.log(`[TAG-WHATS] ✅ Created lead: phone=${phone}, value=${extractedValue}, ad_id=${adId || 'none'}, campaign_id=${campaignId || 'none'}`);
           }
         }
       } catch (syncError) {
         console.error("[TAG-WHATS] Error syncing to ads_whatsapp_leads:", syncError);
-        // Don't fail the main process for sync errors
       }
       
       console.log("[TAG-WHATS] ====== ADS_WHATSAPP_LEADS SYNC COMPLETE ======");
