@@ -118,7 +118,9 @@ const KanbanCard = ({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "bg-card border border-border rounded-lg p-2.5 cursor-pointer hover:border-accent transition-all group w-full max-w-full",
+          // Keep the card slightly inset so its right border never sits under the vertical scrollbar.
+          // IMPORTANT: Don't use margins with w-full (can overflow + get clipped). Instead, reduce width via calc().
+          "bg-card border border-border rounded-lg p-2.5 cursor-pointer hover:border-accent transition-all group w-[calc(100%-0.75rem)] max-w-full mx-auto",
         isDragging && "shadow-lg ring-2 ring-accent"
       )}
       onClick={onClick}
@@ -283,9 +285,8 @@ const SortableKanbanColumn = ({
       </div>
 
       {/* Column content */}
-      {/* NOTE: add extra right padding to keep card borders from being visually cut by the vertical scrollbar */}
       <ScrollArea className="h-[calc(100vh-280px)]" orientation="vertical">
-        <div className="pl-2 pr-5 py-1.5 space-y-1.5 overflow-x-hidden">
+        <div className="px-2 py-1.5 space-y-1.5 overflow-x-hidden">
           <SortableContext 
             items={contacts.map(c => c.id)} 
             strategy={verticalListSortingStrategy}
