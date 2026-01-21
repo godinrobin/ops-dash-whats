@@ -736,7 +736,7 @@ export default function InboxKanbanPage() {
     await updateContactTags(activeContact.id, newTags);
   };
 
-  const handleDragOver = (_event: DragOverEvent) => {
+  const handleDragOver = () => {
     // We could add visual feedback here
   };
 
