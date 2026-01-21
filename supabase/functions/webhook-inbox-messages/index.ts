@@ -3170,6 +3170,48 @@ serve(async (req) => {
         const flowNodes = (activeSession.flow?.nodes || []) as Array<{ id: string; type: string; data: Record<string, unknown> }>;
         const currentNode = flowNodes.find((n: { id: string }) => n.id === activeSession.current_node_id);
         
+        // === PAUSE ON MEDIA CHECK FOR ACTIVE SESSIONS ===
+        // If this is an image or document (PDF) and the flow has pause_on_media enabled,
+        // pause the flow immediately and don't continue processing
+        const flowPauseOnMedia = activeSession.flow?.pause_on_media === true;
+        if ((messageType === 'image' || messageType === 'document') && flowPauseOnMedia) {
+          console.log(`[PAUSE_ON_MEDIA] Media message (${messageType}) received for active session ${activeSession.id}`);
+          console.log(`[PAUSE_ON_MEDIA] Flow "${activeSession.flow?.name}" has pause_on_media enabled - PAUSING FLOW`);
+          
+          // Pause the flow for this contact
+          await supabaseClient
+            .from('inbox_contacts')
+            .update({ flow_paused: true })
+            .eq('id', contact.id);
+          
+          // Also pause the active session
+          await supabaseClient
+            .from('inbox_flow_sessions')
+            .update({ status: 'paused' })
+            .eq('id', activeSession.id);
+          
+          // Cancel any pending delay jobs for this session
+          await supabaseClient
+            .from('inbox_flow_delay_jobs')
+            .update({ 
+              status: 'done',
+              updated_at: new Date().toISOString()
+            })
+            .eq('session_id', activeSession.id)
+            .eq('status', 'scheduled');
+          
+          console.log(`[PAUSE_ON_MEDIA] Flow paused for contact ${contact.id} and session ${activeSession.id} due to media message`);
+          
+          return new Response(JSON.stringify({ 
+            success: true, 
+            flowPausedByMedia: true,
+            sessionId: activeSession.id,
+            mediaType: messageType
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
         // ATOMIC LOCK ACQUISITION - Prevents race conditions where multiple webhooks trigger process-inbox-flow
         // Check if the current node is waiting for input (waitInput, menu, interactiveBlock, or iaConverter)
         if (currentNode && (currentNode.type === 'waitInput' || currentNode.type === 'menu' || currentNode.type === 'interactiveBlock' || currentNode.type === 'iaConverter')) {
