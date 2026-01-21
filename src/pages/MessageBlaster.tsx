@@ -103,6 +103,7 @@ const MessageBlaster = () => {
   const [useFlow, setUseFlow] = useState(false);
   const [selectedFlowId, setSelectedFlowId] = useState<string>('');
   const [flowToDelete, setFlowToDelete] = useState<string | null>(null);
+  const [campaignToDelete, setCampaignToDelete] = useState<string | null>(null);
   const fetchCampaigns = useCallback(async () => {
     if (!user) return;
     
@@ -379,13 +380,13 @@ const MessageBlaster = () => {
     }
   };
 
-  const deleteCampaign = async (campaignId: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta campanha?')) return;
+  const confirmDeleteCampaign = async () => {
+    if (!campaignToDelete) return;
 
     const { error } = await supabase
       .from('blaster_campaigns')
       .delete()
-      .eq('id', campaignId);
+      .eq('id', campaignToDelete);
 
     if (error) {
       toast.error('Erro ao excluir campanha');
@@ -393,6 +394,7 @@ const MessageBlaster = () => {
       toast.success('Campanha excluída');
       fetchCampaigns();
     }
+    setCampaignToDelete(null);
   };
 
   const confirmDeleteFlow = async () => {
@@ -1135,7 +1137,7 @@ const MessageBlaster = () => {
                       variant="ghost" 
                       size="icon" 
                       className="h-8 w-8 text-destructive hover:text-destructive"
-                      onClick={() => deleteCampaign(campaign.id)}
+                      onClick={() => setCampaignToDelete(campaign.id)}
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
@@ -1159,6 +1161,24 @@ const MessageBlaster = () => {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDeleteFlow} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Campaign Delete Confirmation Dialog */}
+      <AlertDialog open={!!campaignToDelete} onOpenChange={(open) => !open && setCampaignToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Campanha</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir esta campanha? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteCampaign} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               Excluir
             </AlertDialogAction>
           </AlertDialogFooter>
