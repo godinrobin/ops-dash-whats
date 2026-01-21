@@ -333,24 +333,39 @@ serve(async (req) => {
       });
     }
 
-    const systemPrompt = `Você é um analisador de comprovantes de pagamento PIX. 
-Analise a imagem/documento e determine se é um comprovante de pagamento PIX válido.
+    const systemPrompt = `Você é um especialista em análise de comprovantes de pagamento PIX do Brasil.
 
-Responda APENAS com um JSON no formato:
+TAREFA: Analise a imagem/documento e extraia TODAS as informações do comprovante PIX.
+
+RESPONDA OBRIGATORIAMENTE com JSON neste formato EXATO:
 {
   "is_pix_payment": true/false,
   "confidence": 0-100,
-  "reason": "breve explicação"
+  "reason": "breve explicação",
+  "valor": "valor exato encontrado no comprovante (ex: 97.00, 150.50, 1234.00) - use ponto como separador decimal",
+  "valor_texto": "valor exatamente como aparece no comprovante (ex: R$ 97,00)"
 }
 
-Critérios para identificar um comprovante PIX:
-- Presença de informações como "Pix", "Transferência", "Comprovante"
-- Dados de origem e destino (nome, CPF/CNPJ parcial, banco)
-- Valor da transação
-- Data e hora
-- Código de autenticação ou ID da transação
+COMO IDENTIFICAR O VALOR DO PIX:
+1. Procure por "Valor" ou "Value" seguido de R$ ou número
+2. Procure por "R$" seguido de números (ex: R$ 97,00 → valor: 97.00)
+3. O valor geralmente aparece em destaque ou maior fonte
+4. Em comprovantes bancários, procure linha "Valor da transferência" ou "Valor Pix"
+5. Formatos comuns: "R$ 100,00", "100,00", "R$100", "BRL 100.00"
 
-Se não for possível determinar ou a imagem não for clara, retorne is_pix_payment: false.`;
+REGRAS DE CONVERSÃO:
+- "R$ 97,00" → valor: 97.00
+- "R$ 1.234,56" → valor: 1234.56 (ponto é milhar, vírgula é decimal)
+- Se o valor contém apenas vírgula: substitua por ponto (97,00 → 97.00)
+- Se não encontrar valor, retorne valor: null
+
+CRITÉRIOS PARA PIX VÁLIDO:
+- Presença de "Pix", "Transferência Pix", "Comprovante" 
+- Dados de origem/destino (nome, CPF/CNPJ, banco)
+- Valor da transação (OBRIGATÓRIO extrair)
+- Data/hora e código de autenticação
+
+Se não for PIX ou imagem não for clara, retorne is_pix_payment: false.`;
 
     let aiContent = "";
     
@@ -888,43 +903,132 @@ Se não for possível determinar ou a imagem não for clara, retorne is_pix_paym
         }
       }
 
-      // Try to extract value from AI response with improved regex patterns
+      // IMPROVED: First try to extract value directly from aiResponse.valor field
       if (aiResponse && typeof aiResponse === 'object') {
-        const aiStr = JSON.stringify(aiResponse);
-        // Enhanced patterns to match:
-        // - "R$ 100,00", "R$100", "R$ 1.234,56"
-        // - "valor: 50", "value: 100", "valor de R$ 50"
-        // - "valor_pix": 100, "payment_value": 50.00
-        // - Standalone values like "97,00" or "1234.56" near keywords
-        const valuePatterns = [
-          /(?:valor|value|amount|payment_value|valor_pix|montante)[:\s"]*R?\$?\s*([\d.,]+)/gi,
-          /R\$\s*([\d.,]+)/g,
-          /(?:pagamento|pix|transferido|transferência|recebido)[^0-9]{0,30}([\d]{1,3}(?:\.[\d]{3})*(?:,[\d]{2}))/gi,
-          /(?:total|quantia)[:\s]*R?\$?\s*([\d.,]+)/gi,
-        ];
+        // Priority 1: Check if AI returned valor field directly
+        if (aiResponse.valor !== null && aiResponse.valor !== undefined) {
+          const directValue = parseFloat(String(aiResponse.valor).replace(',', '.'));
+          if (!isNaN(directValue) && directValue > 0 && directValue < 1000000) {
+            extractedValue = directValue;
+            console.log("[TAG-WHATS] ✅ Value extracted from AI.valor field:", extractedValue);
+          }
+        }
         
-        let bestValue: number | null = null;
+        // Priority 2: Try to parse valor_texto field
+        if (!extractedValue && aiResponse.valor_texto) {
+          const valorTexto = String(aiResponse.valor_texto);
+          // Clean: "R$ 97,00" → "97.00"
+          const cleaned = valorTexto
+            .replace(/R\$?\s*/gi, '')
+            .replace(/\./g, '')  // Remove thousand separators
+            .replace(',', '.')   // Convert decimal comma to dot
+            .trim();
+          const parsed = parseFloat(cleaned);
+          if (!isNaN(parsed) && parsed > 0 && parsed < 1000000) {
+            extractedValue = parsed;
+            console.log("[TAG-WHATS] ✅ Value extracted from AI.valor_texto:", extractedValue, "from:", valorTexto);
+          }
+        }
         
-        for (const pattern of valuePatterns) {
-          const matches = [...aiStr.matchAll(pattern)];
-          for (const match of matches) {
-            if (match[1]) {
-              // Clean the value: remove dots (thousand separator), replace comma with dot
-              const cleanedValue = match[1].replace(/\./g, '').replace(',', '.');
-              const parsed = parseFloat(cleanedValue);
-              if (!isNaN(parsed) && parsed > 0 && parsed < 1000000) {
-                // Prefer higher values (more likely to be the actual payment)
-                if (bestValue === null || parsed > bestValue) {
-                  bestValue = parsed;
+        // Priority 3: Fallback to regex patterns on full AI response
+        if (!extractedValue) {
+          const aiStr = JSON.stringify(aiResponse);
+          const valuePatterns = [
+            // Direct value patterns in JSON
+            /"valor":\s*"?([\d.,]+)"?/gi,
+            /"value":\s*"?([\d.,]+)"?/gi,
+            /"amount":\s*"?([\d.,]+)"?/gi,
+            // Currency patterns
+            /R\$\s*([\d]{1,3}(?:\.[\d]{3})*(?:,[\d]{2}))/g,  // R$ 1.234,56
+            /R\$\s*([\d]+(?:,[\d]{2})?)/g,                    // R$ 97,00 or R$ 97
+            // Value keywords
+            /(?:valor|value|total)[:\s]*R?\$?\s*([\d.,]+)/gi,
+          ];
+          
+          let bestValue: number | null = null;
+          
+          for (const pattern of valuePatterns) {
+            const matches = [...aiStr.matchAll(pattern)];
+            for (const match of matches) {
+              if (match[1]) {
+                // Clean: remove dots (thousand sep), convert comma to dot
+                const cleanedValue = match[1].replace(/\./g, '').replace(',', '.');
+                const parsed = parseFloat(cleanedValue);
+                if (!isNaN(parsed) && parsed > 0 && parsed < 1000000) {
+                  if (bestValue === null || parsed > bestValue) {
+                    bestValue = parsed;
+                  }
                 }
               }
             }
           }
+          
+          if (bestValue) {
+            extractedValue = bestValue;
+            console.log("[TAG-WHATS] ✅ Value extracted from regex fallback:", extractedValue);
+          }
         }
-        
-        extractedValue = bestValue;
       }
-      console.log("[TAG-WHATS] Extracted PIX value:", extractedValue);
+      
+      // Priority 4: If still no value and we have media, make a dedicated Gemini call for value extraction
+      if (!extractedValue && mediaBase64 && isPixPayment) {
+        console.log("[TAG-WHATS] 🔍 No value found, making dedicated Gemini call for value extraction...");
+        
+        const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+        if (lovableApiKey) {
+          try {
+            const valueExtractionPrompt = `Extraia APENAS o valor monetário deste comprovante de pagamento PIX.
+
+RESPONDA SOMENTE COM O NÚMERO DO VALOR, usando ponto como decimal.
+Exemplos de resposta correta: 97.00, 150.50, 1234.00, 50.00
+
+Se o comprovante mostrar "R$ 97,00", responda: 97.00
+Se o comprovante mostrar "R$ 1.234,56", responda: 1234.56
+Se não encontrar valor, responda: 0`;
+
+            const valueResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${lovableApiKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: "google/gemini-2.5-flash",
+                messages: [
+                  {
+                    role: "user",
+                    content: [
+                      { type: "text", text: valueExtractionPrompt },
+                      { type: "image_url", image_url: { url: `data:${mediaMimetype};base64,${mediaBase64}` } }
+                    ]
+                  }
+                ],
+              }),
+            });
+
+            if (valueResponse.ok) {
+              const valueResult = await valueResponse.json();
+              const valueContent = valueResult.choices?.[0]?.message?.content || "";
+              console.log("[TAG-WHATS] Gemini value extraction response:", valueContent);
+              
+              // Parse the numeric response
+              const cleanedResponse = valueContent.trim().replace(/[^\d.,]/g, '').replace(',', '.');
+              const geminiValue = parseFloat(cleanedResponse);
+              
+              if (!isNaN(geminiValue) && geminiValue > 0 && geminiValue < 1000000) {
+                extractedValue = geminiValue;
+                console.log("[TAG-WHATS] ✅ Value extracted from Gemini fallback:", extractedValue);
+              }
+            } else {
+              console.log("[TAG-WHATS] Gemini value extraction failed:", await valueResponse.text());
+            }
+          } catch (geminiError) {
+            console.error("[TAG-WHATS] Gemini value extraction error:", geminiError);
+          }
+        }
+      }
+      
+      console.log("[TAG-WHATS] 📊 Final extracted PIX value:", extractedValue);
     }
 
     // Check if conversion tracking is enabled (support both old and new formats)
