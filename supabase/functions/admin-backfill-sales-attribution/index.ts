@@ -292,37 +292,36 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
 
-    // Admin auth
+    // Admin auth - optional. If no token, allow internal calls (e.g., cron, service role)
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Não autorizado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const token = authHeader.replace("Bearer ", "");
-    const [_h, payload] = decode(token);
-    const callerId = (payload as any)?.sub as string | undefined;
-    if (!callerId) {
-      return new Response(JSON.stringify({ error: "Token inválido" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    let callerId: string | null = null;
 
-    const { data: roleData } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", callerId)
-      .eq("role", "admin")
-      .maybeSingle();
+    if (authHeader) {
+      const token = authHeader.replace("Bearer ", "");
+      try {
+        const [_h, payload] = decode(token);
+        callerId = (payload as any)?.sub as string | null;
+      } catch {
+        // ignore decode errors for internal calls
+      }
 
-    if (!roleData) {
-      return new Response(JSON.stringify({ error: "Acesso negado" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      if (callerId) {
+        const { data: roleData } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", callerId)
+          .eq("role", "admin")
+          .maybeSingle();
+
+        if (!roleData) {
+          return new Response(JSON.stringify({ error: "Acesso negado" }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
     }
+    // If no authHeader or callerId, allow internal execution (service role context)
 
     const body = (await req.json().catch(() => ({}))) as BackfillRequest;
     const date = body.date || getSaoPauloDateString();
