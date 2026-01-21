@@ -124,6 +124,7 @@ type DateFilter = "today" | "yesterday" | "7days" | "30days" | "month";
 type ViewLevel = 'campaign' | 'adset' | 'ad';
 
 const SP_TIMEZONE = "America/Sao_Paulo";
+const UNATTRIBUTED_ROW_ID = "__unattributed__";
 
 interface ColumnConfig {
   key: string;
@@ -356,7 +357,10 @@ export default function AdsCampaigns() {
         .gte("purchase_sent_at", utcStart)
         .lte("purchase_sent_at", utcEnd);
 
-      if (accountIdsToFilter.length > 0) {
+      // Só filtra vendas por conta quando o usuário selecionou explicitamente.
+      // Se estiver em "Todas as contas", incluir também vendas sem ad_account_id (ex: Tag Whats).
+      const isExplicitAccountFilter = selectedAccounts.length > 0;
+      if (isExplicitAccountFilter && accountIdsToFilter.length > 0) {
         salesQuery = salesQuery.in("ad_account_id", accountIdsToFilter);
       }
 
@@ -380,6 +384,15 @@ export default function AdsCampaigns() {
           }
           campaignSalesMap[sale.campaign_id].count++;
           campaignSalesMap[sale.campaign_id].value += sale.purchase_value || 0;
+        }
+
+        // Vendas sem campanha (ex: vendas do Tag Whats que não tinham lead atribuído)
+        if (!sale.campaign_id) {
+          if (!campaignSalesMap[UNATTRIBUTED_ROW_ID]) {
+            campaignSalesMap[UNATTRIBUTED_ROW_ID] = { count: 0, value: 0 };
+          }
+          campaignSalesMap[UNATTRIBUTED_ROW_ID].count++;
+          campaignSalesMap[UNATTRIBUTED_ROW_ID].value += sale.purchase_value || 0;
         }
       });
       
@@ -797,10 +810,53 @@ export default function AdsCampaigns() {
   }, [currentData, sortField, sortOrder]);
 
   const filteredData = useMemo(() => {
-    return sortedData.filter((item: any) =>
+    const base = sortedData.filter((item: any) =>
       item.name?.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [sortedData, searchQuery]);
+
+    // Adiciona uma linha informativa para vendas sem atribuição (apenas na visão de campanhas)
+    if (viewLevel === 'campaign') {
+      const un = salesByCampaign[UNATTRIBUTED_ROW_ID];
+      if (un && un.count > 0) {
+        const synthetic = {
+          id: UNATTRIBUTED_ROW_ID,
+          campaign_id: UNATTRIBUTED_ROW_ID,
+          name: 'Sem atribuição (Tag Whats)',
+          status: 'INFO',
+          objective: '—',
+          daily_budget: 0,
+          lifetime_budget: 0,
+          spend: 0,
+          impressions: 0,
+          clicks: 0,
+          conversions: 0,
+          results: 0,
+          cost_per_result: 0,
+          cpm: 0,
+          ctr: 0,
+          ad_account_id: null,
+          reach: 0,
+          cpc: 0,
+          cost_per_message: 0,
+          messaging_conversations_started: 0,
+          meta_conversions: 0,
+          conversion_value: 0,
+          last_synced_at: null,
+        };
+
+        // Respeita busca
+        if (synthetic.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+          return [synthetic, ...base];
+        }
+      }
+    }
+
+    return base;
+  }, [sortedData, searchQuery, viewLevel, salesByCampaign]);
+
+  const selectableData = useMemo(() => {
+    return filteredData.filter((item: any) => item.id !== UNATTRIBUTED_ROW_ID);
+  }, [filteredData]);
 
   const toggleItemSelection = (itemId: string, item?: any) => {
     setSelectedItems(prev => {
@@ -843,7 +899,7 @@ export default function AdsCampaigns() {
   };
 
   const toggleAllItems = () => {
-    if (selectedItems.size === filteredData.length) {
+    if (selectedItems.size === selectableData.length) {
       setSelectedItems(new Set());
       // Clear hierarchy selection when deselecting all
       if (viewLevel === 'campaign') {
@@ -852,12 +908,12 @@ export default function AdsCampaigns() {
         setSelectedAdsetIds(new Set());
       }
     } else {
-      setSelectedItems(new Set(filteredData.map((item: any) => item.id)));
+      setSelectedItems(new Set(selectableData.map((item: any) => item.id)));
       // Add all to hierarchy selection
       if (viewLevel === 'campaign') {
-        setSelectedCampaignIds(new Set(filteredData.map((item: any) => item.campaign_id)));
+        setSelectedCampaignIds(new Set(selectableData.map((item: any) => item.campaign_id)));
       } else if (viewLevel === 'adset') {
-        setSelectedAdsetIds(new Set(filteredData.map((item: any) => item.adset_id)));
+        setSelectedAdsetIds(new Set(selectableData.map((item: any) => item.adset_id)));
       }
     }
   };
@@ -948,6 +1004,8 @@ export default function AdsCampaigns() {
   };
 
   const renderCellContent = (item: any, columnKey: string) => {
+    const isSynthetic = item?.id === UNATTRIBUTED_ROW_ID;
+
     // Calculate profit using real sales data
     const adId = item.ad_id;
     const campaignId = item.campaign_id;
@@ -969,12 +1027,17 @@ export default function AdsCampaigns() {
         return (
           <div className="flex flex-col gap-0.5">
             <span className="font-medium truncate max-w-[160px] text-sm">{item.name}</span>
-            {getStatusBadge(item.status)}
+            {isSynthetic ? (
+              <Badge variant="secondary" className="text-xs px-2 py-0.5 w-fit">Somente relatório</Badge>
+            ) : (
+              getStatusBadge(item.status)
+            )}
           </div>
         );
       case 'daily_budget':
         const hasBudget = viewLevel !== 'ad';
         if (!hasBudget) return '-';
+        if (isSynthetic) return '-';
         return (
           <div className="flex items-center gap-0.5 justify-end">
             <span className="font-medium text-sm">{formatCurrency(item.daily_budget)}</span>
@@ -1302,7 +1365,7 @@ export default function AdsCampaigns() {
                 <TableRow className="bg-muted/30 hover:bg-muted/30">
                   <TableHead className="w-[40px] border-r border-border/30">
                     <Checkbox
-                      checked={selectedItems.size === filteredData.length && filteredData.length > 0}
+                      checked={selectedItems.size === selectableData.length && selectableData.length > 0}
                       onCheckedChange={toggleAllItems}
                       className="border-orange-500 data-[state=checked]:bg-orange-500 data-[state=checked]:text-white"
                     />
@@ -1371,6 +1434,7 @@ export default function AdsCampaigns() {
               <TableBody>
                 <AnimatePresence mode="popLayout">
                   {filteredData.map((item: any, index: number) => {
+                    const isSynthetic = item?.id === UNATTRIBUTED_ROW_ID;
                     return (
                       <motion.tr 
                         key={item.id}
@@ -1381,20 +1445,22 @@ export default function AdsCampaigns() {
                         style={{ animationDelay: `${index * 0.04}s` }}
                         className={cn(
                           "border-b border-border/20 hover:bg-muted/20 transition-colors",
-                          selectedItems.has(item.id) && "bg-orange-500/5"
+                          !isSynthetic && selectedItems.has(item.id) && "bg-orange-500/5"
                         )}
                       >
                         <TableCell className="border-r border-border/20">
                           <Checkbox
-                            checked={selectedItems.has(item.id)}
-                            onCheckedChange={() => toggleItemSelection(item.id, item)}
+                            disabled={isSynthetic}
+                            checked={!isSynthetic && selectedItems.has(item.id)}
+                            onCheckedChange={() => !isSynthetic && toggleItemSelection(item.id, item)}
                             className="border-orange-500 data-[state=checked]:bg-orange-500 data-[state=checked]:text-white"
                           />
                         </TableCell>
                         <TableCell className="border-r border-border/20">
                           <Switch
-                            checked={item.status === "ACTIVE"}
-                            onCheckedChange={() => handleToggleItem(item)}
+                            disabled={isSynthetic}
+                            checked={!isSynthetic && item.status === "ACTIVE"}
+                            onCheckedChange={() => !isSynthetic && handleToggleItem(item)}
                             className={cn(
                               "data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500",
                               "[&>span]:bg-white"
@@ -1414,44 +1480,46 @@ export default function AdsCampaigns() {
                           </TableCell>
                         ))}
                         <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleToggleItem(item)}>
-                                {item.status === "ACTIVE" ? (
-                                  <>
-                                    <Pause className="h-4 w-4 mr-2" />
-                                    Pausar
-                                  </>
-                                ) : (
-                                  <>
-                                    <Play className="h-4 w-4 mr-2" />
-                                    Ativar
-                                  </>
-                                )}
-                              </DropdownMenuItem>
-                              {viewLevel !== 'ad' && (
-                                <DropdownMenuItem onClick={() => {
-                                  if (viewLevel === 'campaign') {
-                                    setSelectedCampaign(item);
-                                    setSelectedAdset(null);
-                                  } else {
-                                    setSelectedAdset(item);
-                                    setSelectedCampaign(null);
-                                  }
-                                  setNewBudget(item.daily_budget?.toString() || "");
-                                  setEditBudgetDialogOpen(true);
-                                }}>
-                                  <Edit className="h-4 w-4 mr-2" />
-                                  Editar Orçamento
+                          {isSynthetic ? null : (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleToggleItem(item)}>
+                                  {item.status === "ACTIVE" ? (
+                                    <>
+                                      <Pause className="h-4 w-4 mr-2" />
+                                      Pausar
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Play className="h-4 w-4 mr-2" />
+                                      Ativar
+                                    </>
+                                  )}
                                 </DropdownMenuItem>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                                {viewLevel !== 'ad' && (
+                                  <DropdownMenuItem onClick={() => {
+                                    if (viewLevel === 'campaign') {
+                                      setSelectedCampaign(item);
+                                      setSelectedAdset(null);
+                                    } else {
+                                      setSelectedAdset(item);
+                                      setSelectedCampaign(null);
+                                    }
+                                    setNewBudget(item.daily_budget?.toString() || "");
+                                    setEditBudgetDialogOpen(true);
+                                  }}>
+                                    <Edit className="h-4 w-4 mr-2" />
+                                    Editar Orçamento
+                                  </DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
                         </TableCell>
                       </motion.tr>
                     );
