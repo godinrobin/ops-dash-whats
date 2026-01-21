@@ -237,8 +237,8 @@ export const ConversationList = ({
           return !isUnread && !isIgnored;
         case 'all':
         default:
-          // "Todos" shows all contacts (not ignored)
-          return !isIgnored;
+          // "Todos" shows all contacts (not ignored and not Pago)
+          return !isIgnored && !hasPagoTag;
       }
     });
   }, [contacts, activeFilter]);
