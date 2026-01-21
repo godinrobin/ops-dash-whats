@@ -738,11 +738,74 @@ async function executeFlowForContact(
 
       case 'waitInput':
       case 'menu':
-        // For blaster, skip interactive nodes - just move to the first connected edge
-        console.log(`[${phone}] Skipping interactive node: ${currentNode.type}`);
-        const skipEdge = edges.find(e => e.source === currentNodeId);
-        currentNodeId = skipEdge?.target || '';
-        if (!currentNodeId) continueProcessing = false;
+        // For blaster with flows: create a session to wait for user response
+        // This respects the wait input node instead of skipping it
+        console.log(`[${phone}] Reached interactive node: ${currentNode.type} - Creating session to wait for response`);
+        
+        // Create inbox contact if doesn't exist
+        const { data: existingContact } = await supabaseClient
+          .from('inbox_contacts')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('phone', formattedPhone)
+          .maybeSingle();
+        
+        let contactId = existingContact?.id;
+        
+        if (!contactId) {
+          const { data: newContact, error: contactError } = await supabaseClient
+            .from('inbox_contacts')
+            .insert({
+              user_id: userId,
+              phone: formattedPhone,
+              instance_id: instance.id,
+              name: formattedPhone,
+              status: 'active',
+            })
+            .select('id')
+            .single();
+          
+          if (contactError) {
+            console.error(`[${phone}] Error creating contact:`, contactError.message);
+            continueProcessing = false;
+            break;
+          }
+          contactId = newContact.id;
+        }
+        
+        // Create flow session paused at this node
+        const timeoutEnabled = currentNode.data.timeoutEnabled as boolean || false;
+        const timeout = (currentNode.data.timeout as number) || 5;
+        const timeoutUnit = (currentNode.data.timeoutUnit as string) || 'minutes';
+        
+        let timeoutMs = timeout * 60 * 1000; // default minutes
+        if (timeoutUnit === 'seconds') timeoutMs = timeout * 1000;
+        if (timeoutUnit === 'hours') timeoutMs = timeout * 60 * 60 * 1000;
+        if (timeoutUnit === 'days') timeoutMs = timeout * 24 * 60 * 60 * 1000;
+        
+        const timeoutAt = timeoutEnabled ? new Date(Date.now() + timeoutMs).toISOString() : null;
+        
+        const { error: sessionError } = await supabaseClient
+          .from('inbox_flow_sessions')
+          .insert({
+            user_id: userId,
+            flow_id: flow.id,
+            contact_id: contactId,
+            instance_id: instance.id,
+            current_node_id: currentNodeId,
+            status: 'waiting',
+            variables,
+            timeout_at: timeoutAt,
+          });
+        
+        if (sessionError) {
+          console.error(`[${phone}] Error creating session:`, sessionError.message);
+        } else {
+          console.log(`[${phone}] Session created, waiting for user response at node ${currentNodeId}`);
+        }
+        
+        // Stop processing here - the flow will continue when user responds via webhook
+        continueProcessing = false;
         break;
 
       case 'transfer':
