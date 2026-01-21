@@ -49,14 +49,15 @@ export const useInboxMessages = (contactId: string | null) => {
   const sortByCreatedAtAsc = (arr: InboxMessage[]) =>
     [...arr].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
-  const fetchMessages = useCallback(async () => {
+  const fetchMessages = useCallback(async (showLoading = true) => {
     if (!userId || !contactId) {
       setMessages([]);
       setLoading(false);
       return;
     }
 
-    setLoading(true);
+    // Only show loading indicator on first load, not refreshes
+    if (showLoading) setLoading(true);
     try {
       const { data, error: fetchError } = await supabase
         .from('inbox_messages')
@@ -131,10 +132,13 @@ export const useInboxMessages = (contactId: string | null) => {
     }
   }, [userId, contactId]);
 
-  // Fetch messages when contactId changes
+  // Fetch messages when contactId changes - clear immediately for faster perceived switch
   useEffect(() => {
-    fetchMessages();
-  }, [fetchMessages]);
+    // Clear messages immediately when switching contacts for instant feedback
+    setMessages([]);
+    setError(null);
+    fetchMessages(true);
+  }, [contactId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Subscribe to realtime updates for this contact's messages
   useEffect(() => {
@@ -309,7 +313,7 @@ export const useInboxMessages = (contactId: string | null) => {
         const inserted = (data as any)?.inserted ?? 0;
         if (inserted > 0) {
           console.log(`Synced ${inserted} new messages from phone`);
-          await fetchMessages();
+          await fetchMessages(false); // Don't show loading on background sync
         }
       } catch (e) {
         console.warn('sync-inbox-messages exception:', e);
