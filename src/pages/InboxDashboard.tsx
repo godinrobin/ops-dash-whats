@@ -898,6 +898,15 @@ export default function InboxDashboard() {
       gradient: "from-amber-400 to-orange-500",
       comingSoon: false,
     },
+    { 
+      title: "Kanban", 
+      description: "Visualize e organize leads em pipeline", 
+      icon: Users, 
+      path: "/inbox/kanban",
+      count: (contacts as any)._exactCount || contacts.length,
+      gradient: "from-purple-400 to-pink-500",
+      comingSoon: false,
+    },
   ];
 
   return (
@@ -921,7 +930,7 @@ export default function InboxDashboard() {
         </div>
 
         {/* Menu Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {menuCards.map((card) => (
             <Card 
               key={card.title}
