@@ -75,14 +75,24 @@ export default function SaleNotificationSettings() {
       
       if (profileError && profileError.code !== 'PGRST116') throw profileError;
       
-      // If no templates exist, create the default one
-      if (!templatesData || templatesData.length === 0) {
+      const DEFAULT_TITLE = "💰 Nova Venda!";
+      const DEFAULT_BODY = "Parabéns! Você acabou de vender por R$ {valor}!";
+      
+      let finalTemplates = templatesData || [];
+      
+      // Check if the default template already exists (by checking title and body)
+      const hasDefaultTemplate = finalTemplates.some(
+        t => t.title_template === DEFAULT_TITLE && t.body_template === DEFAULT_BODY
+      );
+      
+      // If default template doesn't exist, insert it at the beginning
+      if (!hasDefaultTemplate) {
         const defaultTemplate = {
           user_id: user.id,
-          title_template: "💰 Nova Venda!",
-          body_template: "Parabéns! Você acabou de vender por R$ {valor}!",
+          title_template: DEFAULT_TITLE,
+          body_template: DEFAULT_BODY,
           is_active: true,
-          sort_order: 0,
+          sort_order: -1, // Will be reordered below
         };
         
         const { data: newTemplate, error: insertError } = await supabase
@@ -91,16 +101,22 @@ export default function SaleNotificationSettings() {
           .select()
           .single();
         
-        if (insertError) {
-          console.error("Error creating default template:", insertError);
-          setTemplates([]);
-        } else {
-          setTemplates([newTemplate]);
+        if (!insertError && newTemplate) {
+          // Add default template at the beginning
+          finalTemplates = [newTemplate, ...finalTemplates];
+          
+          // Update sort_order for all templates
+          for (let i = 0; i < finalTemplates.length; i++) {
+            await supabase
+              .from("sale_notification_templates")
+              .update({ sort_order: i })
+              .eq("id", finalTemplates[i].id);
+            finalTemplates[i].sort_order = i;
+          }
         }
-      } else {
-        setTemplates(templatesData);
       }
       
+      setTemplates(finalTemplates);
       setHideSaleValue(profileData?.hide_sale_value_in_notification || false);
     } catch (error: any) {
       toast({ variant: "destructive", title: "Erro", description: error.message });
