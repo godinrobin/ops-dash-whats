@@ -514,12 +514,12 @@ export const ConversationList = ({
                     )}
                   </div>
 
-                  <div className="flex-1 min-w-0 overflow-hidden">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm truncate min-w-0 flex-shrink">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="font-medium text-sm truncate">
                         {getDisplayName(contact)}
                       </span>
-                      <span className="text-[10px] text-muted-foreground whitespace-nowrap flex-shrink-0 ml-auto">
+                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">
                         {formatTime(contact.last_message_at)}
                       </span>
                     </div>
