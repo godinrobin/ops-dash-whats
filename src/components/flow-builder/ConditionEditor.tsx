@@ -518,28 +518,31 @@ export const ConditionEditor = ({
         </div>
       )}
 
-      {/* Add condition buttons */}
-      <div className="flex gap-2 flex-wrap">
-        <Button
-          variant="outline"
-          size="sm"
-          className="flex-1 h-8 text-xs"
-          onClick={() => addCondition('variable')}
-        >
-          <Variable className="h-3 w-3 mr-1" />
-          + Variável
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="flex-1 h-8 text-xs"
-          onClick={() => addCondition('tag')}
-        >
-          <Tag className="h-3 w-3 mr-1" />
-          + Tag
-        </Button>
-        {/* Only show IA condition button if no IA condition exists */}
-        {!conditions.some(c => c.type === 'ia') && (
+      {/* Add condition buttons - disabled when IA condition exists */}
+      {conditions.some(c => c.type === 'ia') ? (
+        <p className="text-xs text-violet-400 text-center py-2">
+          🤖 Condição IA ativa - remova-a para adicionar outras condições
+        </p>
+      ) : (
+        <div className="flex gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1 h-8 text-xs"
+            onClick={() => addCondition('variable')}
+          >
+            <Variable className="h-3 w-3 mr-1" />
+            + Variável
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1 h-8 text-xs"
+            onClick={() => addCondition('tag')}
+          >
+            <Tag className="h-3 w-3 mr-1" />
+            + Tag
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -548,8 +551,8 @@ export const ConditionEditor = ({
           >
             🤖 + Condição IA
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       {conditions.length === 0 && (
         <p className="text-xs text-muted-foreground text-center py-2">

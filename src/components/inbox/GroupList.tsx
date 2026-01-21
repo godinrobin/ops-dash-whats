@@ -79,224 +79,27 @@ export const GroupList = ({
   };
 
   return (
-    <div className="w-80 border-r border-border flex flex-col bg-card flex-shrink-0 overflow-hidden">
-      {/* Header */}
-      <div className="p-4 border-b border-border">
-        {/* View Mode Toggle */}
+    <div className="w-80 border-r border-border flex flex-col bg-card flex-shrink-0 overflow-hidden items-center justify-center">
+      <div className="text-center p-8">
+        <Users className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+        <h3 className="text-lg font-semibold mb-2">Grupos</h3>
+        <Badge variant="outline" className="text-orange-500 border-orange-500">
+          Em breve
+        </Badge>
+        <p className="text-sm text-muted-foreground mt-4">
+          Gerenciamento de grupos WhatsApp será disponibilizado em breve.
+        </p>
         {onViewModeChange && (
-          <div className="flex gap-1 mb-4 p-1 bg-muted rounded-lg">
-            <button
-              onClick={() => onViewModeChange('conversations')}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-md text-sm font-medium transition-all",
-                viewMode === 'conversations'
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <MessageSquare className="h-4 w-4" />
-              Conversas
-            </button>
-            <button
-              onClick={() => onViewModeChange('groups')}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-md text-sm font-medium transition-all",
-                viewMode === 'groups'
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Users className="h-4 w-4" />
-              Grupos
-            </button>
-          </div>
-        )}
-
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Grupos
-          </h2>
-          <div className="flex items-center gap-1">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8"
-              onClick={() => refetch()}
-              disabled={loading}
-            >
-              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-            </Button>
-          </div>
-        </div>
-        
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar grupo..."
-            className="pl-10 h-9"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-
-        {/* Bulk Actions */}
-        <div className="flex items-center gap-2 mt-3">
-          <Button
-            size="sm"
-            variant={bulkActionMode ? "secondary" : "outline"}
-            onClick={() => {
-              setBulkActionMode(!bulkActionMode);
-              if (bulkActionMode) setSelectedGroups(new Set());
-            }}
-            className="text-xs"
+          <Button 
+            variant="outline" 
+            className="mt-4"
+            onClick={() => onViewModeChange('conversations')}
           >
-            {bulkActionMode ? 'Cancelar' : 'Ações em Massa'}
+            <MessageSquare className="h-4 w-4 mr-2" />
+            Voltar para Conversas
           </Button>
-          
-          {bulkActionMode && (
-            <>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={selectAllGroups}
-                className="text-xs"
-              >
-                {selectedGroups.size === filteredGroups.length ? 'Desmarcar' : 'Selecionar Todos'}
-              </Button>
-            </>
-          )}
-        </div>
-
-        {/* Bulk Action Buttons */}
-        {bulkActionMode && selectedGroups.size > 0 && (
-          <div className="flex flex-wrap gap-2 mt-3">
-            <Badge variant="secondary" className="text-xs">
-              {selectedGroups.size} selecionado(s)
-            </Badge>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="outline" className="text-xs gap-1">
-                  <Send className="h-3 w-3" />
-                  Enviar
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem onClick={() => handleBulkAction('send-text')}>
-                  <Send className="h-4 w-4 mr-2" />
-                  Texto
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleBulkAction('send-image')}>
-                  <Image className="h-4 w-4 mr-2" />
-                  Imagem
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleBulkAction('send-audio')}>
-                  <Mic className="h-4 w-4 mr-2" />
-                  Áudio
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleBulkAction('send-document')}>
-                  <FileText className="h-4 w-4 mr-2" />
-                  Documento
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="outline" className="text-xs gap-1">
-                  <MoreVertical className="h-3 w-3" />
-                  Mais
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem onClick={() => handleBulkAction('change-name')}>
-                  Alterar Nome
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleBulkAction('change-photo')}>
-                  Alterar Foto
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleBulkAction('change-permissions')}>
-                  Alterar Permissões
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
         )}
       </div>
-
-      {/* Group List */}
-      <ScrollArea className="flex-1">
-        {loading ? (
-          <div className="p-4 space-y-4">
-            {[1, 2, 3, 4, 5].map(i => (
-              <div key={i} className="flex items-center gap-3">
-                <Skeleton className="h-12 w-12 rounded-full flex-shrink-0" />
-                <div className="flex-1 space-y-2 min-w-0">
-                  <Skeleton className="h-4 w-32" />
-                  <Skeleton className="h-3 w-20" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : filteredGroups.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground">
-            <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Nenhum grupo encontrado</p>
-            <p className="text-sm mt-2">
-              Conecte uma instância para ver os grupos
-            </p>
-          </div>
-        ) : (
-          <div>
-            {filteredGroups.map((group) => (
-              <div
-                key={group.id}
-                onClick={() => !bulkActionMode && onSelectGroup(group)}
-                className={cn(
-                  "flex items-center gap-3 p-3 cursor-pointer hover:bg-accent/50 transition-colors border-b border-border/50",
-                  selectedGroup?.id === group.id && "bg-accent"
-                )}
-              >
-                {bulkActionMode && (
-                  <Checkbox
-                    checked={selectedGroups.has(group.id)}
-                    onCheckedChange={() => toggleGroupSelection(group.id)}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                )}
-                
-                <Avatar className="h-12 w-12 border-2 border-background shadow-sm flex-shrink-0">
-                  {group.profile_pic_url && (
-                    <AvatarImage 
-                      src={group.profile_pic_url} 
-                      alt={group.name}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                  )}
-                  <AvatarFallback className="bg-primary/10 text-primary font-medium">
-                    {getInitials(group.name)}
-                  </AvatarFallback>
-                </Avatar>
-                
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium text-sm truncate">
-                      {group.name}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Users className="h-3 w-3" />
-                    <span>{group.participant_count} membros</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </ScrollArea>
     </div>
   );
 };

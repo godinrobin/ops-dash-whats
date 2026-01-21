@@ -994,7 +994,7 @@ const FlowListPage = () => {
             <div className="space-y-2">
               <Label>Código do Fluxo</Label>
               <Input
-                placeholder="Cole o código UUID aqui..."
+                placeholder="Cole o código do fluxo aqui..."
                 value={importCode}
                 onChange={(e) => setImportCode(e.target.value)}
                 className="font-mono text-sm"
