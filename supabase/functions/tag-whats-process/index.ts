@@ -1272,23 +1272,66 @@ Se não encontrar valor, responda: 0`;
             const sourceUrlObj = new URL(adSourceUrl);
             const isShortLink = sourceUrlObj.hostname === 'fb.me' || 
                                 sourceUrlObj.hostname === 'l.facebook.com' ||
+                                sourceUrlObj.hostname === 'l.instagram.com' ||
                                 (sourceUrlObj.hostname.includes('instagram.com') && sourceUrlObj.pathname.startsWith('/p/'));
             
             if (isShortLink) {
               console.log(`[TAG-WHATS] Detected short link, attempting to expand: ${adSourceUrl}`);
+              
+              // Method 1: HEAD request with manual redirect (faster)
+              let expandSuccess = false;
               try {
-                const expandResponse = await fetch(adSourceUrl, { 
-                  method: 'GET', 
-                  redirect: 'follow',
-                  headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+                const headResponse = await fetch(adSourceUrl, { 
+                  method: 'HEAD', 
+                  redirect: 'manual',
+                  headers: { 
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                  }
                 });
-                if (expandResponse.url && expandResponse.url !== adSourceUrl) {
-                  expandedUrl = expandResponse.url;
+                const locationHeader = headResponse.headers.get('location');
+                if (locationHeader) {
+                  expandedUrl = locationHeader;
                   urlsToMatch.push(expandedUrl);
-                  console.log(`[TAG-WHATS] Expanded short link to: ${expandedUrl}`);
+                  expandSuccess = true;
+                  console.log(`[TAG-WHATS] Expanded via HEAD redirect: ${expandedUrl}`);
                 }
-              } catch (expandErr) {
-                console.log(`[TAG-WHATS] Could not expand short link: ${expandErr}`);
+              } catch (headErr) {
+                console.log(`[TAG-WHATS] HEAD expand failed: ${headErr}`);
+              }
+              
+              // Method 2: GET with follow (fallback)
+              if (!expandSuccess) {
+                try {
+                  const getResponse = await fetch(adSourceUrl, { 
+                    method: 'GET', 
+                    redirect: 'follow',
+                    headers: { 
+                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                    }
+                  });
+                  if (getResponse.url && getResponse.url !== adSourceUrl) {
+                    expandedUrl = getResponse.url;
+                    urlsToMatch.push(expandedUrl);
+                    expandSuccess = true;
+                    console.log(`[TAG-WHATS] Expanded via GET follow: ${expandedUrl}`);
+                  }
+                } catch (getErr) {
+                  console.log(`[TAG-WHATS] GET expand failed: ${getErr}`);
+                }
+              }
+              
+              // Method 3: Parse short code from fb.me and try multiple formats
+              if (!expandSuccess && sourceUrlObj.hostname === 'fb.me') {
+                const shortCode = sourceUrlObj.pathname.replace('/', '');
+                if (shortCode) {
+                  // Add potential matching patterns
+                  postIdsToMatch.push(shortCode);
+                  urlsToMatch.push(`https://www.facebook.com/share/p/${shortCode}`);
+                  urlsToMatch.push(`https://www.facebook.com/share/${shortCode}`);
+                  console.log(`[TAG-WHATS] Added fb.me shortcode to match: ${shortCode}`);
+                }
               }
             }
           } catch (urlParseErr) {
@@ -1407,6 +1450,63 @@ Se não encontrar valor, responda: 0`;
                 matchedAdAccountId = matchedAd.ad_account_id;
                 console.log(`[TAG-WHATS] ✅ Matched ad by prefix ${prefix}: ad_id=${adId}, campaign_id=${campaignId}`);
               }
+            }
+          }
+
+          // Strategy 4: Match by fb.me shortcode in any ad URL or creative
+          if (!campaignId) {
+            try {
+              const sourceUrlObj = new URL(adSourceUrl);
+              if (sourceUrlObj.hostname === 'fb.me') {
+                const shortCode = sourceUrlObj.pathname.replace('/', '');
+                if (shortCode && shortCode.length >= 6) {
+                  console.log(`[TAG-WHATS] Strategy 4: Searching by fb.me shortcode: ${shortCode}`);
+                  
+                  // Try to find any ad that contains this shortcode
+                  const { data: matchedAd } = await supabase
+                    .from('ads_ads')
+                    .select('ad_id, campaign_id, adset_id, name, ad_account_id')
+                    .eq('user_id', instance.user_id)
+                    .or(`ad_post_url.ilike.%${shortCode}%,effective_object_story_id.ilike.%${shortCode}%`)
+                    .limit(1)
+                    .maybeSingle();
+                  
+                  if (matchedAd) {
+                    adId = matchedAd.ad_id;
+                    campaignId = matchedAd.campaign_id;
+                    adsetId = matchedAd.adset_id;
+                    matchedAdAccountId = matchedAd.ad_account_id;
+                    console.log(`[TAG-WHATS] ✅ Matched ad by fb.me shortcode ${shortCode}: ad_id=${adId}, campaign_id=${campaignId}`);
+                  }
+                }
+              }
+            } catch (shortCodeErr) {
+              console.log(`[TAG-WHATS] Strategy 4 error: ${shortCodeErr}`);
+            }
+          }
+
+          // Strategy 5: Use ctwa_clid to lookup from ads_whatsapp_leads (other contacts from same ad)
+          if (!campaignId && contactCtwaClid) {
+            console.log(`[TAG-WHATS] Strategy 5: Looking up by ctwa_clid pattern`);
+            
+            // Extract first part of ctwa_clid (usually identifies the ad/campaign)
+            const clidPrefix = contactCtwaClid.substring(0, 20);
+            
+            const { data: similarLead } = await supabase
+              .from('ads_whatsapp_leads')
+              .select('ad_id, campaign_id, adset_id, ad_account_id')
+              .eq('user_id', instance.user_id)
+              .not('campaign_id', 'is', null)
+              .ilike('ctwa_clid', `${clidPrefix}%`)
+              .limit(1)
+              .maybeSingle();
+            
+            if (similarLead && similarLead.campaign_id) {
+              adId = similarLead.ad_id;
+              campaignId = similarLead.campaign_id;
+              adsetId = similarLead.adset_id;
+              matchedAdAccountId = similarLead.ad_account_id;
+              console.log(`[TAG-WHATS] ✅ Matched via ctwa_clid similarity: ad_id=${adId}, campaign_id=${campaignId}`);
             }
           }
 
