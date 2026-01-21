@@ -11,18 +11,28 @@ type ScrollAreaProps = React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive
    * Use "vertical" to prevent horizontal scrolling in narrow layouts.
    */
   orientation?: ScrollAreaOrientation;
+
+  /**
+   * When true, adds padding to the viewport so content never sits underneath
+   * Radix's overlay scrollbars.
+   */
+  withScrollbarPadding?: boolean;
 };
 
 const ScrollArea = React.forwardRef<
   React.ElementRef<typeof ScrollAreaPrimitive.Root>,
   ScrollAreaProps
->(({ className, children, orientation = "both", ...props }, ref) => (
+>(({ className, children, orientation = "both", withScrollbarPadding = false, ...props }, ref) => (
   <ScrollAreaPrimitive.Root ref={ref} className={cn("relative overflow-hidden", className)} {...props}>
     <ScrollAreaPrimitive.Viewport
       className={cn(
         "h-full w-full rounded-[inherit]",
         orientation === "vertical" && "overflow-x-hidden",
         orientation === "horizontal" && "overflow-y-hidden",
+
+        // Reserve space so content doesn't get visually cut by the overlay scrollbar.
+        withScrollbarPadding && (orientation === "vertical" || orientation === "both") && "pr-3",
+        withScrollbarPadding && (orientation === "horizontal" || orientation === "both") && "pb-3",
       )}
     >
       {children}
