@@ -11,6 +11,7 @@ interface ActiveFlowSession {
   status: string;
   timeout_at: string | null;
   next_run_at: string | null;
+  waiting_for_input: boolean;
 }
 
 interface UseActiveFlowSessionResult {
@@ -140,6 +141,7 @@ export function useActiveFlowSession(contactId: string | null): UseActiveFlowSes
 
       // Calculate next run time from either delay job or timeout_at or variables
       let nextRunAt: string | null = null;
+      let waitingForInput = false;
       
       if (delayJob?.run_at) {
         nextRunAt = delayJob.run_at;
@@ -148,6 +150,10 @@ export function useActiveFlowSession(contactId: string | null): UseActiveFlowSes
         const timeoutTime = new Date(sessionData.timeout_at).getTime();
         if (timeoutTime > Date.now()) {
           nextRunAt = sessionData.timeout_at;
+          // If current node is a waitInput, mark as waiting for input
+          if (currentNodeType === 'waitInput' || currentNodeType === 'waitInputNode') {
+            waitingForInput = true;
+          }
         }
       }
       
@@ -179,6 +185,12 @@ export function useActiveFlowSession(contactId: string | null): UseActiveFlowSes
       }
 
       const flowName = flowData?.name || 'Fluxo';
+      
+      // Adjust label for waitInput nodes
+      let displayLabel = currentNodeLabel;
+      if (waitingForInput) {
+        displayLabel = 'Timeout';
+      }
 
       setSession({
         id: sessionData.id,
@@ -186,10 +198,11 @@ export function useActiveFlowSession(contactId: string | null): UseActiveFlowSes
         flow_name: flowName,
         current_node_id: sessionData.current_node_id,
         current_node_type: currentNodeType,
-        current_node_label: currentNodeLabel,
+        current_node_label: displayLabel,
         status: sessionData.status,
         timeout_at: sessionData.timeout_at,
         next_run_at: nextRunAt,
+        waiting_for_input: waitingForInput,
       });
 
       // Calculate initial countdown
