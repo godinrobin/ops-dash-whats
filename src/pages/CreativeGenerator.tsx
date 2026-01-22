@@ -126,6 +126,8 @@ const CreativeGenerator = () => {
   const [isGeneratingFromRef, setIsGeneratingFromRef] = useState(false);
   const [refGeneratedImage, setRefGeneratedImage] = useState<string | null>(null);
   const [refStep, setRefStep] = useState<'upload' | 'analyze' | 'edit' | 'result'>('upload');
+  const [refEditInstructions, setRefEditInstructions] = useState("");
+  const [isEditingRef, setIsEditingRef] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleGenerate = async () => {
@@ -336,6 +338,36 @@ const CreativeGenerator = () => {
     setReferenceInstructions('');
     setRefGeneratedImage(null);
     setRefStep('upload');
+    setRefEditInstructions('');
+  };
+
+  const handleEditRefImage = async () => {
+    if (!refEditInstructions.trim() || !refGeneratedImage) return;
+
+    setIsEditingRef(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-from-reference', {
+        body: {
+          referenceImageUrl: refGeneratedImage,
+          editInstructions: refEditInstructions.trim(),
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.success && data.image) {
+        setRefGeneratedImage(data.image);
+        setRefEditInstructions('');
+        toast.success('Criativo editado com sucesso!');
+      } else {
+        throw new Error(data.error || 'Erro ao editar criativo');
+      }
+    } catch (error: any) {
+      console.error('Error editing reference creative:', error);
+      toast.error(error.message || 'Erro ao editar criativo');
+    } finally {
+      setIsEditingRef(false);
+    }
   };
 
   return (
@@ -761,21 +793,63 @@ const CreativeGenerator = () => {
                           alt="Criativo gerado"
                           className="w-full h-auto"
                         />
+                        {isEditingRef && (
+                          <div className="absolute inset-0 bg-accent/20 backdrop-blur-sm flex items-center justify-center">
+                            <Spinner size={48} />
+                          </div>
+                        )}
                       </div>
+                      
+                      {/* Edit with AI section */}
+                      <div className="space-y-2 p-4 rounded-lg border border-accent/30 bg-accent/5">
+                        <Label className="flex items-center gap-2">
+                          <Sparkles className="h-4 w-4 text-accent" />
+                          Editar com IA
+                        </Label>
+                        <Textarea
+                          placeholder="Ex: Mude a cor do fundo para azul, adicione mais produtos, altere o texto..."
+                          value={refEditInstructions}
+                          onChange={(e) => setRefEditInstructions(e.target.value)}
+                          rows={2}
+                          disabled={isEditingRef}
+                        />
+                        <Button
+                          onClick={handleEditRefImage}
+                          disabled={isEditingRef || !refEditInstructions.trim()}
+                          className="w-full"
+                          variant="outline"
+                        >
+                          {isEditingRef ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Aplicando edição...
+                            </>
+                          ) : (
+                            <>
+                              <Send className="h-4 w-4 mr-2" />
+                              Aplicar Edição
+                            </>
+                          )}
+                        </Button>
+                      </div>
+
                       <div className="flex gap-3">
                         <Button
                           variant="outline"
                           onClick={() => {
                             setRefGeneratedImage(null);
                             setRefStep('edit');
+                            setRefEditInstructions('');
                           }}
                           className="flex-1"
+                          disabled={isEditingRef}
                         >
-                          Gerar Outro
+                          Nova Referência
                         </Button>
                         <Button
                           onClick={handleDownloadRef}
                           className="flex-1"
+                          disabled={isEditingRef}
                         >
                           <Download className="h-4 w-4 mr-2" />
                           Baixar Criativo
