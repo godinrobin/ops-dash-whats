@@ -40,8 +40,7 @@ export function useActiveFlowSession(contactId: string | null): UseActiveFlowSes
           current_node_id,
           status,
           timeout_at,
-          variables,
-          inbox_flows!inner(name)
+          variables
         `)
         .eq('contact_id', contactId)
         .eq('status', 'active')
@@ -62,6 +61,13 @@ export function useActiveFlowSession(contactId: string | null): UseActiveFlowSes
         return;
       }
 
+      // Fetch flow name separately to avoid join issues
+      const { data: flowData } = await supabase
+        .from('inbox_flows')
+        .select('name')
+        .eq('id', sessionData.flow_id)
+        .maybeSingle();
+
       // Check for delay job
       const { data: delayJob } = await supabase
         .from('inbox_flow_delay_jobs')
@@ -70,22 +76,47 @@ export function useActiveFlowSession(contactId: string | null): UseActiveFlowSes
         .eq('status', 'scheduled')
         .maybeSingle();
 
-      // Calculate next run time from either delay job or timeout_at
+      // Calculate next run time from either delay job or timeout_at or variables
       let nextRunAt: string | null = null;
       
       if (delayJob?.run_at) {
         nextRunAt = delayJob.run_at;
       } else if (sessionData.timeout_at) {
-        nextRunAt = sessionData.timeout_at;
-      } else {
-        // Check variables for _pendingDelay
+        // Only use timeout_at if it's in the future
+        const timeoutTime = new Date(sessionData.timeout_at).getTime();
+        if (timeoutTime > Date.now()) {
+          nextRunAt = sessionData.timeout_at;
+        }
+      }
+      
+      // If no nextRunAt yet, check variables for pending delays
+      if (!nextRunAt) {
         const variables = sessionData.variables as Record<string, any> | null;
-        if (variables?._pendingDelay?.resumeAt) {
-          nextRunAt = new Date(variables._pendingDelay.resumeAt).toISOString();
+        if (variables) {
+          // Check for _pendingDelay
+          if (variables._pendingDelay?.resumeAt) {
+            const resumeAtMs = variables._pendingDelay.resumeAt;
+            if (resumeAtMs > Date.now()) {
+              nextRunAt = new Date(resumeAtMs).toISOString();
+            }
+          }
+          
+          // Check for payment-related delays (e.g., _payment_no_response_delay_*)
+          if (!nextRunAt) {
+            for (const key of Object.keys(variables)) {
+              if (key.startsWith('_payment_no_response_delay_') && variables[key]?.runAt) {
+                const runAtMs = variables[key].runAt;
+                if (runAtMs > Date.now()) {
+                  nextRunAt = new Date(runAtMs).toISOString();
+                  break;
+                }
+              }
+            }
+          }
         }
       }
 
-      const flowName = (sessionData as any).inbox_flows?.name || 'Fluxo desconhecido';
+      const flowName = flowData?.name || 'Fluxo';
 
       setSession({
         id: sessionData.id,
@@ -118,11 +149,11 @@ export function useActiveFlowSession(contactId: string | null): UseActiveFlowSes
     fetchActiveSession();
   }, [fetchActiveSession]);
 
-  // Subscribe to session changes
+  // Subscribe to session changes and delay jobs
   useEffect(() => {
     if (!contactId) return;
 
-    const channel = supabase
+    const sessionChannel = supabase
       .channel(`active-session-${contactId}`)
       .on(
         'postgres_changes',
@@ -139,9 +170,20 @@ export function useActiveFlowSession(contactId: string | null): UseActiveFlowSes
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(sessionChannel);
     };
   }, [contactId, fetchActiveSession]);
+
+  // Also poll every 5 seconds for accuracy when countdown is active
+  useEffect(() => {
+    if (!session) return;
+    
+    const pollInterval = setInterval(() => {
+      fetchActiveSession();
+    }, 5000);
+
+    return () => clearInterval(pollInterval);
+  }, [session, fetchActiveSession]);
 
   // Countdown timer
   useEffect(() => {
