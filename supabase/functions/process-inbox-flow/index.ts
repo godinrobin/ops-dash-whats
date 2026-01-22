@@ -36,10 +36,10 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { sessionId, userInput: rawUserInput, resumeFromDelay, resumeFromTimeout } = await req.json();
+    const { sessionId, userInput: rawUserInput, resumeFromDelay, resumeFromTimeout, forceDefaultEdge } = await req.json();
     let effectiveResumeFromTimeout = !!resumeFromTimeout;
     let userInput = rawUserInput;
-    console.log(`[${runId}] SessionId: ${sessionId}, Input: ${userInput}, ResumeFromDelay: ${resumeFromDelay}, ResumeFromTimeout: ${resumeFromTimeout}, EffectiveResumeFromTimeout: ${effectiveResumeFromTimeout}`);
+    console.log(`[${runId}] SessionId: ${sessionId}, Input: ${userInput}, ResumeFromDelay: ${resumeFromDelay}, ResumeFromTimeout: ${resumeFromTimeout}, ForceDefaultEdge: ${!!forceDefaultEdge}, EffectiveResumeFromTimeout: ${effectiveResumeFromTimeout}`);
 
     // Get session with flow data
     const { data: session, error: sessionError } = await supabaseClient
@@ -176,6 +176,70 @@ serve(async (req) => {
 
     let currentNodeId = session.current_node_id || 'start-1';
     let variables = (session.variables || {}) as Record<string, unknown>;
+
+    // === MANUAL ADVANCE (DEFAULT EDGE) ===
+    // Used ONLY by the Inbox "Avançar" button.
+    // Goal: if flow is stuck at a waitInput node, advance via the RESPONSE path (sourceHandle=default)
+    // without requiring actual user input and without following the TIMEOUT path.
+    if (forceDefaultEdge) {
+      const hasMeaningfulInput =
+        userInput !== undefined &&
+        userInput !== null &&
+        String(userInput).trim().length > 0;
+
+      if (!hasMeaningfulInput) {
+        const currentNode = nodes.find((n) => n.id === currentNodeId);
+        if (currentNode?.type === 'waitInput') {
+          // Prefer the explicit response output
+          let nextEdge = edges.find((e) => e.source === currentNodeId && e.sourceHandle === 'default');
+
+          // Fallback: any edge that isn't timeout/followup
+          if (!nextEdge) {
+            nextEdge = edges.find(
+              (e) =>
+                e.source === currentNodeId &&
+                e.sourceHandle !== 'timeout' &&
+                e.sourceHandle !== 'followup'
+            );
+          }
+
+          // Final fallback: any edge
+          if (!nextEdge) {
+            nextEdge = edges.find((e) => e.source === currentNodeId);
+          }
+
+          if (nextEdge) {
+            const fromNode = currentNodeId;
+            currentNodeId = nextEdge.target;
+            effectiveResumeFromTimeout = false;
+
+            // Clear any waiting markers so the flow can continue
+            lockUpdate.current_node_id = currentNodeId;
+            lockUpdate.timeout_at = null;
+            lockUpdate.variables = variables;
+            lockUpdate.last_interaction = new Date().toISOString();
+
+            try {
+              // Cancel any pending timeout/delay job tied to this session
+              await supabaseClient
+                .from('inbox_flow_delay_jobs')
+                .delete()
+                .eq('session_id', sessionId);
+            } catch (e) {
+              console.error(`[${runId}] forceDefaultEdge: failed to cancel delay job`, e);
+            }
+
+            console.log(
+              `[${runId}] forceDefaultEdge=true: advanced waitInput via RESPONSE path from ${fromNode} -> ${currentNodeId}`
+            );
+          } else {
+            console.log(
+              `[${runId}] forceDefaultEdge=true: no outgoing edge found from waitInput ${currentNodeId}, cannot advance`
+            );
+          }
+        }
+      }
+    }
 
     // Initialize sent nodes tracking for idempotency
     if (!variables._sent_node_ids) {
