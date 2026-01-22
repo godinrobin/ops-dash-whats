@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
-import { User, MessageSquare, Smartphone, ChevronDown, Tag, X, Plus, Pause, Play, Mail, MailOpen, Trash2, AlertTriangle, RefreshCw, Ban, Timer, Workflow } from 'lucide-react';
+import { User, MessageSquare, Smartphone, ChevronDown, Tag, X, Plus, Pause, Play, Mail, MailOpen, Trash2, AlertTriangle, RefreshCw, Ban, Timer, Workflow, SkipForward } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -582,6 +582,58 @@ export const ChatPanel = ({
     }
   };
 
+  // Handle advance flow to next component
+  const handleAdvanceFlow = async () => {
+    if (!contact || !activeFlowSession) {
+      toast.error('Nenhum fluxo ativo para avançar');
+      return;
+    }
+    
+    try {
+      // First, if flow is paused, unpause it
+      if (flowPaused) {
+        await supabase
+          .from('inbox_contacts')
+          .update({ flow_paused: false })
+          .eq('id', contact.id);
+        setFlowPaused(false);
+      }
+      
+      // Cancel any scheduled delay jobs for this session
+      await supabase
+        .from('inbox_flow_delay_jobs')
+        .update({ status: 'cancelled' })
+        .eq('session_id', activeFlowSession.id)
+        .eq('status', 'scheduled');
+      
+      // Unlock session if stuck
+      await supabase
+        .from('inbox_flow_sessions')
+        .update({ 
+          processing: false, 
+          processing_started_at: null,
+          timeout_at: null
+        })
+        .eq('id', activeFlowSession.id);
+      
+      // Trigger process-inbox-flow to continue from current node
+      const { error: invokeError } = await supabase.functions.invoke('process-inbox-flow', {
+        body: { sessionId: activeFlowSession.id },
+      });
+      
+      if (invokeError) {
+        console.error('Error advancing flow:', invokeError);
+        toast.error('Erro ao avançar fluxo');
+        return;
+      }
+      
+      toast.success('Fluxo avançado!');
+    } catch (err) {
+      console.error('Error advancing flow:', err);
+      toast.error('Erro ao avançar fluxo');
+    }
+  };
+
   // Handle mark as read/unread
   const handleMarkAsRead = async () => {
     if (!contact) return;
@@ -795,10 +847,15 @@ export const ChatPanel = ({
                   Pausado
                 </Badge>
               )}
-              {activeFlowSession && !flowPaused && (
+              {activeFlowSession && (
                 <>
                   <Badge 
-                    className="bg-primary text-primary-foreground text-[10px] px-1.5 py-0 h-4 flex items-center gap-1"
+                    className={cn(
+                      "text-[10px] px-1.5 py-0 h-4 flex items-center gap-1",
+                      flowPaused 
+                        ? "bg-orange-500/20 text-orange-500 border border-orange-500/50" 
+                        : "bg-primary text-primary-foreground"
+                    )}
                   >
                     <Workflow className="h-2.5 w-2.5" />
                     {activeFlowSession.flow_name}
@@ -806,13 +863,27 @@ export const ChatPanel = ({
                   {countdown !== null && countdown > 0 && (
                     <Badge 
                       variant="outline"
-                      className="text-[10px] px-1.5 py-0 h-4 flex items-center gap-1 border-primary/50 text-primary animate-pulse"
+                      className={cn(
+                        "text-[10px] px-1.5 py-0 h-4 flex items-center gap-1 animate-pulse",
+                        flowPaused 
+                          ? "border-orange-500/50 text-orange-500" 
+                          : "border-primary/50 text-primary"
+                      )}
                     >
                       <Timer className="h-2.5 w-2.5" />
                       {activeFlowSession.current_node_label && (
                         <span className="font-medium">{activeFlowSession.current_node_label}:</span>
                       )}
                       {formatCountdown(countdown)}
+                    </Badge>
+                  )}
+                  {activeFlowSession.waiting_for_input && !flowPaused && countdown === null && (
+                    <Badge 
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0 h-4 flex items-center gap-1 border-blue-500/50 text-blue-500"
+                    >
+                      <Timer className="h-2.5 w-2.5" />
+                      Aguardando resposta
                     </Badge>
                   )}
                 </>
@@ -857,7 +928,7 @@ export const ChatPanel = ({
         </div>
 
         <div className="flex items-center gap-1">
-          {/* Flow pause/resume buttons */}
+          {/* Flow pause/resume and advance buttons */}
           <TooltipProvider>
             {flowPaused ? (
               <Tooltip>
@@ -886,6 +957,23 @@ export const ChatPanel = ({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>Pausar Funil</TooltipContent>
+              </Tooltip>
+            )}
+
+            {/* Advance flow button - skip to next component */}
+            {activeFlowSession && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-9 w-9 text-blue-500 hover:text-blue-600 hover:bg-blue-500/10"
+                    onClick={handleAdvanceFlow}
+                  >
+                    <SkipForward className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Avançar para próximo componente</TooltipContent>
               </Tooltip>
             )}
 
