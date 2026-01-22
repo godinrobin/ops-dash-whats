@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useNavigate } from "react-router-dom";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useGenerationCooldown } from "@/hooks/useGenerationCooldown";
-import LoadingSpinner from "@/components/ui/snow-ball-loading-spinner";
+import { Spinner } from "@/components/ui/spinner-1";
 import {
   Carousel,
   CarouselContent,
@@ -657,7 +657,7 @@ const CreativeGenerator = () => {
                         />
                         {isAnalyzing && (
                           <div className="absolute inset-0 bg-accent/20 backdrop-blur-sm flex items-center justify-center">
-                            <LoadingSpinner />
+                            <Spinner size={48} />
                           </div>
                         )}
                         {!isAnalyzing && (
