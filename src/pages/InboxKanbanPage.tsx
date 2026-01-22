@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
-import { ArrowLeft, Plus, Phone, User, Tag, Hash, GripVertical, Search, X, MessageSquare, Loader2, Eye, EyeOff, Columns, ChevronLeft, ChevronRight, StickyNote, Edit3, Check } from 'lucide-react';
+import { ArrowLeft, Plus, Phone, User, Tag, Hash, GripVertical, Search, X, MessageSquare, Loader2, Eye, EyeOff, Columns, ChevronLeft, ChevronRight, StickyNote, Edit3, Check, RefreshCw, Calendar } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -542,7 +543,9 @@ export default function InboxKanbanPage() {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [customTags, setCustomTags] = useState<InboxTag[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [dateFilter, setDateFilter] = useState<string>('all');
   const [activeId, setActiveId] = useState<string | null>(null);
   const [selectedContact, setSelectedContact] = useState<KanbanContact | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -701,16 +704,60 @@ export default function InboxKanbanPage() {
     }
   }, [columnOrder]);
 
-  // Filter contacts by search
+  // Filter contacts by search and date
   const filteredContacts = useMemo(() => {
-    if (!searchQuery.trim()) return contacts;
-    const query = searchQuery.toLowerCase();
-    return contacts.filter(c => 
-      c.name?.toLowerCase().includes(query) ||
-      c.phone.includes(query) ||
-      c.tags.some(t => t.toLowerCase().includes(query))
-    );
-  }, [contacts, searchQuery]);
+    let filtered = contacts;
+    
+    // Apply date filter
+    if (dateFilter !== 'all') {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      let startDate: Date;
+      
+      switch (dateFilter) {
+        case 'today':
+          startDate = today;
+          break;
+        case 'yesterday':
+          startDate = new Date(today);
+          startDate.setDate(startDate.getDate() - 1);
+          const endOfYesterday = new Date(today);
+          filtered = filtered.filter(c => {
+            const createdAt = new Date(c.created_at);
+            return createdAt >= startDate && createdAt < endOfYesterday;
+          });
+          break;
+        case '7days':
+          startDate = new Date(today);
+          startDate.setDate(startDate.getDate() - 7);
+          filtered = filtered.filter(c => new Date(c.created_at) >= startDate);
+          break;
+        case '30days':
+          startDate = new Date(today);
+          startDate.setDate(startDate.getDate() - 30);
+          filtered = filtered.filter(c => new Date(c.created_at) >= startDate);
+          break;
+        default:
+          break;
+      }
+      
+      if (dateFilter === 'today') {
+        filtered = filtered.filter(c => new Date(c.created_at) >= today);
+      }
+    }
+    
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(c => 
+        c.name?.toLowerCase().includes(query) ||
+        c.phone.includes(query) ||
+        c.tags.some(t => t.toLowerCase().includes(query))
+      );
+    }
+    
+    return filtered;
+  }, [contacts, searchQuery, dateFilter]);
 
   // Group contacts by their first tag (or "Sem etiqueta")
   const contactsByTag = useMemo(() => {
@@ -926,6 +973,19 @@ export default function InboxKanbanPage() {
     navigate(`/inbox/chat?contact=${contactId}`);
   };
 
+  const handleSyncTags = async () => {
+    setSyncing(true);
+    try {
+      await fetchData();
+      toast.success('Etiquetas sincronizadas com sucesso');
+    } catch (error) {
+      console.error('Error syncing:', error);
+      toast.error('Erro ao sincronizar');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const activeContact = activeId ? contacts.find(c => c.id === activeId) : null;
   const isColumnDrag = activeId?.startsWith('column-');
 
@@ -941,13 +1001,13 @@ export default function InboxKanbanPage() {
             <div>
               <h1 className="text-2xl font-bold">Pipeline de Leads</h1>
               <p className="text-sm text-muted-foreground">
-                {contacts.length} leads · Arraste para mover entre colunas
+                Organize seus leads em Kanban.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
-            <div className="relative flex-1 sm:w-56">
+            <div className="relative flex-1 sm:w-48">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Buscar leads..."
@@ -956,6 +1016,32 @@ export default function InboxKanbanPage() {
                 className="pl-9"
               />
             </div>
+
+            {/* Date filter */}
+            <Select value={dateFilter} onValueChange={setDateFilter}>
+              <SelectTrigger className="w-[140px]">
+                <Calendar className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Filtrar por data" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Sem filtro</SelectItem>
+                <SelectItem value="today">Hoje</SelectItem>
+                <SelectItem value="yesterday">Ontem</SelectItem>
+                <SelectItem value="7days">Últimos 7 dias</SelectItem>
+                <SelectItem value="30days">Últimos 30 dias</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Sync button */}
+            <Button 
+              variant="outline" 
+              size="icon" 
+              onClick={handleSyncTags}
+              disabled={syncing}
+              title="Sincronizar etiquetas"
+            >
+              <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
+            </Button>
             
             {/* Column visibility dropdown */}
             <DropdownMenu>
