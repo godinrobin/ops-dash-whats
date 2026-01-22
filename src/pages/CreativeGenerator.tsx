@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useNavigate } from "react-router-dom";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useGenerationCooldown } from "@/hooks/useGenerationCooldown";
+import LoadingSpinner from "@/components/ui/snow-ball-loading-spinner";
 import {
   Carousel,
   CarouselContent,
@@ -285,6 +286,11 @@ const CreativeGenerator = () => {
 
   const generateFromReference = async () => {
     if (!referenceImage) return;
+    
+    if (!referenceInstructions.trim()) {
+      toast.error('Por favor, descreva as alterações desejadas');
+      return;
+    }
 
     setIsGeneratingFromRef(true);
     try {
@@ -649,17 +655,24 @@ const CreativeGenerator = () => {
                           alt="Imagem de referência"
                           className="w-full h-auto max-h-64 object-contain"
                         />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="absolute top-2 right-2 bg-background/80 hover:bg-background"
-                          onClick={() => {
-                            setReferenceImage(null);
-                            setRefStep('upload');
-                          }}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
+                        {isAnalyzing && (
+                          <div className="absolute inset-0 bg-accent/20 backdrop-blur-sm flex items-center justify-center">
+                            <LoadingSpinner />
+                          </div>
+                        )}
+                        {!isAnalyzing && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="absolute top-2 right-2 bg-background/80 hover:bg-background"
+                            onClick={() => {
+                              setReferenceImage(null);
+                              setRefStep('upload');
+                            }}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                       <Button
                         onClick={analyzeReference}
@@ -693,20 +706,8 @@ const CreativeGenerator = () => {
                         />
                       </div>
                       
-                      {referenceAnalysis && (
-                        <div className="bg-muted/50 rounded-lg p-3 text-sm space-y-2">
-                          <p className="font-medium text-accent">Análise da IA:</p>
-                          {referenceAnalysis.style && (
-                            <p><span className="font-medium">Estilo:</span> {referenceAnalysis.style}</p>
-                          )}
-                          {referenceAnalysis.mood && (
-                            <p><span className="font-medium">Tom:</span> {referenceAnalysis.mood}</p>
-                          )}
-                        </div>
-                      )}
-
                       <div className="space-y-2">
-                        <Label>Alterações desejadas (opcional)</Label>
+                        <Label>Alterações desejadas *</Label>
                         <Textarea
                           placeholder="Ex: Troque o produto por bolsas, mude as cores para tons de azul, adicione texto 'Promoção'..."
                           value={referenceInstructions}
@@ -727,7 +728,7 @@ const CreativeGenerator = () => {
                         </Button>
                         <Button
                           onClick={generateFromReference}
-                          disabled={isGeneratingFromRef || !canGenerate}
+                          disabled={isGeneratingFromRef || !canGenerate || !referenceInstructions.trim()}
                           className="flex-1"
                         >
                           {isGeneratingFromRef ? (
