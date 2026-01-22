@@ -252,6 +252,8 @@ Deno.serve(async (req) => {
         conversation_count: inst.conversation_count || 0,
         last_conversation_sync: inst.last_conversation_sync,
         created_at: inst.created_at,
+        connected_at: inst.connected_at,
+        disconnected_at: inst.disconnected_at,
       }
     }) || []
 
