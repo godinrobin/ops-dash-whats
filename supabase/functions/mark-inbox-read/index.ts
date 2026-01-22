@@ -27,14 +27,17 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
+    const { data, error: claimsError } = await supabaseClient.auth.getClaims(token);
     
-    if (authError || !user) {
+    if (claimsError || !data?.claims) {
+      console.error('[MARK-READ] Invalid token:', claimsError?.message);
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    const user = { id: data.claims.sub as string };
 
     const { contactId } = await req.json();
     
