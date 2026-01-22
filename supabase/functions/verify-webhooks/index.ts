@@ -91,14 +91,17 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
+    const { data, error: claimsError } = await supabaseClient.auth.getClaims(token);
 
-    if (userError || !user) {
+    if (claimsError || !data?.claims) {
+      console.error('[VERIFY-WEBHOOKS] Invalid token:', claimsError?.message);
       return new Response(JSON.stringify({ error: 'Invalid token' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    const user = { id: data.claims.sub as string };
 
     console.log(`[VERIFY-WEBHOOKS] Starting webhook verification for user ${user.id}`);
 
