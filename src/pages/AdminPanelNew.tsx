@@ -277,6 +277,8 @@ interface InstanceData {
   conversation_count: number;
   last_conversation_sync: string | null;
   created_at: string;
+  connected_at?: string | null;
+  disconnected_at?: string | null;
 }
 
 const AdminPanelNew = () => {

@@ -129,11 +129,19 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
 
   // Filter and sort instances
   const filteredInstances = useMemo(() => {
-    let result = selectedStatus === 'connected' 
-      ? connectedInstances 
-      : selectedStatus === 'all' 
-        ? instances 
-        : instances.filter(inst => inst.status === selectedStatus);
+    let result: InstanceData[];
+    
+    if (selectedStatus === 'connected') {
+      // Include both 'connected' and 'open' status
+      result = instances.filter(inst => inst.status === 'connected' || inst.status === 'open');
+    } else if (selectedStatus === 'disconnected') {
+      // Include both 'disconnected' and 'close' status
+      result = instances.filter(inst => inst.status === 'disconnected' || inst.status === 'close');
+    } else if (selectedStatus === 'all') {
+      result = instances;
+    } else {
+      result = instances.filter(inst => inst.status === selectedStatus);
+    }
 
     // Apply search filter
     if (searchQuery) {
@@ -175,7 +183,7 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
     });
 
     return sortedResult;
-  }, [instances, connectedInstances, searchQuery, selectedUser, selectedStatus, sortBy, sortOrder]);
+  }, [instances, searchQuery, selectedUser, selectedStatus, sortBy, sortOrder]);
 
   // Stats
   const stats = useMemo(() => {
