@@ -15,7 +15,7 @@ import {
   Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X, Key, Loader2, 
   UserPlus, Activity, Megaphone, Eye, MousePointer, Trash2, Image, Clock, Settings, Users, 
   BarChart3, Phone, FileText, Wallet, History, Percent, Menu, ShoppingBag, Package, Globe, RefreshCw,
-  Smartphone, Shield, TrendingUp, Wifi
+  Smartphone, Shield, TrendingUp, Wifi, WifiOff
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -24,6 +24,7 @@ import { MarketplaceProductModal } from "@/components/MarketplaceProductModal";
 import { AdminMFA } from "@/components/admin/AdminMFA";
 import { AdminAdsMetrics } from "@/components/admin/AdminAdsMetrics";
 import { AdminInstances } from "@/components/admin/AdminInstances";
+import { AdminDisconnectedInstances } from "@/components/admin/AdminDisconnectedInstances";
 import { AdminWhatsAppApiConfig } from "@/components/admin/AdminWhatsAppApiConfig";
 import { AdminTagWhatsLabels } from "@/components/admin/AdminTagWhatsLabels";
 import { AdminUsers } from "@/components/admin/AdminUsers";
@@ -98,6 +99,7 @@ const SIDEBAR_MENU = [
     icon: Smartphone,
     items: [
       { id: "instances", label: "Números WhatsApp", icon: Smartphone },
+      { id: "disconnected-instances", label: "Desconectadas", icon: WifiOff },
       { id: "whatsapp-api", label: "Configurar API", icon: Wifi },
       { id: "tag-whats-labels", label: "Etiquetas Tag Whats", icon: Shield },
     ]
@@ -2435,6 +2437,9 @@ const AdminPanelNew = () => {
             onRefresh={loadAllData}
           />
         );
+
+      case 'disconnected-instances':
+        return <AdminDisconnectedInstances />;
 
       case 'security':
         return <AdminMFA />;
