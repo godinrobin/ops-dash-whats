@@ -6,6 +6,8 @@ interface ActiveFlowSession {
   flow_id: string;
   flow_name: string;
   current_node_id: string | null;
+  current_node_type: string | null;
+  current_node_label: string | null;
   status: string;
   timeout_at: string | null;
   next_run_at: string | null;
@@ -16,6 +18,52 @@ interface UseActiveFlowSessionResult {
   countdown: number | null; // seconds remaining
   loading: boolean;
 }
+
+// Map node types to Portuguese labels
+const NODE_TYPE_LABELS: Record<string, string> = {
+  'text': 'Texto',
+  'textNode': 'Texto',
+  'image': 'Imagem',
+  'imageNode': 'Imagem',
+  'audio': 'Áudio',
+  'audioNode': 'Áudio',
+  'video': 'Vídeo',
+  'videoNode': 'Vídeo',
+  'delay': 'Delay',
+  'delayNode': 'Delay',
+  'waitInput': 'Aguardar Resposta',
+  'waitInputNode': 'Aguardar Resposta',
+  'menu': 'Menu',
+  'menuNode': 'Menu',
+  'condition': 'Condição',
+  'conditionNode': 'Condição',
+  'ai': 'IA',
+  'aiNode': 'IA',
+  'aiText': 'IA',
+  'aiTextNode': 'IA',
+  'tag': 'Etiqueta',
+  'tagNode': 'Etiqueta',
+  'transfer': 'Transferência',
+  'transferNode': 'Transferência',
+  'webhook': 'Webhook',
+  'webhookNode': 'Webhook',
+  'end': 'Fim',
+  'endNode': 'Fim',
+  'start': 'Início',
+  'startNode': 'Início',
+  'sendCharge': 'Enviar Cobrança',
+  'sendPixKey': 'Enviar Chave PIX',
+  'paymentIdentifier': 'Identificar Pagamento',
+  'randomizer': 'Randomizador',
+  'randomizerNode': 'Randomizador',
+  'pixel': 'Pixel',
+  'pixelNode': 'Pixel',
+  'notifyAdmin': 'Notificar Admin',
+  'setVariable': 'Variável',
+  'document': 'Documento',
+  'documentNode': 'Documento',
+  'interactiveBlock': 'Bloco Interativo',
+};
 
 export function useActiveFlowSession(contactId: string | null): UseActiveFlowSessionResult {
   const [session, setSession] = useState<ActiveFlowSession | null>(null);
@@ -61,12 +109,26 @@ export function useActiveFlowSession(contactId: string | null): UseActiveFlowSes
         return;
       }
 
-      // Fetch flow name separately to avoid join issues
+      // Fetch flow name and nodes separately
       const { data: flowData } = await supabase
         .from('inbox_flows')
-        .select('name')
+        .select('name, nodes')
         .eq('id', sessionData.flow_id)
         .maybeSingle();
+
+      // Find the current node in the flow's nodes array
+      let currentNodeType: string | null = null;
+      let currentNodeLabel: string | null = null;
+      
+      if (flowData?.nodes && sessionData.current_node_id) {
+        const nodes = flowData.nodes as any[];
+        const currentNode = nodes.find((n: any) => n.id === sessionData.current_node_id);
+        if (currentNode) {
+          currentNodeType = currentNode.type || null;
+          // Get label from data or use type mapping
+          currentNodeLabel = currentNode.data?.label || NODE_TYPE_LABELS[currentNode.type] || currentNode.type;
+        }
+      }
 
       // Check for delay job
       const { data: delayJob } = await supabase
@@ -123,6 +185,8 @@ export function useActiveFlowSession(contactId: string | null): UseActiveFlowSes
         flow_id: sessionData.flow_id,
         flow_name: flowName,
         current_node_id: sessionData.current_node_id,
+        current_node_type: currentNodeType,
+        current_node_label: currentNodeLabel,
         status: sessionData.status,
         timeout_at: sessionData.timeout_at,
         next_run_at: nextRunAt,

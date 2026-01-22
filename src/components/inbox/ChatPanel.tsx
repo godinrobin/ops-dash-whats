@@ -796,21 +796,26 @@ export const ChatPanel = ({
                 </Badge>
               )}
               {activeFlowSession && !flowPaused && (
-                <Badge 
-                  className="bg-primary text-primary-foreground text-[10px] px-1.5 py-0 h-4 flex items-center gap-1"
-                >
-                  <Workflow className="h-2.5 w-2.5" />
-                  {activeFlowSession.flow_name}
-                </Badge>
-              )}
-              {countdown !== null && countdown > 0 && !flowPaused && (
-                <Badge 
-                  variant="outline"
-                  className="text-[10px] px-1.5 py-0 h-4 flex items-center gap-1 border-primary/50 text-primary animate-pulse"
-                >
-                  <Timer className="h-2.5 w-2.5" />
-                  {formatCountdown(countdown)}
-                </Badge>
+                <>
+                  <Badge 
+                    className="bg-primary text-primary-foreground text-[10px] px-1.5 py-0 h-4 flex items-center gap-1"
+                  >
+                    <Workflow className="h-2.5 w-2.5" />
+                    {activeFlowSession.flow_name}
+                  </Badge>
+                  {countdown !== null && countdown > 0 && (
+                    <Badge 
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0 h-4 flex items-center gap-1 border-primary/50 text-primary animate-pulse"
+                    >
+                      <Timer className="h-2.5 w-2.5" />
+                      {activeFlowSession.current_node_label && (
+                        <span className="font-medium">{activeFlowSession.current_node_label}:</span>
+                      )}
+                      {formatCountdown(countdown)}
+                    </Badge>
+                  )}
+                </>
               )}
               {contactLabels.map((label) => (
                 <Badge 
