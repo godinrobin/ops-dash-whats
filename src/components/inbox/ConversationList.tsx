@@ -515,12 +515,12 @@ export const ConversationList = ({
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-medium text-sm truncate flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="font-medium text-sm truncate min-w-0">
                         {getDisplayName(contact)}
                       </span>
-                      <span className="text-[10px] text-muted-foreground whitespace-nowrap flex-shrink-0">
-                        {formatTime(contact.last_message_at)}
+                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                        • {formatTime(contact.last_message_at)}
                       </span>
                     </div>
                     {activityStatus ? (
