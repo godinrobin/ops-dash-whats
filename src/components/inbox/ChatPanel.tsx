@@ -873,12 +873,7 @@ export const ChatPanel = ({
                   {countdown !== null && countdown > 0 && (
                     <Badge 
                       variant="outline"
-                      className={cn(
-                        "text-[10px] px-1.5 py-0 h-4 flex items-center gap-1 animate-pulse",
-                        flowPaused 
-                          ? "border-orange-500/50 text-orange-500" 
-                          : "border-primary/50 text-primary"
-                      )}
+                      className="text-[10px] px-1.5 py-0 h-4 flex items-center gap-1 animate-pulse border-orange-400/40 text-orange-400"
                     >
                       <Timer className="h-2.5 w-2.5" />
                       {activeFlowSession.current_node_label && (
