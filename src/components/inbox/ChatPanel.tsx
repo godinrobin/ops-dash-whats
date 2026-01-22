@@ -605,25 +605,35 @@ export const ChatPanel = ({
         .update({ status: 'cancelled' })
         .eq('session_id', activeFlowSession.id)
         .eq('status', 'scheduled');
-      
-      // Unlock session if stuck
-      await supabase
-        .from('inbox_flow_sessions')
-        .update({ 
-          processing: false, 
-          processing_started_at: null,
-          timeout_at: null
-        })
-        .eq('id', activeFlowSession.id);
-      
-      // Trigger process-inbox-flow to continue from current node
-      const { error: invokeError } = await supabase.functions.invoke('process-inbox-flow', {
-        body: { sessionId: activeFlowSession.id },
+
+      const isWaitInputNode =
+        activeFlowSession.current_node_type === 'waitInput' ||
+        activeFlowSession.current_node_type === 'waitInputNode';
+
+      // Trigger process-inbox-flow to continue from current node.
+      // When stuck at waitInput, we force the DEFAULT (response) output, not timeout.
+      const { data: invokeData, error: invokeError } = await supabase.functions.invoke('process-inbox-flow', {
+        body: {
+          sessionId: activeFlowSession.id,
+          ...(isWaitInputNode ? { forceDefaultEdge: true } : {}),
+        },
       });
       
       if (invokeError) {
         console.error('Error advancing flow:', invokeError);
         toast.error('Erro ao avançar fluxo');
+        return;
+      }
+
+      // If flow is currently locked by another execution, inform the user (do NOT force unlock here)
+      if ((invokeData as any)?.reason === 'session_locked') {
+        toast.message('Fluxo processando… tente novamente em alguns segundos');
+        return;
+      }
+
+      // If we still ended up waiting, explain what happened
+      if ((invokeData as any)?.waitingForInput) {
+        toast.message('Ainda aguardando resposta neste passo');
         return;
       }
       
