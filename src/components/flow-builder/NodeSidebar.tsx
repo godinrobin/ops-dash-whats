@@ -17,7 +17,8 @@ import {
   Banknote,
   Sparkles,
   MousePointer2,
-  Megaphone
+  Megaphone,
+  Bell
 } from 'lucide-react';
 
 const nodeCategories = [
@@ -50,6 +51,7 @@ const nodeCategories = [
       { type: 'paymentIdentifier', label: 'Identificar Pagamento', icon: Receipt, color: 'bg-emerald-500' },
       { type: 'sendPixKey', label: 'Enviar Chave PIX', icon: QrCode, color: 'bg-teal-500' },
       { type: 'sendCharge', label: 'Enviar Cobrança', icon: Banknote, color: 'bg-lime-500' },
+      { type: 'notifyAdmin', label: 'Notificar Admin', icon: Bell, color: 'bg-rose-500' },
     ],
   },
 ];

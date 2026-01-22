@@ -1892,6 +1892,104 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
             }
             break;
 
+          case 'notifyAdmin':
+            const notifyType = currentNode.data.notificationType as string || '';
+            
+            if (notifyType === 'whatsapp') {
+              // Send WhatsApp message to admin number
+              const adminPhone = currentNode.data.targetPhone as string || '';
+              const adminMessage = replaceVariables(currentNode.data.message as string || '', variables);
+              
+              if (adminPhone && adminMessage && instanceName) {
+                console.log(`[${runId}] Sending WhatsApp notification to admin: ${adminPhone}`);
+                
+                try {
+                  const adminSendResult = await sendMessage(
+                    effectiveBaseUrl, 
+                    effectiveApiKey, 
+                    instanceName, 
+                    adminPhone, 
+                    adminMessage, 
+                    'text', 
+                    undefined, 
+                    undefined, 
+                    apiProvider, 
+                    instanceUazapiToken, 
+                    0, 
+                    undefined
+                  );
+                  
+                  if (adminSendResult.ok) {
+                    console.log(`[${runId}] Admin WhatsApp notification sent successfully`);
+                    processedActions.push(`Admin WhatsApp notification sent to ${adminPhone}`);
+                  } else {
+                    console.error(`[${runId}] Failed to send admin WhatsApp notification:`, adminSendResult.errorDetails);
+                    processedActions.push(`FAILED admin WhatsApp notification to ${adminPhone}`);
+                  }
+                } catch (notifyError) {
+                  console.error(`[${runId}] Error sending admin WhatsApp notification:`, notifyError);
+                  processedActions.push(`Error sending admin WhatsApp notification`);
+                }
+              } else {
+                console.log(`[${runId}] Missing phone/message/instance for admin WhatsApp notification`);
+              }
+              
+            } else if (notifyType === 'push') {
+              // Send push notification to user
+              const pushTitle = replaceVariables(currentNode.data.pushTitle as string || '', variables);
+              const pushBody = replaceVariables(currentNode.data.pushBody as string || '', variables);
+              
+              if (pushTitle && pushBody) {
+                console.log(`[${runId}] Sending push notification to user: ${session.user_id}`);
+                
+                try {
+                  // Fetch user's push settings
+                  const { data: userProfile } = await supabaseClient
+                    .from('profiles')
+                    .select('push_webhook_enabled, push_subscription_ids')
+                    .eq('id', session.user_id)
+                    .single();
+                  
+                  if (userProfile?.push_webhook_enabled && userProfile?.push_subscription_ids?.length > 0) {
+                    // Insert into push notification queue
+                    const { error: pushError } = await supabaseClient
+                      .from('push_notification_queue')
+                      .insert({
+                        user_id: session.user_id,
+                        subscription_ids: userProfile.push_subscription_ids,
+                        title: pushTitle,
+                        message: pushBody,
+                        icon_url: 'https://zapdata.com.br/favicon.png',
+                      });
+                    
+                    if (pushError) {
+                      console.error(`[${runId}] Error inserting push notification:`, pushError);
+                      processedActions.push(`Error queuing push notification`);
+                    } else {
+                      console.log(`[${runId}] Push notification queued successfully`);
+                      processedActions.push(`Push notification queued for user`);
+                    }
+                  } else {
+                    console.log(`[${runId}] User has push notifications disabled or no subscription IDs`);
+                    processedActions.push(`Push notifications disabled for user`);
+                  }
+                } catch (pushError) {
+                  console.error(`[${runId}] Error sending push notification:`, pushError);
+                  processedActions.push(`Error sending push notification`);
+                }
+              } else {
+                console.log(`[${runId}] Missing title/body for push notification`);
+              }
+            }
+            
+            const notifyEdge = edges.find(e => e.source === currentNodeId);
+            if (notifyEdge) {
+              currentNodeId = notifyEdge.target;
+            } else {
+              continueProcessing = false;
+            }
+            break;
+
           case 'transfer':
             // Check if already sent (idempotency)
             if (!sentNodeIds.includes(currentNodeId)) {

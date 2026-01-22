@@ -1811,6 +1811,143 @@ export const PropertiesPanel = ({
           </div>
         );
 
+      case 'notifyAdmin':
+        // Get all available variables for message customization
+        const getAvailableVariablesForNotify = () => {
+          const nodeVariables = extractCustomVariablesFromNodes(allNodes);
+          const allVariables = [...SYSTEM_VARIABLES, ...dbCustomVariables, ...nodeVariables];
+          return [...new Set(allVariables)].sort();
+        };
+        const notifyVariables = getAvailableVariablesForNotify();
+        
+        const insertNotifyVariable = (varName: string, field: 'message' | 'pushTitle' | 'pushBody') => {
+          const currentValue = (nodeData[field] as string) || '';
+          onUpdateNode(selectedNode.id, { [field]: currentValue + `{{${varName}}}` });
+        };
+        
+        return (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Tipo de Notificação *</Label>
+              <Select
+                value={(nodeData.notificationType as string) || ''}
+                onValueChange={(value) => onUpdateNode(selectedNode.id, { notificationType: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o tipo..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                  <SelectItem value="push">Notificação Push</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {(nodeData.notificationType as string) === 'whatsapp' && (
+              <>
+                <div className="space-y-2">
+                  <Label>Número de Destino *</Label>
+                  <Input
+                    placeholder="5511999999999"
+                    value={(nodeData.targetPhone as string) || ''}
+                    onChange={(e) => onUpdateNode(selectedNode.id, { targetPhone: e.target.value.replace(/\D/g, '') })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Número com DDI + DDD (ex: 5511999999999)
+                  </p>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label>Mensagem *</Label>
+                  <Textarea
+                    placeholder="Escreva a mensagem para o admin..."
+                    value={(nodeData.message as string) || ''}
+                    onChange={(e) => onUpdateNode(selectedNode.id, { message: e.target.value })}
+                    rows={4}
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label className="text-xs">Variáveis disponíveis</Label>
+                  <div className="flex flex-wrap gap-1">
+                    {notifyVariables.map((varName) => (
+                      <Badge 
+                        key={varName}
+                        variant="secondary" 
+                        className="cursor-pointer hover:bg-primary hover:text-primary-foreground text-xs"
+                        onClick={() => insertNotifyVariable(varName, 'message')}
+                      >
+                        {`{{${varName}}}`}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+            
+            {(nodeData.notificationType as string) === 'push' && (
+              <>
+                <div className="space-y-2">
+                  <Label>Título da Notificação *</Label>
+                  <Input
+                    placeholder="Título da notificação push..."
+                    value={(nodeData.pushTitle as string) || ''}
+                    onChange={(e) => onUpdateNode(selectedNode.id, { pushTitle: e.target.value })}
+                  />
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {notifyVariables.slice(0, 3).map((varName) => (
+                      <Badge 
+                        key={varName}
+                        variant="secondary" 
+                        className="cursor-pointer hover:bg-primary hover:text-primary-foreground text-xs"
+                        onClick={() => insertNotifyVariable(varName, 'pushTitle')}
+                      >
+                        {`{{${varName}}}`}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label>Texto da Notificação *</Label>
+                  <Textarea
+                    placeholder="Texto da notificação push..."
+                    value={(nodeData.pushBody as string) || ''}
+                    onChange={(e) => onUpdateNode(selectedNode.id, { pushBody: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label className="text-xs">Variáveis disponíveis</Label>
+                  <div className="flex flex-wrap gap-1">
+                    {notifyVariables.map((varName) => (
+                      <Badge 
+                        key={varName}
+                        variant="secondary" 
+                        className="cursor-pointer hover:bg-primary hover:text-primary-foreground text-xs"
+                        onClick={() => insertNotifyVariable(varName, 'pushBody')}
+                      >
+                        {`{{${varName}}}`}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="p-2 rounded bg-blue-500/10 border border-blue-500/30 text-xs text-blue-400">
+                  <strong>Nota:</strong> A notificação push será enviada para o usuário atual (dono da instância).
+                </div>
+              </>
+            )}
+            
+            {!(nodeData.notificationType as string) && (
+              <p className="text-xs text-muted-foreground text-center py-4">
+                Selecione o tipo de notificação para configurar
+              </p>
+            )}
+          </div>
+        );
+
       default:
         return null;
     }
