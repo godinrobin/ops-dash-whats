@@ -38,6 +38,7 @@ interface AdminInstancesProps {
 export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesProps) => {
   const [syncing, setSyncing] = useState<string | null>(null);
   const [syncingAll, setSyncingAll] = useState(false);
+  const [syncingUazapi, setSyncingUazapi] = useState(false);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -89,6 +90,31 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
       toast.error(error.message || 'Erro ao sincronizar todas');
     } finally {
       setSyncingAll(false);
+    }
+  };
+
+  // Sync with UAZAPI - updates status and phone numbers from the real API
+  const syncWithUazapi = async () => {
+    setSyncingUazapi(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-sync-instances');
+
+      if (error) throw error;
+
+      if (data.error) {
+        toast.error(data.error);
+        return;
+      }
+
+      toast.success(
+        `Sincronizado! UAZAPI tem ${data.realConnected} conectadas. Atualizadas: ${data.updated}, Desconectadas: ${data.disconnected}, Números: ${data.phoneUpdated}`
+      );
+      onRefresh();
+    } catch (error: any) {
+      console.error('Error syncing with UAZAPI:', error);
+      toast.error(error.message || 'Erro ao sincronizar com UAZAPI');
+    } finally {
+      setSyncingUazapi(false);
     }
   };
 
@@ -365,17 +391,18 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
 
             <div className="flex gap-2">
               <Button 
-                variant="outline" 
-                onClick={syncAllConversations}
-                disabled={syncingAll}
+                variant="default" 
+                onClick={syncWithUazapi}
+                disabled={syncingUazapi}
                 className="flex-1"
+                title="Sincronizar status e números com UAZAPI"
               >
-                {syncingAll ? (
+                {syncingUazapi ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 ) : (
                   <RefreshCw className="h-4 w-4 mr-2" />
                 )}
-                Sync Todas
+                Sync UAZAPI
               </Button>
               
               <Button 
