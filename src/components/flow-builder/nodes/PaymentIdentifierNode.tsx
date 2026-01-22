@@ -1,5 +1,5 @@
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { Receipt, Check, X, Clock } from 'lucide-react';
+import { Receipt, Check, X, Clock, ShieldAlert } from 'lucide-react';
 import { NodeAnalyticsWrapper } from '../NodeAnalyticsWrapper';
 
 export const PaymentIdentifierNode = ({ id, data }: NodeProps) => {
@@ -10,11 +10,14 @@ export const PaymentIdentifierNode = ({ id, data }: NodeProps) => {
     maxAttempts?: number;
     noResponseDelayValue?: number;
     noResponseDelayUnit?: 'seconds' | 'minutes';
+    fakeDetectionEnabled?: boolean;
+    fakeDetectionRecipients?: Array<{ name: string; cpf_cnpj: string }>;
   };
   
   const delayValue = nodeData.noResponseDelayValue || 5;
   const delayUnit = nodeData.noResponseDelayUnit || 'minutes';
   const delayDisplay = `${delayValue} ${delayUnit === 'seconds' ? 's' : 'min'}`;
+  const fakeDetectionEnabled = nodeData.fakeDetectionEnabled || false;
   
   return (
     <NodeAnalyticsWrapper nodeId={id}>
@@ -35,6 +38,12 @@ export const PaymentIdentifierNode = ({ id, data }: NodeProps) => {
             {nodeData.checkImage && <span className="bg-emerald-500/20 text-emerald-600 px-1.5 py-0.5 rounded text-[10px]">Imagem</span>}
             {nodeData.checkPdf && <span className="bg-emerald-500/20 text-emerald-600 px-1.5 py-0.5 rounded text-[10px]">PDF</span>}
             {nodeData.markAsPaid && <span className="bg-emerald-500/20 text-emerald-600 px-1.5 py-0.5 rounded text-[10px]">Marca Pago</span>}
+            {fakeDetectionEnabled && (
+              <span className="bg-red-500/20 text-red-500 px-1.5 py-0.5 rounded text-[10px] flex items-center gap-0.5">
+                <ShieldAlert className="h-2.5 w-2.5" />
+                Anti-Fake
+              </span>
+            )}
           </div>
           <div>Tentativas: {nodeData.maxAttempts || 3}</div>
           <div className="flex items-center gap-1">

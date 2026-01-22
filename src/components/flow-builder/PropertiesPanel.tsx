@@ -1273,7 +1273,10 @@ export const PropertiesPanel = ({
           </div>
         );
 
-      case 'paymentIdentifier':
+      case 'paymentIdentifier': {
+        const fakeDetectionEnabled = (nodeData.fakeDetectionEnabled as boolean) || false;
+        const fakeDetectionRecipients = (nodeData.fakeDetectionRecipients as Array<{ name: string; cpf_cnpj: string }>) || [];
+        
         return (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
@@ -1364,16 +1367,98 @@ export const PropertiesPanel = ({
               </p>
             </div>
 
+            {/* Fake Receipt Detection Section */}
+            <div className={`border-t pt-4 mt-4 p-3 rounded-lg ${fakeDetectionEnabled ? 'bg-red-500/5 border-red-500/30' : 'bg-muted/30'}`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Label className={`text-xs uppercase font-semibold ${fakeDetectionEnabled ? 'text-red-400' : 'text-muted-foreground'}`}>
+                    Detecção de Comprovante Fake
+                  </Label>
+                </div>
+                <Switch
+                  checked={fakeDetectionEnabled}
+                  onCheckedChange={(checked) => onUpdateNode(selectedNode.id, { fakeDetectionEnabled: checked })}
+                  className={fakeDetectionEnabled ? 'data-[state=checked]:bg-emerald-500' : 'data-[state=unchecked]:bg-red-500/50'}
+                />
+              </div>
+              
+              {fakeDetectionEnabled && (
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    O comprovante só será aceito se o destinatário corresponder a um dos recebedores cadastrados.
+                  </p>
+                  
+                  {/* Recipients List */}
+                  {fakeDetectionRecipients.length > 0 && (
+                    <div className="space-y-2">
+                      {fakeDetectionRecipients.map((recipient, index) => (
+                        <div key={index} className="flex items-center gap-2 p-2 bg-background/50 rounded border">
+                          <div className="flex-1 text-xs">
+                            <div className="font-medium">{recipient.name}</div>
+                            <div className="text-muted-foreground">{recipient.cpf_cnpj}</div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 text-red-500 hover:text-red-600"
+                            onClick={() => {
+                              const updated = fakeDetectionRecipients.filter((_, i) => i !== index);
+                              onUpdateNode(selectedNode.id, { fakeDetectionRecipients: updated });
+                            }}
+                          >
+                            <Minus className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Add Recipient Form */}
+                  <div className="space-y-2 p-2 bg-background/30 rounded border border-dashed">
+                    <Input
+                      placeholder="Nome do recebedor"
+                      id={`recipient-name-${selectedNode.id}`}
+                      className="h-8 text-xs"
+                    />
+                    <Input
+                      placeholder="CPF ou CNPJ"
+                      id={`recipient-cpf-${selectedNode.id}`}
+                      className="h-8 text-xs"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full h-7 text-xs"
+                      onClick={() => {
+                        const nameInput = document.getElementById(`recipient-name-${selectedNode.id}`) as HTMLInputElement;
+                        const cpfInput = document.getElementById(`recipient-cpf-${selectedNode.id}`) as HTMLInputElement;
+                        if (nameInput?.value && cpfInput?.value) {
+                          const updated = [...fakeDetectionRecipients, { name: nameInput.value, cpf_cnpj: cpfInput.value }];
+                          onUpdateNode(selectedNode.id, { fakeDetectionRecipients: updated });
+                          nameInput.value = '';
+                          cpfInput.value = '';
+                        }
+                      }}
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      Adicionar Recebedor
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="p-2 rounded bg-muted/50 text-xs">
               <strong>Saídas:</strong>
               <div className="flex flex-col gap-1 mt-1">
-                <span className="text-emerald-500">✓ Pagou - Comprovante identificado</span>
+                <span className="text-emerald-500">✓ Pagou - Comprovante identificado{fakeDetectionEnabled ? ' e destinatário validado' : ''}</span>
                 <span className="text-amber-500">⏱ Sem Resposta - Nenhuma mensagem no tempo configurado</span>
-                <span className="text-red-500">✗ Não Pagou - Tentativas esgotadas sem comprovante</span>
+                <span className="text-red-500">✗ Não Pagou - Tentativas esgotadas sem comprovante{fakeDetectionEnabled ? ' ou destinatário não corresponde' : ''}</span>
               </div>
             </div>
           </div>
         );
+      }
 
       case 'sendPixKey':
         return (
