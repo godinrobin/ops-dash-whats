@@ -5,11 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
-  Smartphone, Search, RefreshCw, Loader2, MessageSquare, 
-  TrendingUp, Trophy, Medal, Trash2
+  Smartphone, Search, RefreshCw, Loader2, Filter, 
+  Calendar, CheckCircle, XCircle, ArrowUpDown, Download
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -27,6 +26,7 @@ interface InstanceData {
   last_conversation_sync: string | null;
   created_at: string;
   disconnected_at?: string | null;
+  connected_at?: string | null;
 }
 
 interface AdminInstancesProps {
@@ -38,39 +38,20 @@ interface AdminInstancesProps {
 export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesProps) => {
   const [syncing, setSyncing] = useState<string | null>(null);
   const [syncingAll, setSyncingAll] = useState(false);
-  const [deletingOld, setDeletingOld] = useState(false);
-  const [deletingAll, setDeletingAll] = useState(false);
-  const [cleaningOrphaned, setCleaningOrphaned] = useState(false);
-  const [deleteProgress, setDeleteProgress] = useState<{ current: number; total: number } | null>(null);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<string>('all');
-  const [selectedStatus, setSelectedStatus] = useState<string>('all');
-  const [minConversations, setMinConversations] = useState<string>('');
-  const [sortBy, setSortBy] = useState<'conversations' | 'recent'>('conversations');
-  const [rankingPeriod, setRankingPeriod] = useState<'3' | '7' | '15' | '30'>('7');
+  const [selectedStatus, setSelectedStatus] = useState<string>('connected');
+  const [sortBy, setSortBy] = useState<'days_connected' | 'days_month' | 'user' | 'recent'>('days_connected');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  
+  // Selection for bulk actions
+  const [selectedInstances, setSelectedInstances] = useState<Set<string>>(new Set());
 
-  // All disconnected instances
-  const allDisconnectedInstances = useMemo(() => {
-    return instances.filter(inst => inst.status === 'disconnected');
-  }, [instances]);
-
-  // Calculate instances disconnected for more than 7 days
-  const oldDisconnectedInstances = useMemo(() => {
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    
-    return instances.filter(inst => {
-      if (inst.status !== 'disconnected') return false;
-      
-      // Use disconnected_at if available, otherwise fall back to created_at
-      const disconnectedDate = inst.disconnected_at 
-        ? new Date(inst.disconnected_at) 
-        : new Date(inst.created_at);
-      
-      return disconnectedDate < sevenDaysAgo;
-    });
+  // Only connected instances for this view
+  const connectedInstances = useMemo(() => {
+    return instances.filter(inst => inst.status === 'connected' || inst.status === 'open');
   }, [instances]);
 
   const syncInstanceConversations = async (instanceId: string) => {
@@ -111,272 +92,111 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
     }
   };
 
-  const deleteOldDisconnectedInstances = async () => {
-    if (oldDisconnectedInstances.length === 0) {
-      toast.info('Não há instâncias desconectadas há mais de 7 dias');
-      return;
-    }
-
-    setDeletingOld(true);
-    setDeleteProgress({ current: 0, total: oldDisconnectedInstances.length });
+  // Calculate days connected (since connected_at or created_at)
+  const calculateDaysConnected = (instance: InstanceData): number => {
+    if (instance.status !== 'connected' && instance.status !== 'open') return 0;
     
-    let deletedCount = 0;
-    let skippedCount = 0;
-    let failedCount = 0;
-    const DELAY_MS = 500;
-
-    try {
-      for (let i = 0; i < oldDisconnectedInstances.length; i++) {
-        const inst = oldDisconnectedInstances[i];
-        setDeleteProgress({ current: i + 1, total: oldDisconnectedInstances.length });
-
-        try {
-          // CRITICAL: First verify the REAL status from the API before deleting
-          const { data: statusData, error: statusError } = await supabase.functions.invoke('maturador-evolution', {
-            body: { action: 'status', instanceId: inst.id },
-          });
-
-          // Check if the instance is actually connected in the API
-          const realStatus = statusData?.state?.state || statusData?.connectionStatus || statusData?.status;
-          const isReallyConnected = realStatus === 'connected' || realStatus === 'open' || realStatus === 'CONNECTED';
-
-          if (isReallyConnected) {
-            // Instance is connected in API - update DB status instead of deleting
-            console.log(`[deleteOld] Instance ${inst.instance_name} is actually CONNECTED in API, updating DB status`);
-            await supabase
-              .from('maturador_instances')
-              .update({ status: 'connected', disconnected_at: null })
-              .eq('id', inst.id);
-            skippedCount++;
-            continue;
-          }
-
-          // Only delete if truly disconnected
-          try {
-            await supabase.functions.invoke('maturador-evolution', {
-              body: { 
-                action: 'admin-delete-instance', 
-                instanceId: inst.id,
-                instanceName: inst.instance_name
-              },
-            });
-            console.log(`[deleteOld] Deleted ${inst.instance_name} from UAZAPI`);
-          } catch (apiError) {
-            console.log(`[deleteOld] API delete failed for ${inst.instance_name}, continuing with DB delete`);
-          }
-
-          const { error } = await supabase
-            .from('maturador_instances')
-            .delete()
-            .eq('id', inst.id);
-
-          if (error) throw error;
-          deletedCount++;
-        } catch (err) {
-          console.error(`Error processing instance ${inst.id}:`, err);
-          failedCount++;
-        }
-
-        if (i < oldDisconnectedInstances.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, DELAY_MS));
-        }
-      }
-
-      if (skippedCount > 0) {
-        toast.success(`${deletedCount} excluída(s), ${skippedCount} corrigida(s) (ainda conectadas)${failedCount > 0 ? `, ${failedCount} falha(s)` : ''}`);
-      } else if (failedCount === 0) {
-        toast.success(`${deletedCount} instância(s) excluída(s) com sucesso!`);
-      } else {
-        toast.warning(`${deletedCount} excluída(s), ${failedCount} falha(s)`);
-      }
-      
-      onRefresh();
-    } catch (error: any) {
-      console.error('Error deleting old instances:', error);
-      toast.error(error.message || 'Erro ao excluir instâncias');
-    } finally {
-      setDeletingOld(false);
-      setDeleteProgress(null);
-    }
+    const connectedDate = instance.connected_at 
+      ? new Date(instance.connected_at) 
+      : new Date(instance.created_at);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - connectedDate.getTime());
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
   };
 
-  // Delete all disconnected instances with delay to respect UAZAPI timeout
-  // CRITICAL: Now verifies REAL status from API before deleting to prevent accidental deletion of connected instances
-  const deleteAllDisconnectedInstances = async () => {
-    if (allDisconnectedInstances.length === 0) {
-      toast.info('Não há instâncias desconectadas');
-      return;
-    }
-
-    setDeletingAll(true);
-    setDeleteProgress({ current: 0, total: allDisconnectedInstances.length });
+  // Calculate days active in current month (resets every month)
+  const calculateDaysActiveThisMonth = (instance: InstanceData): number => {
+    if (instance.status !== 'connected' && instance.status !== 'open') return 0;
     
-    let deletedCount = 0;
-    let skippedCount = 0;
-    let failCount = 0;
-    const DELAY_MS = 500; // 500ms delay between deletions to respect UAZAPI timeout
-
-    try {
-      for (let i = 0; i < allDisconnectedInstances.length; i++) {
-        const inst = allDisconnectedInstances[i];
-        setDeleteProgress({ current: i + 1, total: allDisconnectedInstances.length });
-
-        try {
-          // CRITICAL: First verify the REAL status from the API before deleting
-          const { data: statusData, error: statusError } = await supabase.functions.invoke('maturador-evolution', {
-            body: { action: 'status', instanceId: inst.id },
-          });
-
-          // Check if the instance is actually connected in the API
-          const realStatus = statusData?.state?.state || statusData?.connectionStatus || statusData?.status;
-          const isReallyConnected = realStatus === 'connected' || realStatus === 'open' || realStatus === 'CONNECTED';
-
-          if (isReallyConnected) {
-            // Instance is connected in API - update DB status instead of deleting
-            console.log(`[deleteAll] Instance ${inst.instance_name} is actually CONNECTED in API, updating DB status`);
-            await supabase
-              .from('maturador_instances')
-              .update({ status: 'connected', disconnected_at: null })
-              .eq('id', inst.id);
-            skippedCount++;
-            continue;
-          }
-
-          // Only delete if truly disconnected
-          try {
-            await supabase.functions.invoke('maturador-evolution', {
-              body: { 
-                action: 'admin-delete-instance', 
-                instanceId: inst.id,
-                instanceName: inst.instance_name
-              },
-            });
-            console.log(`[deleteAll] Deleted ${inst.instance_name} from UAZAPI`);
-          } catch (apiError) {
-            // Ignore API errors, continue with DB deletion
-            console.log(`[deleteAll] API delete failed for ${inst.instance_name}, continuing with DB delete`);
-          }
-
-          // Delete from database
-          const { error } = await supabase
-            .from('maturador_instances')
-            .delete()
-            .eq('id', inst.id);
-
-          if (error) throw error;
-          deletedCount++;
-        } catch (err) {
-          console.error(`Error processing instance ${inst.id}:`, err);
-          failCount++;
-        }
-
-        // Add delay between deletions to respect UAZAPI rate limits
-        if (i < allDisconnectedInstances.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, DELAY_MS));
-        }
-      }
-
-      if (skippedCount > 0) {
-        toast.success(`${deletedCount} excluída(s), ${skippedCount} corrigida(s) (ainda conectadas)${failCount > 0 ? `, ${failCount} falha(s)` : ''}`);
-      } else if (failCount === 0) {
-        toast.success(`${deletedCount} instância(s) excluída(s) com sucesso!`);
-      } else {
-        toast.warning(`${deletedCount} excluída(s), ${failCount} falha(s)`);
-      }
-      
-      onRefresh();
-    } catch (error: any) {
-      console.error('Error in bulk delete:', error);
-      toast.error(error.message || 'Erro ao excluir instâncias');
-    } finally {
-      setDeletingAll(false);
-      setDeleteProgress(null);
-    }
-  };
-
-  // Cleanup orphaned instances from UAZAPI (instances deleted from DB but still in UAZAPI)
-  const cleanupOrphanedInstances = async () => {
-    setCleaningOrphaned(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('maturador-evolution', {
-        body: { action: 'admin-cleanup-orphaned-instances', maxDeletes: 30 },
-      });
-
-      if (error) throw error;
-
-      if (data.orphanedFound === 0) {
-        toast.info(`Nenhuma instância órfã desconectada encontrada na UAZAPI`);
-      } else if (data.status === 'partial') {
-        toast.success(`${data.deleted} excluída(s), ${data.remaining} restante(s). Clique novamente.`);
-      } else if (data.status === 'done') {
-        toast.success(`${data.deleted} instância(s) órfã(s) excluída(s) da UAZAPI!`);
-      } else if (data.failed === 0) {
-        toast.success(`${data.deleted} instância(s) órfã(s) excluída(s) da UAZAPI!`);
-      } else {
-        toast.warning(`${data.deleted} excluída(s), ${data.failed} falha(s)`);
-      }
-      
-      console.log('[Cleanup Result]', data);
-    } catch (error: any) {
-      console.error('Error cleaning orphaned instances:', error);
-      toast.error(error.message || 'Erro ao limpar instâncias órfãs');
-    } finally {
-      setCleaningOrphaned(false);
-    }
+    const connectedDate = instance.connected_at 
+      ? new Date(instance.connected_at) 
+      : new Date(instance.created_at);
+    const now = new Date();
+    
+    // Get the first day of current month
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    
+    // If connected before this month, count from start of month
+    // If connected this month, count from connection date
+    const countFrom = connectedDate > startOfMonth ? connectedDate : startOfMonth;
+    
+    const diffTime = now.getTime() - countFrom.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 to include today
+    
+    return Math.max(0, diffDays);
   };
 
   // Filter and sort instances
   const filteredInstances = useMemo(() => {
-    const safeInstances = instances || [];
-    let result = [...safeInstances];
+    let result = selectedStatus === 'connected' 
+      ? connectedInstances 
+      : selectedStatus === 'all' 
+        ? instances 
+        : instances.filter(inst => inst.status === selectedStatus);
 
-    // Apply filters
+    // Apply search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       result = result.filter(inst =>
         inst.phone_number?.toLowerCase().includes(query) ||
         inst.instance_name.toLowerCase().includes(query) ||
         inst.label?.toLowerCase().includes(query) ||
-        inst.user_email.toLowerCase().includes(query)
+        inst.user_email.toLowerCase().includes(query) ||
+        inst.username.toLowerCase().includes(query)
       );
     }
 
+    // Apply user filter
     if (selectedUser !== 'all') {
       result = result.filter(inst => inst.user_id === selectedUser);
     }
 
-    if (selectedStatus !== 'all') {
-      result = result.filter(inst => inst.status === selectedStatus);
-    }
-
-    if (minConversations) {
-      const min = parseInt(minConversations);
-      result = result.filter(inst => inst.conversation_count >= min);
-    }
-
     // Sort
-    if (sortBy === 'conversations') {
-      result.sort((a, b) => b.conversation_count - a.conversation_count);
-    } else {
-      result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    }
+    const sortedResult = [...result].sort((a, b) => {
+      let comparison = 0;
+      
+      switch (sortBy) {
+        case 'days_connected':
+          comparison = calculateDaysConnected(b) - calculateDaysConnected(a);
+          break;
+        case 'days_month':
+          comparison = calculateDaysActiveThisMonth(b) - calculateDaysActiveThisMonth(a);
+          break;
+        case 'user':
+          comparison = a.username.localeCompare(b.username);
+          break;
+        case 'recent':
+          comparison = new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          break;
+      }
+      
+      return sortOrder === 'desc' ? comparison : -comparison;
+    });
 
-    return result;
-  }, [instances, searchQuery, selectedUser, selectedStatus, minConversations, sortBy]);
+    return sortedResult;
+  }, [instances, connectedInstances, searchQuery, selectedUser, selectedStatus, sortBy, sortOrder]);
 
-  // Top instances for ranking
-  const topInstances = useMemo(() => {
-    return [...filteredInstances]
-      .sort((a, b) => b.conversation_count - a.conversation_count)
-      .slice(0, 10);
-  }, [filteredInstances]);
+  // Stats
+  const stats = useMemo(() => {
+    const connected = instances.filter(i => i.status === 'connected' || i.status === 'open').length;
+    const disconnected = instances.filter(i => i.status === 'disconnected' || i.status === 'close').length;
+    const totalDaysConnected = connectedInstances.reduce((acc, inst) => acc + calculateDaysConnected(inst), 0);
+    const avgDaysConnected = connectedInstances.length > 0 
+      ? Math.round(totalDaysConnected / connectedInstances.length) 
+      : 0;
+    
+    return { connected, disconnected, avgDaysConnected };
+  }, [instances, connectedInstances]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'connected':
-        return <Badge className="bg-green-500/20 text-green-500">Conectado</Badge>;
+      case 'open':
+        return <Badge className="bg-green-500/20 text-green-500"><CheckCircle className="h-3 w-3 mr-1" />Conectado</Badge>;
       case 'disconnected':
-        return <Badge variant="secondary">Desconectado</Badge>;
+      case 'close':
+        return <Badge variant="secondary"><XCircle className="h-3 w-3 mr-1" />Desconectado</Badge>;
       case 'connecting':
         return <Badge className="bg-yellow-500/20 text-yellow-500">Conectando</Badge>;
       default:
@@ -384,21 +204,118 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
     }
   };
 
-  const getRankBadge = (index: number) => {
-    if (index === 0) return <Trophy className="h-5 w-5 text-yellow-500" />;
-    if (index === 1) return <Medal className="h-5 w-5 text-gray-400" />;
-    if (index === 2) return <Medal className="h-5 w-5 text-amber-600" />;
-    return <span className="text-muted-foreground font-medium">#{index + 1}</span>;
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedInstances(new Set(filteredInstances.map(i => i.id)));
+    } else {
+      setSelectedInstances(new Set());
+    }
+  };
+
+  const handleSelectInstance = (instanceId: string, checked: boolean) => {
+    const newSelected = new Set(selectedInstances);
+    if (checked) {
+      newSelected.add(instanceId);
+    } else {
+      newSelected.delete(instanceId);
+    }
+    setSelectedInstances(newSelected);
+  };
+
+  const toggleSort = (field: typeof sortBy) => {
+    if (sortBy === field) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('desc');
+    }
+  };
+
+  // Export selected instances to CSV
+  const exportToCSV = () => {
+    const dataToExport = selectedInstances.size > 0 
+      ? filteredInstances.filter(i => selectedInstances.has(i.id))
+      : filteredInstances;
+    
+    if (dataToExport.length === 0) {
+      toast.error('Nenhuma instância para exportar');
+      return;
+    }
+
+    const headers = ['Usuário', 'Email', 'Instância', 'Número', 'Status', 'Dias Conectado', 'Dias Ativa Mês'];
+    const rows = dataToExport.map(inst => [
+      inst.username,
+      inst.user_email,
+      inst.instance_name,
+      inst.phone_number || '-',
+      inst.status,
+      calculateDaysConnected(inst),
+      calculateDaysActiveThisMonth(inst)
+    ]);
+
+    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `instancias_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    
+    toast.success(`${dataToExport.length} instância(s) exportada(s)`);
   };
 
   return (
     <div className="space-y-6">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-500/10 rounded-lg">
+                <CheckCircle className="h-5 w-5 text-green-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{stats.connected}</p>
+                <p className="text-xs text-muted-foreground">Instâncias Conectadas</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-500/10 rounded-lg">
+                <XCircle className="h-5 w-5 text-red-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{stats.disconnected}</p>
+                <p className="text-xs text-muted-foreground">Instâncias Desconectadas</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-500/10 rounded-lg">
+                <Calendar className="h-5 w-5 text-blue-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{stats.avgDaysConnected}</p>
+                <p className="text-xs text-muted-foreground">Média Dias Conectado</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Filters */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Smartphone className="h-5 w-5" />
-            Números WhatsApp ({instances.length} total)
+            Controle de Instâncias ({instances.length} total)
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -406,7 +323,7 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar número, nome..."
+                placeholder="Buscar usuário, número, instância..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -420,7 +337,9 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
               <SelectContent>
                 <SelectItem value="all">Todos os usuários</SelectItem>
                 {users.map(u => (
-                  <SelectItem key={u.id} value={u.id}>{u.email}</SelectItem>
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.username || u.email}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -431,197 +350,100 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="connected">Conectado</SelectItem>
-                <SelectItem value="disconnected">Desconectado</SelectItem>
+                <SelectItem value="connected">Conectadas</SelectItem>
+                <SelectItem value="disconnected">Desconectadas</SelectItem>
               </SelectContent>
             </Select>
 
             <div className="flex gap-2">
-              <Input
-                type="number"
-                placeholder="Mín. conversas"
-                value={minConversations}
-                onChange={(e) => setMinConversations(e.target.value)}
-                className="w-32"
-              />
               <Button 
                 variant="outline" 
                 onClick={syncAllConversations}
                 disabled={syncingAll}
+                className="flex-1"
               >
                 {syncingAll ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 ) : (
-                  <RefreshCw className="h-4 w-4" />
+                  <RefreshCw className="h-4 w-4 mr-2" />
                 )}
+                Sync Todas
               </Button>
               
-              {/* Delete all disconnected immediately */}
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button 
-                    variant="destructive" 
-                    disabled={deletingAll || allDisconnectedInstances.length === 0}
-                  >
-                    {deletingAll ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        {deleteProgress && `${deleteProgress.current}/${deleteProgress.total}`}
-                      </>
-                    ) : (
-                      <>
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Excluir TODAS ({allDisconnectedInstances.length})
-                      </>
-                    )}
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Excluir TODAS as instâncias desconectadas?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Esta ação irá excluir permanentemente <strong>{allDisconnectedInstances.length}</strong> instância(s) 
-                      desconectadas. A exclusão será feita com delay de 500ms entre cada uma para respeitar 
-                      o timeout da UAZAPI. Esta ação não pode ser desfeita.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={deleteAllDisconnectedInstances}>
-                      Excluir {allDisconnectedInstances.length} instância(s)
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-
-              {/* Delete old disconnected (+7 days) */}
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    disabled={deletingOld || oldDisconnectedInstances.length === 0}
-                    className="border-destructive/50 text-destructive hover:bg-destructive/10"
-                  >
-                    {deletingOld ? (
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    ) : (
-                      <Trash2 className="h-4 w-4 mr-2" />
-                    )}
-                    +7d ({oldDisconnectedInstances.length})
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Excluir instâncias desconectadas +7 dias?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Esta ação irá excluir permanentemente <strong>{oldDisconnectedInstances.length}</strong> instância(s) 
-                      que estão desconectadas há mais de 7 dias. Esta ação não pode ser desfeita.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={deleteOldDisconnectedInstances}>
-                      Excluir {oldDisconnectedInstances.length} instância(s)
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-
-              {/* Cleanup orphaned instances from UAZAPI */}
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    disabled={cleaningOrphaned}
-                    className="border-orange-500/50 text-orange-600 hover:bg-orange-500/10"
-                  >
-                    {cleaningOrphaned ? (
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    ) : (
-                      <Trash2 className="h-4 w-4 mr-2" />
-                    )}
-                    Limpar Órfãs UAZAPI
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Limpar instâncias órfãs da UAZAPI?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Esta ação irá buscar todas as instâncias na UAZAPI que foram excluídas do banco de dados
-                      mas ainda existem na API, e irá excluí-las. Use isto para corrigir instâncias que 
-                      foram apagadas anteriormente sem serem removidas da UAZAPI.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={cleanupOrphanedInstances}>
-                      Limpar Órfãs
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <Button 
+                variant="outline" 
+                onClick={exportToCSV}
+                title="Exportar CSV"
+              >
+                <Download className="h-4 w-4" />
+              </Button>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-sm text-muted-foreground">Ordenar por:</span>
+          {/* Selected count and bulk actions */}
+          {selectedInstances.size > 0 && (
+            <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg mb-4">
+              <span className="text-sm font-medium">
+                {selectedInstances.size} instância(s) selecionada(s)
+              </span>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => setSelectedInstances(new Set())}
+              >
+                Limpar seleção
+              </Button>
+            </div>
+          )}
+
+          {/* Sort options */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-muted-foreground flex items-center gap-1">
+              <Filter className="h-4 w-4" />
+              Ordenar por:
+            </span>
             <Button
-              variant={sortBy === 'conversations' ? 'default' : 'outline'}
+              variant={sortBy === 'days_connected' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setSortBy('conversations')}
+              onClick={() => toggleSort('days_connected')}
             >
-              <MessageSquare className="h-4 w-4 mr-1" />
-              Conversas
+              <Calendar className="h-4 w-4 mr-1" />
+              Dias Conectado
+              {sortBy === 'days_connected' && (
+                <ArrowUpDown className="h-3 w-3 ml-1" />
+              )}
+            </Button>
+            <Button
+              variant={sortBy === 'days_month' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => toggleSort('days_month')}
+            >
+              Dias no Mês
+              {sortBy === 'days_month' && (
+                <ArrowUpDown className="h-3 w-3 ml-1" />
+              )}
+            </Button>
+            <Button
+              variant={sortBy === 'user' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => toggleSort('user')}
+            >
+              Usuário
+              {sortBy === 'user' && (
+                <ArrowUpDown className="h-3 w-3 ml-1" />
+              )}
             </Button>
             <Button
               variant={sortBy === 'recent' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setSortBy('recent')}
+              onClick={() => toggleSort('recent')}
             >
               Recentes
+              {sortBy === 'recent' && (
+                <ArrowUpDown className="h-3 w-3 ml-1" />
+              )}
             </Button>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Ranking Tabs */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5" />
-            Ranking de Conversas
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Tabs value={rankingPeriod} onValueChange={(v) => setRankingPeriod(v as any)}>
-            <TabsList>
-              <TabsTrigger value="3">3 dias</TabsTrigger>
-              <TabsTrigger value="7">7 dias</TabsTrigger>
-              <TabsTrigger value="15">15 dias</TabsTrigger>
-              <TabsTrigger value="30">30 dias</TabsTrigger>
-            </TabsList>
-            <TabsContent value={rankingPeriod} className="mt-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {topInstances.slice(0, 3).map((inst, index) => (
-                  <Card key={inst.id} className={index === 0 ? 'border-yellow-500/50 bg-yellow-500/5' : ''}>
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        {getRankBadge(index)}
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{inst.phone_number || inst.instance_name}</p>
-                          <p className="text-xs text-muted-foreground truncate">{inst.user_email}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xl font-bold text-primary">{inst.conversation_count}</p>
-                          <p className="text-xs text-muted-foreground">conversas</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </TabsContent>
-          </Tabs>
         </CardContent>
       </Card>
 
@@ -631,65 +453,85 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>#</TableHead>
-                <TableHead>Usuário</TableHead>
-                <TableHead>Número</TableHead>
-                <TableHead>Label</TableHead>
+                <TableHead className="w-12">
+                  <Checkbox
+                    checked={selectedInstances.size === filteredInstances.length && filteredInstances.length > 0}
+                    onCheckedChange={handleSelectAll}
+                  />
+                </TableHead>
+                <TableHead>Nome do Usuário</TableHead>
+                <TableHead>Instância</TableHead>
+                <TableHead>Número Conectado</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Conversas</TableHead>
-                <TableHead>Última Sync</TableHead>
+                <TableHead className="text-center">Dias Conectado</TableHead>
+                <TableHead className="text-center">Dias Ativa no Mês</TableHead>
                 <TableHead>Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredInstances.map((inst, index) => (
-                <TableRow key={inst.id}>
-                  <TableCell>
-                    <div className="w-6 h-6 flex items-center justify-center">
-                      {getRankBadge(index)}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div>
-                      <p className="font-medium">{inst.username}</p>
-                      <p className="text-xs text-muted-foreground">{inst.user_email}</p>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <code className="text-sm">{inst.phone_number || '-'}</code>
-                  </TableCell>
-                  <TableCell>{inst.label || inst.instance_name}</TableCell>
-                  <TableCell>{getStatusBadge(inst.status)}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="font-mono">
-                      {inst.conversation_count}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {inst.last_conversation_sync ? (
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(inst.last_conversation_sync).toLocaleString('pt-BR')}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => syncInstanceConversations(inst.id)}
-                      disabled={syncing === inst.id}
-                    >
-                      {syncing === inst.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {filteredInstances.map((inst) => {
+                const daysConnected = calculateDaysConnected(inst);
+                const daysThisMonth = calculateDaysActiveThisMonth(inst);
+                
+                return (
+                  <TableRow key={inst.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedInstances.has(inst.id)}
+                        onCheckedChange={(checked) => handleSelectInstance(inst.id, checked as boolean)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{inst.username}</p>
+                        <p className="text-xs text-muted-foreground">{inst.user_email}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
+                        {inst.label || inst.instance_name}
+                      </code>
+                    </TableCell>
+                    <TableCell>
+                      <code className="text-sm font-mono">
+                        {inst.phone_number || '-'}
+                      </code>
+                    </TableCell>
+                    <TableCell>{getStatusBadge(inst.status)}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge 
+                        variant="outline" 
+                        className={daysConnected > 7 ? 'border-green-500/50 text-green-600' : ''}
+                      >
+                        {daysConnected} dias
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge 
+                        variant="outline"
+                        className={daysThisMonth > 15 ? 'border-blue-500/50 text-blue-600' : ''}
+                      >
+                        {daysThisMonth} dias
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => syncInstanceConversations(inst.id)}
+                        disabled={syncing === inst.id}
+                        title="Sincronizar conversas"
+                      >
+                        {syncing === inst.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
               {filteredInstances.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
