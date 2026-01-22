@@ -498,18 +498,61 @@ serve(async (req) => {
       }
     }
     
+    // === CLEANUP ORPHAN SESSIONS: Mark sessions with timeout expired > 24h as failed ===
+    console.log("[process-delay-queue] Checking for orphan sessions (timeout expired > 24h)...");
+    
+    const orphanCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(); // 24h ago
+    
+    const { data: orphanSessions, error: orphanError } = await supabase
+      .from("inbox_flow_sessions")
+      .select("id, timeout_at")
+      .eq("status", "active")
+      .not("timeout_at", "is", null)
+      .lt("timeout_at", orphanCutoff)
+      .limit(100);
+    
+    if (orphanError) {
+      console.error("[process-delay-queue] Error fetching orphan sessions:", orphanError);
+    } else if (orphanSessions && orphanSessions.length > 0) {
+      console.log(`[process-delay-queue] Found ${orphanSessions.length} orphan sessions (timeout > 24h), marking as failed`);
+      
+      const orphanIds = orphanSessions.map(s => s.id);
+      
+      await supabase
+        .from("inbox_flow_sessions")
+        .update({ 
+          status: 'failed', 
+          timeout_at: null,
+          processing: false,
+          processing_started_at: null 
+        })
+        .in("id", orphanIds);
+      
+      // Also mark related delay jobs as failed
+      await supabase
+        .from("inbox_flow_delay_jobs")
+        .update({ status: 'failed', updated_at: new Date().toISOString() })
+        .in("session_id", orphanIds)
+        .neq("status", "done");
+      
+      console.log(`[process-delay-queue] Marked ${orphanSessions.length} orphan sessions as failed`);
+    } else {
+      console.log("[process-delay-queue] No orphan sessions need cleanup");
+    }
+    
     // === TIMEOUT HEALING: Find sessions with expired timeout that still need processing ===
     console.log("[process-delay-queue] Checking for expired timeouts that need healing...");
     
     const expiredResult = await supabase
       .from("inbox_flow_sessions")
-      .select("id, current_node_id, timeout_at, flow:inbox_flows(nodes)")
+      .select("id, current_node_id, timeout_at, contact_id, flow:inbox_flows(nodes)")
       .eq("status", "active")
       .not("timeout_at", "is", null)
       .lt("timeout_at", new Date().toISOString())
+      .gte("timeout_at", orphanCutoff) // Only heal recent ones, not orphans (> 24h)
       .limit(20);
     
-    const expiredTimeoutSessions = expiredResult.data as Array<{ id: string; current_node_id: string; timeout_at: string; flow: { nodes: FlowNode[] } | null }> | null;
+    const expiredTimeoutSessions = expiredResult.data as Array<{ id: string; current_node_id: string; timeout_at: string; contact_id: string; flow: { nodes: FlowNode[] } | null }> | null;
     const expiredError = expiredResult.error;
     
     if (expiredError) {
@@ -517,13 +560,56 @@ serve(async (req) => {
     } else if (expiredTimeoutSessions && expiredTimeoutSessions.length > 0) {
       console.log(`[process-delay-queue] Found ${expiredTimeoutSessions.length} expired timeout sessions to heal in parallel`);
       
-      // Filter to those needing timeout healing
+      // Get contact info for all sessions to check for valid instance_id
+      const contactIds = [...new Set(expiredTimeoutSessions.map(s => s.contact_id).filter(Boolean))];
+      const { data: contacts } = await supabase
+        .from("inbox_contacts")
+        .select("id, instance_id")
+        .in("id", contactIds);
+      
+      const contactInstanceMap = new Map((contacts || []).map(c => [c.id, c.instance_id]));
+      
+      // Filter to those needing timeout healing AND have valid instance
       const timeoutableNodeTypes = ['waitInput', 'menu', 'paymentIdentifier'];
-      const sessionsToHeal = expiredTimeoutSessions.filter(s => {
+      const sessionsToHeal: Array<typeof expiredTimeoutSessions[0]> = [];
+      const sessionsWithoutInstance: Array<typeof expiredTimeoutSessions[0]> = [];
+      
+      for (const s of expiredTimeoutSessions) {
         const flowNodes = (s.flow?.nodes || []) as FlowNode[];
         const currentNode = flowNodes.find(n => n.id === s.current_node_id);
-        return currentNode && timeoutableNodeTypes.includes(currentNode.type);
-      });
+        const hasValidNodeType = currentNode && timeoutableNodeTypes.includes(currentNode.type);
+        const hasInstance = contactInstanceMap.get(s.contact_id) !== null && contactInstanceMap.get(s.contact_id) !== undefined;
+        
+        if (hasValidNodeType) {
+          if (hasInstance) {
+            sessionsToHeal.push(s);
+          } else {
+            sessionsWithoutInstance.push(s);
+          }
+        }
+      }
+      
+      // Mark sessions without instance as failed (can't send timeout message without API)
+      if (sessionsWithoutInstance.length > 0) {
+        console.log(`[process-delay-queue] ${sessionsWithoutInstance.length} sessions have no instance_id, marking as failed`);
+        
+        const noInstanceIds = sessionsWithoutInstance.map(s => s.id);
+        await supabase
+          .from("inbox_flow_sessions")
+          .update({ 
+            status: 'failed', 
+            timeout_at: null,
+            processing: false,
+            processing_started_at: null 
+          })
+          .in("id", noInstanceIds);
+        
+        await supabase
+          .from("inbox_flow_delay_jobs")
+          .update({ status: 'failed', updated_at: new Date().toISOString() })
+          .in("session_id", noInstanceIds)
+          .neq("status", "done");
+      }
       
       if (sessionsToHeal.length > 0) {
         const healResults = await Promise.allSettled(
