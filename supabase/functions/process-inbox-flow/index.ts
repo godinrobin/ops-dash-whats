@@ -2161,53 +2161,24 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
 
           case 'randomizer':
             // Randomizer node - pick a random path based on splits configuration
-            // IMPORTANT: We store the selected split in variables to ensure consistency
-            // across multiple executions (prevents duplicate sends from parallel invocations)
-            const randomizerResultKey = `_randomizer_result_${currentNodeId}`;
             const splits = (currentNode.data.splits as Array<{ id: string; name: string; percentage: number }>) || [];
-            
             if (splits.length > 0) {
-              let selectedSplitId: string;
+              // Calculate total percentage
+              const totalPercentage = splits.reduce((sum, s) => sum + (s.percentage || 0), 0);
+              const randomValue = Math.random() * totalPercentage;
               
-              // Check if we already have a stored result for this randomizer
-              const storedResult = variables[randomizerResultKey] as string | undefined;
-              if (storedResult && splits.some(s => s.id === storedResult)) {
-                // Use the stored result for consistency
-                selectedSplitId = storedResult;
-                console.log(`[${runId}] Randomizer: using stored split ${selectedSplitId} (consistency mode)`);
-              } else {
-                // Calculate total percentage and pick randomly
-                const totalPercentage = splits.reduce((sum, s) => sum + (s.percentage || 0), 0);
-                const randomValue = Math.random() * totalPercentage;
-                
-                let cumulative = 0;
-                selectedSplitId = splits[0]?.id;
-                
-                for (const split of splits) {
-                  cumulative += split.percentage || 0;
-                  if (randomValue <= cumulative) {
-                    selectedSplitId = split.id;
-                    break;
-                  }
+              let cumulative = 0;
+              let selectedSplitId = splits[0]?.id;
+              
+              for (const split of splits) {
+                cumulative += split.percentage || 0;
+                if (randomValue <= cumulative) {
+                  selectedSplitId = split.id;
+                  break;
                 }
-                
-                // Store the result for future consistency
-                variables[randomizerResultKey] = selectedSplitId;
-                
-                // Persist immediately to prevent race conditions
-                try {
-                  await supabaseClient
-                    .from('inbox_flow_sessions')
-                    .update({ variables })
-                    .eq('id', sessionId);
-                  console.log(`[${runId}] Randomizer: stored split ${selectedSplitId} for future consistency`);
-                } catch (persistErr) {
-                  console.error(`[${runId}] Randomizer: failed to persist split result:`, persistErr);
-                }
-                
-                console.log(`[${runId}] Randomizer: selected NEW split ${selectedSplitId} (random: ${randomValue.toFixed(2)}/${totalPercentage})`);
               }
               
+              console.log(`[${runId}] Randomizer: selected split ${selectedSplitId} (random: ${randomValue.toFixed(2)}/${totalPercentage})`);
               processedActions.push(`Randomizer: split ${selectedSplitId}`);
               
               // Find edge with matching sourceHandle

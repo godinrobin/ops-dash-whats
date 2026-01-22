@@ -783,6 +783,14 @@ export const ChatPanel = ({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-medium">{getDisplayName()}</h3>
+              {flowPaused && (
+                <Badge 
+                  className="bg-orange-500 text-white text-[10px] px-1.5 py-0 h-4 flex items-center gap-1 animate-pulse"
+                >
+                  <Pause className="h-2.5 w-2.5" />
+                  Pausado
+                </Badge>
+              )}
               {contactLabels.map((label) => (
                 <Badge 
                   key={label} 
@@ -805,14 +813,6 @@ export const ChatPanel = ({
                 </span>
               ) : (
                 <p className="text-sm text-muted-foreground">{getContactSubtitle()}</p>
-              )}
-              {flowPaused && (
-                <Badge 
-                  className="bg-orange-500 text-white text-[10px] px-1.5 py-0 h-4 font-normal gap-1 border-0 animate-pulse"
-                >
-                  <Pause className="h-2.5 w-2.5" />
-                  Pausado
-                </Badge>
               )}
               {instanceName && (
                 <Badge 
