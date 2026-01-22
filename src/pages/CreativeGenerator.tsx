@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Download, ArrowLeft, Image as ImageIcon, Check, Sparkles, Send, Info, Clock } from "lucide-react";
+import { Loader2, Download, ArrowLeft, Image as ImageIcon, Check, Sparkles, Send, Info, Clock, Upload, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useNavigate } from "react-router-dom";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
@@ -116,6 +116,17 @@ const CreativeGenerator = () => {
   const [aiEditRequest, setAiEditRequest] = useState("");
   const [isEditingWithAI, setIsEditingWithAI] = useState(false);
 
+  // Reference image states
+  const [showReferenceDialog, setShowReferenceDialog] = useState(false);
+  const [referenceImage, setReferenceImage] = useState<string | null>(null);
+  const [referenceAnalysis, setReferenceAnalysis] = useState<any>(null);
+  const [referenceInstructions, setReferenceInstructions] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isGeneratingFromRef, setIsGeneratingFromRef] = useState(false);
+  const [refGeneratedImage, setRefGeneratedImage] = useState<string | null>(null);
+  const [refStep, setRefStep] = useState<'upload' | 'analyze' | 'edit' | 'result'>('upload');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const handleGenerate = async () => {
     if (!canGenerate) {
       toast.error(`Aguarde ${formattedTime} para gerar uma nova imagem`);
@@ -205,6 +216,120 @@ const CreativeGenerator = () => {
     } finally {
       setIsEditingWithAI(false);
     }
+  };
+
+  // Reference image handlers
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        toast.error('Por favor, selecione uma imagem válida');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        setReferenceImage(reader.result as string);
+        setRefStep('analyze');
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (items) {
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = () => {
+              setReferenceImage(reader.result as string);
+              setRefStep('analyze');
+            };
+            reader.readAsDataURL(file);
+          }
+        }
+      }
+    }
+  };
+
+  const analyzeReference = async () => {
+    if (!referenceImage) return;
+
+    setIsAnalyzing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-from-reference', {
+        body: {
+          referenceImageUrl: referenceImage,
+          editInstructions: '',
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.success && data.analysis) {
+        setReferenceAnalysis(data.analysis);
+        setRefStep('edit');
+        toast.success('Imagem analisada com sucesso!');
+      } else {
+        throw new Error(data.error || 'Erro ao analisar imagem');
+      }
+    } catch (error: any) {
+      console.error('Error analyzing reference:', error);
+      toast.error(error.message || 'Erro ao analisar imagem');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const generateFromReference = async () => {
+    if (!referenceImage) return;
+
+    setIsGeneratingFromRef(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-from-reference', {
+        body: {
+          referenceImageUrl: referenceImage,
+          editInstructions: referenceInstructions.trim(),
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.success && data.image) {
+        setRefGeneratedImage(data.image);
+        setRefStep('result');
+        startCooldown();
+        toast.success('Criativo gerado com sucesso!');
+      } else {
+        throw new Error(data.error || 'Erro ao gerar criativo');
+      }
+    } catch (error: any) {
+      console.error('Error generating from reference:', error);
+      toast.error(error.message || 'Erro ao gerar criativo');
+    } finally {
+      setIsGeneratingFromRef(false);
+    }
+  };
+
+  const handleDownloadRef = () => {
+    if (!refGeneratedImage) return;
+    const link = document.createElement('a');
+    link.href = refGeneratedImage;
+    link.download = `criativo-referencia-${Date.now()}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Download iniciado!');
+  };
+
+  const resetReferenceDialog = () => {
+    setReferenceImage(null);
+    setReferenceAnalysis(null);
+    setReferenceInstructions('');
+    setRefGeneratedImage(null);
+    setRefStep('upload');
   };
 
   return (
@@ -359,6 +484,19 @@ const CreativeGenerator = () => {
                     </>
                   )}
                 </Button>
+
+                <Button
+                  onClick={() => {
+                    resetReferenceDialog();
+                    setShowReferenceDialog(true);
+                  }}
+                  variant="outline"
+                  className="w-full border-accent text-accent-foreground hover:bg-accent/10"
+                  size="lg"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Envie Imagem de Referência
+                </Button>
                 
                 <p className="text-xs text-muted-foreground text-center flex items-center justify-center gap-1.5 pt-2">
                   <Info className="h-3 w-3" />
@@ -456,6 +594,194 @@ const CreativeGenerator = () => {
                       )}
                     </Button>
                   </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* Reference Image Dialog */}
+            <Dialog 
+              open={showReferenceDialog} 
+              onOpenChange={(open) => {
+                if (!open) resetReferenceDialog();
+                setShowReferenceDialog(open);
+              }}
+            >
+              <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto bg-card border-accent">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-xl">
+                    <Upload className="h-5 w-5 text-accent" />
+                    Criar a partir de Referência
+                  </DialogTitle>
+                  <DialogDescription className="text-base pt-2">
+                    Faça upload de uma imagem de referência e a IA irá analisar e gerar um novo criativo baseado nela.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+
+                <div className="py-4 space-y-4" onPaste={handlePaste}>
+                  {/* Step 1: Upload */}
+                  {refStep === 'upload' && (
+                    <div className="space-y-4">
+                      <div 
+                        onClick={() => fileInputRef.current?.click()}
+                        className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-8 text-center cursor-pointer hover:border-accent/50 transition-colors"
+                      >
+                        <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                        <p className="text-lg font-medium mb-2">Clique para fazer upload</p>
+                        <p className="text-sm text-muted-foreground">ou cole uma imagem (Ctrl+V)</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Step 2: Analyze */}
+                  {refStep === 'analyze' && referenceImage && (
+                    <div className="space-y-4">
+                      <div className="relative rounded-lg overflow-hidden border border-border">
+                        <img
+                          src={referenceImage}
+                          alt="Imagem de referência"
+                          className="w-full h-auto max-h-64 object-contain"
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="absolute top-2 right-2 bg-background/80 hover:bg-background"
+                          onClick={() => {
+                            setReferenceImage(null);
+                            setRefStep('upload');
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <Button
+                        onClick={analyzeReference}
+                        disabled={isAnalyzing}
+                        className="w-full"
+                        size="lg"
+                      >
+                        {isAnalyzing ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Analisando imagem...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-4 w-4 mr-2" />
+                            Analisar Referência
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Step 3: Edit instructions */}
+                  {refStep === 'edit' && referenceImage && (
+                    <div className="space-y-4">
+                      <div className="relative rounded-lg overflow-hidden border border-border">
+                        <img
+                          src={referenceImage}
+                          alt="Imagem de referência"
+                          className="w-full h-auto max-h-48 object-contain"
+                        />
+                      </div>
+                      
+                      {referenceAnalysis && (
+                        <div className="bg-muted/50 rounded-lg p-3 text-sm space-y-2">
+                          <p className="font-medium text-accent">Análise da IA:</p>
+                          {referenceAnalysis.style && (
+                            <p><span className="font-medium">Estilo:</span> {referenceAnalysis.style}</p>
+                          )}
+                          {referenceAnalysis.mood && (
+                            <p><span className="font-medium">Tom:</span> {referenceAnalysis.mood}</p>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <Label>Alterações desejadas (opcional)</Label>
+                        <Textarea
+                          placeholder="Ex: Troque o produto por bolsas, mude as cores para tons de azul, adicione texto 'Promoção'..."
+                          value={referenceInstructions}
+                          onChange={(e) => setReferenceInstructions(e.target.value)}
+                          rows={3}
+                          disabled={isGeneratingFromRef}
+                        />
+                      </div>
+
+                      <div className="flex gap-3">
+                        <Button
+                          variant="outline"
+                          onClick={() => setRefStep('analyze')}
+                          className="flex-1"
+                          disabled={isGeneratingFromRef}
+                        >
+                          Voltar
+                        </Button>
+                        <Button
+                          onClick={generateFromReference}
+                          disabled={isGeneratingFromRef || !canGenerate}
+                          className="flex-1"
+                        >
+                          {isGeneratingFromRef ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Gerando...
+                            </>
+                          ) : !canGenerate ? (
+                            <>
+                              <Clock className="h-4 w-4 mr-2" />
+                              Aguarde {formattedTime}
+                            </>
+                          ) : (
+                            <>
+                              <ImageIcon className="h-4 w-4 mr-2" />
+                              Gerar Criativo
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Step 4: Result */}
+                  {refStep === 'result' && refGeneratedImage && (
+                    <div className="space-y-4">
+                      <div className="relative rounded-lg overflow-hidden border border-border">
+                        <img
+                          src={refGeneratedImage}
+                          alt="Criativo gerado"
+                          className="w-full h-auto"
+                        />
+                      </div>
+                      <div className="flex gap-3">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setRefGeneratedImage(null);
+                            setRefStep('edit');
+                          }}
+                          className="flex-1"
+                        >
+                          Gerar Outro
+                        </Button>
+                        <Button
+                          onClick={handleDownloadRef}
+                          className="flex-1"
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Baixar Criativo
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </DialogContent>
             </Dialog>
