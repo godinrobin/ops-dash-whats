@@ -1693,15 +1693,24 @@ serve(async (req) => {
                   }
                   
                   console.log(`[UAZAPI-WEBHOOK] Valid input received: "${userInputValue?.substring(0, 50)}"`);
-                  // Cancel any pending timeout job for this session
-                  await supabaseClient
-                    .from('inbox_flow_delay_jobs')
-                    .update({ 
-                      status: 'done',
-                      updated_at: new Date().toISOString()
-                    })
-                    .eq('session_id', activeSession.id)
-                    .eq('status', 'scheduled');
+                  // Cancel any pending timeout job for this session ONLY if at a waitInput/menu/interactiveBlock node
+                  // Delay nodes should NOT have their jobs cancelled when user sends a message
+                  const nodeType = currentNode?.type;
+                  const isTimeoutCancelable = ['waitInput', 'menu', 'paymentIdentifier', 'interactiveBlock', 'iaConverter'].includes(nodeType);
+                  
+                  if (isTimeoutCancelable) {
+                    await supabaseClient
+                      .from('inbox_flow_delay_jobs')
+                      .update({ 
+                        status: 'done',
+                        updated_at: new Date().toISOString()
+                      })
+                      .eq('session_id', activeSession.id)
+                      .eq('status', 'scheduled');
+                    console.log(`[UAZAPI-WEBHOOK] Cancelled timeout job for ${nodeType} node`);
+                  } else {
+                    console.log(`[UAZAPI-WEBHOOK] NOT cancelling delay job - current node is ${nodeType}, not a waitInput/menu type`);
+                  }
                   
                   // Clear timeout_at from session
                   await supabaseClient
@@ -3419,15 +3428,24 @@ serve(async (req) => {
             .update({ status: 'paused' })
             .eq('id', activeSession.id);
           
-          // Cancel any pending delay jobs for this session
-          await supabaseClient
-            .from('inbox_flow_delay_jobs')
-            .update({ 
-              status: 'done',
-              updated_at: new Date().toISOString()
-            })
-            .eq('session_id', activeSession.id)
-            .eq('status', 'scheduled');
+          // Cancel any pending delay jobs for this session ONLY if at a waitInput/menu type node
+          // Delay nodes should preserve their jobs during pause_on_media
+          const pauseNodeType = currentNode?.type || '';
+          const isPauseTimeoutCancelable = ['waitInput', 'menu', 'paymentIdentifier', 'interactiveBlock', 'iaConverter'].includes(pauseNodeType);
+          
+          if (isPauseTimeoutCancelable) {
+            await supabaseClient
+              .from('inbox_flow_delay_jobs')
+              .update({ 
+                status: 'done',
+                updated_at: new Date().toISOString()
+              })
+              .eq('session_id', activeSession.id)
+              .eq('status', 'scheduled');
+            console.log(`[PAUSE_ON_MEDIA] Cancelled timeout job for ${pauseNodeType} node`);
+          } else {
+            console.log(`[PAUSE_ON_MEDIA] NOT cancelling delay job - current node is ${pauseNodeType}`);
+          }
           
           console.log(`[PAUSE_ON_MEDIA] Flow paused for contact ${contact.id} and session ${activeSession.id} due to media message`);
           
@@ -3559,20 +3577,28 @@ serve(async (req) => {
             });
           }
           
-          // Cancel any pending timeout job for this session
-          const { error: cancelError } = await supabaseClient
-            .from('inbox_flow_delay_jobs')
-            .update({ 
-              status: 'done',
-              updated_at: new Date().toISOString()
-            })
-            .eq('session_id', activeSession.id)
-            .eq('status', 'scheduled');
+          // Cancel any pending timeout job for this session ONLY if at a waitInput/menu type node
+          // Delay nodes should NOT have their jobs cancelled when user sends a message during delay
+          const inputNodeType = currentNode?.type;
+          const isInputTimeoutCancelable = ['waitInput', 'menu', 'paymentIdentifier', 'interactiveBlock', 'iaConverter'].includes(inputNodeType);
           
-          if (cancelError) {
-            console.error('Error canceling timeout job:', cancelError);
+          if (isInputTimeoutCancelable) {
+            const { error: cancelError } = await supabaseClient
+              .from('inbox_flow_delay_jobs')
+              .update({ 
+                status: 'done',
+                updated_at: new Date().toISOString()
+              })
+              .eq('session_id', activeSession.id)
+              .eq('status', 'scheduled');
+            
+            if (cancelError) {
+              console.error('Error canceling timeout job:', cancelError);
+            } else {
+              console.log(`Timeout job canceled for ${inputNodeType} node`);
+            }
           } else {
-            console.log('Timeout job canceled (if any)');
+            console.log(`[WAIT_INPUT] NOT cancelling delay job - current node is ${inputNodeType}, preserving delay schedule`);
           }
           
           // Clear timeout_at from session

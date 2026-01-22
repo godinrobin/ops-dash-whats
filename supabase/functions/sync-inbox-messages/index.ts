@@ -426,18 +426,27 @@ serve(async (req) => {
             const latest = inboundInputs[inboundInputs.length - 1];
             console.log(`[UAZAPI-SYNC] Continuing session ${activeSession.id} (node=${nodeId}) with input: "${latest.content.substring(0, 80)}"`);
 
-            // Cancel any scheduled timeout jobs for this session (if any)
-            await supabaseAdmin
-              .from('inbox_flow_delay_jobs')
-              .update({ status: 'done', updated_at: new Date().toISOString() })
-              .eq('session_id', activeSession.id)
-              .eq('status', 'scheduled');
+            // Cancel any scheduled timeout jobs for this session ONLY if at waitInput/menu node
+            // Delay nodes should preserve their jobs when user sends a message
+            const syncNodeType = nodeId.split('-')[0]; // e.g. "waitInput-1" -> "waitInput"
+            const isSyncTimeoutCancelable = ['waitInput', 'menu', 'paymentIdentifier', 'interactiveBlock', 'iaConverter'].includes(syncNodeType);
+            
+            if (isSyncTimeoutCancelable) {
+              await supabaseAdmin
+                .from('inbox_flow_delay_jobs')
+                .update({ status: 'done', updated_at: new Date().toISOString() })
+                .eq('session_id', activeSession.id)
+                .eq('status', 'scheduled');
+              console.log(`[UAZAPI-SYNC] Cancelled timeout job for ${syncNodeType} node`);
 
-            // Clear timeout_at
-            await supabaseAdmin
-              .from('inbox_flow_sessions')
-              .update({ timeout_at: null })
-              .eq('id', activeSession.id);
+              // Clear timeout_at only for waitInput type nodes
+              await supabaseAdmin
+                .from('inbox_flow_sessions')
+                .update({ timeout_at: null })
+                .eq('id', activeSession.id);
+            } else {
+              console.log(`[UAZAPI-SYNC] NOT cancelling delay job - current node type is ${syncNodeType}`);
+            }
 
             // Call process-inbox-flow with service role JWT
             const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-inbox-flow`;
