@@ -343,7 +343,9 @@ RESPONDA OBRIGATORIAMENTE com JSON neste formato EXATO:
   "confidence": 0-100,
   "reason": "breve explicação",
   "valor": "valor exato encontrado no comprovante (ex: 97.00, 150.50, 1234.00) - use ponto como separador decimal",
-  "valor_texto": "valor exatamente como aparece no comprovante (ex: R$ 97,00)"
+  "valor_texto": "valor exatamente como aparece no comprovante (ex: R$ 97,00)",
+  "destinatario_nome": "nome completo do destinatário/recebedor do PIX",
+  "destinatario_cpf_cnpj": "CPF ou CNPJ do destinatário (apenas números, ou null se não visível)"
 }
 
 COMO IDENTIFICAR O VALOR DO PIX:
@@ -358,6 +360,13 @@ REGRAS DE CONVERSÃO:
 - "R$ 1.234,56" → valor: 1234.56 (ponto é milhar, vírgula é decimal)
 - Se o valor contém apenas vírgula: substitua por ponto (97,00 → 97.00)
 - Se não encontrar valor, retorne valor: null
+
+COMO IDENTIFICAR O DESTINATÁRIO:
+1. Procure por "Destino", "Destinatário", "Recebedor", "Favorecido", "Para"
+2. O nome do destinatário geralmente aparece junto com CPF/CNPJ parcial ou completo
+3. Extraia o nome EXATAMENTE como aparece no comprovante
+4. CPF/CNPJ pode estar parcialmente mascarado (ex: ***.123.456-**) - extraia o que for visível, remova os asteriscos
+5. Se não encontrar, retorne null
 
 CRITÉRIOS PARA PIX VÁLIDO:
 - Presença de "Pix", "Transferência Pix", "Comprovante" 
@@ -533,9 +542,96 @@ Se não for PIX ou imagem não for clara, retorne is_pix_payment: false.`;
     let labelApplied = false;
     let alreadyHasLabel = false;
     let errorMessage: string | null = null;
+    let fakeReceiptDetected = false;
 
     if (isPixPayment) {
-      console.log("[TAG-WHATS] PIX payment detected! Checking if already labeled...");
+      console.log("[TAG-WHATS] PIX payment detected! Checking fake receipt detection...");
+      
+      // Check if fake receipt detection is enabled for this user
+      const { data: userProfile } = await supabase
+        .from("profiles")
+        .select("fake_receipt_detection_enabled")
+        .eq("id", instance.user_id)
+        .single();
+      
+      if (userProfile?.fake_receipt_detection_enabled) {
+        console.log("[TAG-WHATS] Fake receipt detection is enabled. Checking recipients...");
+        
+        // Get registered recipients for this user
+        const { data: recipients } = await supabase
+          .from("tag_whats_recipients")
+          .select("name, cpf_cnpj")
+          .eq("user_id", instance.user_id);
+        
+        if (recipients && recipients.length > 0) {
+          const extractedName = (aiResponse?.destinatario_nome || "").toLowerCase().trim();
+          const extractedCpfCnpj = (aiResponse?.destinatario_cpf_cnpj || "").replace(/\D/g, "");
+          
+          console.log("[TAG-WHATS] Extracted recipient data:", { extractedName, extractedCpfCnpj });
+          console.log("[TAG-WHATS] Registered recipients:", recipients.length);
+          
+          // Check if the extracted recipient matches any registered recipient
+          const matchFound = recipients.some(r => {
+            const registeredName = r.name.toLowerCase().trim();
+            const registeredCpfCnpj = r.cpf_cnpj.replace(/\D/g, "");
+            
+            // Match by name (partial match - check if extracted name contains registered name or vice versa)
+            const nameMatch = extractedName.includes(registeredName) || 
+                              registeredName.includes(extractedName) ||
+                              extractedName.split(" ").some((word: string) => registeredName.includes(word) && word.length > 2);
+            
+            // Match by CPF/CNPJ (partial match - for masked documents)
+            const cpfCnpjMatch = extractedCpfCnpj && registeredCpfCnpj && (
+              extractedCpfCnpj.includes(registeredCpfCnpj) || 
+              registeredCpfCnpj.includes(extractedCpfCnpj) ||
+              // Handle partial CPF/CNPJ (at least 6 consecutive digits match)
+              (extractedCpfCnpj.length >= 6 && registeredCpfCnpj.includes(extractedCpfCnpj)) ||
+              (registeredCpfCnpj.length >= 6 && extractedCpfCnpj.includes(registeredCpfCnpj))
+            );
+            
+            console.log("[TAG-WHATS] Checking recipient:", { 
+              registeredName, 
+              registeredCpfCnpj: registeredCpfCnpj.slice(0, 3) + "***",
+              nameMatch, 
+              cpfCnpjMatch 
+            });
+            
+            return nameMatch || cpfCnpjMatch;
+          });
+          
+          if (!matchFound) {
+            console.log("[TAG-WHATS] FAKE RECEIPT DETECTED! Recipient does not match any registered recipient.");
+            fakeReceiptDetected = true;
+            
+            // Log the fake receipt detection
+            await supabase.from("tag_whats_logs").insert({
+              user_id: instance.user_id,
+              config_id: config.id,
+              instance_id: instance.id,
+              contact_phone: phone,
+              message_type: messageType,
+              is_pix_payment: true,
+              label_applied: false,
+              error_message: `Comprovante fake detectado! Destinatário: "${aiResponse?.destinatario_nome || 'não identificado'}" não corresponde a nenhum recebedor cadastrado.`,
+            });
+            
+            return new Response(JSON.stringify({ 
+              success: true, 
+              message: "Fake receipt detected - recipient mismatch",
+              fake_detected: true,
+              extracted_recipient: aiResponse?.destinatario_nome,
+            }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          } else {
+            console.log("[TAG-WHATS] Recipient verified successfully!");
+          }
+        } else {
+          console.log("[TAG-WHATS] No recipients registered, skipping validation.");
+        }
+      }
+      
+      console.log("[TAG-WHATS] Checking if already labeled...");
       
       // Check if this contact already has the "Pago" label applied
       const { data: existingLog, error: existingLogError } = await supabase

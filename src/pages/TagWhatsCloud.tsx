@@ -59,6 +59,13 @@ interface TagWhatsLog {
   label_applied: boolean;
 }
 
+interface Recipient {
+  id: string;
+  name: string;
+  cpf_cnpj: string;
+  created_at: string;
+}
+
 // Generate colors for chart lines
 const CHART_COLORS = [
   '#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', 
@@ -106,6 +113,18 @@ const TagWhatsCloud = () => {
   // Global pago label toggle
   const [disablePagoLabel, setDisablePagoLabel] = useState(false);
   
+  // Fake receipt detection states
+  const [fakeReceiptDetectionEnabled, setFakeReceiptDetectionEnabled] = useState(false);
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [fakeDetectionSectionCollapsed, setFakeDetectionSectionCollapsed] = useState(() => {
+    const saved = localStorage.getItem('tagwhats_fake_collapsed');
+    return saved ? JSON.parse(saved) : false;
+  });
+  const [newRecipientName, setNewRecipientName] = useState('');
+  const [newRecipientCpfCnpj, setNewRecipientCpfCnpj] = useState('');
+  const [addingRecipient, setAddingRecipient] = useState(false);
+  const [deletingRecipientId, setDeletingRecipientId] = useState<string | null>(null);
+  
   // FB Auto Events states
   const [fbEventEnabled, setFbEventEnabled] = useState(false);
   const [fbEventType, setFbEventType] = useState('Purchase');
@@ -124,6 +143,10 @@ const TagWhatsCloud = () => {
   useEffect(() => {
     localStorage.setItem('tagwhats_fb_collapsed', JSON.stringify(fbEventsSectionCollapsed));
   }, [fbEventsSectionCollapsed]);
+  
+  useEffect(() => {
+    localStorage.setItem('tagwhats_fake_collapsed', JSON.stringify(fakeDetectionSectionCollapsed));
+  }, [fakeDetectionSectionCollapsed]);
 
   const fetchData = useCallback(async () => {
     const userId = effectiveUserId || user?.id;
@@ -191,23 +214,35 @@ const TagWhatsCloud = () => {
     }
   }, [configs]);
 
-  // Load user profile settings for FB events and pago label
+  // Load user profile settings for FB events, pago label and fake detection
   useEffect(() => {
     const loadUserProfile = async () => {
       const userId = effectiveUserId || user?.id;
       if (!userId) return;
       
-      const { data: profile } = await supabase
+      const { data: profile } = await (supabase
         .from('profiles')
-        .select('disable_pago_label, fb_event_enabled, fb_event_on_sale, fb_event_value')
+        .select('disable_pago_label, fb_event_enabled, fb_event_on_sale, fb_event_value, fake_receipt_detection_enabled')
         .eq('id', userId)
-        .single();
+        .single() as any);
       
       if (profile) {
         setDisablePagoLabel(profile.disable_pago_label ?? false);
         setFbEventEnabled(profile.fb_event_enabled ?? false);
         setFbEventType(profile.fb_event_on_sale ?? 'Purchase');
         setFbEventValue(profile.fb_event_value ?? undefined);
+        setFakeReceiptDetectionEnabled(profile.fake_receipt_detection_enabled ?? false);
+      }
+      
+      // Load recipients
+      const { data: recipientsData } = await (supabase
+        .from('tag_whats_recipients' as any)
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false }) as any);
+      
+      if (recipientsData) {
+        setRecipients(recipientsData);
       }
     };
     loadUserProfile();
@@ -296,6 +331,93 @@ const TagWhatsCloud = () => {
       toast.error('Erro ao salvar configuração');
     } finally {
       setSavingFbConfig(false);
+    }
+  };
+
+  // Fake receipt detection handlers
+  const handleToggleFakeDetection = async (enabled: boolean) => {
+    const userId = effectiveUserId || user?.id;
+    if (!userId) return;
+    
+    try {
+      const { error } = await (supabase
+        .from('profiles')
+        .update({ fake_receipt_detection_enabled: enabled } as any)
+        .eq('id', userId) as any);
+      
+      if (error) throw error;
+      setFakeReceiptDetectionEnabled(enabled);
+      toast.success(enabled ? 'Detecção de comprovante fake ativada' : 'Detecção de comprovante fake desativada');
+    } catch (error) {
+      console.error('Error toggling fake detection:', error);
+      toast.error('Erro ao alterar configuração');
+    }
+  };
+
+  const handleAddRecipient = async () => {
+    const userId = effectiveUserId || user?.id;
+    if (!userId) return;
+    
+    if (!newRecipientName.trim() || !newRecipientCpfCnpj.trim()) {
+      toast.error('Preencha o nome e CPF/CNPJ');
+      return;
+    }
+    
+    setAddingRecipient(true);
+    try {
+      const { data, error } = await (supabase
+        .from('tag_whats_recipients' as any)
+        .insert({
+          user_id: userId,
+          name: newRecipientName.trim(),
+          cpf_cnpj: newRecipientCpfCnpj.replace(/\D/g, ''),
+        })
+        .select()
+        .single() as any);
+      
+      if (error) throw error;
+      
+      setRecipients(prev => [data, ...prev]);
+      setNewRecipientName('');
+      setNewRecipientCpfCnpj('');
+      toast.success('Recebedor adicionado!');
+    } catch (error) {
+      console.error('Error adding recipient:', error);
+      toast.error('Erro ao adicionar recebedor');
+    } finally {
+      setAddingRecipient(false);
+    }
+  };
+
+  const handleDeleteRecipient = async (recipientId: string) => {
+    setDeletingRecipientId(recipientId);
+    try {
+      const { error } = await (supabase
+        .from('tag_whats_recipients' as any)
+        .delete()
+        .eq('id', recipientId) as any);
+      
+      if (error) throw error;
+      
+      setRecipients(prev => prev.filter(r => r.id !== recipientId));
+      toast.success('Recebedor removido!');
+    } catch (error) {
+      console.error('Error deleting recipient:', error);
+      toast.error('Erro ao remover recebedor');
+    } finally {
+      setDeletingRecipientId(null);
+    }
+  };
+
+  // Format CPF/CNPJ for display
+  const formatCpfCnpj = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    if (digits.length <= 11) {
+      // CPF: 000.000.000-00
+      return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+    } else {
+      // CNPJ: 00.000.000/0000-00
+      return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
     }
   };
 
@@ -687,6 +809,129 @@ const TagWhatsCloud = () => {
                   checked={!disablePagoLabel}
                   onCheckedChange={(checked) => handleTogglePagoLabel(!checked)}
                 />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Fake Receipt Detection Section */}
+          <Card className={`mb-6 ${fakeReceiptDetectionEnabled ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-red-500/30 bg-red-500/5'}`}>
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <div className={`p-2 rounded-full ${fakeReceiptDetectionEnabled ? 'bg-emerald-500/20' : 'bg-red-500/20'}`}>
+                  <AlertTriangle className={`h-4 w-4 ${fakeReceiptDetectionEnabled ? 'text-emerald-500' : 'text-red-500'}`} />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <h4 className={`font-semibold ${fakeReceiptDetectionEnabled ? 'text-emerald-400' : 'text-red-400'}`}>
+                        Detecção de Comprovante Fake
+                      </h4>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0"
+                        onClick={() => setFakeDetectionSectionCollapsed(!fakeDetectionSectionCollapsed)}
+                      >
+                        {fakeDetectionSectionCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    <ColoredSwitch
+                      checked={fakeReceiptDetectionEnabled}
+                      onCheckedChange={handleToggleFakeDetection}
+                    />
+                  </div>
+                  
+                  {!fakeDetectionSectionCollapsed && (
+                    <p className="text-sm text-muted-foreground mb-4">
+                      {fakeReceiptDetectionEnabled 
+                        ? 'Ativada - valida se o destinatário do comprovante corresponde aos recebedores cadastrados'
+                        : 'Desativada - todos os comprovantes PIX serão aceitos sem validação de destinatário'
+                      }
+                    </p>
+                  )}
+                  
+                  {fakeReceiptDetectionEnabled && !fakeDetectionSectionCollapsed && (
+                    <div className="space-y-4 border-t border-border/50 pt-4">
+                      {/* Warning */}
+                      <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                        <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                        <p className="text-xs text-amber-400">
+                          <strong>Importante:</strong> Cadastre os nomes e CPF/CNPJ exatamente como aparecem nos comprovantes bancários. 
+                          O sistema compara o destinatário extraído do comprovante com os recebedores cadastrados.
+                        </p>
+                      </div>
+                      
+                      {/* Add new recipient form */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="space-y-1">
+                          <Label htmlFor="recipient-name" className="text-xs">Nome do Recebedor</Label>
+                          <Input
+                            id="recipient-name"
+                            placeholder="Ex: João da Silva"
+                            value={newRecipientName}
+                            onChange={(e) => setNewRecipientName(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="recipient-cpf-cnpj" className="text-xs">CPF ou CNPJ</Label>
+                          <Input
+                            id="recipient-cpf-cnpj"
+                            placeholder="000.000.000-00"
+                            value={newRecipientCpfCnpj}
+                            onChange={(e) => setNewRecipientCpfCnpj(e.target.value)}
+                          />
+                        </div>
+                        <div className="flex items-end">
+                          <Button
+                            onClick={handleAddRecipient}
+                            disabled={addingRecipient || !newRecipientName.trim() || !newRecipientCpfCnpj.trim()}
+                            className="w-full bg-emerald-600 hover:bg-emerald-700"
+                          >
+                            {addingRecipient ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
+                            Adicionar
+                          </Button>
+                        </div>
+                      </div>
+                      
+                      {/* Recipients list */}
+                      {recipients.length > 0 ? (
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground">Recebedores Cadastrados ({recipients.length})</Label>
+                          <div className="space-y-2 max-h-48 overflow-y-auto">
+                            {recipients.map((recipient) => (
+                              <div 
+                                key={recipient.id} 
+                                className="flex items-center justify-between p-3 bg-card border border-border rounded-lg"
+                              >
+                                <div>
+                                  <p className="font-medium text-sm">{recipient.name}</p>
+                                  <p className="text-xs text-muted-foreground">{formatCpfCnpj(recipient.cpf_cnpj)}</p>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-destructive hover:text-destructive"
+                                  onClick={() => handleDeleteRecipient(recipient.id)}
+                                  disabled={deletingRecipientId === recipient.id}
+                                >
+                                  {deletingRecipientId === recipient.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center py-4 text-muted-foreground text-sm">
+                          Nenhum recebedor cadastrado. Adicione pelo menos um recebedor para ativar a validação.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
