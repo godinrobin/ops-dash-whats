@@ -10,8 +10,10 @@ import { MemberRoute } from "@/components/MemberRoute";
 import { AdminRoute } from "@/components/AdminRoute";
 import { AnnouncementPopup } from "@/components/AnnouncementPopup";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
+import { AdminActiveUsersPanel } from "@/components/admin/AdminActiveUsersPanel";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { usePushQueueProcessor } from "@/hooks/usePushQueueProcessor";
+import { usePresence } from "@/hooks/usePresence";
 
 import Toaster, { ToasterRef } from "@/components/ui/toast";
 import { setGlobalToasterRef } from "@/hooks/useSplashedToast";
@@ -79,11 +81,15 @@ const AppContent = () => {
   // Process push notification queue in realtime
   usePushQueueProcessor();
   
+  // Track user presence
+  usePresence();
+  
   return (
     <>
       <FacebookOAuthHandler />
       <AnnouncementPopup />
       <ImpersonationWrapper />
+      <AdminActiveUsersPanel />
       
       <Routes>
         <Route path="/auth" element={<Auth />} />
