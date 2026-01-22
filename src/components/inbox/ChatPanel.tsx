@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
-import { User, MessageSquare, Smartphone, ChevronDown, Tag, X, Plus, Pause, Play, Mail, MailOpen, Trash2, AlertTriangle, RefreshCw, Ban } from 'lucide-react';
+import { User, MessageSquare, Smartphone, ChevronDown, Tag, X, Plus, Pause, Play, Mail, MailOpen, Trash2, AlertTriangle, RefreshCw, Ban, Timer, Workflow } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { formatPhoneDisplay } from '@/utils/phoneFormatter';
+import { useActiveFlowSession, formatCountdown } from '@/hooks/useActiveFlowSession';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -185,6 +186,9 @@ export const ChatPanel = ({
   const activityTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   // Reply state
   const [replyToMessage, setReplyToMessage] = useState<InboxMessage | null>(null);
+  
+  // Active flow session with countdown
+  const { session: activeFlowSession, countdown } = useActiveFlowSession(contact?.id ?? null);
 
   const scrollToBottom = useCallback(() => {
     const root = scrollAreaRef.current;
@@ -789,6 +793,23 @@ export const ChatPanel = ({
                 >
                   <Pause className="h-2.5 w-2.5" />
                   Pausado
+                </Badge>
+              )}
+              {activeFlowSession && !flowPaused && (
+                <Badge 
+                  className="bg-primary text-primary-foreground text-[10px] px-1.5 py-0 h-4 flex items-center gap-1"
+                >
+                  <Workflow className="h-2.5 w-2.5" />
+                  {activeFlowSession.flow_name}
+                </Badge>
+              )}
+              {countdown !== null && countdown > 0 && !flowPaused && (
+                <Badge 
+                  variant="outline"
+                  className="text-[10px] px-1.5 py-0 h-4 flex items-center gap-1 border-primary/50 text-primary animate-pulse"
+                >
+                  <Timer className="h-2.5 w-2.5" />
+                  {formatCountdown(countdown)}
                 </Badge>
               )}
               {contactLabels.map((label) => (
