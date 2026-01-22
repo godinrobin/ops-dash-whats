@@ -125,4 +125,5 @@ export type NodeType =
   | 'setVariable'
   | 'tag'
   | 'randomizer'
+  | 'notifyAdmin'
   | 'end';

@@ -39,6 +39,7 @@ import { SendPixKeyNode } from './nodes/SendPixKeyNode';
 import { SendChargeNode } from './nodes/SendChargeNode';
 import { InteractiveBlockNode } from './nodes/InteractiveBlockNode';
 import { PixelNode } from './nodes/PixelNode';
+import { NotifyAdminNode } from './nodes/NotifyAdminNode';
 import { NodeSidebar } from './NodeSidebar';
 import { PropertiesPanel } from './PropertiesPanel';
 import { useFlowValidation } from './hooks/useFlowValidation';
@@ -70,6 +71,7 @@ const nodeTypes = {
   sendCharge: SendChargeNode,
   interactiveBlock: InteractiveBlockNode,
   pixel: PixelNode,
+  notifyAdmin: NotifyAdminNode,
 };
 
 interface FlowCanvasProps {
