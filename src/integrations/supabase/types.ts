@@ -2862,6 +2862,7 @@ export type Database = {
           avatar_url: string | null
           created_at: string
           disable_pago_label: boolean | null
+          fake_receipt_detection_enabled: boolean | null
           fb_auto_event_type: string | null
           fb_event_enabled: boolean | null
           fb_event_on_sale: string | null
@@ -2882,6 +2883,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           disable_pago_label?: boolean | null
+          fake_receipt_detection_enabled?: boolean | null
           fb_auto_event_type?: string | null
           fb_event_enabled?: boolean | null
           fb_event_on_sale?: string | null
@@ -2902,6 +2904,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           disable_pago_label?: boolean | null
+          fake_receipt_detection_enabled?: boolean | null
           fb_auto_event_type?: string | null
           fb_event_enabled?: boolean | null
           fb_event_on_sale?: string | null
@@ -3684,6 +3687,30 @@ export type Database = {
           id?: string
           notification_type?: string
           updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      tag_whats_recipients: {
+        Row: {
+          cpf_cnpj: string
+          created_at: string
+          id: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          cpf_cnpj: string
+          created_at?: string
+          id?: string
+          name: string
+          user_id: string
+        }
+        Update: {
+          cpf_cnpj?: string
+          created_at?: string
+          id?: string
+          name?: string
           user_id?: string
         }
         Relationships: []
