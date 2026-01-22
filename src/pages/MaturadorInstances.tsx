@@ -545,14 +545,6 @@ export default function MaturadorInstances() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={handleSyncPhoneNumbers} disabled={syncing || refreshing}>
-              {syncing ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Phone className="h-4 w-4 mr-2" />
-              )}
-              Sincronizar Números
-            </Button>
             <Button variant="outline" size="icon" onClick={handleRefresh} disabled={refreshing || syncing}>
               <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             </Button>

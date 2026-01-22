@@ -1154,10 +1154,6 @@ export default function InboxDashboard() {
               Números Conectados
             </h2>
             <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={handleSyncPhoneNumbers} disabled={syncing || refreshing} size="sm">
-                {syncing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Phone className="h-4 w-4 mr-2" />}
-                Sincronizar
-              </Button>
               <Button variant="outline" size="icon" onClick={handleRefresh} disabled={refreshing || syncing}>
                 <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
               </Button>
