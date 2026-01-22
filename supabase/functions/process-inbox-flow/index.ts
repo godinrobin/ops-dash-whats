@@ -2317,6 +2317,10 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
             const markAsPaid = (currentNode.data.markAsPaid as boolean) || false;
             const maxAttempts = (currentNode.data.maxAttempts as number) || 3;
             
+            // Fake detection settings
+            const fakeDetectionEnabled = (currentNode.data.fakeDetectionEnabled as boolean) || false;
+            const fakeDetectionRecipients = (currentNode.data.fakeDetectionRecipients as Array<{ name: string; cpf_cnpj: string }>) || [];
+            
             // No response delay configuration
             const noResponseDelayValue = (currentNode.data.noResponseDelayValue as number) || 5;
             const noResponseDelayUnit = (currentNode.data.noResponseDelayUnit as string) || 'minutes';
@@ -2641,25 +2645,26 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
 
                 const isPdfMedia = mediaMimetype.includes('pdf') || messageType === 'document';
 
-                const systemPrompt = `Você é um analisador de comprovantes de pagamento PIX.\n\nAnalise a imagem/documento e determine se é um comprovante de pagamento PIX válido.\n\nResponda APENAS com um JSON no formato:\n{\n  "is_pix_payment": true/false,\n  "confidence": 0-100,\n  "reason": "breve explicação"\n}\n\nCritérios para identificar um comprovante PIX:\n- Termos como "Pix", "Transferência", "Comprovante"\n- Dados de origem e destino (nome, CPF/CNPJ parcial, banco)\n- Valor, data/hora e ID/autenticação quando presentes\n\nImportante: mesmo que o comprovante esteja parcialmente visível, se houver sinais claros de transação PIX (ex.: "Pix" + banco + dados de origem/destino), marque como is_pix_payment:true com a confiança apropriada.`;
+                // Build system prompt - include recipient extraction if fake detection is enabled
+                const baseSystemPrompt = `Você é um analisador de comprovantes de pagamento PIX.\n\nAnalise a imagem/documento e determine se é um comprovante de pagamento PIX válido.\n\nResponda APENAS com um JSON no formato:\n{\n  "is_pix_payment": true/false,\n  "confidence": 0-100,\n  "reason": "breve explicação",\n  "destinatario_nome": "nome do destinatário/recebedor se visível ou null",\n  "destinatario_cpf_cnpj": "CPF/CNPJ do destinatário se visível (com ou sem máscara ***) ou null"\n}\n\nCritérios para identificar um comprovante PIX:\n- Termos como "Pix", "Transferência", "Comprovante"\n- Dados de origem e destino (nome, CPF/CNPJ parcial, banco)\n- Valor, data/hora e ID/autenticação quando presentes\n\nIMPORTANTE: Extraia SEMPRE o nome e CPF/CNPJ do DESTINATÁRIO (quem recebeu o pagamento), não do remetente. Mesmo que esteja parcialmente visível ou mascarado (ex: ***.123.456-**), inclua no JSON.\n\nImportante: mesmo que o comprovante esteja parcialmente visível, se houver sinais claros de transação PIX (ex.: "Pix" + banco + dados de origem/destino), marque como is_pix_payment:true com a confiança apropriada.`;
 
                 const messagesToSend = isPdfMedia
                   ? [
-                      { role: 'system', content: systemPrompt },
+                      { role: 'system', content: baseSystemPrompt },
                       {
                         role: 'user',
                         content: [
-                          { type: 'text', text: 'Analise este PDF e determine se é um comprovante de pagamento PIX.' },
+                          { type: 'text', text: 'Analise este PDF e determine se é um comprovante de pagamento PIX. Extraia também os dados do destinatário.' },
                           { type: 'image_url', image_url: { url: `data:application/pdf;base64,${mediaBase64}` } },
                         ],
                       },
                     ]
                   : [
-                      { role: 'system', content: systemPrompt },
+                      { role: 'system', content: baseSystemPrompt },
                       {
                         role: 'user',
                         content: [
-                          { type: 'text', text: 'Analise esta imagem e determine se é um comprovante de pagamento PIX.' },
+                          { type: 'text', text: 'Analise esta imagem e determine se é um comprovante de pagamento PIX. Extraia também os dados do destinatário.' },
                           { type: 'image_url', image_url: { url: `data:${mediaMimetype};base64,${mediaBase64}` } },
                         ],
                       },
@@ -2679,7 +2684,7 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
 
                 if (!aiResponse.ok) {
                   console.error(`[${runId}] PaymentIdentifier: AI API error:`, await aiResponse.text());
-                  return { ok: false, isPayment: false, analysisText: '' };
+                  return { ok: false, isPayment: false, analysisText: '', recipientName: null, recipientCpfCnpj: null };
                 }
 
                 const aiData = await aiResponse.json();
@@ -2687,6 +2692,9 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
                 console.log(`[${runId}] PaymentIdentifier: AI result: ${analysisText}`);
 
                 let isPayment = false;
+                let recipientName: string | null = null;
+                let recipientCpfCnpj: string | null = null;
+                
                 try {
                   const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
                   if (jsonMatch) {
@@ -2697,17 +2705,63 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
 
                     // Slightly more permissive threshold to reduce false negatives.
                     isPayment = parsed.is_pix_payment === true && (!hasConfidence || conf >= 55);
-                    console.log(`[${runId}] PaymentIdentifier: parsed isPayment=${isPayment}, confidence=${conf}`);
+                    
+                    // Extract recipient data
+                    recipientName = parsed.destinatario_nome || null;
+                    recipientCpfCnpj = parsed.destinatario_cpf_cnpj || null;
+                    
+                    console.log(`[${runId}] PaymentIdentifier: parsed isPayment=${isPayment}, confidence=${conf}, recipientName=${recipientName}, recipientCpfCnpj=${recipientCpfCnpj}`);
                   }
                 } catch (parseErr) {
                   console.error(`[${runId}] PaymentIdentifier: error parsing AI response:`, parseErr);
                 }
 
-                return { ok: true, isPayment, analysisText };
+                return { ok: true, isPayment, analysisText, recipientName, recipientCpfCnpj };
               } catch (analysisErr) {
                 console.error(`[${runId}] PaymentIdentifier: error analyzing media:`, analysisErr);
-                return { ok: false, isPayment: false, analysisText: '' };
+                return { ok: false, isPayment: false, analysisText: '', recipientName: null, recipientCpfCnpj: null };
               }
+            };
+
+            // Helper function to validate recipient against registered recipients
+            const validateRecipient = (extractedName: string | null, extractedCpfCnpj: string | null): boolean => {
+              if (!fakeDetectionEnabled || fakeDetectionRecipients.length === 0) {
+                return true; // No validation needed
+              }
+              
+              if (!extractedName && !extractedCpfCnpj) {
+                console.log(`[${runId}] PaymentIdentifier: No recipient data extracted, cannot validate`);
+                return false;
+              }
+              
+              const normalizedExtractedName = (extractedName || '').toLowerCase().trim();
+              const normalizedExtractedCpfCnpj = (extractedCpfCnpj || '').replace(/[^\d]/g, '');
+              
+              const matchFound = fakeDetectionRecipients.some((recipient) => {
+                const registeredName = recipient.name.toLowerCase().trim();
+                const registeredCpfCnpj = recipient.cpf_cnpj.replace(/[^\d]/g, '');
+                
+                // Name matching: partial match (either contains the other)
+                const nameMatch = normalizedExtractedName && registeredName && (
+                  normalizedExtractedName.includes(registeredName) || 
+                  registeredName.includes(normalizedExtractedName)
+                );
+                
+                // CPF/CNPJ matching: at least 6 consecutive digits match
+                let cpfCnpjMatch = false;
+                if (normalizedExtractedCpfCnpj.length >= 6 && registeredCpfCnpj.length >= 6) {
+                  // Check if the extracted digits appear in the registered CPF/CNPJ or vice versa
+                  cpfCnpjMatch = registeredCpfCnpj.includes(normalizedExtractedCpfCnpj) || 
+                                 normalizedExtractedCpfCnpj.includes(registeredCpfCnpj);
+                }
+                
+                console.log(`[${runId}] PaymentIdentifier: Comparing - extracted="${normalizedExtractedName}" vs registered="${registeredName}" (nameMatch=${nameMatch}), cpf="${normalizedExtractedCpfCnpj}" vs "${registeredCpfCnpj}" (cpfMatch=${cpfCnpjMatch})`);
+                
+                return nameMatch || cpfCnpjMatch;
+              });
+              
+              console.log(`[${runId}] PaymentIdentifier: Recipient validation result: ${matchFound ? 'MATCH' : 'NO MATCH'}`);
+              return matchFound;
             };
 
             // Process each new media in order until we either:
@@ -2718,7 +2772,7 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
               if (attempts >= maxAttempts) break;
               processedAnyThisRun = true;
 
-              const { isPayment, analysisText } = await analyzeMessage(msg);
+              const { isPayment, analysisText, recipientName, recipientCpfCnpj } = await analyzeMessage(msg);
               lastAnalysis = analysisText;
 
               // Advance cursor so we never reprocess the same media
@@ -2729,6 +2783,17 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
               variables[paymentLastAnalysisKey] = lastAnalysis;
 
               if (isPayment) {
+                // If fake detection is enabled, validate the recipient
+                if (fakeDetectionEnabled) {
+                  const isRecipientValid = validateRecipient(recipientName ?? null, recipientCpfCnpj ?? null);
+                  if (!isRecipientValid) {
+                    console.log(`[${runId}] ⚠️ PaymentIdentifier: Payment detected but recipient does NOT match - treating as NOT PAID`);
+                    // Count as attempt but don't confirm payment
+                    attempts += 1;
+                    variables[paymentAttemptKey] = attempts;
+                    continue;
+                  }
+                }
                 isPaymentReceipt = true;
                 break;
               }
