@@ -14,6 +14,11 @@ import { useNavigate } from "react-router-dom";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useGenerationCooldown } from "@/hooks/useGenerationCooldown";
 import { Spinner } from "@/components/ui/spinner-1";
+import { useCreditsSystem } from "@/hooks/useCreditsSystem";
+import { useCredits } from "@/hooks/useCredits";
+import { useFreeTierUsage } from "@/hooks/useFreeTierUsage";
+import { SystemCreditBadge } from "@/components/credits/SystemCreditBadge";
+import { InsufficientCreditsModal } from "@/components/credits/InsufficientCreditsModal";
 import {
   Carousel,
   CarouselContent,
@@ -106,6 +111,16 @@ const CreativeGenerator = () => {
   useActivityTracker("page_visit", "Gerador de Criativo");
   const navigate = useNavigate();
   const { canGenerate, formattedTime, startCooldown, isAdmin } = useGenerationCooldown("creative_last_generation");
+  
+  // Credits system hooks
+  const { isActive: isCreditsActive } = useCreditsSystem();
+  const { deductCredits, canAfford } = useCredits();
+  const { getUsage, incrementUsage, hasFreeTier, getRemainingFree } = useFreeTierUsage();
+  const [showInsufficientCredits, setShowInsufficientCredits] = useState(false);
+  
+  const CREDIT_COST = 0.20;
+  const SYSTEM_ID = 'gerador_criativos';
+  
   const [selectedModel, setSelectedModel] = useState("calm-beige");
   const [productName, setProductName] = useState("");
   const [includePrice, setIncludePrice] = useState(false);
@@ -144,6 +159,35 @@ const CreativeGenerator = () => {
     if (includePrice && !price.trim()) {
       toast.error("Por favor, informe o valor do produto");
       return;
+    }
+
+    // Credit system check
+    if (isCreditsActive) {
+      const usage = getUsage(SYSTEM_ID);
+      const isInFreeTier = hasFreeTier(SYSTEM_ID) && usage.canUse;
+      
+      if (!isInFreeTier) {
+        // Need to pay with credits
+        if (!canAfford(CREDIT_COST)) {
+          setShowInsufficientCredits(true);
+          return;
+        }
+        
+        // Deduct credits
+        const success = await deductCredits(
+          CREDIT_COST,
+          SYSTEM_ID,
+          'Geração de criativo'
+        );
+        
+        if (!success) {
+          setShowInsufficientCredits(true);
+          return;
+        }
+      } else {
+        // Increment free tier usage
+        await incrementUsage(SYSTEM_ID);
+      }
     }
 
     setIsGenerating(true);
@@ -867,6 +911,14 @@ const CreativeGenerator = () => {
           </footer>
         </div>
       </div>
+
+      {/* Insufficient Credits Modal */}
+      <InsufficientCreditsModal
+        open={showInsufficientCredits}
+        onOpenChange={setShowInsufficientCredits}
+        requiredCredits={CREDIT_COST}
+        systemName="Gerador de Criativos"
+      />
     </>
   );
 };
