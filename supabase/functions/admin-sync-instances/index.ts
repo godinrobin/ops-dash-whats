@@ -107,11 +107,18 @@ serve(async (req) => {
     const uazapiInstances: UazApiInstance[] = await uazapiResponse.json();
     console.log(`[admin-sync-instances] Got ${uazapiInstances.length} instances from UAZAPI`);
 
-    // Create a map of instance names to their UAZAPI data
+    // Create a map of NORMALIZED instance names (lowercase + trim) to their UAZAPI data
     const uazapiMap = new Map<string, UazApiInstance>();
     for (const inst of uazapiInstances) {
-      uazapiMap.set(inst.instance, inst);
+      const normalizedName = inst.instance?.toLowerCase().trim();
+      if (normalizedName) {
+        uazapiMap.set(normalizedName, inst);
+      }
     }
+
+    // Log first 5 UAZAPI instance names for debugging
+    const sampleUazapiNames = uazapiInstances.slice(0, 5).map(i => i.instance);
+    console.log(`[admin-sync-instances] Sample UAZAPI names:`, sampleUazapiNames);
 
     // Fetch all instances from our database
     const { data: dbInstances, error: dbError } = await supabase
@@ -126,6 +133,10 @@ serve(async (req) => {
       });
     }
 
+    // Log first 5 DB instance names for debugging
+    const sampleDbNames = (dbInstances || []).slice(0, 5).map(i => i.instance_name);
+    console.log(`[admin-sync-instances] Sample DB names:`, sampleDbNames);
+
     let updated = 0;
     let orphaned = 0;
     let phoneUpdated = 0;
@@ -133,7 +144,9 @@ serve(async (req) => {
 
     // Process each database instance
     for (const dbInst of dbInstances || []) {
-      const uazapiInst = uazapiMap.get(dbInst.instance_name);
+      // NORMALIZE DB instance name for comparison (lowercase + trim)
+      const normalizedDbName = dbInst.instance_name?.toLowerCase().trim();
+      const uazapiInst = uazapiMap.get(normalizedDbName || '');
 
       if (!uazapiInst) {
         // Instance doesn't exist in UAZAPI - mark as disconnected (orphaned)

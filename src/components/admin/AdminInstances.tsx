@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,12 @@ interface InstanceData {
   connected_at?: string | null;
 }
 
+interface InstanceSubscription {
+  instance_id: string;
+  expires_at: string | null;
+  is_free: boolean;
+}
+
 interface AdminInstancesProps {
   users: Array<{ id: string; email: string; username: string }>;
   instances: InstanceData[];
@@ -39,16 +45,28 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
   const [syncing, setSyncing] = useState<string | null>(null);
   const [syncingAll, setSyncingAll] = useState(false);
   const [syncingUazapi, setSyncingUazapi] = useState(false);
+  const [subscriptions, setSubscriptions] = useState<InstanceSubscription[]>([]);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('connected');
-  const [sortBy, setSortBy] = useState<'days_connected' | 'days_month' | 'user' | 'recent'>('days_connected');
+  const [sortBy, setSortBy] = useState<'days_connected' | 'renewal' | 'user' | 'recent'>('days_connected');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   
   // Selection for bulk actions
   const [selectedInstances, setSelectedInstances] = useState<Set<string>>(new Set());
+
+  // Load subscriptions on mount
+  useEffect(() => {
+    const loadSubscriptions = async () => {
+      const { data } = await supabase
+        .from('instance_subscriptions')
+        .select('instance_id, expires_at, is_free');
+      if (data) setSubscriptions(data);
+    };
+    loadSubscriptions();
+  }, []);
 
   // Only connected instances for this view
   const connectedInstances = useMemo(() => {
@@ -133,26 +151,18 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
     return diffDays;
   };
 
-  // Calculate days active in current month (resets every month)
-  const calculateDaysActiveThisMonth = (instance: InstanceData): number => {
-    if (instance.status !== 'connected' && instance.status !== 'open') return 0;
+  // Get renewal days for an instance (from subscriptions)
+  const getRenewalInfo = (instanceId: string): { isFree: boolean; daysRemaining: number | null } => {
+    const sub = subscriptions.find(s => s.instance_id === instanceId);
+    if (!sub) return { isFree: false, daysRemaining: null };
+    if (sub.is_free) return { isFree: true, daysRemaining: null };
+    if (!sub.expires_at) return { isFree: false, daysRemaining: null };
     
-    const connectedDate = instance.connected_at 
-      ? new Date(instance.connected_at) 
-      : new Date(instance.created_at);
+    const expiresAt = new Date(sub.expires_at);
     const now = new Date();
-    
-    // Get the first day of current month
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    
-    // If connected before this month, count from start of month
-    // If connected this month, count from connection date
-    const countFrom = connectedDate > startOfMonth ? connectedDate : startOfMonth;
-    
-    const diffTime = now.getTime() - countFrom.getTime();
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 to include today
-    
-    return Math.max(0, diffDays);
+    const diffTime = expiresAt.getTime() - now.getTime();
+    const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return { isFree: false, daysRemaining: days };
   };
 
   // Filter and sort instances
@@ -196,9 +206,14 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
         case 'days_connected':
           comparison = calculateDaysConnected(b) - calculateDaysConnected(a);
           break;
-        case 'days_month':
-          comparison = calculateDaysActiveThisMonth(b) - calculateDaysActiveThisMonth(a);
+        case 'renewal': {
+          const renewalA = getRenewalInfo(a.id);
+          const renewalB = getRenewalInfo(b.id);
+          const daysA = renewalA.isFree ? 999 : (renewalA.daysRemaining ?? -1);
+          const daysB = renewalB.isFree ? 999 : (renewalB.daysRemaining ?? -1);
+          comparison = daysA - daysB;
           break;
+        }
         case 'user':
           comparison = a.username.localeCompare(b.username);
           break;
@@ -278,16 +293,19 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
       return;
     }
 
-    const headers = ['Usuário', 'Email', 'Instância', 'Número', 'Status', 'Dias Conectado', 'Dias Ativa Mês'];
-    const rows = dataToExport.map(inst => [
-      inst.username,
-      inst.user_email,
-      inst.instance_name,
-      inst.phone_number || '-',
-      inst.status,
-      calculateDaysConnected(inst),
-      calculateDaysActiveThisMonth(inst)
-    ]);
+    const headers = ['Usuário', 'Email', 'Instância', 'Número', 'Status', 'Dias Conectado', 'Renovação'];
+    const rows = dataToExport.map(inst => {
+      const renewal = getRenewalInfo(inst.id);
+      return [
+        inst.username,
+        inst.user_email,
+        inst.instance_name,
+        inst.phone_number || '-',
+        inst.status,
+        calculateDaysConnected(inst),
+        renewal.isFree ? 'Grátis' : (renewal.daysRemaining !== null ? `${renewal.daysRemaining} dias` : '-')
+      ];
+    });
 
     const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -451,12 +469,12 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
               )}
             </Button>
             <Button
-              variant={sortBy === 'days_month' ? 'default' : 'outline'}
+              variant={sortBy === 'renewal' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => toggleSort('days_month')}
+              onClick={() => toggleSort('renewal')}
             >
-              Dias no Mês
-              {sortBy === 'days_month' && (
+              Renovação
+              {sortBy === 'renewal' && (
                 <ArrowUpDown className="h-3 w-3 ml-1" />
               )}
             </Button>
@@ -501,14 +519,14 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
                 <TableHead>Número Conectado</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-center">Dias Conectado</TableHead>
-                <TableHead className="text-center">Dias Ativa no Mês</TableHead>
+                <TableHead className="text-center">Renovação</TableHead>
                 <TableHead>Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredInstances.map((inst) => {
                 const daysConnected = calculateDaysConnected(inst);
-                const daysThisMonth = calculateDaysActiveThisMonth(inst);
+                const renewal = getRenewalInfo(inst.id);
                 
                 return (
                   <TableRow key={inst.id}>
@@ -544,12 +562,20 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
                       </Badge>
                     </TableCell>
                     <TableCell className="text-center">
-                      <Badge 
-                        variant="outline"
-                        className={daysThisMonth > 15 ? 'border-blue-500/50 text-blue-600' : ''}
-                      >
-                        {daysThisMonth} dias
-                      </Badge>
+                      {renewal.isFree ? (
+                        <Badge variant="secondary" className="bg-green-500/10 text-green-600 border-green-500/30">
+                          Grátis
+                        </Badge>
+                      ) : renewal.daysRemaining !== null ? (
+                        <Badge 
+                          variant={renewal.daysRemaining <= 3 ? 'destructive' : 'outline'}
+                          className={renewal.daysRemaining > 3 ? 'border-blue-500/50 text-blue-600' : ''}
+                        >
+                          {renewal.daysRemaining} dias
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Button
