@@ -17,6 +17,8 @@ import { useAutoCheckConnectingInstances } from "@/hooks/useAutoCheckConnectingI
 import { QRCodeModal, setQrCodeCache, clearQrCodeCache } from "@/components/QRCodeModal";
 import { PairCodeModal } from "@/components/PairCodeModal";
 import { useProxyValidator } from "@/hooks/useProxyValidator";
+import { InstanceRenewalTag } from "@/components/credits/InstanceRenewalTag";
+import { useInstanceSubscription } from "@/hooks/useInstanceSubscription";
 
 interface Instance {
   id: string;
@@ -68,6 +70,9 @@ export default function MaturadorInstances() {
   
   // Proxy validation (for create modal)
   const { validateProxy, validating: validatingProxy, result: proxyValidationResult, clearResult: clearProxyResult } = useProxyValidator();
+  
+  // Instance subscription for credits system
+  const { registerInstance, freeInstancesRemaining } = useInstanceSubscription();
   
   // Card proxy validation state (per-instance)
   const [validatingInstanceProxy, setValidatingInstanceProxy] = useState<string | null>(null);
@@ -274,6 +279,11 @@ export default function MaturadorInstances() {
           .from('maturador_instances')
           .update({ proxy_string: proxyString })
           .eq('id', data.instanceId);
+      }
+      
+      // Register instance subscription for credits system
+      if (data.instanceId) {
+        await registerInstance(data.instanceId);
       }
       
       await fetchInstances();
@@ -633,8 +643,9 @@ export default function MaturadorInstances() {
                       )}
                     </div>
                   )}
-                  <CardDescription>
+                  <CardDescription className="flex items-center gap-2">
                     {instance.phone_number || instance.instance_name}
+                    <InstanceRenewalTag instanceId={instance.id} />
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
