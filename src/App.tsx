@@ -11,6 +11,7 @@ import { AdminRoute } from "@/components/AdminRoute";
 import { AnnouncementPopup } from "@/components/AnnouncementPopup";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { AdminActiveUsersPanel } from "@/components/admin/AdminActiveUsersPanel";
+import { CreditsSystemBanner } from "@/components/credits/CreditsSystemBanner";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { usePushQueueProcessor } from "@/hooks/usePushQueueProcessor";
 import { usePresence } from "@/hooks/usePresence";
@@ -89,6 +90,7 @@ const AppContent = () => {
       <FacebookOAuthHandler />
       <AnnouncementPopup />
       <ImpersonationWrapper />
+      <CreditsSystemBanner />
       <AdminActiveUsersPanel />
       
       <Routes>
@@ -146,8 +148,8 @@ const AppContent = () => {
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/settings/sale-notifications" element={<ProtectedRoute><SaleNotificationSettings /></ProtectedRoute>} />
         
-        {/* ADS MODULE */}
-        <Route path="/ads/*" element={<MemberRoute featureName="ADS X1"><AdsLayout /></MemberRoute>} />
+        {/* ADS MODULE - FREE FOR ALL AUTHENTICATED USERS */}
+        <Route path="/ads/*" element={<ProtectedRoute><AdsLayout /></ProtectedRoute>} />
         
         {/* ADMIN ROUTES */}
         <Route path="/admin-panel" element={<AdminRoute><AdminPanelNew /></AdminRoute>} />
