@@ -90,7 +90,7 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
   const { isImpersonating } = useImpersonation();
   useActivityTracker("marketplace", "Marketplace");
 
-  const [activeTab, setActiveTab] = useState("numeros-virtuais");
+  const [activeTab, setActiveTab] = useState("creditos");
   const [products, setProducts] = useState<MarketplaceProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [balance, setBalance] = useState(0);
@@ -408,6 +408,10 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
           {/* Tabs */}
           <AnimatedTabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <AnimatedTabsList className="grid w-full grid-cols-5 mb-6">
+              <AnimatedTabsTrigger value="creditos" className="flex items-center gap-2">
+                <Coins className="h-4 w-4" />
+                <span className="hidden sm:inline">Créditos Zap</span>
+              </AnimatedTabsTrigger>
               <AnimatedTabsTrigger value="numeros-virtuais" className="flex items-center gap-2">
                 <Phone className="h-4 w-4" />
                 <span className="hidden sm:inline">Números Virtuais</span>
@@ -420,15 +424,15 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
                 <Globe className="h-4 w-4" />
                 <span className="hidden sm:inline">Proxies</span>
               </AnimatedTabsTrigger>
-              <AnimatedTabsTrigger value="creditos" className="flex items-center gap-2">
-                <Coins className="h-4 w-4" />
-                <span className="hidden sm:inline">Créditos Zap</span>
-              </AnimatedTabsTrigger>
               <AnimatedTabsTrigger value="ativos" className="flex items-center gap-2">
                 <ShoppingBag className="h-4 w-4" />
                 <span className="hidden sm:inline">Ativos</span>
               </AnimatedTabsTrigger>
             </AnimatedTabsList>
+
+            <AnimatedTabsContent value="creditos">
+              <CreditsTab onRecharge={() => setRechargeOpen(true)} />
+            </AnimatedTabsContent>
 
             <AnimatedTabsContent value="numeros-virtuais" className="-mx-4 md:-mx-6 -mb-4 md:-mb-6">
               <SMSBotEmbed />
@@ -444,10 +448,6 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
                 onRecharge={() => setRechargeOpen(true)}
                 onBalanceChange={setBalance}
               />
-            </AnimatedTabsContent>
-
-            <AnimatedTabsContent value="creditos">
-              <CreditsTab onRecharge={() => setRechargeOpen(true)} />
             </AnimatedTabsContent>
 
             <AnimatedTabsContent value="ativos">
