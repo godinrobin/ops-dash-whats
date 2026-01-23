@@ -12,6 +12,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { AudioSection } from "@/components/AudioSection";
+import { useCreditsSystem } from "@/hooks/useCreditsSystem";
+import { useCredits } from "@/hooks/useCredits";
+import { SystemCreditBadge } from "@/components/credits/SystemCreditBadge";
+import { InsufficientCreditsModal } from "@/components/credits/InsufficientCreditsModal";
 import {
   Upload, 
   Trash2, 
@@ -111,6 +115,13 @@ export default function VideoVariationGenerator() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [currentProcessing, setCurrentProcessing] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState<string | null>(null);
+  const [showInsufficientCredits, setShowInsufficientCredits] = useState(false);
+  
+  // Credits system
+  const { isActive: isCreditsActive } = useCreditsSystem();
+  const { deductCredits, canAfford, balance } = useCredits();
+  const CREDIT_COST_PER_VARIATION = 0.10;
+  const SYSTEM_ID = 'gerador_variacoes';
   
   // Analysis state
   const [isAnalyzing, setIsAnalyzing] = useState<string | null>(null);

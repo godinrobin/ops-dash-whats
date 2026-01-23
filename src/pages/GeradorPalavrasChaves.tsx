@@ -5,9 +5,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { ArrowUp, Loader2, Key, Sparkles, Search, Hash, Lightbulb, Copy, Check } from "lucide-react";
+import { ArrowUp, Loader2, Key, Sparkles, Search, Hash, Lightbulb, Copy, Check, Coins } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
+import { useCreditsSystem } from "@/hooks/useCreditsSystem";
+import { useCredits } from "@/hooks/useCredits";
+import { InsufficientCreditsModal } from "@/components/credits/InsufficientCreditsModal";
+import { Badge } from "@/components/ui/badge";
 
 interface Message {
   id: string;
@@ -129,6 +133,13 @@ const GeradorPalavrasChaves = () => {
   const [streamingContent, setStreamingContent] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [showInsufficientCredits, setShowInsufficientCredits] = useState(false);
+  
+  // Credits system
+  const { isActive: isCreditsActive } = useCreditsSystem();
+  const { deductCredits, canAfford } = useCredits();
+  const CREDIT_COST = 0.01;
+  const SYSTEM_ID = 'gerador_palavras_chave';
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -148,6 +159,25 @@ const GeradorPalavrasChaves = () => {
 
   const handleSubmit = async () => {
     if (!input.trim() || isLoading) return;
+
+    // Credit system check
+    if (isCreditsActive) {
+      if (!canAfford(CREDIT_COST)) {
+        setShowInsufficientCredits(true);
+        return;
+      }
+      
+      const success = await deductCredits(
+        CREDIT_COST,
+        SYSTEM_ID,
+        'Geração de palavras-chave'
+      );
+      
+      if (!success) {
+        setShowInsufficientCredits(true);
+        return;
+      }
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -208,6 +238,7 @@ const GeradorPalavrasChaves = () => {
   ];
 
   return (
+    <>
     <SystemLayout>
       <div className="min-h-[calc(100vh-3.5rem)] md:min-h-[calc(100vh-4rem)] bg-background flex flex-col">
         <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full px-4">
@@ -219,10 +250,18 @@ const GeradorPalavrasChaves = () => {
                 animate={{ opacity: 1, y: 0 }}
                 className="text-center mb-8"
               >
-                <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-accent/20 to-orange-500/20 flex items-center justify-center">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-accent/20 to-accent/10 flex items-center justify-center">
                   <Key className="w-8 h-8 text-accent" />
                 </div>
-                <h1 className="text-2xl font-bold mb-2">Gerador de Palavras-Chave</h1>
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <h1 className="text-2xl font-bold">Gerador de Palavras-Chave</h1>
+                  {isCreditsActive && (
+                    <Badge variant="outline" className="border-accent/50 text-accent gap-1">
+                      <Coins className="h-3 w-3" />
+                      {CREDIT_COST.toFixed(2)} por mensagem
+                    </Badge>
+                  )}
+                </div>
                 <p className="text-muted-foreground max-w-md">
                   Descubra as melhores palavras-chave para encontrar anúncios de WhatsApp no gerenciador de anúncios
                 </p>
@@ -335,6 +374,15 @@ const GeradorPalavrasChaves = () => {
         </div>
       </div>
     </SystemLayout>
+
+    {/* Insufficient Credits Modal */}
+    <InsufficientCreditsModal
+      open={showInsufficientCredits}
+      onOpenChange={setShowInsufficientCredits}
+      requiredCredits={CREDIT_COST}
+      systemName="Gerador de Palavras-Chave"
+    />
+  </>
   );
 };
 
