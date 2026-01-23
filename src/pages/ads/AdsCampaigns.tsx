@@ -424,16 +424,28 @@ export default function AdsCampaigns() {
   const handleSync = async () => {
     setSyncing(true);
     try {
+      // Build request body with date info
+      const syncBody: any = { 
+        datePreset: datePresetMap[dateFilter] 
+      };
+      
+      // If specific date is selected, pass the date range
+      if (dateFilter === "specific" && specificDate) {
+        const dateStr = format(specificDate, "yyyy-MM-dd");
+        syncBody.timeRange = { since: dateStr, until: dateStr };
+        delete syncBody.datePreset; // Remove preset when using time_range
+      }
+
       // Sync all three levels
       const results = await Promise.all([
         supabase.functions.invoke("facebook-campaigns", { 
-          body: { action: "sync_campaigns", datePreset: datePresetMap[dateFilter] } 
+          body: { action: "sync_campaigns", ...syncBody } 
         }),
         supabase.functions.invoke("facebook-campaigns", { 
-          body: { action: "sync_adsets", datePreset: datePresetMap[dateFilter] } 
+          body: { action: "sync_adsets", ...syncBody } 
         }),
         supabase.functions.invoke("facebook-campaigns", { 
-          body: { action: "sync_ads", datePreset: datePresetMap[dateFilter] } 
+          body: { action: "sync_ads", ...syncBody } 
         }),
       ]);
       
@@ -459,12 +471,14 @@ export default function AdsCampaigns() {
     }
   };
 
-  // Re-sync when date filter changes
+  // Re-sync when date filter changes (but only if not specific without a date selected)
   useEffect(() => {
     if (user && !loading) {
+      // Don't auto-sync if specific date is selected but no date chosen yet
+      if (dateFilter === "specific" && !specificDate) return;
       handleSync();
     }
-  }, [dateFilter]);
+  }, [dateFilter, specificDate]);
 
   const handleToggleCampaign = async (campaign: Campaign) => {
     const newStatus = campaign.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
