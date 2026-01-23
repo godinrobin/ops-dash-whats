@@ -1372,6 +1372,90 @@ export type Database = {
         }
         Relationships: []
       }
+      credit_packages: {
+        Row: {
+          created_at: string | null
+          credits: number
+          id: string
+          is_active: boolean | null
+          name: string
+          price_brl: number
+          sort_order: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          credits: number
+          id?: string
+          is_active?: boolean | null
+          name: string
+          price_brl: number
+          sort_order?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          credits?: number
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          price_brl?: number
+          sort_order?: number | null
+        }
+        Relationships: []
+      }
+      credit_transactions: {
+        Row: {
+          amount: number
+          created_at: string | null
+          description: string
+          id: string
+          reference_id: string | null
+          system_id: string | null
+          type: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          description: string
+          id?: string
+          reference_id?: string | null
+          system_id?: string | null
+          type: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          description?: string
+          id?: string
+          reference_id?: string | null
+          system_id?: string | null
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      credits_system_config: {
+        Row: {
+          id: string
+          key: string
+          updated_at: string | null
+          value: Json
+        }
+        Insert: {
+          id?: string
+          key: string
+          updated_at?: string | null
+          value: Json
+        }
+        Update: {
+          id?: string
+          key?: string
+          updated_at?: string | null
+          value?: Json
+        }
+        Relationships: []
+      }
       daily_update_status: {
         Row: {
           completed_at: string | null
@@ -2190,6 +2274,39 @@ export type Database = {
           id?: string
           name?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      instance_subscriptions: {
+        Row: {
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          instance_id: string
+          is_free: boolean | null
+          last_renewal: string | null
+          user_id: string
+          warning_shown: boolean | null
+        }
+        Insert: {
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          instance_id: string
+          is_free?: boolean | null
+          last_renewal?: string | null
+          user_id: string
+          warning_shown?: boolean | null
+        }
+        Update: {
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          instance_id?: string
+          is_free?: boolean | null
+          last_renewal?: string | null
+          user_id?: string
+          warning_shown?: boolean | null
         }
         Relationships: []
       }
@@ -3407,6 +3524,45 @@ export type Database = {
         }
         Relationships: []
       }
+      system_pricing: {
+        Row: {
+          credit_cost: number
+          description: string | null
+          free_tier_limit: number | null
+          free_tier_period: string | null
+          id: string
+          is_active: boolean | null
+          price_type: string
+          system_id: string
+          system_name: string
+          updated_at: string | null
+        }
+        Insert: {
+          credit_cost: number
+          description?: string | null
+          free_tier_limit?: number | null
+          free_tier_period?: string | null
+          id?: string
+          is_active?: boolean | null
+          price_type: string
+          system_id: string
+          system_name: string
+          updated_at?: string | null
+        }
+        Update: {
+          credit_cost?: number
+          description?: string | null
+          free_tier_limit?: number | null
+          free_tier_period?: string | null
+          id?: string
+          is_active?: boolean | null
+          price_type?: string
+          system_id?: string
+          system_name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       tag_whats_configs: {
         Row: {
           ad_account_id: string | null
@@ -3808,6 +3964,30 @@ export type Database = {
           },
         ]
       }
+      user_credits: {
+        Row: {
+          balance: number
+          created_at: string | null
+          id: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          balance?: number
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          balance?: number
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_custom_voices: {
         Row: {
           created_at: string
@@ -3868,6 +4048,33 @@ export type Database = {
           updated_at?: string
           user_id?: string
           whatsapp_business_account_id?: string | null
+        }
+        Relationships: []
+      }
+      user_free_tier_usage: {
+        Row: {
+          id: string
+          period_end: string
+          period_start: string
+          system_id: string
+          usage_count: number | null
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          period_end: string
+          period_start: string
+          system_id: string
+          usage_count?: number | null
+          user_id: string
+        }
+        Update: {
+          id?: string
+          period_end?: string
+          period_start?: string
+          system_id?: string
+          usage_count?: number | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -3942,6 +4149,33 @@ export type Database = {
           created_at?: string | null
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_system_access: {
+        Row: {
+          access_type: string
+          expires_at: string | null
+          id: string
+          purchased_at: string | null
+          system_id: string
+          user_id: string
+        }
+        Insert: {
+          access_type: string
+          expires_at?: string | null
+          id?: string
+          purchased_at?: string | null
+          system_id: string
+          user_id: string
+        }
+        Update: {
+          access_type?: string
+          expires_at?: string | null
+          id?: string
+          purchased_at?: string | null
+          system_id?: string
           user_id?: string
         }
         Relationships: []
@@ -4414,6 +4648,16 @@ export type Database = {
       }
     }
     Functions: {
+      add_credits: {
+        Args: {
+          p_amount: number
+          p_description: string
+          p_reference_id?: string
+          p_type: string
+          p_user_id: string
+        }
+        Returns: boolean
+      }
       claim_push_notifications: {
         Args: { batch_size?: number }
         Returns: {
@@ -4437,6 +4681,16 @@ export type Database = {
       cleanup_expired_oauth_tokens: { Args: never; Returns: undefined }
       cleanup_old_data: { Args: never; Returns: undefined }
       cleanup_old_webhook_diagnostics: { Args: never; Returns: undefined }
+      deduct_credits: {
+        Args: {
+          p_amount: number
+          p_description: string
+          p_system_id: string
+          p_user_id: string
+        }
+        Returns: boolean
+      }
+      get_credits_system_status: { Args: never; Returns: Json }
       get_deliverable_prompt_usage: {
         Args: { p_user_id: string }
         Returns: number
