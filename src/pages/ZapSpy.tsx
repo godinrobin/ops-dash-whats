@@ -9,13 +9,16 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { ExternalLink, Plus, Pencil, Trash2, EyeOff, Eye, Search, Flame, Calendar, X, Star, Bookmark, Check } from "lucide-react";
+import { ExternalLink, Plus, Pencil, Trash2, EyeOff, Eye, Search, Flame, Calendar, X, Star, Bookmark, Check, Lock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
 import { splashedToast, splashedToast as toast } from "@/hooks/useSplashedToast";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { AnimatedSearchBar } from "@/components/ui/animated-search-bar";
+import { useSystemAccess } from "@/hooks/useSystemAccess";
+import { useAccessLevel } from "@/hooks/useAccessLevel";
+import { SystemAccessModal } from "@/components/credits/SystemAccessModal";
 
 interface ZapSpyOffer {
   id: string;
@@ -34,6 +37,17 @@ const ZapSpy = () => {
   useActivityTracker("page_visit", "Zap Spy");
   const { user } = useAuth();
   const { isAdmin } = useAdminStatus();
+  
+  // Access control hooks
+  const { isFullMember } = useAccessLevel();
+  const { hasAccess, loading: accessLoading, purchaseAccess, daysRemaining, getSystemPricing } = useSystemAccess();
+  const [showAccessModal, setShowAccessModal] = useState(false);
+  
+  const SYSTEM_ID = 'zap_spy';
+  const userHasAccess = hasAccess(SYSTEM_ID);
+  const userDaysRemaining = daysRemaining(SYSTEM_ID);
+  const systemPricing = getSystemPricing(SYSTEM_ID);
+  
   const [offers, setOffers] = useState<ZapSpyOffer[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedNiche, setSelectedNiche] = useState<string>("all");
@@ -836,6 +850,16 @@ const ZapSpy = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* System Access Modal */}
+      <SystemAccessModal
+        open={showAccessModal}
+        onOpenChange={setShowAccessModal}
+        systemId={SYSTEM_ID}
+        onPurchaseSuccess={() => {
+          toast.success("Acesso liberado!", "Você agora tem acesso ao Zap Spy");
+        }}
+      />
     </SystemLayout>
   );
 };

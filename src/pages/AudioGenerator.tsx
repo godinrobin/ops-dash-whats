@@ -12,6 +12,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Download, Play, Pause, Volume2, Clock, Upload, Trash2, Plus, Mic } from "lucide-react";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useMultiGenerationCooldown } from "@/hooks/useMultiGenerationCooldown";
+import { useCreditsSystem } from "@/hooks/useCreditsSystem";
+import { useCredits } from "@/hooks/useCredits";
+import { useFreeTierUsage } from "@/hooks/useFreeTierUsage";
+import { useAccessLevel } from "@/hooks/useAccessLevel";
+import { SystemCreditBadge } from "@/components/credits/SystemCreditBadge";
+import { InsufficientCreditsModal } from "@/components/credits/InsufficientCreditsModal";
 
 interface Voice {
   id: string;
@@ -61,6 +67,17 @@ const AudioGenerator = () => {
   useActivityTracker("page_visit", "Gerador de Áudio");
   const { toast } = useToast();
   const { canGenerate, formattedTime, startCooldown, isAdmin, generationsLeft } = useMultiGenerationCooldown("audio_generations", 3);
+  
+  // Credits system hooks
+  const { isActive: isCreditsActive } = useCreditsSystem();
+  const { deductCredits, canAfford } = useCredits();
+  const { getUsage, incrementUsage, hasFreeTier, getRemainingFree } = useFreeTierUsage();
+  const { isFullMember } = useAccessLevel();
+  const [showInsufficientCredits, setShowInsufficientCredits] = useState(false);
+  
+  const CREDIT_COST = 0.15;
+  const SYSTEM_ID = 'gerador_audio';
+  
   const [text, setText] = useState("");
   const [selectedVoice, setSelectedVoice] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -351,6 +368,35 @@ const AudioGenerator = () => {
       return;
     }
 
+    // Credit system check
+    if (isCreditsActive) {
+      const usage = getUsage(SYSTEM_ID);
+      const isInFreeTier = hasFreeTier(SYSTEM_ID) && usage.canUse;
+      
+      if (!isInFreeTier) {
+        // Need to pay with credits
+        if (!canAfford(CREDIT_COST)) {
+          setShowInsufficientCredits(true);
+          return;
+        }
+        
+        // Deduct credits
+        const success = await deductCredits(
+          CREDIT_COST,
+          SYSTEM_ID,
+          'Geração de áudio'
+        );
+        
+        if (!success) {
+          setShowInsufficientCredits(true);
+          return;
+        }
+      } else {
+        // Increment free tier usage
+        await incrementUsage(SYSTEM_ID);
+      }
+    }
+
     setIsGenerating(true);
     setAudioUrl(null);
 
@@ -433,9 +479,17 @@ const AudioGenerator = () => {
 
           <Card className="border-2 border-accent">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Volume2 className="w-5 h-5 text-accent" />
-                Configuração do Áudio
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Volume2 className="w-5 h-5 text-accent" />
+                  Configuração do Áudio
+                </div>
+                <SystemCreditBadge 
+                  creditCost={CREDIT_COST}
+                  suffix="por geração"
+                  freeTierInfo={`${getRemainingFree(SYSTEM_ID)} gerações grátis restantes hoje`}
+                  isInFreeTier={hasFreeTier(SYSTEM_ID) && getUsage(SYSTEM_ID).canUse}
+                />
               </CardTitle>
               <CardDescription>
                 Insira o texto e escolha a voz desejada
@@ -744,6 +798,14 @@ const AudioGenerator = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Insufficient Credits Modal */}
+      <InsufficientCreditsModal
+        open={showInsufficientCredits}
+        onOpenChange={setShowInsufficientCredits}
+        requiredCredits={CREDIT_COST}
+        systemName="Gerador de Áudio"
+      />
     </SystemLayout>
   );
 };
