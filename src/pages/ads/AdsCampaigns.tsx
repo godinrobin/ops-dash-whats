@@ -20,7 +20,7 @@ import {
   Play,
   ChevronUp,
   ChevronDown,
-  Calendar,
+  Calendar as CalendarIcon,
   Eye,
   EyeOff,
   Pencil,
@@ -45,6 +45,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Calendar } from "@/components/ui/calendar";
 
 interface Campaign {
   id: string;
@@ -120,7 +121,7 @@ interface Ad {
 
 type SortField = 'name' | 'status' | 'daily_budget' | 'spend' | 'impressions' | 'reach' | 'cpm' | 'cpc' | 'ctr' | 'cost_per_message' | 'messaging_conversations_started' | 'meta_conversions' | 'conversion_value' | 'profit';
 type SortOrder = 'asc' | 'desc';
-type DateFilter = "today" | "yesterday" | "7days" | "30days" | "month";
+type DateFilter = "today" | "yesterday" | "7days" | "30days" | "month" | "specific";
 type ViewLevel = 'campaign' | 'adset' | 'ad';
 
 const SP_TIMEZONE = "America/Sao_Paulo";
@@ -197,6 +198,8 @@ export default function AdsCampaigns() {
     const saved = localStorage.getItem('ads_campaigns_date_filter');
     return (saved as DateFilter) || "7days";
   });
+  const [specificDate, setSpecificDate] = useState<Date | undefined>(undefined);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
 
   // Persist date filter to localStorage
@@ -216,7 +219,8 @@ export default function AdsCampaigns() {
     yesterday: "yesterday",
     "7days": "last_7d",
     "30days": "last_30d",
-    month: "this_month"
+    month: "this_month",
+    specific: "today"
   };
 
   // New campaign form state
@@ -236,7 +240,7 @@ export default function AdsCampaigns() {
     if (user) {
       loadData();
     }
-  }, [user, selectedAccounts, dateFilter]);
+  }, [user, selectedAccounts, dateFilter, specificDate]);
 
   const getDateRangeUTC = (filter: DateFilter) => {
     const nowInSP = toZonedTime(new Date(), SP_TIMEZONE);
@@ -267,6 +271,16 @@ export default function AdsCampaigns() {
         const firstDayOfMonth = new Date(nowInSP.getFullYear(), nowInSP.getMonth(), 1);
         spStart = startOfDay(firstDayOfMonth);
         spEnd = endOfDay(nowInSP);
+        break;
+      }
+      case "specific": {
+        if (specificDate) {
+          spStart = startOfDay(specificDate);
+          spEnd = endOfDay(specificDate);
+        } else {
+          spStart = startOfDay(nowInSP);
+          spEnd = endOfDay(nowInSP);
+        }
         break;
       }
       default:
@@ -1099,8 +1113,13 @@ export default function AdsCampaigns() {
         </div>
         
         <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-muted-foreground" />
-          <Select value={dateFilter} onValueChange={(v) => setDateFilter(v as DateFilter)}>
+          <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+          <Select value={dateFilter} onValueChange={(v) => {
+            setDateFilter(v as DateFilter);
+            if (v !== "specific") {
+              setSpecificDate(undefined);
+            }
+          }}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Selecionar período" />
             </SelectTrigger>
@@ -1110,8 +1129,39 @@ export default function AdsCampaigns() {
               <SelectItem value="7days">Últimos 7 dias</SelectItem>
               <SelectItem value="30days">Últimos 30 dias</SelectItem>
               <SelectItem value="month">Este mês</SelectItem>
+              <SelectItem value="specific">Data específica</SelectItem>
             </SelectContent>
           </Select>
+
+          {dateFilter === "specific" && (
+            <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-[160px] justify-start text-left font-normal",
+                    !specificDate && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {specificDate ? format(specificDate, "dd/MM/yyyy", { locale: ptBR }) : <span>Selecionar</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={specificDate}
+                  onSelect={(date) => {
+                    setSpecificDate(date);
+                    setDatePickerOpen(false);
+                  }}
+                  disabled={(date) => date > new Date()}
+                  initialFocus
+                  className="p-3 pointer-events-auto"
+                />
+              </PopoverContent>
+            </Popover>
+          )}
         </div>
         
         {/* Multi-select account filter */}
