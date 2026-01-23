@@ -11,6 +11,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/useSplashedToast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCreditsSystem } from "@/hooks/useCreditsSystem";
+import { useCredits } from "@/hooks/useCredits";
+import { SystemCreditBadge } from "@/components/credits/SystemCreditBadge";
+import { InsufficientCreditsModal } from "@/components/credits/InsufficientCreditsModal";
 import { 
   Globe, 
   Search, 
@@ -29,6 +33,9 @@ import {
   Trash2,
   Eye
 } from "lucide-react";
+
+const CREDIT_COST = 0.15;
+const SYSTEM_ID = 'clonador_sites';
 
 interface AnalysisResult {
   structure: {
@@ -95,6 +102,11 @@ export default function SiteCloner() {
     { id: 'prompt', name: 'Gerando prompt', icon: <FileText className="h-4 w-4" />, status: 'pending' },
   ]);
   const { toast } = useToast();
+  
+  // Credits system
+  const { isActive: isCreditsActive } = useCreditsSystem();
+  const { deductCredits, canAfford } = useCredits();
+  const [showInsufficientCredits, setShowInsufficientCredits] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -127,6 +139,20 @@ export default function SiteCloner() {
     if (!url) {
       toast({ title: "Erro", description: "Digite uma URL válida", variant: "destructive" });
       return;
+    }
+
+    // Check credits if system is active
+    if (isCreditsActive) {
+      if (!canAfford(CREDIT_COST)) {
+        setShowInsufficientCredits(true);
+        return;
+      }
+      
+      const deducted = await deductCredits(CREDIT_COST, SYSTEM_ID, 'Clonagem de site');
+      if (!deducted) {
+        setShowInsufficientCredits(true);
+        return;
+      }
     }
 
     setIsAnalyzing(true);
@@ -501,6 +527,13 @@ export default function SiteCloner() {
           </Tabs>
         </div>
       </main>
+      
+      <InsufficientCreditsModal
+        open={showInsufficientCredits}
+        onOpenChange={setShowInsufficientCredits}
+        requiredCredits={CREDIT_COST}
+        systemName="Clonador de Sites"
+      />
     </div>
   );
 }

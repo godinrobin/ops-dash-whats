@@ -31,6 +31,7 @@ import { AdminUsers } from "@/components/admin/AdminUsers";
 import { AdminCreditsControl } from "@/components/admin/AdminCreditsControl";
 import { AdminSystemPricing } from "@/components/admin/AdminSystemPricing";
 import { AdminCreditPackages } from "@/components/admin/AdminCreditPackages";
+import { AdminZapSpyUsers } from "@/components/admin/AdminZapSpyUsers";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 
 // Product image imports for admin
@@ -114,6 +115,7 @@ const SIDEBAR_MENU = [
       { id: "credits-control", label: "Controle do Sistema", icon: Coins },
       { id: "credits-pricing", label: "Tabela de Preços", icon: Wallet },
       { id: "credits-packages", label: "Pacotes", icon: Package },
+      { id: "zap-spy-users", label: "Zap Spy Users", icon: Eye },
     ]
   },
   {
@@ -1805,7 +1807,8 @@ const AdminPanelNew = () => {
       case "credits-packages":
         return <AdminCreditPackages />;
 
-      case "passwords":
+      case "zap-spy-users":
+        return <AdminZapSpyUsers users={users} />;
         return (
           <Card className="border-2 border-accent max-w-md">
             <CardHeader>

@@ -8,6 +8,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Upload, Download, Loader2, Play, ArrowLeft, Wand2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { WatermarkMaskEditor } from "@/components/WatermarkMaskEditor";
+import { useCreditsSystem } from "@/hooks/useCreditsSystem";
+import { useCredits } from "@/hooks/useCredits";
+import { SystemCreditBadge } from "@/components/credits/SystemCreditBadge";
+import { InsufficientCreditsModal } from "@/components/credits/InsufficientCreditsModal";
 
 interface MaskRegion {
   x: number;
@@ -16,11 +20,19 @@ interface MaskRegion {
   height: number;
 }
 
+const CREDIT_COST = 0.25;
+const SYSTEM_ID = 'removedor_marca';
+
 const WatermarkRemover = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  
+  // Credits system
+  const { isActive: isCreditsActive } = useCreditsSystem();
+  const { deductCredits, canAfford } = useCredits();
+  const [showInsufficientCredits, setShowInsufficientCredits] = useState(false);
   
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string>("");
@@ -73,6 +85,20 @@ const WatermarkRemover = () => {
         variant: "destructive",
       });
       return;
+    }
+
+    // Check credits if system is active
+    if (isCreditsActive) {
+      if (!canAfford(CREDIT_COST)) {
+        setShowInsufficientCredits(true);
+        return;
+      }
+      
+      const deducted = await deductCredits(CREDIT_COST, SYSTEM_ID, 'Remoção de marca d\'água');
+      if (!deducted) {
+        setShowInsufficientCredits(true);
+        return;
+      }
     }
 
     setIsProcessing(true);
@@ -343,6 +369,13 @@ const WatermarkRemover = () => {
           </Card>
         </div>
       </div>
+      
+      <InsufficientCreditsModal
+        open={showInsufficientCredits}
+        onOpenChange={setShowInsufficientCredits}
+        requiredCredits={CREDIT_COST}
+        systemName="Removedor de Marca d'Água"
+      />
     </>
   );
 };
