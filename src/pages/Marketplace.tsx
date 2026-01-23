@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { 
   Wallet, Phone, BarChart3, ShoppingBag, ArrowLeft, Shield, Truck, CreditCard, 
-  Check, Minus, Plus, Clock, X, Loader2, ClipboardList, Globe, ChevronDown, ChevronUp, Info
+  Check, Minus, Plus, Clock, X, Loader2, ClipboardList, Globe, ChevronDown, ChevronUp, Info, Coins
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
@@ -44,6 +44,7 @@ import comboDiamondImg from "@/assets/combo-diamond.png";
 import SMSBot from "@/pages/SMSBot";
 import SMMPanel from "@/pages/SMMPanel";
 import { ProxiesTab } from "@/components/marketplace/ProxiesTab";
+import { CreditsTab } from "@/components/marketplace/CreditsTab";
 
 interface MarketplaceProduct {
   id: string;
@@ -406,7 +407,7 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
 
           {/* Tabs */}
           <AnimatedTabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <AnimatedTabsList className="grid w-full grid-cols-4 mb-6">
+            <AnimatedTabsList className="grid w-full grid-cols-5 mb-6">
               <AnimatedTabsTrigger value="numeros-virtuais" className="flex items-center gap-2">
                 <Phone className="h-4 w-4" />
                 <span className="hidden sm:inline">Números Virtuais</span>
@@ -418,6 +419,10 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
               <AnimatedTabsTrigger value="proxies" className="flex items-center gap-2">
                 <Globe className="h-4 w-4" />
                 <span className="hidden sm:inline">Proxies</span>
+              </AnimatedTabsTrigger>
+              <AnimatedTabsTrigger value="creditos" className="flex items-center gap-2">
+                <Coins className="h-4 w-4" />
+                <span className="hidden sm:inline">Créditos Zap</span>
               </AnimatedTabsTrigger>
               <AnimatedTabsTrigger value="ativos" className="flex items-center gap-2">
                 <ShoppingBag className="h-4 w-4" />
@@ -439,6 +444,10 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
                 onRecharge={() => setRechargeOpen(true)}
                 onBalanceChange={setBalance}
               />
+            </AnimatedTabsContent>
+
+            <AnimatedTabsContent value="creditos">
+              <CreditsTab onRecharge={() => setRechargeOpen(true)} />
             </AnimatedTabsContent>
 
             <AnimatedTabsContent value="ativos">
