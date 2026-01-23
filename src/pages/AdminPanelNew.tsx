@@ -15,7 +15,7 @@ import {
   Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X, Key, Loader2, 
   UserPlus, Activity, Megaphone, Eye, MousePointer, Trash2, Image, Clock, Settings, Users, 
   BarChart3, Phone, FileText, Wallet, History, Percent, Menu, ShoppingBag, Package, Globe, RefreshCw,
-  Smartphone, Shield, TrendingUp, Wifi, WifiOff
+  Smartphone, Shield, TrendingUp, Wifi, WifiOff, Coins
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -28,6 +28,9 @@ import { AdminDisconnectedInstances } from "@/components/admin/AdminDisconnected
 import { AdminWhatsAppApiConfig } from "@/components/admin/AdminWhatsAppApiConfig";
 import { AdminTagWhatsLabels } from "@/components/admin/AdminTagWhatsLabels";
 import { AdminUsers } from "@/components/admin/AdminUsers";
+import { AdminCreditsControl } from "@/components/admin/AdminCreditsControl";
+import { AdminSystemPricing } from "@/components/admin/AdminSystemPricing";
+import { AdminCreditPackages } from "@/components/admin/AdminCreditPackages";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 
 // Product image imports for admin
@@ -102,6 +105,15 @@ const SIDEBAR_MENU = [
       { id: "disconnected-instances", label: "Desconectadas", icon: WifiOff },
       { id: "whatsapp-api", label: "Configurar API", icon: Wifi },
       { id: "tag-whats-labels", label: "Etiquetas Tag Whats", icon: Shield },
+    ]
+  },
+  {
+    category: "Créditos",
+    icon: Coins,
+    items: [
+      { id: "credits-control", label: "Controle do Sistema", icon: Coins },
+      { id: "credits-pricing", label: "Tabela de Preços", icon: Wallet },
+      { id: "credits-packages", label: "Pacotes", icon: Package },
     ]
   },
   {
@@ -1783,6 +1795,15 @@ const AdminPanelNew = () => {
             </CardContent>
           </Card>
         );
+
+      case "credits-control":
+        return <AdminCreditsControl />;
+
+      case "credits-pricing":
+        return <AdminSystemPricing />;
+
+      case "credits-packages":
+        return <AdminCreditPackages />;
 
       case "passwords":
         return (
