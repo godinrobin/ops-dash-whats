@@ -338,11 +338,21 @@ export default function AdsDashboard() {
   const handleSync = async () => {
     setSyncing(true);
     try {
+      // Build request body with date info
+      const syncBody: any = { 
+        action: "sync_campaigns",
+        datePreset: datePresetMap[dateFilter]
+      };
+      
+      // If specific date is selected, pass the date range
+      if (dateFilter === "specific" && specificDate) {
+        const dateStr = format(specificDate, "yyyy-MM-dd");
+        syncBody.timeRange = { since: dateStr, until: dateStr };
+        delete syncBody.datePreset; // Remove preset when using time_range
+      }
+
       const { error, data } = await supabase.functions.invoke("facebook-campaigns", { 
-        body: { 
-          action: "sync_campaigns",
-          datePreset: datePresetMap[dateFilter]
-        } 
+        body: syncBody
       });
       
       // Check for auth errors
@@ -369,9 +379,11 @@ export default function AdsDashboard() {
   // Re-sync when date filter changes
   useEffect(() => {
     if (user && !loading && hasAccounts) {
+      // Don't auto-sync if specific date is selected but no date chosen yet
+      if (dateFilter === "specific" && !specificDate) return;
       handleSync();
     }
-  }, [dateFilter]);
+  }, [dateFilter, specificDate]);
 
   const toggleCardVisibility = (cardId: string) => {
     setHiddenCards(prev => {

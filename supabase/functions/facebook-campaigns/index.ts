@@ -110,7 +110,7 @@ serve(async (req) => {
 
     // Sync campaigns from all selected ad accounts
     if (action === "sync_campaigns") {
-      const { adAccountId, datePreset = "last_7d" } = body;
+      const { adAccountId, datePreset = "last_7d", timeRange } = body;
 
       // Get selected ad accounts (or specific one if provided)
       let query = supabaseClient
@@ -143,17 +143,24 @@ serve(async (req) => {
           continue;
         }
 
-        const datePresetInput = datePreset || 'last_7d';
-        const datePresetMap: Record<string, string> = {
-          'today': 'today',
-          'yesterday': 'yesterday',
-          'last_7d': 'last_7d',
-          'last_30d': 'last_30d',
-          'this_month': 'this_month'
-        };
-        const mappedDatePreset = datePresetMap[datePresetInput] || 'last_7d';
-        
-        console.log('Using date_preset:', mappedDatePreset);
+        // Build insights query - use time_range for specific dates, date_preset otherwise
+        let insightsQuery = '';
+        if (timeRange?.since && timeRange?.until) {
+          insightsQuery = `insights.time_range({"since":"${timeRange.since}","until":"${timeRange.until}"})`;
+          console.log('Using time_range:', timeRange);
+        } else {
+          const datePresetInput = datePreset || 'last_7d';
+          const datePresetMap: Record<string, string> = {
+            'today': 'today',
+            'yesterday': 'yesterday',
+            'last_7d': 'last_7d',
+            'last_30d': 'last_30d',
+            'this_month': 'this_month'
+          };
+          const mappedDatePreset = datePresetMap[datePresetInput] || 'last_7d';
+          insightsQuery = `insights.date_preset(${mappedDatePreset})`;
+          console.log('Using date_preset:', mappedDatePreset);
+        }
 
         const insightsFields = [
           'spend', 'impressions', 'clicks', 'reach', 'cpm', 'ctr',
@@ -162,7 +169,7 @@ serve(async (req) => {
         ].join(',');
 
         // Fetch campaigns with insights
-        const campaignsUrl = `https://graph.facebook.com/v18.0/act_${adAccount.ad_account_id}/campaigns?fields=id,name,status,objective,daily_budget,lifetime_budget,insights.date_preset(${mappedDatePreset}){${insightsFields}}&access_token=${accessToken}`;
+        const campaignsUrl = `https://graph.facebook.com/v18.0/act_${adAccount.ad_account_id}/campaigns?fields=id,name,status,objective,daily_budget,lifetime_budget,${insightsQuery}{${insightsFields}}&access_token=${accessToken}`;
         
         console.log(`Fetching campaigns for account ${adAccount.ad_account_id}...`);
         const campaignsResponse = await fetch(campaignsUrl);
@@ -249,7 +256,7 @@ serve(async (req) => {
 
     // Sync ad sets
     if (action === "sync_adsets") {
-      const { datePreset = "last_7d" } = body;
+      const { datePreset = "last_7d", timeRange } = body;
 
       const { data: adAccounts } = await supabaseClient
         .from("ads_ad_accounts")
@@ -270,14 +277,21 @@ serve(async (req) => {
         const accessToken = adAccount.ads_facebook_accounts?.access_token;
         if (!accessToken) continue;
 
-        const datePresetMap: Record<string, string> = {
-          'today': 'today',
-          'yesterday': 'yesterday',
-          'last_7d': 'last_7d',
-          'last_30d': 'last_30d',
-          'this_month': 'this_month'
-        };
-        const mappedDatePreset = datePresetMap[datePreset] || 'last_7d';
+        // Build insights query - use time_range for specific dates, date_preset otherwise
+        let insightsQuery = '';
+        if (timeRange?.since && timeRange?.until) {
+          insightsQuery = `insights.time_range({"since":"${timeRange.since}","until":"${timeRange.until}"})`;
+        } else {
+          const datePresetMap: Record<string, string> = {
+            'today': 'today',
+            'yesterday': 'yesterday',
+            'last_7d': 'last_7d',
+            'last_30d': 'last_30d',
+            'this_month': 'this_month'
+          };
+          const mappedDatePreset = datePresetMap[datePreset] || 'last_7d';
+          insightsQuery = `insights.date_preset(${mappedDatePreset})`;
+        }
 
         const insightsFields = [
           'spend', 'impressions', 'clicks', 'reach', 'cpm', 'ctr',
@@ -285,7 +299,7 @@ serve(async (req) => {
           'actions', 'cost_per_action_type', 'action_values'
         ].join(',');
 
-        const adsetsUrl = `https://graph.facebook.com/v18.0/act_${adAccount.ad_account_id}/adsets?fields=id,name,status,campaign_id,daily_budget,lifetime_budget,insights.date_preset(${mappedDatePreset}){${insightsFields}}&limit=500&access_token=${accessToken}`;
+        const adsetsUrl = `https://graph.facebook.com/v18.0/act_${adAccount.ad_account_id}/adsets?fields=id,name,status,campaign_id,daily_budget,lifetime_budget,${insightsQuery}{${insightsFields}}&limit=500&access_token=${accessToken}`;
         
         console.log(`Fetching adsets for account ${adAccount.ad_account_id}...`);
         const adsetsResponse = await fetch(adsetsUrl);
@@ -373,7 +387,7 @@ serve(async (req) => {
 
     // Sync ads
     if (action === "sync_ads") {
-      const { datePreset = "last_7d" } = body;
+      const { datePreset = "last_7d", timeRange } = body;
 
       const { data: adAccounts } = await supabaseClient
         .from("ads_ad_accounts")
@@ -394,14 +408,21 @@ serve(async (req) => {
         const accessToken = adAccount.ads_facebook_accounts?.access_token;
         if (!accessToken) continue;
 
-        const datePresetMap: Record<string, string> = {
-          'today': 'today',
-          'yesterday': 'yesterday',
-          'last_7d': 'last_7d',
-          'last_30d': 'last_30d',
-          'this_month': 'this_month'
-        };
-        const mappedDatePreset = datePresetMap[datePreset] || 'last_7d';
+        // Build insights query - use time_range for specific dates, date_preset otherwise
+        let insightsQuery = '';
+        if (timeRange?.since && timeRange?.until) {
+          insightsQuery = `insights.time_range({"since":"${timeRange.since}","until":"${timeRange.until}"})`;
+        } else {
+          const datePresetMap: Record<string, string> = {
+            'today': 'today',
+            'yesterday': 'yesterday',
+            'last_7d': 'last_7d',
+            'last_30d': 'last_30d',
+            'this_month': 'this_month'
+          };
+          const mappedDatePreset = datePresetMap[datePreset] || 'last_7d';
+          insightsQuery = `insights.date_preset(${mappedDatePreset})`;
+        }
 
         const insightsFields = [
           'spend', 'impressions', 'clicks', 'reach', 'cpm', 'ctr',
@@ -409,7 +430,7 @@ serve(async (req) => {
           'actions', 'cost_per_action_type', 'action_values'
         ].join(',');
 
-        const adsUrl = `https://graph.facebook.com/v18.0/act_${adAccount.ad_account_id}/ads?fields=id,name,status,adset_id,campaign_id,creative{thumbnail_url,effective_object_story_id,instagram_permalink_url,object_story_spec},insights.date_preset(${mappedDatePreset}){${insightsFields}}&limit=500&access_token=${accessToken}`;
+        const adsUrl = `https://graph.facebook.com/v18.0/act_${adAccount.ad_account_id}/ads?fields=id,name,status,adset_id,campaign_id,creative{thumbnail_url,effective_object_story_id,instagram_permalink_url,object_story_spec},${insightsQuery}{${insightsFields}}&limit=500&access_token=${accessToken}`;
         
         console.log(`Fetching ads for account ${adAccount.ad_account_id}...`);
         const adsResponse = await fetch(adsUrl);
