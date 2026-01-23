@@ -36,6 +36,8 @@ import { cn } from "@/lib/utils";
 import { splashedToast } from "@/hooks/useSplashedToast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Calendar } from "@/components/ui/calendar";
+import { CalendarIcon } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
@@ -63,7 +65,7 @@ interface SaleByAd {
   value: number;
 }
 
-type DateFilter = "today" | "yesterday" | "7days" | "30days";
+type DateFilter = "today" | "yesterday" | "7days" | "30days" | "specific";
 
 const defaultCardOrder = [
   'spend', 'impressions', 'clicks', 'conversions',
@@ -77,6 +79,8 @@ export default function AdsDashboard() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [dateFilter, setDateFilter] = useState<DateFilter>("7days");
+  const [specificDate, setSpecificDate] = useState<Date | undefined>(undefined);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>(["all"]);
   const [adAccounts, setAdAccounts] = useState<any[]>([]);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
@@ -137,6 +141,16 @@ export default function AdsDashboard() {
         spEnd = endOfDay(nowInSP);
         break;
       }
+      case "specific": {
+        if (specificDate) {
+          spStart = startOfDay(specificDate);
+          spEnd = endOfDay(specificDate);
+        } else {
+          spStart = startOfDay(nowInSP);
+          spEnd = endOfDay(nowInSP);
+        }
+        break;
+      }
       default:
         spStart = startOfDay(nowInSP);
         spEnd = endOfDay(nowInSP);
@@ -151,7 +165,7 @@ export default function AdsDashboard() {
       start: utcStart.toISOString(), 
       end: utcEnd.toISOString() 
     };
-  }, []);
+  }, [specificDate]);
 
   // Only show active ad accounts
   const activeAdAccounts = adAccounts.filter(acc => acc.is_selected === true);
@@ -160,7 +174,7 @@ export default function AdsDashboard() {
     if (user) {
       loadData();
     }
-  }, [user, dateFilter, selectedAccounts]);
+  }, [user, dateFilter, selectedAccounts, specificDate]);
 
   // Save card order to localStorage
   useEffect(() => {
@@ -317,7 +331,8 @@ export default function AdsDashboard() {
     today: "today",
     yesterday: "yesterday",
     "7days": "last_7d",
-    "30days": "last_30d"
+    "30days": "last_30d",
+    specific: "today"
   };
 
   const handleSync = async () => {
@@ -502,17 +517,55 @@ export default function AdsDashboard() {
             </PopoverContent>
           </Popover>
 
-          <Select value={dateFilter} onValueChange={(v) => setDateFilter(v as DateFilter)}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="today">Hoje</SelectItem>
-              <SelectItem value="yesterday">Ontem</SelectItem>
-              <SelectItem value="7days">7 dias</SelectItem>
-              <SelectItem value="30days">30 dias</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Select value={dateFilter} onValueChange={(v) => {
+              setDateFilter(v as DateFilter);
+              if (v !== "specific") {
+                setSpecificDate(undefined);
+              }
+            }}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="today">Hoje</SelectItem>
+                <SelectItem value="yesterday">Ontem</SelectItem>
+                <SelectItem value="7days">7 dias</SelectItem>
+                <SelectItem value="30days">30 dias</SelectItem>
+                <SelectItem value="specific">Data específica</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {dateFilter === "specific" && (
+              <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-[160px] justify-start text-left font-normal",
+                      !specificDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {specificDate ? format(specificDate, "dd/MM/yyyy", { locale: ptBR }) : <span>Selecionar</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={specificDate}
+                    onSelect={(date) => {
+                      setSpecificDate(date);
+                      setDatePickerOpen(false);
+                    }}
+                    disabled={(date) => date > new Date()}
+                    initialFocus
+                    className="p-3 pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+            )}
+          </div>
 
           {/* Edit layout button */}
           <Dialog>
