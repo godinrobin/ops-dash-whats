@@ -16,6 +16,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Moon, Sun, Camera, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { CreditWalletDisplay } from "@/components/credits/CreditWalletDisplay";
 
 interface ProfileModalProps {
   open: boolean;
@@ -331,6 +332,9 @@ export const ProfileModal = ({ open, onOpenChange }: ProfileModalProps) => {
               </div>
             </div>
           </div>
+
+          {/* Credit Wallet */}
+          <CreditWalletDisplay />
 
           {/* Theme Toggle */}
           <div className="space-y-3">
