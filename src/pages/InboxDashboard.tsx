@@ -26,6 +26,8 @@ import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { QRCodeModal, clearQrCodeCache, setQrCodeCache } from "@/components/QRCodeModal";
 import { PairCodeModal } from "@/components/PairCodeModal";
 import { useProxyValidator } from "@/hooks/useProxyValidator";
+import { InstanceRenewalTag } from "@/components/credits/InstanceRenewalTag";
+import { useInstanceSubscription } from "@/hooks/useInstanceSubscription";
 
 interface Instance {
   id: string;
@@ -101,6 +103,9 @@ export default function InboxDashboard() {
   
   // Proxy validation
   const { validateProxy, validating: validatingProxy, result: proxyValidationResult, clearResult: clearProxyResult } = useProxyValidator();
+  
+  // Instance subscription for credits system
+  const { registerInstance, freeInstancesRemaining } = useInstanceSubscription();
   
   // Card proxy validation state (per-instance)
   const [validatingInstanceProxy, setValidatingInstanceProxy] = useState<string | null>(null);
@@ -430,6 +435,11 @@ export default function InboxDashboard() {
         instance_name: newInstanceName,
         qrcode: data.qrcode?.base64,
       };
+      
+      // Register instance in credits system
+      if (data.instanceId) {
+        await registerInstance(data.instanceId);
+      }
 
       if (newInstance.qrcode) {
         setCurrentQrInstance(newInstance);
@@ -1269,6 +1279,7 @@ export default function InboxDashboard() {
                           <div className={`w-2 h-2 rounded-full ${getStatusColor(instance.status)}`} />
                           {getStatusText(instance.status)}
                         </Badge>
+                        <InstanceRenewalTag instanceId={instance.id} />
                       </div>
                       <CardDescription>{instance.phone_number || instance.instance_name}</CardDescription>
                     </CardHeader>

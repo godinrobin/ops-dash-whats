@@ -19,21 +19,23 @@ interface InstanceRenewalTagProps {
 }
 
 export const InstanceRenewalTag = ({ instanceId }: InstanceRenewalTagProps) => {
-  const { isActive } = useCreditsSystem();
+  const { isActive, isAdminTesting, isSimulatingPartial } = useCreditsSystem();
   const { getDaysRemaining, isAboutToExpire, isInstanceFree, renewInstance } = useInstanceSubscription();
   const { balance, canAfford, creditsToReais } = useCredits();
   const [showModal, setShowModal] = useState(false);
   const [renewing, setRenewing] = useState(false);
 
-  // Don't show if credits system is not active
-  if (!isActive) return null;
+  // Show tag in any active/test mode
+  const showTag = isActive || isAdminTesting || isSimulatingPartial;
+  if (!showTag) return null;
 
   const daysRemaining = getDaysRemaining(instanceId);
   const isFree = isInstanceFree(instanceId);
   const aboutToExpire = isAboutToExpire(instanceId);
   
-  // Free instances without expiration don't show tag
-  if (isFree && daysRemaining === null) return null;
+  // In partial simulation, ALL instances need the tag
+  // In admin test, only non-free instances (4th+)
+  const shouldShowTag = isSimulatingPartial || !isFree || daysRemaining !== null;
 
   const RENEWAL_COST = 6;
   const canRenew = canAfford(RENEWAL_COST);
@@ -68,11 +70,13 @@ export const InstanceRenewalTag = ({ instanceId }: InstanceRenewalTagProps) => {
     if (daysRemaining === 0) return 'Expira hoje!';
     if (daysRemaining === 1) return '1 dia restante';
     if (daysRemaining !== null) return `${daysRemaining} dias`;
+    // For simulation mode, show a default
+    if (isSimulatingPartial) return '3 dias';
     return null;
   };
 
   const badgeContent = getBadgeContent();
-  if (!badgeContent) return null;
+  if (!badgeContent || !shouldShowTag) return null;
 
   return (
     <>

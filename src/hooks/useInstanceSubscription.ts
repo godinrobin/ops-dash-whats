@@ -45,7 +45,7 @@ const DAYS_PER_RENEWAL = 30;
 
 export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
   const { user } = useAuth();
-  const { isActive, activatedAt, isSimulatingPartial } = useCreditsSystem();
+  const { isActive, activatedAt, isSimulatingPartial, isAdminTesting } = useCreditsSystem();
   const { isFullMember } = useAccessLevel();
   const { deductCredits, canAfford, refresh: refreshCredits } = useCredits();
   const [subscriptions, setSubscriptions] = useState<InstanceSubscription[]>([]);
@@ -87,10 +87,14 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
   const totalInstances = subscriptions.length;
   
   // For full members (not simulating), they get 3 free instances
+  // When simulating partial, treat as 0 free instances
   const effectiveFullMember = isSimulatingPartial ? false : isFullMember;
   const freeInstancesRemaining = effectiveFullMember 
     ? Math.max(0, FREE_INSTANCES_LIMIT - freeInstancesCount)
     : 0;
+  
+  // In admin test mode or partial simulation, we simulate as if the system is active
+  const isTestingActive = isAdminTesting || isSimulatingPartial;
 
   const isInstanceFree = useCallback((instanceId: string): boolean => {
     const subscription = subscriptions.find(s => s.instance_id === instanceId);
@@ -99,6 +103,40 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
 
   const getDaysRemaining = useCallback((instanceId: string): number | null => {
     const subscription = subscriptions.find(s => s.instance_id === instanceId);
+    
+    // In test modes, simulate expiration for non-free instances
+    if (isTestingActive) {
+      if (!subscription) {
+        // No subscription = simulate as extra instance (3 days default)
+        return 3;
+      }
+      
+      // In partial simulation, all instances are "extra" and need renewal
+      if (isSimulatingPartial) {
+        if (subscription.expires_at) {
+          const now = new Date();
+          const expires = new Date(subscription.expires_at);
+          const diff = expires.getTime() - now.getTime();
+          if (diff <= 0) return 0;
+          return Math.ceil(diff / (1000 * 60 * 60 * 24));
+        }
+        // Simulate 3 days for instances without expiration
+        return 3;
+      }
+      
+      // In admin test mode, show expiration only for non-free instances
+      if (!subscription.is_free) {
+        if (subscription.expires_at) {
+          const now = new Date();
+          const expires = new Date(subscription.expires_at);
+          const diff = expires.getTime() - now.getTime();
+          if (diff <= 0) return 0;
+          return Math.ceil(diff / (1000 * 60 * 60 * 24));
+        }
+        return 3; // Default to 3 days for testing
+      }
+    }
+    
     if (!subscription) return null;
     
     // Free instances don't expire (unless system was just activated)
@@ -112,7 +150,7 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
     
     if (diff <= 0) return 0;
     return Math.ceil(diff / (1000 * 60 * 60 * 24));
-  }, [subscriptions, activatedAt]);
+  }, [subscriptions, activatedAt, isTestingActive, isSimulatingPartial]);
 
   const isAboutToExpire = useCallback((instanceId: string): boolean => {
     const days = getDaysRemaining(instanceId);
