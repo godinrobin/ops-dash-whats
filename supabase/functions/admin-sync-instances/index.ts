@@ -127,16 +127,18 @@ serve(async (req) => {
     }
 
     let updated = 0;
-    let disconnected = 0;
+    let orphaned = 0;
     let phoneUpdated = 0;
+    let statusFixed = 0;
 
     // Process each database instance
     for (const dbInst of dbInstances || []) {
       const uazapiInst = uazapiMap.get(dbInst.instance_name);
 
       if (!uazapiInst) {
-        // Instance doesn't exist in UAZAPI - mark as disconnected
-        if (dbInst.status === 'connected' || dbInst.status === 'open') {
+        // Instance doesn't exist in UAZAPI - mark as disconnected (orphaned)
+        // ALWAYS mark as disconnected if not in UAZAPI, regardless of current status
+        if (dbInst.status !== 'disconnected') {
           const { error: updateError } = await supabase
             .from("maturador_instances")
             .update({ 
@@ -146,13 +148,13 @@ serve(async (req) => {
             .eq("id", dbInst.id);
 
           if (!updateError) {
-            disconnected++;
-            console.log(`[admin-sync-instances] Marked as disconnected: ${dbInst.instance_name}`);
+            orphaned++;
+            console.log(`[admin-sync-instances] Orphaned (not in UAZAPI): ${dbInst.instance_name}`);
           }
         }
       } else {
         // Instance exists in UAZAPI - update status and phone
-        const updates: Record<string, any> = {};
+        const updates: Record<string, unknown> = {};
         
         // Map UAZAPI status to our status
         const uazapiStatus = uazapiInst.status?.toLowerCase();
@@ -160,7 +162,7 @@ serve(async (req) => {
         
         if (uazapiStatus === 'open' || uazapiStatus === 'connected') {
           newStatus = 'connected';
-        } else if (uazapiStatus === 'close' || uazapiStatus === 'disconnected') {
+        } else if (uazapiStatus === 'close' || uazapiStatus === 'closed' || uazapiStatus === 'disconnected') {
           newStatus = 'disconnected';
         } else if (uazapiStatus === 'connecting' || uazapiStatus === 'qrcode') {
           newStatus = 'connecting';
@@ -169,6 +171,7 @@ serve(async (req) => {
         // Check if status changed
         if (newStatus !== dbInst.status) {
           updates.status = newStatus;
+          statusFixed++;
           if (newStatus === 'connected') {
             updates.connected_at = new Date().toISOString();
           } else if (newStatus === 'disconnected') {
@@ -211,20 +214,41 @@ serve(async (req) => {
       }
     }
 
-    // Count actual connected from UAZAPI
+    // Count actual stats from UAZAPI
     const realConnected = uazapiInstances.filter(i => 
       i.status?.toLowerCase() === 'open' || i.status?.toLowerCase() === 'connected'
     ).length;
+    
+    const realDisconnected = uazapiInstances.filter(i => 
+      i.status?.toLowerCase() === 'close' || i.status?.toLowerCase() === 'closed' || i.status?.toLowerCase() === 'disconnected'
+    ).length;
+    
+    const realConnecting = uazapiInstances.filter(i => 
+      i.status?.toLowerCase() === 'connecting' || i.status?.toLowerCase() === 'qrcode'
+    ).length;
 
-    console.log(`[admin-sync-instances] Sync complete - Updated: ${updated}, Disconnected: ${disconnected}, Phone updated: ${phoneUpdated}, Real connected in UAZAPI: ${realConnected}`);
+    console.log(`[admin-sync-instances] Sync complete:`);
+    console.log(`  - Total in UAZAPI: ${uazapiInstances.length}`);
+    console.log(`  - Real connected in UAZAPI: ${realConnected}`);
+    console.log(`  - Real disconnected in UAZAPI: ${realDisconnected}`);
+    console.log(`  - Real connecting in UAZAPI: ${realConnecting}`);
+    console.log(`  - DB instances: ${dbInstances?.length || 0}`);
+    console.log(`  - Orphaned (not in UAZAPI): ${orphaned}`);
+    console.log(`  - Status fixed: ${statusFixed}`);
+    console.log(`  - Phone updated: ${phoneUpdated}`);
+    console.log(`  - Total updated: ${updated}`);
 
     return new Response(JSON.stringify({
       success: true,
       totalInUazapi: uazapiInstances.length,
+      totalInDb: dbInstances?.length || 0,
       realConnected,
-      updated,
-      disconnected,
+      realDisconnected,
+      realConnecting,
+      orphaned,
+      statusFixed,
       phoneUpdated,
+      updated,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

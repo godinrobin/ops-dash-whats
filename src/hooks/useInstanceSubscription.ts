@@ -82,24 +82,46 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
     fetchSubscriptions();
   }, [fetchSubscriptions]);
 
-  // Count free instances (first 3 created)
-  const freeInstancesCount = subscriptions.filter(s => s.is_free).length;
+  // Sort subscriptions by created_at to determine order
+  const sortedSubscriptions = [...subscriptions].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  );
+  
   const totalInstances = subscriptions.length;
   
-  // For full members (not simulating), they get 3 free instances
+  // For full members (not simulating), they get 3 free instances (first 3 by creation order)
   // When simulating partial, treat as 0 free instances
   const effectiveFullMember = isSimulatingPartial ? false : isFullMember;
+  
+  // Count how many of the first 3 instances exist
+  const freeInstancesUsed = effectiveFullMember 
+    ? Math.min(FREE_INSTANCES_LIMIT, sortedSubscriptions.length)
+    : 0;
   const freeInstancesRemaining = effectiveFullMember 
-    ? Math.max(0, FREE_INSTANCES_LIMIT - freeInstancesCount)
+    ? Math.max(0, FREE_INSTANCES_LIMIT - freeInstancesUsed)
     : 0;
   
   // In admin test mode or partial simulation, we simulate as if the system is active
   const isTestingActive = isAdminTesting || isSimulatingPartial;
 
+  // Check if an instance is free based on its position in creation order
   const isInstanceFree = useCallback((instanceId: string): boolean => {
-    const subscription = subscriptions.find(s => s.instance_id === instanceId);
-    return subscription?.is_free ?? false;
-  }, [subscriptions]);
+    if (isSimulatingPartial) {
+      // In partial simulation, no instances are free
+      return false;
+    }
+    
+    if (!effectiveFullMember) {
+      return false;
+    }
+    
+    // Find position of this instance in sorted order
+    const index = sortedSubscriptions.findIndex(s => s.instance_id === instanceId);
+    if (index === -1) return false;
+    
+    // First 3 instances are free for full members
+    return index < FREE_INSTANCES_LIMIT;
+  }, [sortedSubscriptions, effectiveFullMember, isSimulatingPartial]);
 
   const getDaysRemaining = useCallback((instanceId: string): number | null => {
     const subscription = subscriptions.find(s => s.instance_id === instanceId);
@@ -225,7 +247,7 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
     // Determine if this instance should be free
     // Full members get first 3 free (unless simulating partial)
     const effectiveFM = isSimulatingPartial ? false : isFullMember;
-    const shouldBeFree = effectiveFM && freeInstancesCount < FREE_INSTANCES_LIMIT;
+    const shouldBeFree = effectiveFM && sortedSubscriptions.length < FREE_INSTANCES_LIMIT;
 
     // Calculate expiration
     let expiresAt: string | null = null;
@@ -262,7 +284,7 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
       console.error('Error:', error);
       return false;
     }
-  }, [user, isActive, isFullMember, isSimulatingPartial, freeInstancesCount, fetchSubscriptions]);
+  }, [user, isActive, isFullMember, isSimulatingPartial, sortedSubscriptions.length, fetchSubscriptions]);
 
   const refresh = useCallback(async () => {
     setLoading(true);

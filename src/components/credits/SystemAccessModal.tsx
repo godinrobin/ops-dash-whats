@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useSystemAccess } from "@/hooks/useSystemAccess";
 import { useCredits } from "@/hooks/useCredits";
-import { Check, Infinity, Calendar, Loader2 } from "lucide-react";
+import { Check, Infinity, Calendar, Loader2, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 interface SystemAccessModalProps {
   open: boolean;
@@ -26,8 +27,9 @@ export const SystemAccessModal = ({
   onPurchaseSuccess,
 }: SystemAccessModalProps) => {
   const { getSystemPricing, purchaseAccess, daysRemaining, hasAccess } = useSystemAccess();
-  const { balance, canAfford, creditsToReais } = useCredits();
+  const { balance, canAfford } = useCredits();
   const [purchasing, setPurchasing] = useState(false);
+  const navigate = useNavigate();
 
   const pricing = getSystemPricing(systemId);
   const days = daysRemaining(systemId);
@@ -59,6 +61,11 @@ export const SystemAccessModal = ({
     } finally {
       setPurchasing(false);
     }
+  };
+
+  const handleGoToMarketplace = () => {
+    onOpenChange(false);
+    navigate('/marketplace');
   };
 
   return (
@@ -102,10 +109,6 @@ export const SystemAccessModal = ({
                 </p>
                 <p className="text-2xl font-bold">{pricing.credit_cost} <span className="text-sm font-normal">créditos</span></p>
               </div>
-              <div className="text-right">
-                <p className="text-xs text-muted-foreground">Equivalente a</p>
-                <p className="text-lg font-semibold text-accent">{creditsToReais(pricing.credit_cost)}</p>
-              </div>
             </div>
           </div>
 
@@ -118,9 +121,14 @@ export const SystemAccessModal = ({
           </div>
 
           {!canPurchase && (
-            <p className="text-sm text-red-500 text-center">
-              Saldo insuficiente. Compre mais créditos no Marketplace.
-            </p>
+            <Button 
+              variant="outline" 
+              onClick={handleGoToMarketplace} 
+              className="w-full border-amber-500 text-amber-500 hover:bg-amber-500/10"
+            >
+              <ShoppingCart className="h-4 w-4 mr-2" />
+              Recarregue seu saldo
+            </Button>
           )}
         </div>
 

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useInstanceSubscription } from "@/hooks/useInstanceSubscription";
 import { useCredits } from "@/hooks/useCredits";
 import { useCreditsSystem } from "@/hooks/useCreditsSystem";
-import { Clock, AlertTriangle, Loader2, RefreshCw } from "lucide-react";
+import { Clock, AlertTriangle, Loader2, RefreshCw, ShoppingCart } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 interface InstanceRenewalTagProps {
   instanceId: string;
@@ -21,7 +22,8 @@ interface InstanceRenewalTagProps {
 export const InstanceRenewalTag = ({ instanceId }: InstanceRenewalTagProps) => {
   const { isActive, isAdminTesting, isSimulatingPartial } = useCreditsSystem();
   const { getDaysRemaining, isAboutToExpire, isInstanceFree, renewInstance } = useInstanceSubscription();
-  const { balance, canAfford, creditsToReais } = useCredits();
+  const { balance, canAfford } = useCredits();
+  const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
   const [renewing, setRenewing] = useState(false);
 
@@ -35,7 +37,21 @@ export const InstanceRenewalTag = ({ instanceId }: InstanceRenewalTagProps) => {
   
   // In partial simulation, ALL instances need the tag
   // In admin test, only non-free instances (4th+)
-  const shouldShowTag = isSimulatingPartial || !isFree || daysRemaining !== null;
+  // Only show if there's a daysRemaining value
+  const shouldShowTag = (() => {
+    if (isSimulatingPartial) {
+      // In partial simulation, all instances show tag
+      return daysRemaining !== null;
+    }
+    
+    if (isAdminTesting) {
+      // In admin test, only non-free instances show tag
+      return !isFree && daysRemaining !== null;
+    }
+    
+    // When system is active, show for non-free with expiration
+    return !isFree && daysRemaining !== null;
+  })();
 
   const RENEWAL_COST = 6;
   const canRenew = canAfford(RENEWAL_COST);
@@ -57,6 +73,11 @@ export const InstanceRenewalTag = ({ instanceId }: InstanceRenewalTagProps) => {
     }
   };
 
+  const handleGoToMarketplace = () => {
+    setShowModal(false);
+    navigate('/marketplace');
+  };
+
   // Determine badge style
   const getBadgeStyle = () => {
     if (daysRemaining === null) return 'default';
@@ -68,10 +89,8 @@ export const InstanceRenewalTag = ({ instanceId }: InstanceRenewalTagProps) => {
 
   const getBadgeContent = () => {
     if (daysRemaining === 0) return 'Expira hoje!';
-    if (daysRemaining === 1) return '1 dia restante';
+    if (daysRemaining === 1) return '1 dia';
     if (daysRemaining !== null) return `${daysRemaining} dias`;
-    // For simulation mode, show a default
-    if (isSimulatingPartial) return '3 dias';
     return null;
   };
 
@@ -82,7 +101,7 @@ export const InstanceRenewalTag = ({ instanceId }: InstanceRenewalTagProps) => {
     <>
       <Badge
         variant={getBadgeStyle()}
-        className={`cursor-pointer hover:opacity-80 transition-opacity ${
+        className={`cursor-pointer hover:opacity-80 transition-opacity whitespace-nowrap ${
           aboutToExpire ? 'animate-pulse' : ''
         }`}
         onClick={() => setShowModal(true)}
@@ -96,8 +115,8 @@ export const InstanceRenewalTag = ({ instanceId }: InstanceRenewalTagProps) => {
           <DialogHeader>
             <div className="flex items-center gap-3 mb-2">
               {aboutToExpire ? (
-                <div className="p-3 rounded-full bg-red-500/20">
-                  <AlertTriangle className="h-6 w-6 text-red-500" />
+                <div className="p-3 rounded-full bg-destructive/20">
+                  <AlertTriangle className="h-6 w-6 text-destructive" />
                 </div>
               ) : (
                 <div className="p-3 rounded-full bg-accent/20">
@@ -123,16 +142,12 @@ export const InstanceRenewalTag = ({ instanceId }: InstanceRenewalTagProps) => {
                   <p className="text-sm text-muted-foreground">Custo de renovação</p>
                   <p className="text-2xl font-bold">{RENEWAL_COST} <span className="text-sm font-normal">créditos</span></p>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs text-muted-foreground">Equivalente a</p>
-                  <p className="text-lg font-semibold text-accent">{creditsToReais(RENEWAL_COST)}</p>
-                </div>
               </div>
             </div>
 
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Seu saldo atual:</span>
-              <span className={`font-medium ${canRenew ? 'text-green-500' : 'text-red-500'}`}>
+              <span className={`font-medium ${canRenew ? 'text-green-500' : 'text-destructive'}`}>
                 {balance.toFixed(2)} créditos
               </span>
             </div>
@@ -152,9 +167,14 @@ export const InstanceRenewalTag = ({ instanceId }: InstanceRenewalTagProps) => {
             )}
 
             {!canRenew && (
-              <p className="text-sm text-red-500 text-center">
-                Saldo insuficiente. Compre mais créditos no Marketplace.
-              </p>
+              <Button 
+                variant="outline" 
+                onClick={handleGoToMarketplace} 
+                className="w-full border-amber-500 text-amber-500 hover:bg-amber-500/10"
+              >
+                <ShoppingCart className="h-4 w-4 mr-2" />
+                Recarregue seu saldo
+              </Button>
             )}
           </div>
 
