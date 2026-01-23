@@ -7,6 +7,10 @@ import { useToast } from "@/hooks/useSplashedToast";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Upload, Copy, FileAudio, Check } from "lucide-react";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
+import { useCreditsSystem } from "@/hooks/useCreditsSystem";
+import { useCredits } from "@/hooks/useCredits";
+import { SystemCreditBadge } from "@/components/credits/SystemCreditBadge";
+import { InsufficientCreditsModal } from "@/components/credits/InsufficientCreditsModal";
 
 const MAX_FILE_SIZE_MB = 25;
 const MAX_DURATION_MINUTES = 10;
@@ -20,6 +24,13 @@ const AudioTranscriber = () => {
   const [transcription, setTranscription] = useState("");
   const [fileName, setFileName] = useState("");
   const [copied, setCopied] = useState(false);
+  const [showInsufficientCredits, setShowInsufficientCredits] = useState(false);
+  
+  // Credits system
+  const { isActive: isCreditsActive } = useCreditsSystem();
+  const { deductCredits, canAfford } = useCredits();
+  const CREDIT_COST = 0.05;
+  const SYSTEM_ID = 'transcricao_audio';
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -49,6 +60,25 @@ const AudioTranscriber = () => {
   };
 
   const transcribeAudio = async (file: File) => {
+    // Credit system check
+    if (isCreditsActive) {
+      if (!canAfford(CREDIT_COST)) {
+        setShowInsufficientCredits(true);
+        return;
+      }
+      
+      const success = await deductCredits(
+        CREDIT_COST,
+        SYSTEM_ID,
+        'Transcrição de áudio'
+      );
+      
+      if (!success) {
+        setShowInsufficientCredits(true);
+        return;
+      }
+    }
+    
     setIsTranscribing(true);
     setTranscription("");
 
@@ -124,9 +154,15 @@ const AudioTranscriber = () => {
 
           <Card className="border-2 border-accent">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileAudio className="w-5 h-5 text-accent" />
-                Enviar Áudio
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileAudio className="w-5 h-5 text-accent" />
+                  Enviar Áudio
+                </div>
+                <SystemCreditBadge 
+                  creditCost={CREDIT_COST}
+                  suffix="por transcrição"
+                />
               </CardTitle>
               <CardDescription>
                 Formatos aceitos: MP3, OGG, OPUS (máx. {MAX_DURATION_MINUTES} minutos / {MAX_FILE_SIZE_MB}MB)
@@ -218,6 +254,14 @@ const AudioTranscriber = () => {
           </Card>
         </div>
       </div>
+
+      {/* Insufficient Credits Modal */}
+      <InsufficientCreditsModal
+        open={showInsufficientCredits}
+        onOpenChange={setShowInsufficientCredits}
+        requiredCredits={CREDIT_COST}
+        systemName="Transcrição de Áudio"
+      />
     </SystemLayout>
   );
 };

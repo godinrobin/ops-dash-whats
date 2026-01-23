@@ -10,6 +10,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useMultiGenerationCooldown } from "@/hooks/useMultiGenerationCooldown";
+import { useCreditsSystem } from "@/hooks/useCreditsSystem";
+import { useCredits } from "@/hooks/useCredits";
+import { SystemCreditBadge } from "@/components/credits/SystemCreditBadge";
+import { InsufficientCreditsModal } from "@/components/credits/InsufficientCreditsModal";
 
 interface AnalysisResult {
   hookScore: number;
@@ -35,6 +39,13 @@ const CreativeAnalyzer = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showInsufficientCredits, setShowInsufficientCredits] = useState(false);
+
+  // Credits system
+  const { isActive: isCreditsActive } = useCreditsSystem();
+  const { deductCredits, canAfford } = useCredits();
+  const CREDIT_COST = 0.20;
+  const SYSTEM_ID = 'analisador_criativos';
 
   // Cooldown hook - 1 analysis per 5 minutes
   const {
@@ -103,6 +114,25 @@ const CreativeAnalyzer = () => {
     if (!canGenerate && !isAdmin) {
       toast.error("Aguarde o cooldown para fazer uma nova análise");
       return;
+    }
+
+    // Credit system check
+    if (isCreditsActive) {
+      if (!canAfford(CREDIT_COST)) {
+        setShowInsufficientCredits(true);
+        return;
+      }
+      
+      const success = await deductCredits(
+        CREDIT_COST,
+        SYSTEM_ID,
+        'Análise de criativo'
+      );
+      
+      if (!success) {
+        setShowInsufficientCredits(true);
+        return;
+      }
     }
 
     setIsAnalyzing(true);
@@ -264,12 +294,18 @@ const CreativeAnalyzer = () => {
                   <Video className="h-4 w-4" />
                   Vídeo
                 </AnimatedTabsTrigger>
-                <AnimatedTabsTrigger value="image" className="flex items-center gap-2">
+            <AnimatedTabsTrigger value="image" className="flex items-center gap-2">
                   <Image className="h-4 w-4" />
                   Imagem
                 </AnimatedTabsTrigger>
               </AnimatedTabsList>
             </AnimatedTabs>
+            <div className="mt-4 flex justify-end">
+              <SystemCreditBadge 
+                creditCost={CREDIT_COST}
+                suffix="por análise"
+              />
+            </div>
           </CardContent>
         </Card>
 
@@ -396,6 +432,14 @@ const CreativeAnalyzer = () => {
           </div>
         )}
       </div>
+
+      {/* Insufficient Credits Modal */}
+      <InsufficientCreditsModal
+        open={showInsufficientCredits}
+        onOpenChange={setShowInsufficientCredits}
+        requiredCredits={CREDIT_COST}
+        systemName="Analisador de Criativos"
+      />
     </div>
   );
 };
