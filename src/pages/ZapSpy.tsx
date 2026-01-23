@@ -18,6 +18,7 @@ import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { AnimatedSearchBar } from "@/components/ui/animated-search-bar";
 import { useSystemAccess } from "@/hooks/useSystemAccess";
 import { useAccessLevel } from "@/hooks/useAccessLevel";
+import { useCreditsSystem } from "@/hooks/useCreditsSystem";
 import { SystemAccessModal } from "@/components/credits/SystemAccessModal";
 
 interface ZapSpyOffer {
@@ -40,11 +41,21 @@ const ZapSpy = () => {
   
   // Access control hooks
   const { isFullMember } = useAccessLevel();
-  const { hasAccess, loading: accessLoading, purchaseAccess, daysRemaining, getSystemPricing } = useSystemAccess();
+  const { hasAccess, loading: accessLoading, daysRemaining, getSystemPricing } = useSystemAccess();
+  const { isActive: isCreditsActive, isAdminTesting, isSimulatingPartial } = useCreditsSystem();
   const [showAccessModal, setShowAccessModal] = useState(false);
   
   const SYSTEM_ID = 'zap_spy';
-  const userHasAccess = hasAccess(SYSTEM_ID);
+  
+  // In test modes, simulate the access check
+  const isTestMode = isAdminTesting || isSimulatingPartial;
+  // Full members have access, partial members need to purchase
+  const effectiveFullMember = isSimulatingPartial ? false : isFullMember;
+  // In simulation mode, treat as no access for partial members
+  const userHasAccess = isTestMode 
+    ? (isAdminTesting ? hasAccess(SYSTEM_ID) || effectiveFullMember : false)
+    : hasAccess(SYSTEM_ID) || !isCreditsActive;
+  
   const userDaysRemaining = daysRemaining(SYSTEM_ID);
   const systemPricing = getSystemPricing(SYSTEM_ID);
   
@@ -429,27 +440,49 @@ const ZapSpy = () => {
             </p>
           </header>
 
-          {/* Filters */}
-          <div className="flex flex-col md:flex-row gap-4 mb-6">
-            <div className="flex-1">
-              <AnimatedSearchBar
-                placeholder="Buscar oferta..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full"
-              />
-            </div>
-            <Select value={selectedNiche} onValueChange={setSelectedNiche}>
-              <SelectTrigger className="w-full md:w-48">
-                <SelectValue placeholder="Filtrar por nicho" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os nichos</SelectItem>
-                {availableNiches.map((niche) => (
-                  <SelectItem key={niche} value={niche}>{niche}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* Access Gate - Block for non-members in credits system */}
+          {(isCreditsActive || isTestMode) && !userHasAccess && !accessLoading && !isAdmin && (
+            <Card className="border-amber-500/50 bg-amber-500/10 mb-8">
+              <CardContent className="py-8 text-center">
+                <Lock className="h-12 w-12 text-amber-500 mx-auto mb-4" />
+                <h2 className="text-xl font-bold mb-2">Acesso Restrito</h2>
+                <p className="text-muted-foreground mb-4">
+                  Este sistema requer assinatura mensal para membros parciais.
+                </p>
+                <Button 
+                  onClick={() => setShowAccessModal(true)}
+                  className="bg-accent hover:bg-accent/90"
+                >
+                  Ver Planos de Acesso
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Main Content - Only show if has access or is admin */}
+          {(userHasAccess || isAdmin || accessLoading) && (
+            <>
+              {/* Filters */}
+              <div className="flex flex-col md:flex-row gap-4 mb-6">
+                <div className="flex-1">
+                  <AnimatedSearchBar
+                    placeholder="Buscar oferta..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+                <Select value={selectedNiche} onValueChange={setSelectedNiche}>
+                  <SelectTrigger className="w-full md:w-48">
+                    <SelectValue placeholder="Filtrar por nicho" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os nichos</SelectItem>
+                    {availableNiches.map((niche) => (
+                      <SelectItem key={niche} value={niche}>{niche}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
             <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
               <SelectTrigger className="w-full md:w-48">
@@ -711,6 +744,8 @@ const ZapSpy = () => {
                 </Card>
               ))}
             </div>
+          )}
+            </>
           )}
         </div>
       </div>

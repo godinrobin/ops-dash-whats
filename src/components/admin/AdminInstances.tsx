@@ -107,7 +107,9 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
       }
 
       toast.success(
-        `Sincronizado! UAZAPI tem ${data.realConnected} conectadas. Atualizadas: ${data.updated}, Desconectadas: ${data.disconnected}, Números: ${data.phoneUpdated}`
+        `Sincronizado com UAZAPI!\n` +
+        `Total: ${data.totalInUazapi} | Conectadas: ${data.realConnected} | ` +
+        `Órfãs: ${data.orphaned} | Status corrigidos: ${data.statusFixed}`
       );
       onRefresh();
     } catch (error: any) {

@@ -23,7 +23,7 @@ export const InsufficientCreditsModal = ({
   requiredCredits,
   systemName,
 }: InsufficientCreditsModalProps) => {
-  const { balance, creditsToReais } = useCredits();
+  const { balance } = useCredits();
   const navigate = useNavigate();
   
   const missing = Math.max(0, requiredCredits - balance);
@@ -66,7 +66,7 @@ export const InsufficientCreditsModal = ({
             <div className="flex items-center gap-2">
               <Wallet className="h-4 w-4 text-red-500" />
               <span className="text-sm">
-                Faltam <strong className="text-red-500">{missing.toFixed(2)} créditos</strong> ({creditsToReais(missing)})
+                Faltam <strong className="text-red-500">{missing.toFixed(2)} créditos</strong>
               </span>
             </div>
           </div>
@@ -75,7 +75,7 @@ export const InsufficientCreditsModal = ({
         <div className="flex flex-col gap-2">
           <Button onClick={handleGoToMarketplace} className="w-full bg-accent hover:bg-accent/90">
             <ShoppingCart className="h-4 w-4 mr-2" />
-            Ir ao Marketplace
+            Recarregue seu saldo
           </Button>
           <Button variant="ghost" onClick={() => onOpenChange(false)} className="w-full">
             Cancelar
