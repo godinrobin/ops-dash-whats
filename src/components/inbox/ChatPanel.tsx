@@ -181,9 +181,8 @@ export const ChatPanel = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [connectionError, setConnectionError] = useState<{ show: boolean; errorCode?: string; instanceName?: string }>({ show: false });
   const [isIgnored, setIsIgnored] = useState(false);
-  // Activity status: 'typing' | 'recording' | null
-  const [activityStatus, setActivityStatus] = useState<'typing' | 'recording' | null>(null);
-  const activityTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // DISABLED: Activity status removed to reduce Cloud consumption
+  const activityStatus = null;
   // Reply state
   const [replyToMessage, setReplyToMessage] = useState<InboxMessage | null>(null);
   
@@ -368,15 +367,6 @@ export const ChatPanel = ({
     scrollToBottom();
   }, [scrollToBottom, messages.length]);
 
-  // Clear activity indicator when contact changes
-  useEffect(() => {
-    setActivityStatus(null);
-    if (activityTimeoutRef.current) {
-      clearTimeout(activityTimeoutRef.current);
-      activityTimeoutRef.current = null;
-    }
-  }, [contact?.id]);
-
   // Listen for flow_paused changes via postgres_changes on inbox_contacts
   useEffect(() => {
     if (!contact?.id) return;
@@ -410,80 +400,7 @@ export const ChatPanel = ({
     };
   }, [contact?.id]);
 
-  // Listen for activity events (typing/recording) via postgres_changes on inbox_contact_activity
-  useEffect(() => {
-    if (!contact?.id) return;
-    
-    // Subscribe to postgres_changes on inbox_contact_activity for this specific contact
-    const channel = supabase
-      .channel(`activity:${contact.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'inbox_contact_activity',
-          filter: `contact_id=eq.${contact.id}`,
-        },
-        (payload) => {
-          console.log('[ChatPanel] Received activity event:', payload);
-          const newRow = payload.new as { status?: string } | undefined;
-          const status = newRow?.status;
-          
-          if (payload.eventType === 'DELETE' || !status) {
-            setActivityStatus(null);
-            if (activityTimeoutRef.current) {
-              clearTimeout(activityTimeoutRef.current);
-              activityTimeoutRef.current = null;
-            }
-            return;
-          }
-          
-          // Set status based on value
-          if (status === 'recording') {
-            setActivityStatus('recording');
-          } else {
-            setActivityStatus('typing');
-          }
-          
-          // Clear any existing timeout
-          if (activityTimeoutRef.current) {
-            clearTimeout(activityTimeoutRef.current);
-          }
-          
-          // Auto-hide after 5 seconds
-          activityTimeoutRef.current = setTimeout(() => {
-            setActivityStatus(null);
-          }, 5000);
-        }
-      )
-      .subscribe((status, err) => {
-        if (err) {
-          console.error('[ChatPanel] Activity channel error:', err);
-        }
-      });
-    
-    return () => {
-      supabase.removeChannel(channel);
-      if (activityTimeoutRef.current) {
-        clearTimeout(activityTimeoutRef.current);
-      }
-    };
-  }, [contact?.id]);
-
-  // Hide activity indicator when new message arrives
-  useEffect(() => {
-    if (messages.length > 0 && activityStatus) {
-      const lastMessage = messages[messages.length - 1];
-      if (lastMessage.direction === 'inbound') {
-        setActivityStatus(null);
-        if (activityTimeoutRef.current) {
-          clearTimeout(activityTimeoutRef.current);
-          activityTimeoutRef.current = null;
-        }
-      }
-    }
-  }, [messages, activityStatus]);
+  // DISABLED: Activity/presence tracking removed to reduce Cloud consumption
 
 
   const handleAddLabel = async (labelName: string) => {

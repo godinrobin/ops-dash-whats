@@ -304,11 +304,10 @@ export const ChatMessage = ({ message, allMessages = [], contact, onReply, onMes
       case 'pending':
         return <Loader2 className="h-3 w-3 text-muted-foreground animate-spin" />;
       case 'sent':
-        return <Check className="h-3 w-3 text-muted-foreground" />;
       case 'delivered':
-        return <CheckCheck className="h-3 w-3 text-muted-foreground" />;
       case 'read':
-        return <CheckCheck className="h-3 w-3 text-blue-500" />;
+        // Show single check for all sent statuses (delivery/read tracking disabled)
+        return <Check className="h-3 w-3 text-muted-foreground" />;
       case 'failed':
         return <XCircle className="h-3 w-3 text-destructive" />;
       default:
