@@ -95,6 +95,12 @@ export const useCreditsSystem = (): UseCreditsSystemReturn => {
         return;
       }
 
+      console.log('[CREDITS-SYSTEM] User flags loaded:', {
+        userId: user.id,
+        credits_system_test_user: data?.credits_system_test_user,
+        is_semi_full_member: data?.is_semi_full_member
+      });
+
       setIsTestUser(data?.credits_system_test_user ?? false);
       setIsSemiFullMember(data?.is_semi_full_member ?? false);
     } catch (error) {
@@ -178,11 +184,13 @@ export const useCreditsSystem = (): UseCreditsSystemReturn => {
   const isActive = (() => {
     // Test users always experience the credits system as active
     if (isTestUser) {
+      console.log('[CREDITS-SYSTEM] Active because: test user');
       return true;
     }
     
     // Semi-full members always experience the credits system as active
     if (isSemiFullMember) {
+      console.log('[CREDITS-SYSTEM] Active because: semi-full member');
       return true;
     }
 

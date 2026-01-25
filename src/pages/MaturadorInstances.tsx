@@ -257,6 +257,17 @@ export default function MaturadorInstances() {
       return;
     }
 
+    // DEBUG: Log all credit system states
+    console.log('[CREATE-INSTANCE] Credit System States:', {
+      isCreditsActive,
+      isAdminTesting,
+      isSimulatingPartial,
+      isSemiFullMember,
+      isFullMember,
+      creditsLoading,
+      balanceLoading
+    });
+
     if (!newInstanceName.trim()) {
       toast.error('Nome do número é obrigatório');
       return;
@@ -270,6 +281,8 @@ export default function MaturadorInstances() {
     // Check if credits system is active (including test modes and semi-full members)
     const isCreditsRequired = isCreditsActive || isAdminTesting || isSimulatingPartial || isSemiFullMember;
     
+    console.log('[CREATE-INSTANCE] Credits required?', isCreditsRequired);
+    
     if (isCreditsRequired) {
       // Determine effective full member status (partial simulation or semi-full = not full member for free tier)
       const effectiveFM = (isSimulatingPartial || isSemiFullMember) ? false : isFullMember;
@@ -279,28 +292,42 @@ export default function MaturadorInstances() {
         i.status === 'connected' || i.status === 'open'
       ).length;
       
+      console.log('[CREATE-INSTANCE] Effective Full Member:', effectiveFM, 'Connected:', connectedCount);
+      
       // Check if user has free slots available
       const hasFreeSlot = effectiveFM && connectedCount < FREE_INSTANCES_LIMIT;
       
+      console.log('[CREATE-INSTANCE] Has free slot?', hasFreeSlot);
+      
       if (!hasFreeSlot) {
         // Need to pay 6 credits for this instance
+        console.log('[CREATE-INSTANCE] Checking if can afford', INSTANCE_COST, 'credits');
+        
         if (!canAfford(INSTANCE_COST)) {
+          console.log('[CREATE-INSTANCE] Cannot afford, showing modal');
           setShowInsufficientCreditsModal(true);
           return;
         }
         
         // Deduct credits BEFORE creating instance
+        console.log('[CREATE-INSTANCE] Deducting credits...');
         const success = await deductCredits(
           INSTANCE_COST, 
           'instancia_whatsapp', 
           'Criação de instância WhatsApp (30 dias)'
         );
         
+        console.log('[CREATE-INSTANCE] Deduction result:', success);
+        
         if (!success) {
           toast.error('Erro ao processar pagamento de créditos');
           return;
         }
+      } else {
+        console.log('[CREATE-INSTANCE] Free slot available, skipping payment');
       }
+    } else {
+      console.log('[CREATE-INSTANCE] Credits not required, creating for free');
     }
 
     setCreating(true);

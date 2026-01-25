@@ -104,12 +104,24 @@ export const useCredits = (): UseCreditsReturn => {
     systemId: string,
     description: string
   ): Promise<boolean> => {
+    console.log('[DEDUCT-CREDITS] Called with:', { amount, systemId, description, userId: user?.id });
+    
     // Semi-full members and test users ALWAYS need to pay, regardless of global system status
     const requiresPayment = isActive || isSemiFullMember || isTestUser;
+    
+    console.log('[DEDUCT-CREDITS] Payment check:', {
+      isActive,
+      isSemiFullMember,
+      isTestUser,
+      requiresPayment,
+      hasUser: !!user
+    });
+    
     if (!user || !requiresPayment) return true; // If system is not active for this user, allow usage
     if (!canAfford(amount)) return false;
 
     try {
+      console.log('[DEDUCT-CREDITS] Calling RPC deduct_credits...');
       const { data, error } = await supabase.rpc('deduct_credits', {
         p_user_id: user.id,
         p_amount: amount,
@@ -121,6 +133,8 @@ export const useCredits = (): UseCreditsReturn => {
         console.error('Error deducting credits:', error);
         return false;
       }
+
+      console.log('[DEDUCT-CREDITS] RPC result:', data);
 
       if (data) {
         // Update local balance optimistically
