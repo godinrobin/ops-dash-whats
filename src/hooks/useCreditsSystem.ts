@@ -19,6 +19,8 @@ interface UseCreditsSystemReturn {
   isSimulatingPartial: boolean;
   /** Whether this is a test user for the credits system */
   isTestUser: boolean;
+  /** Whether this is a semi-full member (no free tier benefits) */
+  isSemiFullMember: boolean;
   /** Current system status */
   systemStatus: CreditsSystemStatus;
   /** When the system was activated for all users */
@@ -67,28 +69,31 @@ export const useCreditsSystem = (): UseCreditsSystemReturn => {
   const { isAdmin } = useAdminStatus();
   const [config, setConfig] = useState<CreditsSystemConfig>({ status: 'inactive', activated_at: null });
   const [isTestUser, setIsTestUser] = useState(false);
+  const [isSemiFullMember, setIsSemiFullMember] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Check if user is a test user for credits system
-  const checkTestUser = useCallback(async () => {
+  // Check if user is a test user or semi-full member for credits system
+  const checkUserFlags = useCallback(async () => {
     if (!user) {
       setIsTestUser(false);
+      setIsSemiFullMember(false);
       return;
     }
 
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('credits_system_test_user')
+        .select('credits_system_test_user, is_semi_full_member')
         .eq('id', user.id)
         .maybeSingle();
 
       if (error) {
-        console.error('Error checking test user status:', error);
+        console.error('Error checking user flags:', error);
         return;
       }
 
       setIsTestUser(data?.credits_system_test_user ?? false);
+      setIsSemiFullMember(data?.is_semi_full_member ?? false);
     } catch (error) {
       console.error('Error:', error);
     }
@@ -124,8 +129,8 @@ export const useCreditsSystem = (): UseCreditsSystemReturn => {
 
   useEffect(() => {
     fetchStatus();
-    checkTestUser();
-  }, [fetchStatus, checkTestUser]);
+    checkUserFlags();
+  }, [fetchStatus, checkUserFlags]);
 
   const updateStatus = useCallback(async (newStatus: CreditsSystemStatus): Promise<boolean> => {
     if (!isAdmin) return false;
@@ -165,6 +170,11 @@ export const useCreditsSystem = (): UseCreditsSystemReturn => {
     if (isTestUser) {
       return true;
     }
+    
+    // Semi-full members always experience the credits system as active
+    if (isSemiFullMember) {
+      return true;
+    }
 
     switch (config.status) {
       case 'inactive':
@@ -187,6 +197,7 @@ export const useCreditsSystem = (): UseCreditsSystemReturn => {
     isAdminTesting,
     isSimulatingPartial,
     isTestUser,
+    isSemiFullMember,
     systemStatus: config.status,
     activatedAt: config.activated_at,
     loading,

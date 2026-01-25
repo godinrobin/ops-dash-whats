@@ -8,19 +8,46 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, Key, LogIn, Loader2, Users } from "lucide-react";
 import { toast } from "sonner";
+
+type MemberType = 'full' | 'semi_full' | 'partial';
 
 interface UserData {
   id: string;
   email: string;
   username: string;
   is_full_member: boolean;
+  is_semi_full_member: boolean;
+  member_type: MemberType;
 }
 
 interface AdminUsersProps {
   onImpersonate: (userId: string, userEmail: string) => void;
 }
+
+const getMemberType = (isFullMember: boolean, isSemiFullMember: boolean): MemberType => {
+  if (isSemiFullMember) return 'semi_full';
+  if (isFullMember) return 'full';
+  return 'partial';
+};
+
+const getMemberLabel = (type: MemberType): string => {
+  switch (type) {
+    case 'full': return 'Membro Completo';
+    case 'semi_full': return 'Membro Semi-Full';
+    case 'partial': return 'Membro Parcial';
+  }
+};
+
+const getMemberBadgeVariant = (type: MemberType): "default" | "secondary" | "outline" => {
+  switch (type) {
+    case 'full': return 'default';
+    case 'semi_full': return 'outline';
+    case 'partial': return 'secondary';
+  }
+};
 
 export const AdminUsers = ({ onImpersonate }: AdminUsersProps) => {
   const { user } = useAuth();
@@ -31,6 +58,7 @@ export const AdminUsers = ({ onImpersonate }: AdminUsersProps) => {
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [resettingPassword, setResettingPassword] = useState(false);
+  const [updatingMember, setUpdatingMember] = useState<string | null>(null);
 
   useEffect(() => {
     loadUsers();
@@ -42,19 +70,26 @@ export const AdminUsers = ({ onImpersonate }: AdminUsersProps) => {
       const { data, error } = await supabase.functions.invoke("admin-get-all-data");
       if (error) throw error;
 
-      // Get profiles with is_full_member
+      // Get profiles with is_full_member and is_semi_full_member
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("id, username, is_full_member");
+        .select("id, username, is_full_member, is_semi_full_member");
 
       const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
 
-      const usersWithDetails = (data.users || []).map((u: any) => ({
-        id: u.id,
-        email: u.email,
-        username: profileMap.get(u.id)?.username || u.email,
-        is_full_member: profileMap.get(u.id)?.is_full_member ?? true,
-      }));
+      const usersWithDetails = (data.users || []).map((u: any) => {
+        const profile = profileMap.get(u.id);
+        const isFullMember = profile?.is_full_member ?? true;
+        const isSemiFullMember = profile?.is_semi_full_member ?? false;
+        return {
+          id: u.id,
+          email: u.email,
+          username: profile?.username || u.email,
+          is_full_member: isFullMember,
+          is_semi_full_member: isSemiFullMember,
+          member_type: getMemberType(isFullMember, isSemiFullMember),
+        };
+      });
 
       setUsers(usersWithDetails);
     } catch (err) {
@@ -102,6 +137,37 @@ export const AdminUsers = ({ onImpersonate }: AdminUsersProps) => {
       toast.error("Erro ao alterar senha: " + (err.message || "Erro desconhecido"));
     } finally {
       setResettingPassword(false);
+    }
+  };
+
+  const handleMemberTypeChange = async (userId: string, newType: MemberType) => {
+    setUpdatingMember(userId);
+    try {
+      const updates = {
+        is_full_member: newType === 'full',
+        is_semi_full_member: newType === 'semi_full',
+      };
+
+      const { error } = await supabase
+        .from("profiles")
+        .update(updates)
+        .eq("id", userId);
+
+      if (error) throw error;
+
+      // Update local state
+      setUsers(prev => prev.map(u => 
+        u.id === userId 
+          ? { ...u, ...updates, member_type: newType }
+          : u
+      ));
+
+      toast.success(`Tipo de membro alterado para ${getMemberLabel(newType)}`);
+    } catch (err: any) {
+      console.error("Error updating member type:", err);
+      toast.error("Erro ao alterar tipo de membro");
+    } finally {
+      setUpdatingMember(null);
     }
   };
 
@@ -185,7 +251,7 @@ export const AdminUsers = ({ onImpersonate }: AdminUsersProps) => {
                 <TableRow>
                   <TableHead>Email</TableHead>
                   <TableHead>Username</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>Tipo de Membro</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -202,9 +268,43 @@ export const AdminUsers = ({ onImpersonate }: AdminUsersProps) => {
                       <TableCell className="font-medium">{u.email}</TableCell>
                       <TableCell>{u.username}</TableCell>
                       <TableCell>
-                        <Badge variant={u.is_full_member ? "default" : "secondary"}>
-                          {u.is_full_member ? "Membro Completo" : "Parcial"}
-                        </Badge>
+                        <Select
+                          value={u.member_type}
+                          onValueChange={(value: MemberType) => handleMemberTypeChange(u.id, value)}
+                          disabled={updatingMember === u.id}
+                        >
+                          <SelectTrigger className="w-[180px]">
+                            {updatingMember === u.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <SelectValue>
+                                <Badge variant={getMemberBadgeVariant(u.member_type)}>
+                                  {getMemberLabel(u.member_type)}
+                                </Badge>
+                              </SelectValue>
+                            )}
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="full">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="default">Membro Completo</Badge>
+                                <span className="text-xs text-muted-foreground">Free tier + navegação</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="semi_full">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline">Membro Semi-Full</Badge>
+                                <span className="text-xs text-muted-foreground">Navegação, sem free tier</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="partial">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="secondary">Membro Parcial</Badge>
+                                <span className="text-xs text-muted-foreground">Acesso limitado</span>
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
