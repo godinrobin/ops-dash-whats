@@ -120,6 +120,45 @@ export default function WhatsAppEditorAddNumber() {
     fetchInstances();
   };
 
+  // Handle clicking "Novo Número" button - shows purchase confirmation for semi-full members
+  const handleNewNumberClick = () => {
+    console.log('[NEW-NUMBER-CLICK] Checking if need to show purchase modal:', {
+      isSemiFullMember,
+      isCreditsActive,
+      isAdminTesting,
+      isSimulatingPartial,
+      creditsLoading,
+      userFlagsLoaded: !creditsLoading
+    });
+
+    // Check if credits system is required for this user
+    const isCreditsRequired = isCreditsActive || isAdminTesting || isSimulatingPartial || isSemiFullMember;
+    
+    if (isCreditsRequired) {
+      // Determine effective full member status
+      const effectiveFM = (isSimulatingPartial || isSemiFullMember) ? false : isFullMember;
+      
+      // Count current connected instances
+      const connectedCount = instances.filter(i => 
+        i.status === 'connected' || i.status === 'open'
+      ).length;
+      
+      // Check if user has free slots available
+      const hasFreeSlot = effectiveFM && connectedCount < FREE_INSTANCES_LIMIT;
+      
+      console.log('[NEW-NUMBER-CLICK] Payment check:', { effectiveFM, connectedCount, hasFreeSlot });
+      
+      if (!hasFreeSlot) {
+        // Need to pay - show purchase confirmation FIRST
+        setShowConfirmPurchaseModal(true);
+        return;
+      }
+    }
+
+    // Free instance - open the regular creation modal
+    setCreateModalOpen(true);
+  };
+
   const handleCreateInstance = () => {
     if (!newInstanceName.trim()) {
       toast.error('Digite um nome para a instância');
@@ -505,7 +544,7 @@ export default function WhatsAppEditorAddNumber() {
                 <RefreshCw className={cn("h-4 w-4 mr-2", refreshing && "animate-spin")} />
                 Atualizar
               </Button>
-              <Button onClick={() => setCreateModalOpen(true)}>
+              <Button onClick={handleNewNumberClick}>
                 <Plus className="h-4 w-4 mr-2" />
                 Novo Número
               </Button>
@@ -520,7 +559,7 @@ export default function WhatsAppEditorAddNumber() {
               <p className="text-muted-foreground mb-4">
                 Clique no botão acima para adicionar seu primeiro número
               </p>
-              <Button onClick={() => setCreateModalOpen(true)}>
+              <Button onClick={handleNewNumberClick}>
                 <Plus className="h-4 w-4 mr-2" />
                 Adicionar Número
               </Button>
@@ -655,25 +694,35 @@ export default function WhatsAppEditorAddNumber() {
         </DialogContent>
       </Dialog>
 
-      {/* Confirm Purchase Modal */}
+      {/* Confirm Purchase Modal (for semi-full members) */}
       <Dialog open={showConfirmPurchaseModal} onOpenChange={setShowConfirmPurchaseModal}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Smartphone className="h-5 w-5 text-primary" />
-              Confirmar Criação de Instância
+              Nova Instância WhatsApp
             </DialogTitle>
             <DialogDescription>
-              Esta ação irá consumir créditos do seu saldo.
+              Crie uma nova instância para conectar seu WhatsApp. Esta ação consumirá créditos.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
+            {/* Instance Name Input */}
+            <div className="space-y-2">
+              <Label>Nome da Instância</Label>
+              <Input
+                value={newInstanceName}
+                onChange={(e) => setNewInstanceName(e.target.value)}
+                placeholder="Ex: meu_numero_principal"
+              />
+              <p className="text-xs text-muted-foreground">
+                Use apenas letras, números e underscore
+              </p>
+            </div>
+
+            {/* Cost Summary */}
             <div className="p-4 rounded-lg bg-muted/50 space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Instância:</span>
-                <span className="font-medium">{newInstanceName}</span>
-              </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">Período:</span>
                 <span className="font-medium">30 dias</span>
@@ -684,6 +733,7 @@ export default function WhatsAppEditorAddNumber() {
               </div>
             </div>
 
+            {/* Balance Display */}
             <div className="flex items-center gap-2 p-3 rounded-lg bg-accent/10 border border-accent/20">
               <Wallet className="h-4 w-4 text-accent" />
               <div className="flex-1">
@@ -699,14 +749,17 @@ export default function WhatsAppEditorAddNumber() {
           <DialogFooter className="gap-2">
             <Button 
               variant="outline" 
-              onClick={() => setShowConfirmPurchaseModal(false)}
+              onClick={() => {
+                setShowConfirmPurchaseModal(false);
+                setNewInstanceName('');
+              }}
               disabled={creating}
             >
               Cancelar
             </Button>
             <Button 
               onClick={handleConfirmCreate} 
-              disabled={creating || balance < INSTANCE_COST}
+              disabled={creating || balance < INSTANCE_COST || !newInstanceName.trim()}
               className="bg-primary"
             >
               {creating ? (
@@ -717,7 +770,7 @@ export default function WhatsAppEditorAddNumber() {
               ) : (
                 <>
                   <CheckCircle2 className="h-4 w-4 mr-2" />
-                  Confirmar e Criar
+                  Confirmar e Criar ({INSTANCE_COST} créditos)
                 </>
               )}
             </Button>
