@@ -17,6 +17,8 @@ interface UseCreditsSystemReturn {
   isAdminTesting: boolean;
   /** Whether admin is simulating as partial member */
   isSimulatingPartial: boolean;
+  /** Whether this is a test user for the credits system */
+  isTestUser: boolean;
   /** Current system status */
   systemStatus: CreditsSystemStatus;
   /** When the system was activated for all users */
@@ -64,7 +66,33 @@ export const useCreditsSystem = (): UseCreditsSystemReturn => {
   const { user } = useAuth();
   const { isAdmin } = useAdminStatus();
   const [config, setConfig] = useState<CreditsSystemConfig>({ status: 'inactive', activated_at: null });
+  const [isTestUser, setIsTestUser] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Check if user is a test user for credits system
+  const checkTestUser = useCallback(async () => {
+    if (!user) {
+      setIsTestUser(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('credits_system_test_user')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error checking test user status:', error);
+        return;
+      }
+
+      setIsTestUser(data?.credits_system_test_user ?? false);
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  }, [user]);
 
   const fetchStatus = useCallback(async (forceRefresh = false) => {
     if (!forceRefresh) {
@@ -96,7 +124,8 @@ export const useCreditsSystem = (): UseCreditsSystemReturn => {
 
   useEffect(() => {
     fetchStatus();
-  }, [fetchStatus]);
+    checkTestUser();
+  }, [fetchStatus, checkTestUser]);
 
   const updateStatus = useCallback(async (newStatus: CreditsSystemStatus): Promise<boolean> => {
     if (!isAdmin) return false;
@@ -132,6 +161,11 @@ export const useCreditsSystem = (): UseCreditsSystemReturn => {
 
   // Determine if credits system is active for the current user
   const isActive = (() => {
+    // Test users always experience the credits system as active
+    if (isTestUser) {
+      return true;
+    }
+
     switch (config.status) {
       case 'inactive':
         return false;
@@ -152,6 +186,7 @@ export const useCreditsSystem = (): UseCreditsSystemReturn => {
     isActive,
     isAdminTesting,
     isSimulatingPartial,
+    isTestUser,
     systemStatus: config.status,
     activatedAt: config.activated_at,
     loading,
