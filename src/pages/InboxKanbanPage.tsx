@@ -666,43 +666,82 @@ export default function InboxKanbanPage() {
     return Array.from(combined);
   }, [customTags, contacts]);
 
-  // Initialize column order when allTags changes
+  // Initialize column order when allTags changes - prioritize DB, then localStorage
   useEffect(() => {
-    const predefinedNames = predefinedLabels.map(l => l.name);
-    const customNames = customTags.map(t => t.name);
-    const otherTags = allTags.filter(t => 
-      !predefinedNames.includes(t) && !customNames.includes(t) && t !== 'Sem etiqueta'
-    );
-    
-    // Try to load saved order
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY_COLUMN_ORDER);
-      if (stored) {
-        const savedOrder = JSON.parse(stored) as string[];
-        // Merge saved order with current tags (keep order for existing, append new ones)
-        const allCurrentTags = ['Sem etiqueta', ...predefinedNames, ...customNames, ...otherTags];
-        const validSaved = savedOrder.filter(t => allCurrentTags.includes(t));
-        const newTags = allCurrentTags.filter(t => !validSaved.includes(t));
-        
-        // Ensure "Sem etiqueta" is always first
-        const finalOrder = validSaved.filter(t => t !== 'Sem etiqueta');
-        setColumnOrder(['Sem etiqueta', ...finalOrder, ...newTags.filter(t => t !== 'Sem etiqueta')]);
-        return;
+    const initColumnOrder = async () => {
+      const predefinedNames = predefinedLabels.map(l => l.name);
+      const customNames = customTags.map(t => t.name);
+      const otherTags = allTags.filter(t => 
+        !predefinedNames.includes(t) && !customNames.includes(t) && t !== 'Sem etiqueta'
+      );
+      
+      const allCurrentTags = ['Sem etiqueta', ...predefinedNames, ...customNames, ...otherTags];
+      
+      // Try to load from database first
+      if (userId) {
+        try {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('kanban_column_order')
+            .eq('id', userId)
+            .single();
+          
+          if (profile?.kanban_column_order && Array.isArray(profile.kanban_column_order)) {
+            const savedOrder = profile.kanban_column_order as string[];
+            const validSaved = savedOrder.filter(t => allCurrentTags.includes(t));
+            const newTags = allCurrentTags.filter(t => !validSaved.includes(t));
+            
+            const finalOrder = validSaved.filter(t => t !== 'Sem etiqueta');
+            setColumnOrder(['Sem etiqueta', ...finalOrder, ...newTags.filter(t => t !== 'Sem etiqueta')]);
+            return;
+          }
+        } catch {
+          // Fall through to localStorage
+        }
       }
-    } catch {
-      // Ignore parse errors
-    }
+      
+      // Try to load from localStorage as fallback
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY_COLUMN_ORDER);
+        if (stored) {
+          const savedOrder = JSON.parse(stored) as string[];
+          const validSaved = savedOrder.filter(t => allCurrentTags.includes(t));
+          const newTags = allCurrentTags.filter(t => !validSaved.includes(t));
+          
+          const finalOrder = validSaved.filter(t => t !== 'Sem etiqueta');
+          setColumnOrder(['Sem etiqueta', ...finalOrder, ...newTags.filter(t => t !== 'Sem etiqueta')]);
+          return;
+        }
+      } catch {
+        // Ignore parse errors
+      }
+      
+      // Default order: "Sem etiqueta" first, then predefined, then custom, then others
+      setColumnOrder(['Sem etiqueta', ...predefinedNames, ...customNames, ...otherTags]);
+    };
     
-    // Default order: "Sem etiqueta" first, then predefined, then custom, then others
-    setColumnOrder(['Sem etiqueta', ...predefinedNames, ...customNames, ...otherTags]);
-  }, [allTags, customTags]);
+    initColumnOrder();
+  }, [allTags, customTags, userId]);
 
-  // Save column order to localStorage
+  // Save column order to localStorage AND to database for persistence
   useEffect(() => {
-    if (columnOrder.length > 0) {
+    if (columnOrder.length > 0 && userId) {
       localStorage.setItem(STORAGE_KEY_COLUMN_ORDER, JSON.stringify(columnOrder));
+      
+      // Also save to database for cross-session persistence
+      const saveToDb = async () => {
+        try {
+          await supabase
+            .from('profiles')
+            .update({ kanban_column_order: columnOrder })
+            .eq('id', userId);
+        } catch (error) {
+          console.error('Error saving column order to DB:', error);
+        }
+      };
+      saveToDb();
     }
-  }, [columnOrder]);
+  }, [columnOrder, userId]);
 
   // Filter contacts by search and date
   const filteredContacts = useMemo(() => {
@@ -759,7 +798,7 @@ export default function InboxKanbanPage() {
     return filtered;
   }, [contacts, searchQuery, dateFilter]);
 
-  // Group contacts by their first tag (or "Sem etiqueta")
+  // Group contacts by their LAST tag (most recently added) or "Sem etiqueta"
   const contactsByTag = useMemo(() => {
     const grouped: Record<string, KanbanContact[]> = {};
     
@@ -769,17 +808,17 @@ export default function InboxKanbanPage() {
     });
     grouped['Sem etiqueta'] = [];
 
-    // Assign contacts to their first tag column
+    // Assign contacts to their LAST tag's column (most recently added)
     filteredContacts.forEach(contact => {
       if (contact.tags.length === 0) {
         grouped['Sem etiqueta'].push(contact);
       } else {
-        // Place in the first tag's column
-        const firstTag = contact.tags[0];
-        if (!grouped[firstTag]) {
-          grouped[firstTag] = [];
+        // Place in the LAST tag's column (most recently added tag)
+        const lastTag = contact.tags[contact.tags.length - 1];
+        if (!grouped[lastTag]) {
+          grouped[lastTag] = [];
         }
-        grouped[firstTag].push(contact);
+        grouped[lastTag].push(contact);
       }
     });
 
@@ -848,16 +887,19 @@ export default function InboxKanbanPage() {
     if (!targetTag) return;
 
     // If dropping in the same column, do nothing
-    const currentTag = activeContact.tags[0] || 'Sem etiqueta';
+    const currentTag = activeContact.tags.length > 0 
+      ? activeContact.tags[activeContact.tags.length - 1] 
+      : 'Sem etiqueta';
     if (currentTag === targetTag) return;
 
-    // Update tags
+    // Update tags - add target tag at the END so it becomes the "current" column
     let newTags: string[];
     if (targetTag === 'Sem etiqueta') {
       newTags = [];
     } else {
-      // Replace first tag with the target tag, keep other tags
-      newTags = [targetTag, ...activeContact.tags.filter(t => t !== currentTag && t !== targetTag)];
+      // Remove target tag if exists (to avoid duplicates), then add it at the end
+      const filteredTags = activeContact.tags.filter(t => t !== targetTag);
+      newTags = [...filteredTags, targetTag];
     }
 
     await updateContactTags(activeContact.id, newTags);

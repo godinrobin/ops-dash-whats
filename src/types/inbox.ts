@@ -47,7 +47,8 @@ export interface InboxFlow {
   description: string | null;
   nodes: FlowNode[];
   edges: FlowEdge[];
-  trigger_type: 'keyword' | 'all' | 'schedule' | 'sale';
+  trigger_type: 'keyword' | 'all' | 'schedule' | 'sale' | 'tag';
+  trigger_tags?: string[];
   trigger_keywords: string[];
   assigned_instances: string[];
   is_active: boolean;
@@ -126,4 +127,5 @@ export type NodeType =
   | 'tag'
   | 'randomizer'
   | 'notifyAdmin'
+  | 'followUp'
   | 'end';

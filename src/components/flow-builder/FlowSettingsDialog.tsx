@@ -47,8 +47,9 @@ export const FlowSettingsDialog = ({
 }: FlowSettingsDialogProps) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [triggerType, setTriggerType] = useState<'keyword' | 'all' | 'schedule' | 'sale'>('keyword');
+  const [triggerType, setTriggerType] = useState<'keyword' | 'all' | 'schedule' | 'sale' | 'tag'>('keyword');
   const [triggerKeywords, setTriggerKeywords] = useState('');
+  const [triggerTags, setTriggerTags] = useState('');
   const [keywordMatchType, setKeywordMatchType] = useState<'exact' | 'contains' | 'not_contains'>('exact');
   const [assignedInstances, setAssignedInstances] = useState<string[]>([]);
   const [pauseOnMedia, setPauseOnMedia] = useState(false);
@@ -68,6 +69,7 @@ export const FlowSettingsDialog = ({
       setDescription(flow.description || '');
       setTriggerType(flow.trigger_type || 'keyword');
       setTriggerKeywords(flow.trigger_keywords?.join(', ') || '');
+      setTriggerTags((flow as any).trigger_tags?.join(', ') || '');
       setKeywordMatchType((flow as any).keyword_match_type || 'exact');
       setAssignedInstances(flow.assigned_instances || []);
       setPauseOnMedia(flow.pause_on_media || false);
@@ -105,11 +107,17 @@ export const FlowSettingsDialog = ({
       .map((k) => k.trim().toLowerCase())
       .filter((k) => k.length > 0);
 
-    const updates: Partial<InboxFlow> & { keyword_match_type?: string } = {
+    const tags = triggerTags
+      .split(',')
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
+
+    const updates: Partial<InboxFlow> & { keyword_match_type?: string; trigger_tags?: string[] } = {
       name: name.trim(),
       description: description.trim() || null,
       trigger_type: triggerType,
       trigger_keywords: keywords,
+      trigger_tags: tags,
       keyword_match_type: keywordMatchType,
       assigned_instances: assignedInstances,
       pause_on_media: pauseOnMedia,
@@ -120,7 +128,7 @@ export const FlowSettingsDialog = ({
       reply_to_last_message: replyToLastMessage,
       reply_mode: replyToLastMessage ? replyMode : 'all',
       reply_interval: replyToLastMessage && replyMode === 'interval' ? replyInterval : 3,
-      pause_other_flows: triggerType === 'sale' ? pauseOtherFlows : false,
+      pause_other_flows: (triggerType === 'sale' || triggerType === 'tag') ? pauseOtherFlows : false,
     };
 
     const result = await onSave(flow.id, updates);
@@ -173,7 +181,7 @@ export const FlowSettingsDialog = ({
           {/* Tipo de Gatilho */}
           <div className="space-y-2">
             <Label>Tipo de Gatilho</Label>
-            <Select value={triggerType} onValueChange={(v) => setTriggerType(v as 'keyword' | 'all' | 'schedule' | 'sale')}>
+            <Select value={triggerType} onValueChange={(v) => setTriggerType(v as 'keyword' | 'all' | 'schedule' | 'sale' | 'tag')}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -181,12 +189,18 @@ export const FlowSettingsDialog = ({
                 <SelectItem value="keyword">Palavra-chave</SelectItem>
                 <SelectItem value="all">Todas as mensagens</SelectItem>
                 <SelectItem value="sale">Venda</SelectItem>
+                <SelectItem value="tag">Etiqueta</SelectItem>
               </SelectContent>
             </Select>
+            {triggerType === 'tag' && (
+              <p className="text-xs text-muted-foreground">
+                O fluxo será acionado automaticamente quando uma das etiquetas for adicionada ao contato.
+              </p>
+            )}
           </div>
 
-          {/* Pausar outros fluxos - only for sale trigger */}
-          {triggerType === 'sale' && (
+          {/* Pausar outros fluxos - for sale and tag triggers */}
+          {(triggerType === 'sale' || triggerType === 'tag') && (
             <div className="flex items-center justify-between p-3 border rounded-md bg-amber-500/10 border-amber-500/30">
               <div>
                 <Label className="flex items-center gap-2">
@@ -194,7 +208,7 @@ export const FlowSettingsDialog = ({
                   Pausar outros fluxos
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Ao ativar, pausa todos os outros fluxos ativos do contato para priorizar este fluxo de venda
+                  Ao ativar, pausa todos os outros fluxos ativos do contato para priorizar este fluxo
                 </p>
               </div>
               <Switch
@@ -206,6 +220,22 @@ export const FlowSettingsDialog = ({
                     : 'data-[state=unchecked]:bg-red-500'
                 }
               />
+            </div>
+          )}
+
+          {/* Etiquetas gatilho */}
+          {triggerType === 'tag' && (
+            <div className="space-y-2">
+              <Label>Etiquetas que Acionam o Fluxo</Label>
+              <Textarea
+                value={triggerTags}
+                onChange={(e) => setTriggerTags(e.target.value)}
+                placeholder="Lead, VIP, Interessado (separadas por vírgula)"
+                rows={2}
+              />
+              <p className="text-xs text-muted-foreground">
+                Separe as etiquetas por vírgula. Quando qualquer uma dessas etiquetas for adicionada ao contato, o fluxo será iniciado.
+              </p>
             </div>
           )}
 
