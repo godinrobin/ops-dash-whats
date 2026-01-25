@@ -13,6 +13,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Copy, Wand2, MessageSquare, Mic, Image, Video, FileText, ChevronDown, ChevronUp, Lightbulb, Edit, Plus, Save, Trash2, FolderOpen, Sparkles, Loader2, Send } from "lucide-react";
 import { TicketTagInput } from "@/components/TicketTagInput";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
+import { useCreditsSystem } from "@/hooks/useCreditsSystem";
+import { useCredits } from "@/hooks/useCredits";
+import { InsufficientCreditsModal } from "@/components/credits/InsufficientCreditsModal";
 
 interface FunnelMessage {
   type: "text" | "audio" | "image" | "video" | "ebook";
@@ -92,6 +95,16 @@ const WhatsAppFunnelCreator = () => {
   useActivityTracker("page_visit", "Criador de Funil");
   const { user } = useAuth();
   const { toast } = useToast();
+  
+  // Credits system
+  const { isActive: isCreditsActive, isSemiFullMember } = useCreditsSystem();
+  const { deductCredits, canAfford, balance } = useCredits();
+  const CREDIT_COST_GENERATION = 0.10;
+  const CREDIT_COST_EDIT = 0.05;
+  const SYSTEM_ID_GENERATION = 'gerador_funil';
+  const SYSTEM_ID_EDIT = 'edicao_funil_ia';
+  const [showInsufficientCredits, setShowInsufficientCredits] = useState(false);
+  
   const [isLoading, setIsLoading] = useState(false);
   const [generatedFunnel, setGeneratedFunnel] = useState<GeneratedFunnel | null>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
@@ -196,6 +209,27 @@ const WhatsAppFunnelCreator = () => {
   const generateFunnel = async () => {
     setIsLoading(true);
     setShowSiteRecommendation(false);
+
+    // Check credits if system is active for this user
+    if (isCreditsActive || isSemiFullMember) {
+      if (!canAfford(CREDIT_COST_GENERATION)) {
+        setShowInsufficientCredits(true);
+        setIsLoading(false);
+        return;
+      }
+      
+      const success = await deductCredits(
+        CREDIT_COST_GENERATION,
+        SYSTEM_ID_GENERATION,
+        'Geração de funil WhatsApp'
+      );
+      
+      if (!success) {
+        setShowInsufficientCredits(true);
+        setIsLoading(false);
+        return;
+      }
+    }
 
     try {
       const { data, error } = await supabase.functions.invoke("generate-whatsapp-funnel", {
@@ -418,6 +452,28 @@ const WhatsAppFunnelCreator = () => {
     if (!aiEditRequest.trim() || !generatedFunnel) return;
 
     setIsEditingWithAI(true);
+    
+    // Check credits if system is active for this user
+    if (isCreditsActive || isSemiFullMember) {
+      if (!canAfford(CREDIT_COST_EDIT)) {
+        setShowInsufficientCredits(true);
+        setIsEditingWithAI(false);
+        return;
+      }
+      
+      const success = await deductCredits(
+        CREDIT_COST_EDIT,
+        SYSTEM_ID_EDIT,
+        'Edição de funil com IA'
+      );
+      
+      if (!success) {
+        setShowInsufficientCredits(true);
+        setIsEditingWithAI(false);
+        return;
+      }
+    }
+    
     try {
       const productContext = formData.product === "Outro" 
         ? formData.customProduct 
@@ -1213,6 +1269,14 @@ const WhatsAppFunnelCreator = () => {
       <footer className="mt-16 text-center text-xs text-muted-foreground/50 pb-4">
         Criado por <a href="https://instagram.com/joaolucassps" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground transition-colors">@joaolucassps</a>
       </footer>
+      
+      {/* Insufficient Credits Modal */}
+      <InsufficientCreditsModal
+        open={showInsufficientCredits}
+        onOpenChange={setShowInsufficientCredits}
+        requiredCredits={CREDIT_COST_GENERATION}
+        systemName="Gerador de Funil WhatsApp"
+      />
     </div>
   );
 };
