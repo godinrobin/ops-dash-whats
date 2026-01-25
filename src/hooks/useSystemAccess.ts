@@ -45,7 +45,7 @@ interface UseSystemAccessReturn {
 
 export const useSystemAccess = (): UseSystemAccessReturn => {
   const { user } = useAuth();
-  const { isActive, isSimulatingPartial } = useCreditsSystem();
+  const { isActive, isSimulatingPartial, isSemiFullMember, isTestUser } = useCreditsSystem();
   const { isFullMember } = useAccessLevel();
   const { deductCredits, canAfford, refresh: refreshCredits } = useCredits();
   const [accesses, setAccesses] = useState<SystemAccess[]>([]);
@@ -107,6 +107,17 @@ export const useSystemAccess = (): UseSystemAccessReturn => {
   }, [pricing]);
 
   const hasAccess = useCallback((systemId: string): boolean => {
+    // Semi-full members and test users ALWAYS need purchased access (no free tier)
+    if (isSemiFullMember || isTestUser) {
+      const access = accesses.find(a => a.system_id === systemId);
+      if (!access) return false;
+      if (access.access_type === 'lifetime') return true;
+      if (access.expires_at) {
+        return new Date(access.expires_at) > new Date();
+      }
+      return false;
+    }
+
     // If credits system is not active, full members have access to everything
     if (!isActive) {
       return isFullMember ?? true;
@@ -133,7 +144,7 @@ export const useSystemAccess = (): UseSystemAccessReturn => {
     }
 
     return false;
-  }, [isActive, isFullMember, isSimulatingPartial, accesses]);
+  }, [isActive, isFullMember, isSimulatingPartial, isSemiFullMember, isTestUser, accesses]);
 
   const daysRemaining = useCallback((systemId: string): number | null => {
     const access = accesses.find(a => a.system_id === systemId);
