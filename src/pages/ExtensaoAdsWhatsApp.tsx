@@ -35,8 +35,9 @@ const ExtensaoAdsWhatsApp = () => {
       }
 
       try {
+        // Use raw query since types might not be updated yet
         const { data, error } = await supabase
-          .from('system_access')
+          .from('system_access' as any)
           .select('id')
           .eq('user_id', user.id)
           .eq('system_id', SYSTEM_ID)
@@ -79,8 +80,8 @@ const ExtensaoAdsWhatsApp = () => {
           return;
         }
 
-        // Register access
-        await supabase.from('system_access').insert({
+        // Register access (use raw query since types might not be updated yet)
+        await (supabase.from('system_access' as any) as any).insert({
           user_id: user?.id,
           system_id: SYSTEM_ID,
         });
