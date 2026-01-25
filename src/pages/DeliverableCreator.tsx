@@ -17,6 +17,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { useDeliverablePromptLimit } from "@/hooks/useDeliverablePromptLimit";
 import { Progress } from "@/components/ui/progress";
+import { useCreditsSystem } from "@/hooks/useCreditsSystem";
+import { useCredits } from "@/hooks/useCredits";
+import { InsufficientCreditsModal } from "@/components/credits/InsufficientCreditsModal";
 
 export interface DeliverableConfig {
   templateId: string;
@@ -126,6 +129,13 @@ const DeliverableCreator = () => {
     hasReachedLimit, 
     incrementPrompt 
   } = useDeliverablePromptLimit(user?.id);
+  
+  // Credits system
+  const { isActive: isCreditsActive, isSemiFullMember } = useCreditsSystem();
+  const { deductCredits, canAfford, balance } = useCredits();
+  const CREDIT_COST = 0.10;
+  const SYSTEM_ID = 'criador_entregavel';
+  const [showInsufficientCredits, setShowInsufficientCredits] = useState(false);
   
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [step, setStep] = useState<ConversationStep>("template_selection");
@@ -980,7 +990,25 @@ const DeliverableCreator = () => {
   };
 
   const startGeneration = async (finalConfig: DeliverableConfig) => {
-    // First generation is free - no prompt counting
+    // Check credits for semi-full members (they pay from first use, no free tier)
+    if (isCreditsActive || isSemiFullMember) {
+      if (!canAfford(CREDIT_COST)) {
+        setShowInsufficientCredits(true);
+        return;
+      }
+      
+      const success = await deductCredits(
+        CREDIT_COST,
+        SYSTEM_ID,
+        'Geração de entregável'
+      );
+      
+      if (!success) {
+        setShowInsufficientCredits(true);
+        return;
+      }
+    }
+    
     setStep("generating");
     setIsGenerating(true);
     
@@ -1053,16 +1081,35 @@ ${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as se
   };
 
   const generateWithEdit = async (editRequest: string) => {
-    // Check prompt limit before editing
-    if (hasReachedLimit) {
-      toast.error("Você atingiu o limite diário de 30 prompts. Tente novamente amanhã!");
-      return;
-    }
-    
-    const canProceed = await incrementPrompt();
-    if (!canProceed) {
-      toast.error("Limite de prompts atingido para hoje!");
-      return;
+    // Check credits for semi-full members (they pay from first use)
+    if (isCreditsActive || isSemiFullMember) {
+      if (!canAfford(CREDIT_COST)) {
+        setShowInsufficientCredits(true);
+        return;
+      }
+      
+      const success = await deductCredits(
+        CREDIT_COST,
+        SYSTEM_ID,
+        'Edição de entregável'
+      );
+      
+      if (!success) {
+        setShowInsufficientCredits(true);
+        return;
+      }
+    } else {
+      // For non-credits users, check prompt limit
+      if (hasReachedLimit) {
+        toast.error("Você atingiu o limite diário de 30 prompts. Tente novamente amanhã!");
+        return;
+      }
+      
+      const canProceed = await incrementPrompt();
+      if (!canProceed) {
+        toast.error("Limite de prompts atingido para hoje!");
+        return;
+      }
     }
     
     setIsGenerating(true);
@@ -1410,6 +1457,14 @@ ${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as se
           />
         </div>
       </div>
+      
+      {/* Insufficient Credits Modal */}
+      <InsufficientCreditsModal
+        open={showInsufficientCredits}
+        onOpenChange={setShowInsufficientCredits}
+        requiredCredits={CREDIT_COST}
+        systemName="Criador de Entregáveis"
+      />
     </SystemLayout>
   );
 };
