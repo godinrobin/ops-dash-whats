@@ -2978,6 +2978,7 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
+          credits_system_test_user: boolean | null
           disable_pago_label: boolean | null
           fake_receipt_detection_enabled: boolean | null
           fb_auto_event_type: string | null
@@ -2999,6 +3000,7 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          credits_system_test_user?: boolean | null
           disable_pago_label?: boolean | null
           fake_receipt_detection_enabled?: boolean | null
           fb_auto_event_type?: string | null
@@ -3020,6 +3022,7 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           created_at?: string
+          credits_system_test_user?: boolean | null
           disable_pago_label?: boolean | null
           fake_receipt_detection_enabled?: boolean | null
           fb_auto_event_type?: string | null
