@@ -98,11 +98,11 @@ export const useAccessLevel = () => {
     }
 
     try {
-      // Fetch membership status and admin role in parallel
+      // Fetch membership status, admin role, and test user flag in parallel
       const [profileResult, roleResult] = await Promise.all([
         supabase
           .from("profiles")
-          .select("is_full_member")
+          .select("is_full_member, credits_system_test_user")
           .eq("id", user.id)
           .maybeSingle(),
         supabase
@@ -113,8 +113,12 @@ export const useAccessLevel = () => {
           .maybeSingle()
       ]);
 
-      // Set membership status - default to true if no profile found
-      const memberStatus = profileResult.data?.is_full_member ?? true;
+      // Credits test users should be treated as full members for navigation
+      // but the credits system will still apply usage restrictions
+      const isCreditsTestUser = profileResult.data?.credits_system_test_user ?? false;
+      const baseMemberStatus = profileResult.data?.is_full_member ?? true;
+      // If test user, grant full navigation access (no locks in sidebar)
+      const memberStatus = isCreditsTestUser ? true : baseMemberStatus;
       const adminStatus = !!roleResult.data;
 
       setIsFullMember(memberStatus);
