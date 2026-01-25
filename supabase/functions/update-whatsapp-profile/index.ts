@@ -90,6 +90,8 @@ Deno.serve(async (req) => {
       try {
         // Update name if provided
         if (name !== undefined && name !== null) {
+          console.log(`Updating name for ${instance.instance_name} to: "${name}" (length: ${name.length})`)
+          
           const nameResponse = await fetch(`${UAZAPI_BASE_URL}/profile/name`, {
             method: 'POST',
             headers: {
@@ -100,6 +102,8 @@ Deno.serve(async (req) => {
           })
 
           const raw = await nameResponse.text()
+          console.log(`UazAPI /profile/name response for ${instance.instance_name}: status=${nameResponse.status}, body=${raw.substring(0, 500)}`)
+          
           let parsed: any = null
           try {
             parsed = raw ? JSON.parse(raw) : null
@@ -114,6 +118,8 @@ Deno.serve(async (req) => {
             results.push({ id: instance.id, success: false, error: `Nome: ${message}` })
             continue
           }
+          
+          console.log(`Name update request accepted for ${instance.instance_name}`)
         }
 
         // Update image if provided
