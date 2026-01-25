@@ -104,7 +104,7 @@ export default function SiteCloner() {
   const { toast } = useToast();
   
   // Credits system
-  const { isActive: isCreditsActive } = useCreditsSystem();
+  const { isActive: isCreditsActive, isSemiFullMember } = useCreditsSystem();
   const { deductCredits, canAfford } = useCredits();
   const [showInsufficientCredits, setShowInsufficientCredits] = useState(false);
 
@@ -141,8 +141,8 @@ export default function SiteCloner() {
       return;
     }
 
-    // Check credits if system is active
-    if (isCreditsActive) {
+    // Check credits if system is active (including semi-full members)
+    if (isCreditsActive || isSemiFullMember) {
       if (!canAfford(CREDIT_COST)) {
         setShowInsufficientCredits(true);
         return;

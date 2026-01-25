@@ -118,7 +118,7 @@ export default function VideoVariationGenerator() {
   const [showInsufficientCredits, setShowInsufficientCredits] = useState(false);
   
   // Credits system
-  const { isActive: isCreditsActive } = useCreditsSystem();
+  const { isActive: isCreditsActive, isSemiFullMember } = useCreditsSystem();
   const { deductCredits, canAfford, balance } = useCredits();
   const CREDIT_COST_PER_VARIATION = 0.10;
   const SYSTEM_ID = 'gerador_variacoes';
@@ -850,6 +850,39 @@ export default function VideoVariationGenerator() {
     if (missingAudioUploads.length > 0) {
       toast.error('Alguns áudios ainda estão sendo enviados. Aguarde.');
       return;
+    }
+
+    // Calculate total variations to determine credit cost
+    const hasAudioClips = audioClips.length > 0;
+    let totalVariations = 0;
+    if (hasAudioClips) {
+      totalVariations = hookVideos.length * bodyVideos.length * ctaVideos.length * audioClips.length;
+    } else {
+      totalVariations = hookVideos.length * bodyVideos.length * ctaVideos.length;
+    }
+    // Apply custom variation limit if set
+    if (customVariationCount !== null) {
+      totalVariations = Math.min(totalVariations, customVariationCount);
+    }
+    const totalCreditCost = totalVariations * CREDIT_COST_PER_VARIATION;
+
+    // Credit system check (active for credits system users and semi-full members)
+    if (isCreditsActive || isSemiFullMember) {
+      if (!canAfford(totalCreditCost)) {
+        setShowInsufficientCredits(true);
+        return;
+      }
+      
+      const success = await deductCredits(
+        totalCreditCost,
+        SYSTEM_ID,
+        `Geração de ${totalVariations} variações de vídeo`
+      );
+      
+      if (!success) {
+        setShowInsufficientCredits(true);
+        return;
+      }
     }
 
     setIsGenerating(true);

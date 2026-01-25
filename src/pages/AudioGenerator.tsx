@@ -69,7 +69,7 @@ const AudioGenerator = () => {
   const { canGenerate, formattedTime, startCooldown, isAdmin, generationsLeft } = useMultiGenerationCooldown("audio_generations", 3);
   
   // Credits system hooks
-  const { isActive: isCreditsActive } = useCreditsSystem();
+  const { isActive: isCreditsActive, isSemiFullMember } = useCreditsSystem();
   const { deductCredits, canAfford } = useCredits();
   const { getUsage, incrementUsage, hasFreeTier, getRemainingFree } = useFreeTierUsage();
   const { isFullMember } = useAccessLevel();
@@ -368,8 +368,8 @@ const AudioGenerator = () => {
       return;
     }
 
-    // Credit system check
-    if (isCreditsActive) {
+    // Credit system check (active for credits system users and semi-full members)
+    if (isCreditsActive || isSemiFullMember) {
       const usage = getUsage(SYSTEM_ID);
       const isInFreeTier = hasFreeTier(SYSTEM_ID) && usage.canUse;
       

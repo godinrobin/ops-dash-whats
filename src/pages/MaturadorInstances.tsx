@@ -79,7 +79,7 @@ export default function MaturadorInstances() {
   const { registerInstance, freeInstancesRemaining } = useInstanceSubscription();
   
   // Credits system
-  const { isActive: isCreditsActive, isAdminTesting, isSimulatingPartial } = useCreditsSystem();
+  const { isActive: isCreditsActive, isAdminTesting, isSimulatingPartial, isSemiFullMember } = useCreditsSystem();
   const { canAfford, deductCredits } = useCredits();
   const { isFullMember } = useAccessLevel();
   const [showInsufficientCreditsModal, setShowInsufficientCreditsModal] = useState(false);
@@ -261,12 +261,12 @@ export default function MaturadorInstances() {
       return;
     }
 
-    // Check if credits system is active (including test modes)
-    const isCreditsRequired = isCreditsActive || isAdminTesting || isSimulatingPartial;
+    // Check if credits system is active (including test modes and semi-full members)
+    const isCreditsRequired = isCreditsActive || isAdminTesting || isSimulatingPartial || isSemiFullMember;
     
     if (isCreditsRequired) {
-      // Determine effective full member status (partial simulation = not full member)
-      const effectiveFM = isSimulatingPartial ? false : isFullMember;
+      // Determine effective full member status (partial simulation or semi-full = not full member for free tier)
+      const effectiveFM = (isSimulatingPartial || isSemiFullMember) ? false : isFullMember;
       
       // Count current connected instances
       const connectedCount = instances.filter(i => 
