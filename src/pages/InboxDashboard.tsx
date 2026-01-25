@@ -1625,7 +1625,7 @@ export default function InboxDashboard() {
               </div>
               <div className="flex justify-between items-center pt-2 border-t">
                 <span className="text-sm font-medium">Custo:</span>
-                <span className="text-lg font-bold text-primary">{INSTANCE_COST} créditos</span>
+                <span className="text-lg font-bold text-orange-500">{INSTANCE_COST} créditos</span>
               </div>
             </div>
 
