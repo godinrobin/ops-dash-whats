@@ -31,7 +31,7 @@ export const MemberRoute = ({ children, featureName }: MemberRouteProps) => {
       try {
         const { data, error } = await supabase
           .from("profiles")
-          .select("is_full_member")
+          .select("is_full_member, is_semi_full_member, credits_system_test_user")
           .eq("id", userId)
           .single();
 
@@ -40,10 +40,17 @@ export const MemberRoute = ({ children, featureName }: MemberRouteProps) => {
           // Default to full member if error (fail-safe for existing users)
           setIsFullMember(true);
         } else {
-          setIsFullMember(data?.is_full_member ?? true);
+          // Semi-full members and test users get full navigation access (no locks)
+          const semiFullStatus = data?.is_semi_full_member ?? false;
+          const isTestUser = data?.credits_system_test_user ?? false;
+          const baseMemberStatus = data?.is_full_member ?? true;
+          
+          // Grant navigation access if: full member OR semi-full OR test user
+          const hasNavigationAccess = baseMemberStatus || semiFullStatus || isTestUser;
+          setIsFullMember(hasNavigationAccess);
           
           // If not a full member, show modal (but skip if admin is impersonating)
-          if (!data?.is_full_member && !isImpersonating) {
+          if (!hasNavigationAccess && !isImpersonating) {
             setShowModal(true);
           }
         }
