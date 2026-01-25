@@ -41,7 +41,7 @@ const ZapSpy = () => {
   
   // Access control hooks
   const { isFullMember } = useAccessLevel();
-  const { hasAccess, loading: accessLoading, daysRemaining, getSystemPricing } = useSystemAccess();
+  const { hasAccess, loading: accessLoading, daysRemaining, getSystemPricing, refresh: refreshAccess } = useSystemAccess();
   const { isActive: isCreditsActive, isAdminTesting, isSimulatingPartial } = useCreditsSystem();
   const [showAccessModal, setShowAccessModal] = useState(false);
   
@@ -899,7 +899,8 @@ const ZapSpy = () => {
         open={showAccessModal}
         onOpenChange={setShowAccessModal}
         systemId={SYSTEM_ID}
-        onPurchaseSuccess={() => {
+        onPurchaseSuccess={async () => {
+          await refreshAccess();
           toast.success("Acesso liberado!", "Você agora tem acesso ao Zap Spy");
         }}
       />
