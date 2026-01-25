@@ -42,7 +42,7 @@ const ZapSpy = () => {
   // Access control hooks
   const { isFullMember } = useAccessLevel();
   const { hasAccess, loading: accessLoading, daysRemaining, getSystemPricing, refresh: refreshAccess } = useSystemAccess();
-  const { isActive: isCreditsActive, isAdminTesting, isSimulatingPartial } = useCreditsSystem();
+  const { isActive: isCreditsActive, isAdminTesting, isSimulatingPartial, isTestUser } = useCreditsSystem();
   const [showAccessModal, setShowAccessModal] = useState(false);
   
   const SYSTEM_ID = 'zap_spy';
@@ -55,11 +55,15 @@ const ZapSpy = () => {
   const effectiveAdmin = isSimulatingPartial ? false : isAdmin;
   
   // Access logic:
+  // - Test user (credits_system_test_user): ALWAYS check purchased access
   // - In partial simulation: ALWAYS block (simulate partial member who needs to pay)
   // - In admin test: Full members have access, partials need to purchase
   // - When active: Check purchased access
   // - When inactive: Free access
   const userHasAccess = (() => {
+    // Test users always need to purchase access (system is active for them)
+    if (isTestUser) return hasAccess(SYSTEM_ID);
+    
     // System not active = free access
     if (!isCreditsActive && !isTestMode) return true;
     
@@ -69,7 +73,7 @@ const ZapSpy = () => {
     // Admin test mode = full members have access
     if (isAdminTesting) return hasAccess(SYSTEM_ID) || effectiveFullMember;
     
-    // System active = check purchased access
+    // System active = check purchased access (even for full members)
     return hasAccess(SYSTEM_ID);
   })();
   
@@ -77,7 +81,8 @@ const ZapSpy = () => {
   const systemPricing = getSystemPricing(SYSTEM_ID);
   
   // Determine if content should be blurred (no access in credits system)
-  const shouldBlurContent = (isCreditsActive || isTestMode) && !userHasAccess && !accessLoading && !effectiveAdmin;
+  // Test users should see blur if they don't have access (even though they're treated as full members for navigation)
+  const shouldBlurContent = ((isCreditsActive || isTestMode || isTestUser) && !userHasAccess && !accessLoading && !effectiveAdmin);
   
   const [offers, setOffers] = useState<ZapSpyOffer[]>([]);
   const [loading, setLoading] = useState(true);
