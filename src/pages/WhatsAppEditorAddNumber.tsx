@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { 
   ArrowLeft, Plus, RefreshCw, Loader2, QrCode, Trash2, PowerOff, 
-  RotateCcw, CheckCircle2, XCircle, Smartphone, Settings, Copy, Hash
+  RotateCcw, CheckCircle2, XCircle, Smartphone, Settings, Copy, Hash, Wallet
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -83,6 +83,9 @@ export default function WhatsAppEditorAddNumber() {
   // Insufficient credits modal
   const [showInsufficientCreditsModal, setShowInsufficientCreditsModal] = useState(false);
 
+  // Confirmation modal for paid instances
+  const [showConfirmPurchaseModal, setShowConfirmPurchaseModal] = useState(false);
+
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const fetchInstances = useCallback(async () => {
@@ -117,7 +120,44 @@ export default function WhatsAppEditorAddNumber() {
     fetchInstances();
   };
 
-  const handleCreateInstance = async () => {
+  const handleCreateInstance = () => {
+    if (!newInstanceName.trim()) {
+      toast.error('Digite um nome para a instância');
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(newInstanceName)) {
+      toast.error('O nome deve conter apenas letras, números e underscores');
+      return;
+    }
+
+    // Check if credits system is active (including test modes and semi-full members)
+    const isCreditsRequired = isCreditsActive || isAdminTesting || isSimulatingPartial || isSemiFullMember;
+    
+    if (isCreditsRequired) {
+      // Determine effective full member status
+      const effectiveFM = (isSimulatingPartial || isSemiFullMember) ? false : isFullMember;
+      
+      // Count current connected instances
+      const connectedCount = instances.filter(i => 
+        i.status === 'connected' || i.status === 'open'
+      ).length;
+      
+      // Check if user has free slots available
+      const hasFreeSlot = effectiveFM && connectedCount < FREE_INSTANCES_LIMIT;
+      
+      if (!hasFreeSlot) {
+        // Show confirmation modal for paid instance
+        setShowConfirmPurchaseModal(true);
+        return;
+      }
+    }
+
+    // Free instance or credits not required - create directly
+    handleConfirmCreate();
+  };
+
+  const handleConfirmCreate = async () => {
     // Wait for credits system to fully load
     if (creditsLoading || balanceLoading) {
       toast.error('Aguarde, carregando informações...');
@@ -173,6 +213,7 @@ export default function WhatsAppEditorAddNumber() {
         
         if (!canAfford(INSTANCE_COST)) {
           console.log('[CREATE-INSTANCE] Cannot afford, showing modal');
+          setShowConfirmPurchaseModal(false);
           setShowInsufficientCreditsModal(true);
           return;
         }
@@ -188,9 +229,12 @@ export default function WhatsAppEditorAddNumber() {
         console.log('[CREATE-INSTANCE] Deduction result:', success);
         
         if (!success) {
+          setShowConfirmPurchaseModal(false);
           toast.error('Erro ao processar pagamento de créditos');
           return;
         }
+
+        toast.success(`${INSTANCE_COST} créditos debitados com sucesso!`);
       } else {
         console.log('[CREATE-INSTANCE] Free slot available, skipping payment');
       }
@@ -226,6 +270,7 @@ export default function WhatsAppEditorAddNumber() {
 
       toast.success('Instância criada com sucesso');
       setCreateModalOpen(false);
+      setShowConfirmPurchaseModal(false);
       setNewInstanceName('');
       fetchInstances();
     } catch (error: any) {
@@ -603,6 +648,76 @@ export default function WhatsAppEditorAddNumber() {
                 <>
                   <Plus className="h-4 w-4 mr-2" />
                   Criar
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Purchase Modal */}
+      <Dialog open={showConfirmPurchaseModal} onOpenChange={setShowConfirmPurchaseModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Smartphone className="h-5 w-5 text-primary" />
+              Confirmar Criação de Instância
+            </DialogTitle>
+            <DialogDescription>
+              Esta ação irá consumir créditos do seu saldo.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="p-4 rounded-lg bg-muted/50 space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Instância:</span>
+                <span className="font-medium">{newInstanceName}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Período:</span>
+                <span className="font-medium">30 dias</span>
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t">
+                <span className="text-sm font-medium">Custo:</span>
+                <span className="text-lg font-bold text-primary">{INSTANCE_COST} créditos</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-accent/10 border border-accent/20">
+              <Wallet className="h-4 w-4 text-accent" />
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground">Saldo atual</p>
+                <p className="font-semibold">{balance.toFixed(2)} créditos</p>
+              </div>
+              {balance < INSTANCE_COST && (
+                <Badge variant="destructive">Insuficiente</Badge>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowConfirmPurchaseModal(false)}
+              disabled={creating}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleConfirmCreate} 
+              disabled={creating || balance < INSTANCE_COST}
+              className="bg-primary"
+            >
+              {creating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Confirmar e Criar
                 </>
               )}
             </Button>
