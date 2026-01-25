@@ -30,7 +30,7 @@ const WatermarkRemover = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
   // Credits system
-  const { isActive: isCreditsActive } = useCreditsSystem();
+  const { isActive: isCreditsActive, isSemiFullMember } = useCreditsSystem();
   const { deductCredits, canAfford } = useCredits();
   const [showInsufficientCredits, setShowInsufficientCredits] = useState(false);
   
@@ -87,8 +87,8 @@ const WatermarkRemover = () => {
       return;
     }
 
-    // Check credits if system is active
-    if (isCreditsActive) {
+    // Check credits if system is active (including semi-full members)
+    if (isCreditsActive || isSemiFullMember) {
       if (!canAfford(CREDIT_COST)) {
         setShowInsufficientCredits(true);
         return;

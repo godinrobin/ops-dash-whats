@@ -136,7 +136,7 @@ const GeradorPalavrasChaves = () => {
   const [showInsufficientCredits, setShowInsufficientCredits] = useState(false);
   
   // Credits system
-  const { isActive: isCreditsActive } = useCreditsSystem();
+  const { isActive: isCreditsActive, isSemiFullMember } = useCreditsSystem();
   const { deductCredits, canAfford } = useCredits();
   const CREDIT_COST = 0.01;
   const SYSTEM_ID = 'gerador_palavras_chave';
@@ -160,8 +160,8 @@ const GeradorPalavrasChaves = () => {
   const handleSubmit = async () => {
     if (!input.trim() || isLoading) return;
 
-    // Credit system check
-    if (isCreditsActive) {
+    // Credit system check (active for credits system users and semi-full members)
+    if (isCreditsActive || isSemiFullMember) {
       if (!canAfford(CREDIT_COST)) {
         setShowInsufficientCredits(true);
         return;

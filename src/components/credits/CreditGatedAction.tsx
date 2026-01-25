@@ -39,15 +39,15 @@ export const CreditGatedAction = ({
   skipForFullMember = false,
   customFreeTierCheck,
 }: CreditGatedActionProps) => {
-  const { isActive } = useCreditsSystem();
+  const { isActive, isSemiFullMember } = useCreditsSystem();
   const { deductCredits, canAfford } = useCredits();
   const { isFullMember } = useAccessLevel();
   const [isProcessing, setIsProcessing] = useState(false);
   const [showInsufficientModal, setShowInsufficientModal] = useState(false);
 
   const execute = async () => {
-    // If credits system is not active, just run the action
-    if (!isActive) {
+    // If credits system is not active and user is not semi-full, just run the action
+    if (!isActive && !isSemiFullMember) {
       setIsProcessing(true);
       try {
         await onAction();

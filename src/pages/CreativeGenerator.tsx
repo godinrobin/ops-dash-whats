@@ -113,7 +113,7 @@ const CreativeGenerator = () => {
   const { canGenerate, formattedTime, startCooldown, isAdmin } = useGenerationCooldown("creative_last_generation");
   
   // Credits system hooks
-  const { isActive: isCreditsActive } = useCreditsSystem();
+  const { isActive: isCreditsActive, isSemiFullMember } = useCreditsSystem();
   const { deductCredits, canAfford } = useCredits();
   const { getUsage, incrementUsage, hasFreeTier, getRemainingFree } = useFreeTierUsage();
   const [showInsufficientCredits, setShowInsufficientCredits] = useState(false);
@@ -161,8 +161,8 @@ const CreativeGenerator = () => {
       return;
     }
 
-    // Credit system check
-    if (isCreditsActive) {
+    // Credit system check (active for credits system users and semi-full members)
+    if (isCreditsActive || isSemiFullMember) {
       const usage = getUsage(SYSTEM_ID);
       const isInFreeTier = hasFreeTier(SYSTEM_ID) && usage.canUse;
       
