@@ -75,7 +75,7 @@ export const InstanceRenewalTag = ({ instanceId }: InstanceRenewalTagProps) => {
 
   const handleGoToMarketplace = () => {
     setShowModal(false);
-    navigate('/marketplace');
+    navigate('/marketplace?tab=credits');
   };
 
   // Determine badge style
@@ -170,7 +170,7 @@ export const InstanceRenewalTag = ({ instanceId }: InstanceRenewalTagProps) => {
               <Button 
                 variant="outline" 
                 onClick={handleGoToMarketplace} 
-                className="w-full border-amber-500 text-amber-500 hover:bg-amber-500/10"
+                className="w-full border-orange-500 text-orange-500 hover:bg-orange-500/10"
               >
                 <ShoppingCart className="h-4 w-4 mr-2" />
                 Recarregue seu saldo
