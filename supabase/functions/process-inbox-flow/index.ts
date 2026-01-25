@@ -1488,6 +1488,43 @@ Regras RIGOROSAS:
             break;
 
           case 'waitInput':
+            // Check for follow-up trigger (fires before timeout, doesn't move flow - just sends follow-up content)
+            const resumeFromFollowUp = !!(req as any).resumeFromFollowUp;
+            
+            // If resumeFromFollowUp, send follow-up message and reschedule for timeout
+            if (resumeFromFollowUp) {
+              console.log(`[${runId}] Follow-up triggered, following FOLLOW-UP output`);
+              
+              // Clear the pending follow-up from variables
+              delete variables._pendingFollowUp;
+              
+              await supabaseClient
+                .from('inbox_flow_sessions')
+                .update({
+                  variables,
+                  last_interaction: new Date().toISOString(),
+                })
+                .eq('id', sessionId);
+              
+              processedActions.push('Follow-up triggered, following follow-up path');
+              
+              // Find edge with sourceHandle = 'followup'
+              const followUpEdge = edges.find((e: { source: string; sourceHandle?: string }) => 
+                e.source === currentNodeId && e.sourceHandle === 'followup'
+              );
+              
+              if (followUpEdge) {
+                console.log(`[${runId}] Found follow-up edge to node ${followUpEdge.target}`);
+                currentNodeId = followUpEdge.target;
+              } else {
+                // No follow-up edge found - stay at current node and wait for timeout/input
+                console.log(`[${runId}] No follow-up edge found, staying at current node ${currentNodeId}`);
+                continueProcessing = false;
+              }
+              
+              break;
+            }
+            
             // If resumeFromTimeout (or late response), skip waiting and move to TIMEOUT output (not default response)
             if (effectiveResumeFromTimeout) {
               console.log(`[${runId}] Timeout expired, continuing flow via TIMEOUT output`);
@@ -1497,7 +1534,9 @@ Regras RIGOROSAS:
                 variables[key] = ''; // Empty value for timeout
               }
               
-              // Clear timeout and move to timeout node (sourceHandle = 'timeout')
+              // Clear timeout and pending follow-up
+              delete variables._pendingFollowUp;
+              
               await supabaseClient
                 .from('inbox_flow_sessions')
                 .update({
@@ -1539,9 +1578,11 @@ Regras RIGOROSAS:
             
             // Calculate timeout if enabled - default is false now for clarity
             const timeoutEnabled = currentNode.data.timeoutEnabled === true;
+            const followUpEnabled = currentNode.data.followUpEnabled === true && timeoutEnabled;
             let timeoutAt: string | null = null;
+            let followUpAt: string | null = null;
             
-            console.log(`[${runId}] WaitInput node ${currentNodeId}: timeoutEnabled=${currentNode.data.timeoutEnabled}, timeout=${currentNode.data.timeout}, timeoutUnit=${currentNode.data.timeoutUnit}`);
+            console.log(`[${runId}] WaitInput node ${currentNodeId}: timeoutEnabled=${currentNode.data.timeoutEnabled}, timeout=${currentNode.data.timeout}, timeoutUnit=${currentNode.data.timeoutUnit}, followUpEnabled=${followUpEnabled}`);
             
             if (timeoutEnabled) {
               const timeoutValue = (currentNode.data.timeout as number) || 5;
@@ -1555,8 +1596,36 @@ Regras RIGOROSAS:
               
               timeoutAt = new Date(Date.now() + timeoutSeconds * 1000).toISOString();
               console.log(`[${runId}] Timeout configured: ${timeoutValue} ${timeoutUnit} (${timeoutSeconds}s) -> expires at ${timeoutAt}`);
+              
+              // Calculate follow-up time if enabled (must be before timeout)
+              if (followUpEnabled) {
+                const followUpDelay = (currentNode.data.followUpDelay as number) || 1;
+                const followUpUnit = (currentNode.data.followUpUnit as string) || 'minutes';
+                
+                let followUpSeconds = followUpDelay;
+                if (followUpUnit === 'minutes') followUpSeconds *= 60;
+                if (followUpUnit === 'hours') followUpSeconds *= 3600;
+                if (followUpUnit === 'days') followUpSeconds *= 86400;
+                
+                // Follow-up must be before timeout
+                if (followUpSeconds < timeoutSeconds) {
+                  followUpAt = new Date(Date.now() + followUpSeconds * 1000).toISOString();
+                  console.log(`[${runId}] Follow-up configured: ${followUpDelay} ${followUpUnit} (${followUpSeconds}s) -> triggers at ${followUpAt}`);
+                } else {
+                  console.log(`[${runId}] Follow-up (${followUpSeconds}s) >= timeout (${timeoutSeconds}s), skipping follow-up`);
+                }
+              }
             } else {
               console.log(`[${runId}] Timeout disabled for this waitInput node`);
+            }
+            
+            // Store follow-up info in variables if configured
+            if (followUpAt) {
+              variables._pendingFollowUp = {
+                nodeId: currentNodeId,
+                followUpAt: new Date(followUpAt).getTime(),
+                timeoutAt: timeoutAt ? new Date(timeoutAt).getTime() : null,
+              };
             }
             
             // Stop and wait for user input - save state and release lock
@@ -1572,57 +1641,57 @@ Regras RIGOROSAS:
               })
               .eq('id', sessionId);
             
-            // Create timeout job if timeout is enabled
+            // Create job for the earliest event (follow-up or timeout)
             // IMPORTANT: Check if there's already a pending delay job - don't overwrite it!
-            if (timeoutAt) {
+            const earliestJobTime = followUpAt || timeoutAt;
+            if (earliestJobTime) {
               // First check if there's an existing scheduled delay job
               const { data: existingJob } = await supabaseClient
                 .from('inbox_flow_delay_jobs')
                 .select('run_at, status')
                 .eq('session_id', sessionId)
                 .eq('status', 'scheduled')
-                .single();
+                .maybeSingle();
               
-              // Only create timeout job if there's no existing scheduled job, 
-              // OR if the existing job is set to run AFTER this timeout
-              // (we want the earlier one to fire first)
+              // Only create job if there's no existing scheduled job, 
+              // OR if the existing job is set to run AFTER this one
               if (!existingJob) {
                 await supabaseClient
                   .from('inbox_flow_delay_jobs')
                   .upsert({
                     session_id: sessionId,
                     user_id: session.user_id,
-                    run_at: timeoutAt,
+                    run_at: earliestJobTime,
                     status: 'scheduled',
                     attempts: 0,
                   }, { onConflict: 'session_id' });
                 
-                console.log(`[${runId}] Timeout job created for session ${sessionId}, will expire at ${timeoutAt}`);
+                console.log(`[${runId}] Job created for session ${sessionId}, will run at ${earliestJobTime} (${followUpAt ? 'follow-up' : 'timeout'})`);
               } else {
                 const existingRunAt = new Date(existingJob.run_at).getTime();
-                const newTimeoutAt = new Date(timeoutAt).getTime();
+                const newJobAt = new Date(earliestJobTime).getTime();
                 
-                if (newTimeoutAt < existingRunAt) {
-                  // New timeout is earlier - update to use the timeout instead
+                if (newJobAt < existingRunAt) {
+                  // New job is earlier - update to use it instead
                   await supabaseClient
                     .from('inbox_flow_delay_jobs')
                     .update({
-                      run_at: timeoutAt,
+                      run_at: earliestJobTime,
                       status: 'scheduled',
                       attempts: 0,
                       updated_at: new Date().toISOString(),
                     })
                     .eq('session_id', sessionId);
                   
-                  console.log(`[${runId}] Updated job to earlier timeout: ${timeoutAt} (was: ${existingJob.run_at})`);
+                  console.log(`[${runId}] Updated job to earlier time: ${earliestJobTime} (was: ${existingJob.run_at})`);
                 } else {
                   // Existing delay job is earlier - keep it and let it fire first
-                  console.log(`[${runId}] Keeping existing delay job at ${existingJob.run_at} (timeout would be: ${timeoutAt})`);
+                  console.log(`[${runId}] Keeping existing delay job at ${existingJob.run_at} (new job would be: ${earliestJobTime})`);
                 }
               }
             }
             
-            processedActions.push(`Waiting for user input${timeoutAt ? ` (timeout: ${timeoutAt})` : ''}`);
+            processedActions.push(`Waiting for user input${timeoutAt ? ` (timeout: ${timeoutAt})` : ''}${followUpAt ? ` (follow-up: ${followUpAt})` : ''}`);
             continueProcessing = false;
             
             // Return early - lock already released in the update above
@@ -1631,7 +1700,8 @@ Regras RIGOROSAS:
               currentNode: currentNodeId,
               actions: processedActions,
               waitingForInput: true,
-              timeoutAt
+              timeoutAt,
+              followUpAt
             }), {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });

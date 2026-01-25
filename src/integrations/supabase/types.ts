@@ -2077,6 +2077,7 @@ export type Database = {
           reply_mode: string | null
           reply_to_last_message: boolean | null
           trigger_keywords: string[] | null
+          trigger_tags: string[] | null
           trigger_type: string
           updated_at: string
           user_id: string
@@ -2102,6 +2103,7 @@ export type Database = {
           reply_mode?: string | null
           reply_to_last_message?: boolean | null
           trigger_keywords?: string[] | null
+          trigger_tags?: string[] | null
           trigger_type?: string
           updated_at?: string
           user_id: string
@@ -2127,6 +2129,7 @@ export type Database = {
           reply_mode?: string | null
           reply_to_last_message?: boolean | null
           trigger_keywords?: string[] | null
+          trigger_tags?: string[] | null
           trigger_type?: string
           updated_at?: string
           user_id?: string
@@ -2989,6 +2992,7 @@ export type Database = {
           id: string
           is_full_member: boolean
           is_semi_full_member: boolean | null
+          kanban_column_order: string[] | null
           lead_rotation_limit: number | null
           notify_on_disconnect: boolean | null
           notify_on_lead_rotation: boolean | null
@@ -3012,6 +3016,7 @@ export type Database = {
           id: string
           is_full_member?: boolean
           is_semi_full_member?: boolean | null
+          kanban_column_order?: string[] | null
           lead_rotation_limit?: number | null
           notify_on_disconnect?: boolean | null
           notify_on_lead_rotation?: boolean | null
@@ -3035,6 +3040,7 @@ export type Database = {
           id?: string
           is_full_member?: boolean
           is_semi_full_member?: boolean | null
+          kanban_column_order?: string[] | null
           lead_rotation_limit?: number | null
           notify_on_disconnect?: boolean | null
           notify_on_lead_rotation?: boolean | null

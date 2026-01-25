@@ -36,6 +36,7 @@ interface ProcessJobResult {
   processed: boolean;
   error?: string;
   rescheduled?: boolean;
+  reason?: string;
 }
 
 serve(async (req) => {
@@ -99,7 +100,7 @@ serve(async (req) => {
           // Check if this is a timeout job (session has timeout_at set and is waiting for input)
           const { data: session } = await supabase
             .from("inbox_flow_sessions")
-            .select("*, flow:inbox_flows(nodes)")
+            .select("*, flow:inbox_flows(nodes), contact:inbox_contacts(flow_paused)")
             .eq("id", job.session_id)
             .single();
           
@@ -112,9 +113,31 @@ serve(async (req) => {
             return { success: true, processed: false };
           }
           
+          // Check if contact has flow_paused - if so, skip this job
+          const contactFlowPaused = (session.contact as any)?.flow_paused === true;
+          if (contactFlowPaused) {
+            console.log(`[process-delay-queue] Contact has flow_paused=true for session ${job.session_id}, marking job as done`);
+            await supabase
+              .from("inbox_flow_delay_jobs")
+              .update({ status: "done", updated_at: new Date().toISOString() })
+              .eq("session_id", job.session_id);
+            return { success: true, processed: false, reason: 'flow_paused' };
+          }
+          
+          // Check if session is paused
+          if (session.status === 'paused') {
+            console.log(`[process-delay-queue] Session ${job.session_id} is paused, marking job as done`);
+            await supabase
+              .from("inbox_flow_delay_jobs")
+              .update({ status: "done", updated_at: new Date().toISOString() })
+              .eq("session_id", job.session_id);
+            return { success: true, processed: false, reason: 'session_paused' };
+          }
+          
           // Check session variables for pending delay info
           const sessionVars = (session.variables || {}) as Record<string, unknown>;
           const pendingDelay = sessionVars._pendingDelay as { nodeId: string; resumeAt: number } | undefined;
+          const pendingFollowUp = sessionVars._pendingFollowUp as { nodeId: string; followUpAt: number; timeoutAt: number | null } | undefined;
           
           // If session is completed BUT has pending delay, try to reactivate it
           if (session.status === 'completed') {
@@ -148,6 +171,10 @@ serve(async (req) => {
           
           const hasPendingUserInput = sessionVars._pending_user_input !== undefined;
           
+          // Check if this is a follow-up job (follow-up fires BEFORE timeout)
+          const isFollowUpJob = pendingFollowUp && pendingFollowUp.followUpAt <= Date.now() && 
+                               (pendingFollowUp.timeoutAt === null || pendingFollowUp.timeoutAt > Date.now());
+          
           // CRITICAL FIX: If current node is waitInput/menu and there's a timeout_at set,
           // this session is waiting for user input - don't process delay jobs that aren't timeouts!
           const isActuallyWaitingForInput = isWaitingForInput || (session.timeout_at !== null && !pendingDelay);
@@ -165,7 +192,7 @@ serve(async (req) => {
           const paymentNoResponseDelayKey = `_payment_no_response_delay_${session.current_node_id}`;
           const hasPaymentNoResponseDelay = sessionVars[paymentNoResponseDelayKey] !== undefined;
           
-          console.log(`[process-delay-queue] Session ${job.session_id}: isTimeoutJob=${isTimeoutJob}, isWaitingForInput=${isWaitingForInput}, isActuallyWaitingForInput=${isActuallyWaitingForInput}, isDelayNode=${isDelayNode}, isPaymentIdentifier=${isPaymentIdentifier}, hasValidPendingDelay=${hasValidPendingDelay}, hasPendingDelayNotReady=${hasPendingDelayNotReady}, hasPaymentNoResponseDelay=${hasPaymentNoResponseDelay}, hasPauseScheduled=${hasPauseScheduled}, pauseReady=${pauseReady}, nodeType=${currentNode?.type}, hasPendingUserInput=${hasPendingUserInput}`);
+          console.log(`[process-delay-queue] Session ${job.session_id}: isTimeoutJob=${isTimeoutJob}, isFollowUpJob=${isFollowUpJob}, isWaitingForInput=${isWaitingForInput}, isActuallyWaitingForInput=${isActuallyWaitingForInput}, isDelayNode=${isDelayNode}, isPaymentIdentifier=${isPaymentIdentifier}, hasValidPendingDelay=${hasValidPendingDelay}, hasPendingDelayNotReady=${hasPendingDelayNotReady}, hasPaymentNoResponseDelay=${hasPaymentNoResponseDelay}, hasPauseScheduled=${hasPauseScheduled}, pauseReady=${pauseReady}, nodeType=${currentNode?.type}, hasPendingUserInput=${hasPendingUserInput}`);
 
           const rescheduleIfLocked = async (invokeResult: unknown): Promise<boolean> => {
             const isLockedSkip =
@@ -249,8 +276,55 @@ serve(async (req) => {
             return { success: true, processed: true };
           }
 
+          // === HANDLE FOLLOW-UP (fires before timeout) ===
+          if (isFollowUpJob && isActuallyWaitingForInput) {
+            console.log(`[process-delay-queue] Follow-up triggered for session ${job.session_id}`);
+
+            const { data: invokeResult, error: invokeError } = await supabase.functions.invoke("process-inbox-flow", {
+              body: {
+                sessionId: job.session_id,
+                resumeFromFollowUp: true,
+              },
+            });
+
+            if (invokeError) {
+              console.error(`[process-delay-queue] Error invoking process-inbox-flow for follow-up ${job.session_id}:`, invokeError);
+              const newStatus = job.attempts >= 2 ? "failed" : "scheduled";
+              await supabase
+                .from("inbox_flow_delay_jobs")
+                .update({ 
+                  status: newStatus,
+                  last_error: invokeError.message || "Unknown error",
+                  updated_at: new Date().toISOString()
+                })
+                .eq("session_id", job.session_id);
+              return { success: false, processed: false, error: invokeError.message };
+            }
+
+            if (await rescheduleIfLocked(invokeResult)) {
+              return { success: true, processed: false, rescheduled: true };
+            }
+
+            console.log(`[process-delay-queue] Follow-up job result for ${job.session_id}:`, invokeResult);
+            
+            // After follow-up, schedule the timeout job if there's one
+            if (pendingFollowUp?.timeoutAt && pendingFollowUp.timeoutAt > Date.now()) {
+              await supabase
+                .from("inbox_flow_delay_jobs")
+                .update({ 
+                  run_at: new Date(pendingFollowUp.timeoutAt).toISOString(),
+                  status: "scheduled",
+                  attempts: 0,
+                  updated_at: new Date().toISOString()
+                })
+                .eq("session_id", job.session_id);
+              console.log(`[process-delay-queue] Rescheduled job for timeout at ${new Date(pendingFollowUp.timeoutAt).toISOString()}`);
+              return { success: true, processed: true };
+            }
+          }
+
           // If this is a timeout job and session is still waiting for input, trigger timeout
-          if (isTimeoutJob && isActuallyWaitingForInput) {
+          if (isTimeoutJob && isActuallyWaitingForInput && !isFollowUpJob) {
             console.log(`[process-delay-queue] Timeout expired for session ${job.session_id}, continuing flow`);
 
             const { data: invokeResult, error: invokeError } = await supabase.functions.invoke("process-inbox-flow", {
