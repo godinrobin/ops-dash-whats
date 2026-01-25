@@ -66,7 +66,10 @@ export const CreditWalletDisplay = ({ compact = false, showTransactions = false 
           </div>
 
           <Button
-            onClick={() => navigate('/marketplace?tab=creditos')}
+            onClick={() => {
+              localStorage.setItem('homeMode', 'marketplace');
+              navigate('/?tab=creditos');
+            }}
             className="w-full bg-accent hover:bg-accent/90"
             size="sm"
           >

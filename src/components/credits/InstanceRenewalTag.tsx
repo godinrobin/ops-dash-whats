@@ -75,7 +75,8 @@ export const InstanceRenewalTag = ({ instanceId }: InstanceRenewalTagProps) => {
 
   const handleGoToMarketplace = () => {
     setShowModal(false);
-    navigate('/marketplace?tab=creditos');
+    localStorage.setItem('homeMode', 'marketplace');
+    navigate('/?tab=creditos');
   };
 
   // Determine badge style
