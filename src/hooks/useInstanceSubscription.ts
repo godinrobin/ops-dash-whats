@@ -16,6 +16,12 @@ interface InstanceSubscription {
   created_at: string;
 }
 
+interface MaturadorInstance {
+  id: string;
+  status: string;
+  created_at: string;
+}
+
 interface UseInstanceSubscriptionReturn {
   /** Number of free instances remaining (3 for full members) */
   freeInstancesRemaining: number;
@@ -49,6 +55,7 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
   const { isFullMember } = useAccessLevel();
   const { deductCredits, canAfford, refresh: refreshCredits } = useCredits();
   const [subscriptions, setSubscriptions] = useState<InstanceSubscription[]>([]);
+  const [instances, setInstances] = useState<MaturadorInstance[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchSubscriptions = useCallback(async () => {
@@ -78,9 +85,36 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
     }
   }, [user]);
 
+  // Fetch connected instances directly from maturador_instances for fallback
+  const fetchInstances = useCallback(async () => {
+    if (!user) {
+      setInstances([]);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('maturador_instances')
+        .select('id, status, created_at')
+        .eq('user_id', user.id)
+        .in('status', ['connected', 'open'])
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching instances:', error);
+        return;
+      }
+
+      setInstances(data ?? []);
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  }, [user]);
+
   useEffect(() => {
     fetchSubscriptions();
-  }, [fetchSubscriptions]);
+    fetchInstances();
+  }, [fetchSubscriptions, fetchInstances]);
 
   // Sort subscriptions by created_at to determine order
   const sortedSubscriptions = [...subscriptions].sort(
@@ -115,27 +149,48 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
       return false;
     }
     
-    // Find position of this instance in sorted order
-    const index = sortedSubscriptions.findIndex(s => s.instance_id === instanceId);
-    if (index === -1) return false;
+    // First, try to find in subscriptions table
+    const subIndex = sortedSubscriptions.findIndex(s => s.instance_id === instanceId);
+    if (subIndex !== -1) {
+      // First 3 subscriptions are free for full members
+      return subIndex < FREE_INSTANCES_LIMIT;
+    }
     
-    // First 3 instances are free for full members
-    return index < FREE_INSTANCES_LIMIT;
-  }, [sortedSubscriptions, effectiveFullMember, isSimulatingPartial]);
+    // FALLBACK: When subscriptions table is empty (e.g., admin test mode),
+    // use direct position in connected maturador_instances
+    // The 3 oldest CONNECTED instances are considered free
+    const instanceIndex = instances.findIndex(i => i.id === instanceId);
+    if (instanceIndex === -1) return false;
+    
+    return instanceIndex < FREE_INSTANCES_LIMIT;
+  }, [sortedSubscriptions, effectiveFullMember, isSimulatingPartial, instances]);
 
   const getDaysRemaining = useCallback((instanceId: string): number | null => {
     const subscription = subscriptions.find(s => s.instance_id === instanceId);
     
+    // Check if this instance is free (using fallback logic)
+    const isFree = (() => {
+      if (isSimulatingPartial) return false;
+      if (!effectiveFullMember) return false;
+      
+      // Check in subscriptions first
+      const subIndex = sortedSubscriptions.findIndex(s => s.instance_id === instanceId);
+      if (subIndex !== -1) return subIndex < FREE_INSTANCES_LIMIT;
+      
+      // Fallback to instances position
+      const instIndex = instances.findIndex(i => i.id === instanceId);
+      if (instIndex === -1) return false;
+      return instIndex < FREE_INSTANCES_LIMIT;
+    })();
+    
     // In test modes, simulate expiration for non-free instances
     if (isTestingActive) {
-      if (!subscription) {
-        // No subscription = simulate as extra instance (3 days default)
-        return 3;
-      }
+      // If instance is free (by fallback logic), no expiration
+      if (isFree) return null;
       
       // In partial simulation, all instances are "extra" and need renewal
       if (isSimulatingPartial) {
-        if (subscription.expires_at) {
+        if (subscription?.expires_at) {
           const now = new Date();
           const expires = new Date(subscription.expires_at);
           const diff = expires.getTime() - now.getTime();
@@ -146,17 +201,15 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
         return 3;
       }
       
-      // In admin test mode, show expiration only for non-free instances
-      if (!subscription.is_free) {
-        if (subscription.expires_at) {
-          const now = new Date();
-          const expires = new Date(subscription.expires_at);
-          const diff = expires.getTime() - now.getTime();
-          if (diff <= 0) return 0;
-          return Math.ceil(diff / (1000 * 60 * 60 * 24));
-        }
-        return 3; // Default to 3 days for testing
+      // In admin test mode, non-free instances get 3 days default
+      if (subscription?.expires_at) {
+        const now = new Date();
+        const expires = new Date(subscription.expires_at);
+        const diff = expires.getTime() - now.getTime();
+        if (diff <= 0) return 0;
+        return Math.ceil(diff / (1000 * 60 * 60 * 24));
       }
+      return 3; // Default to 3 days for testing
     }
     
     if (!subscription) return null;
@@ -172,7 +225,7 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
     
     if (diff <= 0) return 0;
     return Math.ceil(diff / (1000 * 60 * 60 * 24));
-  }, [subscriptions, activatedAt, isTestingActive, isSimulatingPartial]);
+  }, [subscriptions, activatedAt, isTestingActive, isSimulatingPartial, effectiveFullMember, sortedSubscriptions, instances]);
 
   const isAboutToExpire = useCallback((instanceId: string): boolean => {
     const days = getDaysRemaining(instanceId);
@@ -288,9 +341,9 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    await fetchSubscriptions();
+    await Promise.all([fetchSubscriptions(), fetchInstances()]);
     setLoading(false);
-  }, [fetchSubscriptions]);
+  }, [fetchSubscriptions, fetchInstances]);
 
   return {
     freeInstancesRemaining,
