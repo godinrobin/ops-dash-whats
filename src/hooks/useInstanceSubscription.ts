@@ -299,7 +299,8 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
 
     // Determine if this instance should be free
     // Full members get first 3 free (unless simulating partial)
-    const effectiveFM = isSimulatingPartial ? false : isFullMember;
+    // Semi-full members NEVER get free instances
+    const effectiveFM = (isSimulatingPartial || isSemiFullMember) ? false : isFullMember;
     const shouldBeFree = effectiveFM && sortedSubscriptions.length < FREE_INSTANCES_LIMIT;
 
     // Calculate expiration
@@ -337,7 +338,7 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
       console.error('Error:', error);
       return false;
     }
-  }, [user, isActive, isFullMember, isSimulatingPartial, sortedSubscriptions.length, fetchSubscriptions]);
+  }, [user, isActive, isFullMember, isSimulatingPartial, isSemiFullMember, sortedSubscriptions.length, fetchSubscriptions]);
 
   const refresh = useCallback(async () => {
     setLoading(true);

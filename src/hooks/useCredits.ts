@@ -36,7 +36,7 @@ const CREDIT_VALUE_BRL = 6.50;
 
 export const useCredits = (): UseCreditsReturn => {
   const { user } = useAuth();
-  const { isActive } = useCreditsSystem();
+  const { isActive, isSemiFullMember, isTestUser } = useCreditsSystem();
   const [balance, setBalance] = useState(0);
   const [transactions, setTransactions] = useState<CreditTransaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,7 +104,9 @@ export const useCredits = (): UseCreditsReturn => {
     systemId: string,
     description: string
   ): Promise<boolean> => {
-    if (!user || !isActive) return true; // If system is not active, allow usage
+    // Semi-full members and test users ALWAYS need to pay, regardless of global system status
+    const requiresPayment = isActive || isSemiFullMember || isTestUser;
+    if (!user || !requiresPayment) return true; // If system is not active for this user, allow usage
     if (!canAfford(amount)) return false;
 
     try {
@@ -131,7 +133,7 @@ export const useCredits = (): UseCreditsReturn => {
       console.error('Error:', error);
       return false;
     }
-  }, [user, isActive, canAfford, fetchTransactions]);
+  }, [user, isActive, isSemiFullMember, isTestUser, canAfford, fetchTransactions]);
 
   const creditsToReais = useCallback((credits: number): string => {
     const value = credits * CREDIT_VALUE_BRL;
