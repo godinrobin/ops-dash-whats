@@ -98,11 +98,11 @@ export const useAccessLevel = () => {
     }
 
     try {
-      // Fetch membership status, admin role, and test user flag in parallel
+      // Fetch membership status and admin role in parallel
       const [profileResult, roleResult] = await Promise.all([
         supabase
           .from("profiles")
-          .select("is_full_member, credits_system_test_user")
+          .select("is_full_member")
           .eq("id", user.id)
           .maybeSingle(),
         supabase
@@ -113,9 +113,8 @@ export const useAccessLevel = () => {
           .maybeSingle()
       ]);
 
-      // For test users, always treat as partial member (is_full_member = false)
-      const isCreditsTestUser = profileResult.data?.credits_system_test_user ?? false;
-      const memberStatus = isCreditsTestUser ? false : (profileResult.data?.is_full_member ?? true);
+      // Set membership status - default to true if no profile found
+      const memberStatus = profileResult.data?.is_full_member ?? true;
       const adminStatus = !!roleResult.data;
 
       setIsFullMember(memberStatus);
