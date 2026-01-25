@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ArrowLeft, MessageSquare, Smartphone, GitBranch, Bell, Plus, RefreshCw, Loader2, QrCode, Trash2, PowerOff, RotateCcw, ChevronDown, ChevronRight, Phone, Zap, Users, TrendingUp, Filter, Check, Hash, Wifi, MapPin, CheckCircle, XCircle } from "lucide-react";
+import { ArrowLeft, MessageSquare, Smartphone, GitBranch, Bell, Plus, RefreshCw, Loader2, QrCode, Trash2, PowerOff, RotateCcw, ChevronDown, ChevronRight, Phone, Zap, Users, TrendingUp, Filter, Check, Hash, Wifi, MapPin, CheckCircle, XCircle, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
@@ -28,6 +28,13 @@ import { PairCodeModal } from "@/components/PairCodeModal";
 import { useProxyValidator } from "@/hooks/useProxyValidator";
 import { InstanceRenewalTag } from "@/components/credits/InstanceRenewalTag";
 import { useInstanceSubscription } from "@/hooks/useInstanceSubscription";
+import { useCredits } from "@/hooks/useCredits";
+import { useCreditsSystem } from "@/hooks/useCreditsSystem";
+import { useAccessLevel } from "@/hooks/useAccessLevel";
+import { InsufficientCreditsModal } from "@/components/credits/InsufficientCreditsModal";
+
+const FREE_INSTANCES_LIMIT = 3;
+const INSTANCE_COST = 6;
 
 interface Instance {
   id: string;
@@ -98,6 +105,10 @@ export default function InboxDashboard() {
   const [pairCodeModalOpen, setPairCodeModalOpen] = useState(false);
   const [currentPairCodeInstance, setCurrentPairCodeInstance] = useState<Instance | null>(null);
 
+  // Credits system modals
+  const [showConfirmPurchaseModal, setShowConfirmPurchaseModal] = useState(false);
+  const [showInsufficientCreditsModal, setShowInsufficientCreditsModal] = useState(false);
+
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   
@@ -106,6 +117,17 @@ export default function InboxDashboard() {
   
   // Instance subscription for credits system
   const { registerInstance, freeInstancesRemaining } = useInstanceSubscription();
+
+  // Credits system hooks
+  const { 
+    isActive: isCreditsActive, 
+    isAdminTesting, 
+    isSimulatingPartial, 
+    isSemiFullMember,
+    loading: creditsLoading 
+  } = useCreditsSystem();
+  const { isFullMember } = useAccessLevel();
+  const { balance, loading: balanceLoading, canAfford, deductCredits } = useCredits();
   
   // Card proxy validation state (per-instance)
   const [validatingInstanceProxy, setValidatingInstanceProxy] = useState<string | null>(null);
@@ -393,7 +415,45 @@ export default function InboxDashboard() {
     }
   };
 
-  const handleCreateInstance = async () => {
+  // Handle clicking "Novo Número" button - shows purchase confirmation for semi-full members
+  const handleNewNumberClick = () => {
+    console.log('[INBOX-NEW-NUMBER] Checking if need to show purchase modal:', {
+      isSemiFullMember,
+      isCreditsActive,
+      isAdminTesting,
+      isSimulatingPartial,
+      creditsLoading
+    });
+
+    // Check if credits system is required for this user
+    const isCreditsRequired = isCreditsActive || isAdminTesting || isSimulatingPartial || isSemiFullMember;
+    
+    if (isCreditsRequired) {
+      // Determine effective full member status
+      const effectiveFM = (isSimulatingPartial || isSemiFullMember) ? false : isFullMember;
+      
+      // Count current connected instances
+      const connectedCount = instances.filter(i => 
+        i.status === 'connected' || i.status === 'open'
+      ).length;
+      
+      // Check if user has free slots available
+      const hasFreeSlot = effectiveFM && connectedCount < FREE_INSTANCES_LIMIT;
+      
+      console.log('[INBOX-NEW-NUMBER] Payment check:', { effectiveFM, connectedCount, hasFreeSlot });
+      
+      if (!hasFreeSlot) {
+        // Need to pay - show purchase confirmation FIRST
+        setShowConfirmPurchaseModal(true);
+        return;
+      }
+    }
+
+    // Free instance - open the regular creation modal
+    setCreateModalOpen(true);
+  };
+
+  const handleCreateInstance = async (fromPurchaseModal = false) => {
     if (!newInstanceName.trim()) {
       toast.error('Nome do número é obrigatório');
       return;
@@ -402,6 +462,31 @@ export default function InboxDashboard() {
     if (!/^[a-zA-Z0-9_]+$/.test(newInstanceName)) {
       toast.error('O nome deve conter apenas letras, números e underscores');
       return;
+    }
+
+    // If coming from purchase modal, deduct credits first
+    if (fromPurchaseModal) {
+      console.log('[INBOX-CREATE] Deducting credits for paid instance...');
+      
+      if (!canAfford(INSTANCE_COST)) {
+        setShowConfirmPurchaseModal(false);
+        setShowInsufficientCreditsModal(true);
+        return;
+      }
+
+      const success = await deductCredits(
+        INSTANCE_COST, 
+        'instancia_whatsapp', 
+        'Criação de instância WhatsApp (30 dias)'
+      );
+
+      if (!success) {
+        setShowConfirmPurchaseModal(false);
+        toast.error('Erro ao processar pagamento de créditos');
+        return;
+      }
+
+      toast.success(`${INSTANCE_COST} créditos debitados com sucesso!`);
     }
 
     setCreating(true);
@@ -427,6 +512,7 @@ export default function InboxDashboard() {
 
       toast.success('Número criado com sucesso!');
       setCreateModalOpen(false);
+      setShowConfirmPurchaseModal(false);
       resetCreateForm();
       await fetchData();
 
@@ -1167,7 +1253,7 @@ export default function InboxDashboard() {
               <Button variant="outline" size="icon" onClick={handleRefresh} disabled={refreshing || syncing}>
                 <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
               </Button>
-              <Button onClick={() => setCreateModalOpen(true)} size="sm">
+              <Button onClick={handleNewNumberClick} size="sm">
                 <Plus className="h-4 w-4 mr-2" />
                 Novo Número
               </Button>
@@ -1180,7 +1266,7 @@ export default function InboxDashboard() {
                 <Smartphone className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                 <h3 className="text-lg font-medium mb-2">Nenhum número conectado</h3>
                 <p className="text-muted-foreground mb-4">Adicione seu primeiro número de WhatsApp</p>
-                <Button onClick={() => setCreateModalOpen(true)}>
+                <Button onClick={handleNewNumberClick}>
                   <Plus className="h-4 w-4 mr-2" />
                   Criar Número
                 </Button>
@@ -1457,7 +1543,7 @@ export default function InboxDashboard() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setCreateModalOpen(false); resetCreateForm(); }}>Cancelar</Button>
-            <Button onClick={handleCreateInstance} disabled={creating || !newInstanceName}>
+            <Button onClick={() => handleCreateInstance(false)} disabled={creating || !newInstanceName}>
               {creating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
               Criar
             </Button>
@@ -1503,6 +1589,98 @@ export default function InboxDashboard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Confirm Purchase Modal (for semi-full members) */}
+      <Dialog open={showConfirmPurchaseModal} onOpenChange={setShowConfirmPurchaseModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Smartphone className="h-5 w-5 text-primary" />
+              Nova Instância WhatsApp
+            </DialogTitle>
+            <DialogDescription>
+              Crie uma nova instância para conectar seu WhatsApp. Esta ação consumirá créditos.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Instance Name Input */}
+            <div className="space-y-2">
+              <Label>Nome identificador</Label>
+              <Input
+                value={newInstanceName}
+                onChange={(e) => setNewInstanceName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                placeholder="meu_numero_01"
+              />
+              <p className="text-xs text-muted-foreground">
+                Apenas letras minúsculas, números e underscores
+              </p>
+            </div>
+
+            {/* Cost Summary */}
+            <div className="p-4 rounded-lg bg-muted/50 space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Período:</span>
+                <span className="font-medium">30 dias</span>
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t">
+                <span className="text-sm font-medium">Custo:</span>
+                <span className="text-lg font-bold text-primary">{INSTANCE_COST} créditos</span>
+              </div>
+            </div>
+
+            {/* Balance Display */}
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-accent/10 border border-accent/20">
+              <Wallet className="h-4 w-4 text-accent" />
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground">Saldo atual</p>
+                <p className="font-semibold">{balance.toFixed(2)} créditos</p>
+              </div>
+              {balance < INSTANCE_COST && (
+                <Badge variant="destructive">Insuficiente</Badge>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowConfirmPurchaseModal(false);
+                setNewInstanceName('');
+              }}
+              disabled={creating}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={() => handleCreateInstance(true)} 
+              disabled={creating || balance < INSTANCE_COST || !newInstanceName.trim()}
+              className="bg-primary"
+            >
+              {creating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Confirmar e Criar ({INSTANCE_COST} créditos)
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Insufficient Credits Modal */}
+      <InsufficientCreditsModal
+        open={showInsufficientCreditsModal}
+        onOpenChange={setShowInsufficientCreditsModal}
+        requiredCredits={INSTANCE_COST}
+        systemName="Instância WhatsApp"
+      />
       </div>
     </SystemLayout>
   );
