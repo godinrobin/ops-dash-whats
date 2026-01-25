@@ -76,6 +76,9 @@ const ZapSpy = () => {
   const userDaysRemaining = daysRemaining(SYSTEM_ID);
   const systemPricing = getSystemPricing(SYSTEM_ID);
   
+  // Determine if content should be blurred (no access in credits system)
+  const shouldBlurContent = (isCreditsActive || isTestMode) && !userHasAccess && !accessLoading && !effectiveAdmin;
+  
   const [offers, setOffers] = useState<ZapSpyOffer[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedNiche, setSelectedNiche] = useState<string>("all");
@@ -179,6 +182,13 @@ const ZapSpy = () => {
     loadOffers();
     loadSavedOffers();
   }, [user]);
+
+  // Auto-open access modal when user doesn't have access
+  useEffect(() => {
+    if (shouldBlurContent && !accessLoading) {
+      setShowAccessModal(true);
+    }
+  }, [shouldBlurContent, accessLoading]);
 
   const loadOffers = async () => {
     if (!user) return;
@@ -457,27 +467,8 @@ const ZapSpy = () => {
             </p>
           </header>
 
-          {/* Access Gate - Block for non-members in credits system */}
-          {(isCreditsActive || isTestMode) && !userHasAccess && !accessLoading && !effectiveAdmin && (
-            <Card className="border-amber-500/50 bg-amber-500/10 mb-8">
-              <CardContent className="py-8 text-center">
-                <Lock className="h-12 w-12 text-amber-500 mx-auto mb-4" />
-                <h2 className="text-xl font-bold mb-2">Acesso Restrito</h2>
-                <p className="text-muted-foreground mb-4">
-                  Este sistema requer assinatura mensal para membros parciais.
-                </p>
-                <Button 
-                  onClick={() => setShowAccessModal(true)}
-                  className="bg-accent hover:bg-accent/90"
-                >
-                  Ver Planos de Acesso
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Main Content - Only show if has access or is admin */}
-          {(userHasAccess || effectiveAdmin || accessLoading) && (
+          {/* Main Content - Show always but blur if no access */}
+          <div className={shouldBlurContent ? "blur-md pointer-events-none select-none" : ""}>
             <>
               {/* Filters */}
               <div className="flex flex-col md:flex-row gap-4 mb-6">
@@ -763,7 +754,7 @@ const ZapSpy = () => {
             </div>
           )}
             </>
-          )}
+          </div>
         </div>
       </div>
 
