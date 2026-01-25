@@ -182,6 +182,11 @@ export const useCreditsSystem = (): UseCreditsSystemReturn => {
 
   // Determine if credits system is active for the current user
   const isActive = (() => {
+    // IMPORTANT: Check user flags only after they're loaded
+    if (!userFlagsLoaded) {
+      return false;
+    }
+
     // Test users always experience the credits system as active
     if (isTestUser) {
       console.log('[CREDITS-SYSTEM] Active because: test user');
@@ -189,6 +194,7 @@ export const useCreditsSystem = (): UseCreditsSystemReturn => {
     }
     
     // Semi-full members always experience the credits system as active
+    // This must apply REGARDLESS of global system status
     if (isSemiFullMember) {
       console.log('[CREDITS-SYSTEM] Active because: semi-full member');
       return true;
