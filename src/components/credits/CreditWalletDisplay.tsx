@@ -66,7 +66,7 @@ export const CreditWalletDisplay = ({ compact = false, showTransactions = false 
           </div>
 
           <Button
-            onClick={() => navigate('/marketplace?tab=credits')}
+            onClick={() => navigate('/marketplace?tab=creditos')}
             className="w-full bg-accent hover:bg-accent/90"
             size="sm"
           >

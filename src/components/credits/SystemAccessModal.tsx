@@ -65,7 +65,7 @@ export const SystemAccessModal = ({
 
   const handleGoToMarketplace = () => {
     onOpenChange(false);
-    navigate('/marketplace?tab=credits');
+    navigate('/marketplace?tab=creditos');
   };
 
   return (

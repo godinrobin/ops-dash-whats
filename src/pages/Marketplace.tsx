@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -88,6 +89,7 @@ interface UserOrder {
 const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
   const { user } = useAuth();
   const { isImpersonating } = useImpersonation();
+  const [searchParams] = useSearchParams();
   useActivityTracker("marketplace", "Marketplace");
 
   const [activeTab, setActiveTab] = useState("creditos");
@@ -96,6 +98,14 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
   const [balance, setBalance] = useState(0);
   const [rechargeOpen, setRechargeOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  // Sync activeTab with URL query parameter
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
   
   // Product detail state
   const [selectedProduct, setSelectedProduct] = useState<MarketplaceProduct | null>(null);
