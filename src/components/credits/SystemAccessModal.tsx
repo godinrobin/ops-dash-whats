@@ -65,7 +65,8 @@ export const SystemAccessModal = ({
 
   const handleGoToMarketplace = () => {
     onOpenChange(false);
-    navigate('/marketplace?tab=creditos');
+    localStorage.setItem('homeMode', 'marketplace');
+    navigate('/?tab=creditos');
   };
 
   return (
