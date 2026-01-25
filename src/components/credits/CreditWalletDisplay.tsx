@@ -63,18 +63,14 @@ export const CreditWalletDisplay = ({ compact = false, showTransactions = false 
                 <p className="text-2xl font-bold">{balance.toFixed(2)} <span className="text-sm font-normal text-muted-foreground">créditos</span></p>
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-xs text-muted-foreground">Equivalente a</p>
-              <p className="text-lg font-semibold text-accent">{creditsToReais(balance)}</p>
-            </div>
           </div>
 
           <Button
-            onClick={() => navigate('/marketplace')}
+            onClick={() => navigate('/marketplace?tab=credits')}
             className="w-full bg-accent hover:bg-accent/90"
             size="sm"
           >
-            Comprar Créditos
+            Recarregar Créditos
             <ArrowRight className="h-4 w-4 ml-2" />
           </Button>
 

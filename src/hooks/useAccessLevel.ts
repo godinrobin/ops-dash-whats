@@ -7,8 +7,8 @@ const FREE_SYSTEMS = [
   "marketplace",
   "metricas",
   "organizador-numeros",
-  "track-ofertas",
-  "zap-spy"
+  "track-ofertas"
+  // "zap-spy" - Removed: requires subscription in credits system
 ];
 
 // Systems that require full membership

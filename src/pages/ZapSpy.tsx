@@ -51,10 +51,25 @@ const ZapSpy = () => {
   const isTestMode = isAdminTesting || isSimulatingPartial;
   // Full members have access, partial members need to purchase
   const effectiveFullMember = isSimulatingPartial ? false : isFullMember;
-  // In simulation mode, treat as no access for partial members
-  const userHasAccess = isTestMode 
-    ? (isAdminTesting ? hasAccess(SYSTEM_ID) || effectiveFullMember : false)
-    : hasAccess(SYSTEM_ID) || !isCreditsActive;
+  
+  // Access logic:
+  // - In partial simulation: ALWAYS block (simulate partial member who needs to pay)
+  // - In admin test: Full members have access, partials need to purchase
+  // - When active: Check purchased access
+  // - When inactive: Free access
+  const userHasAccess = (() => {
+    // System not active = free access
+    if (!isCreditsActive && !isTestMode) return true;
+    
+    // Partial simulation = always block to simulate partial member
+    if (isSimulatingPartial) return hasAccess(SYSTEM_ID);
+    
+    // Admin test mode = full members have access
+    if (isAdminTesting) return hasAccess(SYSTEM_ID) || effectiveFullMember;
+    
+    // System active = check purchased access
+    return hasAccess(SYSTEM_ID);
+  })();
   
   const userDaysRemaining = daysRemaining(SYSTEM_ID);
   const systemPricing = getSystemPricing(SYSTEM_ID);

@@ -30,7 +30,7 @@ export const InsufficientCreditsModal = ({
 
   const handleGoToMarketplace = () => {
     onOpenChange(false);
-    navigate('/marketplace');
+    navigate('/marketplace?tab=credits');
   };
 
   return (
