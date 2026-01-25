@@ -423,6 +423,23 @@ export const ChatPanel = ({
 
       setContactLabels(newTags);
       toast.success(`Etiqueta "${labelName}" adicionada!`);
+
+      // Trigger tag-based flows for this contact
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase.functions.invoke('trigger-tag-flow', {
+            body: {
+              contactId: contact.id,
+              tagName: labelName,
+              userId: user.id,
+            },
+          });
+        }
+      } catch (triggerError) {
+        console.error('Error triggering tag flow:', triggerError);
+        // Don't show error to user - tag was still added successfully
+      }
     } catch (err) {
       console.error('Error:', err);
       toast.error('Erro ao adicionar etiqueta');
@@ -468,14 +485,40 @@ export const ChatPanel = ({
   const handlePauseFlow = async () => {
     if (!contact) return;
     try {
+      // First update the contact to pause flows
       const { error } = await supabase
         .from('inbox_contacts')
         .update({ flow_paused: true })
         .eq('id', contact.id);
       
       if (error) throw error;
+
+      // Also pause any active sessions for this contact
+      const { data: activeSessions } = await supabase
+        .from('inbox_flow_sessions')
+        .select('id')
+        .eq('contact_id', contact.id)
+        .eq('status', 'active');
+
+      if (activeSessions && activeSessions.length > 0) {
+        const sessionIds = activeSessions.map(s => s.id);
+        
+        // Pause the sessions
+        await supabase
+          .from('inbox_flow_sessions')
+          .update({ status: 'paused' })
+          .in('id', sessionIds);
+        
+        // Cancel all pending delay jobs (timeouts, follow-ups, delays)
+        await supabase
+          .from('inbox_flow_delay_jobs')
+          .update({ status: 'done', updated_at: new Date().toISOString() })
+          .in('session_id', sessionIds)
+          .eq('status', 'scheduled');
+      }
+
       setFlowPaused(true);
-      toast.success('Funil pausado');
+      toast.success('Funil pausado e jobs pendentes cancelados');
     } catch (err) {
       console.error('Error pausing flow:', err);
       toast.error('Erro ao pausar funil');

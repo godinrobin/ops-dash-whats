@@ -686,12 +686,12 @@ export default function InboxKanbanPage() {
             .eq('id', userId)
             .single();
           
-          if (profile?.kanban_column_order && Array.isArray(profile.kanban_column_order)) {
-            const savedOrder = profile.kanban_column_order as string[];
-            const validSaved = savedOrder.filter(t => allCurrentTags.includes(t));
+          const savedOrder = (profile as any)?.kanban_column_order;
+          if (savedOrder && Array.isArray(savedOrder)) {
+            const validSaved = savedOrder.filter((t: string) => allCurrentTags.includes(t));
             const newTags = allCurrentTags.filter(t => !validSaved.includes(t));
             
-            const finalOrder = validSaved.filter(t => t !== 'Sem etiqueta');
+            const finalOrder = validSaved.filter((t: string) => t !== 'Sem etiqueta');
             setColumnOrder(['Sem etiqueta', ...finalOrder, ...newTags.filter(t => t !== 'Sem etiqueta')]);
             return;
           }
@@ -733,7 +733,7 @@ export default function InboxKanbanPage() {
         try {
           await supabase
             .from('profiles')
-            .update({ kanban_column_order: columnOrder })
+            .update({ kanban_column_order: columnOrder } as any)
             .eq('id', userId);
         } catch (error) {
           console.error('Error saving column order to DB:', error);
@@ -924,6 +924,11 @@ export default function InboxKanbanPage() {
 
   const updateContactTags = async (contactId: string, newTags: string[]) => {
     try {
+      // Get old tags to identify which tags are being ADDED
+      const oldContact = contacts.find(c => c.id === contactId);
+      const oldTags = oldContact?.tags || [];
+      const addedTags = newTags.filter(t => !oldTags.includes(t));
+
       const { error } = await supabase
         .from('inbox_contacts')
         .update({ tags: newTags })
@@ -939,6 +944,23 @@ export default function InboxKanbanPage() {
       // Update selected contact if it's the same
       if (selectedContact?.id === contactId) {
         setSelectedContact(prev => prev ? { ...prev, tags: newTags } : null);
+      }
+
+      // Trigger tag-based flows for each NEWLY added tag
+      if (userId && addedTags.length > 0) {
+        for (const tagName of addedTags) {
+          try {
+            await supabase.functions.invoke('trigger-tag-flow', {
+              body: {
+                contactId,
+                tagName,
+                userId,
+              },
+            });
+          } catch (triggerError) {
+            console.error('Error triggering tag flow:', triggerError);
+          }
+        }
       }
 
       toast.success('Lead movido com sucesso');
