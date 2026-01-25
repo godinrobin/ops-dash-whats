@@ -51,6 +51,8 @@ const ZapSpy = () => {
   const isTestMode = isAdminTesting || isSimulatingPartial;
   // Full members have access, partial members need to purchase
   const effectiveFullMember = isSimulatingPartial ? false : isFullMember;
+  // Admin only bypasses restrictions when NOT simulating partial
+  const effectiveAdmin = isSimulatingPartial ? false : isAdmin;
   
   // Access logic:
   // - In partial simulation: ALWAYS block (simulate partial member who needs to pay)
@@ -456,7 +458,7 @@ const ZapSpy = () => {
           </header>
 
           {/* Access Gate - Block for non-members in credits system */}
-          {(isCreditsActive || isTestMode) && !userHasAccess && !accessLoading && !isAdmin && (
+          {(isCreditsActive || isTestMode) && !userHasAccess && !accessLoading && !effectiveAdmin && (
             <Card className="border-amber-500/50 bg-amber-500/10 mb-8">
               <CardContent className="py-8 text-center">
                 <Lock className="h-12 w-12 text-amber-500 mx-auto mb-4" />
@@ -475,7 +477,7 @@ const ZapSpy = () => {
           )}
 
           {/* Main Content - Only show if has access or is admin */}
-          {(userHasAccess || isAdmin || accessLoading) && (
+          {(userHasAccess || effectiveAdmin || accessLoading) && (
             <>
               {/* Filters */}
               <div className="flex flex-col md:flex-row gap-4 mb-6">
