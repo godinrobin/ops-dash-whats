@@ -101,13 +101,13 @@ export const InstanceRenewalTag = ({ instanceId }: InstanceRenewalTagProps) => {
     <>
       <Badge
         variant={getBadgeStyle()}
-        className={`cursor-pointer hover:opacity-80 transition-opacity whitespace-nowrap ${
+        className={`cursor-pointer hover:opacity-80 transition-opacity whitespace-nowrap flex-shrink-0 ${
           aboutToExpire ? 'animate-pulse' : ''
         }`}
         onClick={() => setShowModal(true)}
       >
-        <Clock className="h-3 w-3 mr-1" />
-        {badgeContent}
+        <Clock className="h-3 w-3 mr-1 flex-shrink-0" />
+        <span className="whitespace-nowrap">{badgeContent}</span>
       </Badge>
 
       <Dialog open={showModal} onOpenChange={setShowModal}>

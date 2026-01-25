@@ -19,6 +19,10 @@ import { PairCodeModal } from "@/components/PairCodeModal";
 import { useProxyValidator } from "@/hooks/useProxyValidator";
 import { InstanceRenewalTag } from "@/components/credits/InstanceRenewalTag";
 import { useInstanceSubscription } from "@/hooks/useInstanceSubscription";
+import { useCreditsSystem } from "@/hooks/useCreditsSystem";
+import { useCredits } from "@/hooks/useCredits";
+import { useAccessLevel } from "@/hooks/useAccessLevel";
+import { InsufficientCreditsModal } from "@/components/credits/InsufficientCreditsModal";
 
 interface Instance {
   id: string;
@@ -73,6 +77,14 @@ export default function MaturadorInstances() {
   
   // Instance subscription for credits system
   const { registerInstance, freeInstancesRemaining } = useInstanceSubscription();
+  
+  // Credits system
+  const { isActive: isCreditsActive, isAdminTesting, isSimulatingPartial } = useCreditsSystem();
+  const { canAfford, deductCredits } = useCredits();
+  const { isFullMember } = useAccessLevel();
+  const [showInsufficientCreditsModal, setShowInsufficientCreditsModal] = useState(false);
+  const INSTANCE_COST = 6; // 6 credits for 30 days
+  const FREE_INSTANCES_LIMIT = 3;
   
   // Card proxy validation state (per-instance)
   const [validatingInstanceProxy, setValidatingInstanceProxy] = useState<string | null>(null);
@@ -247,6 +259,42 @@ export default function MaturadorInstances() {
     if (!/^[a-zA-Z0-9_]+$/.test(newInstanceName)) {
       toast.error('O nome deve conter apenas letras, números e underscores');
       return;
+    }
+
+    // Check if credits system is active (including test modes)
+    const isCreditsRequired = isCreditsActive || isAdminTesting || isSimulatingPartial;
+    
+    if (isCreditsRequired) {
+      // Determine effective full member status (partial simulation = not full member)
+      const effectiveFM = isSimulatingPartial ? false : isFullMember;
+      
+      // Count current connected instances
+      const connectedCount = instances.filter(i => 
+        i.status === 'connected' || i.status === 'open'
+      ).length;
+      
+      // Check if user has free slots available
+      const hasFreeSlot = effectiveFM && connectedCount < FREE_INSTANCES_LIMIT;
+      
+      if (!hasFreeSlot) {
+        // Need to pay 6 credits for this instance
+        if (!canAfford(INSTANCE_COST)) {
+          setShowInsufficientCreditsModal(true);
+          return;
+        }
+        
+        // Deduct credits BEFORE creating instance
+        const success = await deductCredits(
+          INSTANCE_COST, 
+          'instancia_whatsapp', 
+          'Criação de instância WhatsApp (30 dias)'
+        );
+        
+        if (!success) {
+          toast.error('Erro ao processar pagamento de créditos');
+          return;
+        }
+      }
     }
 
     setCreating(true);
@@ -904,6 +952,14 @@ export default function MaturadorInstances() {
             )}
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Insufficient Credits Modal */}
+        <InsufficientCreditsModal
+          open={showInsufficientCreditsModal}
+          onOpenChange={setShowInsufficientCreditsModal}
+          requiredCredits={INSTANCE_COST}
+          systemName="Instância WhatsApp"
+        />
       </div>
     </div>
   );

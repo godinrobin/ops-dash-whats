@@ -58,16 +58,57 @@ export const CreditsTab = ({ onRecharge }: CreditsTabProps) => {
     setPurchasing(pkg.id);
     
     try {
-      // TODO: Implement PIX payment flow
-      // For now, show message that credits need to be purchased
-      toast.info(
-        "Para comprar créditos, faça uma recarga na carteira e depois volte aqui!",
-        {
-          description: `Pacote: ${pkg.name} - R$ ${pkg.price_brl.toFixed(2).replace('.', ',')}`,
-          duration: 5000,
-        }
-      );
-      onRecharge();
+      // 1. Fetch wallet balance
+      const { data: wallet, error: walletError } = await supabase
+        .from('sms_user_wallets')
+        .select('balance')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      
+      if (walletError) throw walletError;
+      
+      const walletBalance = wallet?.balance ?? 0;
+      
+      // 2. Check if user has sufficient balance
+      if (walletBalance < pkg.price_brl) {
+        toast.error(
+          `Saldo insuficiente. Você tem R$ ${walletBalance.toFixed(2).replace('.', ',')} e precisa de R$ ${pkg.price_brl.toFixed(2).replace('.', ',')}`,
+          { description: 'Recarregue sua carteira primeiro.' }
+        );
+        onRecharge();
+        return;
+      }
+      
+      // 3. Debit from wallet
+      const { error: debitError } = await supabase
+        .from('sms_user_wallets')
+        .update({ balance: walletBalance - pkg.price_brl })
+        .eq('user_id', user.id);
+      
+      if (debitError) throw debitError;
+      
+      // 4. Add credits via RPC
+      const { error: creditError } = await supabase.rpc('add_credits', {
+        p_user_id: user.id,
+        p_amount: pkg.credits,
+        p_type: 'purchase',
+        p_description: `Compra de pacote: ${pkg.name}`,
+        p_reference_id: pkg.id
+      });
+      
+      if (creditError) {
+        // Rollback wallet debit on credit error
+        await supabase
+          .from('sms_user_wallets')
+          .update({ balance: walletBalance })
+          .eq('user_id', user.id);
+        throw creditError;
+      }
+      
+      // 5. Refresh credits display
+      await refreshCredits();
+      toast.success(`${pkg.credits} créditos adicionados com sucesso!`);
+      
     } catch (err) {
       console.error("Error purchasing:", err);
       toast.error("Erro ao processar compra");
@@ -123,9 +164,6 @@ export const CreditsTab = ({ onRecharge }: CreditsTabProps) => {
               <div>
                 <p className="text-sm text-muted-foreground">Seu saldo de créditos</p>
                 <p className="text-3xl font-bold text-accent">{balance.toFixed(2)}</p>
-                <p className="text-sm text-muted-foreground">
-                  ≈ {creditsToReais(balance)}
-                </p>
               </div>
             </div>
           </div>
@@ -179,9 +217,6 @@ export const CreditsTab = ({ onRecharge }: CreditsTabProps) => {
                       </p>
                       <p className="text-2xl font-semibold text-green-500 mt-1">
                         R$ {pkg.price_brl.toFixed(2).replace('.', ',')}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        R$ {(pkg.price_brl / pkg.credits).toFixed(2).replace('.', ',')} por crédito
                       </p>
                     </div>
 
