@@ -1,12 +1,103 @@
+import { useState, useEffect } from "react";
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Download, Chrome, FolderOpen, ToggleRight, CheckCircle } from "lucide-react";
+import { Download, Chrome, FolderOpen, ToggleRight, CheckCircle, Lock, Coins } from "lucide-react";
 import whatsappLogo from "@/assets/whatsapp-logo.png";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
+import { useCreditsSystem } from "@/hooks/useCreditsSystem";
+import { useCredits } from "@/hooks/useCredits";
+import { InsufficientCreditsModal } from "@/components/credits/InsufficientCreditsModal";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
+
+const EXTENSION_COST = 1.50;
+const SYSTEM_ID = 'save_whatsapp';
 
 const SaveWhatsApp = () => {
   useActivityTracker("page_visit", "Save WhatsApp");
+  const { user } = useAuth();
+  const { isActive: isCreditsActive, isSemiFullMember, loading: creditsLoading } = useCreditsSystem();
+  const { deductCredits, canAfford, loading: balanceLoading } = useCredits();
+  const [showInsufficientCredits, setShowInsufficientCredits] = useState(false);
+  const [hasPurchased, setHasPurchased] = useState(false);
+  const [checkingPurchase, setCheckingPurchase] = useState(true);
+  const [purchasing, setPurchasing] = useState(false);
+
+  // Check if user has already purchased the extension
+  useEffect(() => {
+    const checkPurchase = async () => {
+      if (!user) {
+        setCheckingPurchase(false);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('system_access')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('system_id', SYSTEM_ID)
+          .maybeSingle();
+
+        if (!error && data) {
+          setHasPurchased(true);
+        }
+      } catch (err) {
+        console.error('Error checking purchase:', err);
+      } finally {
+        setCheckingPurchase(false);
+      }
+    };
+
+    checkPurchase();
+  }, [user]);
+
+  const handleDownload = async () => {
+    // Check if credits system is active and user is semi-full member
+    const requiresPayment = (isCreditsActive || isSemiFullMember) && !hasPurchased;
+
+    if (requiresPayment && isSemiFullMember) {
+      // Semi-full members need to pay
+      if (!canAfford(EXTENSION_COST)) {
+        setShowInsufficientCredits(true);
+        return;
+      }
+
+      setPurchasing(true);
+      try {
+        const success = await deductCredits(
+          EXTENSION_COST,
+          SYSTEM_ID,
+          'Compra da Extensão Save WhatsApp'
+        );
+
+        if (!success) {
+          setShowInsufficientCredits(true);
+          return;
+        }
+
+        // Register access
+        await supabase.from('system_access').insert({
+          user_id: user?.id,
+          system_id: SYSTEM_ID,
+        });
+
+        setHasPurchased(true);
+        toast.success('Extensão adquirida com sucesso!');
+      } catch (error) {
+        console.error('Error purchasing:', error);
+        toast.error('Erro ao processar compra');
+        return;
+      } finally {
+        setPurchasing(false);
+      }
+    }
+
+    // Proceed with download
+    window.open("https://joaolucassps.co/save-whatsapp.zip", "_blank");
+  };
   
   const steps = [
     {
@@ -41,6 +132,9 @@ const SaveWhatsApp = () => {
     }
   ];
 
+  const isLoading = creditsLoading || balanceLoading || checkingPurchase;
+  const needsToPay = isSemiFullMember && !hasPurchased;
+
   return (
     <>
       <Header />
@@ -60,13 +154,47 @@ const SaveWhatsApp = () => {
           </header>
 
           {/* Download Button */}
-          <div className="flex justify-center mb-12">
-            <a href="https://joaolucassps.co/save-whatsapp.zip" download>
-              <Button size="lg" className="bg-gradient-to-r from-green-400 to-green-600 hover:from-green-500 hover:to-green-700 text-white gap-2 text-lg px-8 py-6">
-                <Download className="w-6 h-6" />
-                Baixar Extensão
-              </Button>
-            </a>
+          <div className="flex flex-col items-center mb-12">
+            {needsToPay && !hasPurchased && (
+              <div className="mb-4 p-3 rounded-lg bg-accent/10 border border-accent/30">
+                <div className="flex items-center justify-center gap-2 text-accent">
+                  <Coins className="h-4 w-4" />
+                  <span className="font-semibold">{EXTENSION_COST.toFixed(2)} créditos</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Compra única - acesso vitalício</p>
+              </div>
+            )}
+            
+            <Button 
+              size="lg" 
+              onClick={handleDownload}
+              disabled={isLoading || purchasing}
+              className="bg-gradient-to-r from-green-400 to-green-600 hover:from-green-500 hover:to-green-700 text-white gap-2 text-lg px-8 py-6"
+            >
+              {purchasing ? (
+                <>
+                  <span className="animate-spin">⏳</span>
+                  Processando...
+                </>
+              ) : needsToPay ? (
+                <>
+                  <Lock className="w-6 h-6" />
+                  Comprar e Baixar
+                </>
+              ) : (
+                <>
+                  <Download className="w-6 h-6" />
+                  Baixar Extensão
+                </>
+              )}
+            </Button>
+            
+            {hasPurchased && (
+              <p className="text-xs text-green-500 mt-2 flex items-center justify-center gap-1">
+                <CheckCircle className="h-3 w-3" />
+                Você já possui acesso a esta extensão
+              </p>
+            )}
           </div>
 
           {/* Features */}
@@ -121,6 +249,13 @@ const SaveWhatsApp = () => {
           </div>
         </div>
       </div>
+
+      <InsufficientCreditsModal
+        open={showInsufficientCredits}
+        onOpenChange={setShowInsufficientCredits}
+        requiredCredits={EXTENSION_COST}
+        systemName="Save WhatsApp"
+      />
     </>
   );
 };

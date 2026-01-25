@@ -253,15 +253,7 @@ const GeradorPalavrasChaves = () => {
                 <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-accent/20 to-accent/10 flex items-center justify-center">
                   <Key className="w-8 h-8 text-accent" />
                 </div>
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <h1 className="text-2xl font-bold">Gerador de Palavras-Chave</h1>
-                  {isCreditsActive && (
-                    <Badge variant="outline" className="border-accent/50 text-accent gap-1">
-                      <Coins className="h-3 w-3" />
-                      {CREDIT_COST.toFixed(2)} por mensagem
-                    </Badge>
-                  )}
-                </div>
+                <h1 className="text-2xl font-bold mb-2">Gerador de Palavras-Chave</h1>
                 <p className="text-muted-foreground max-w-md">
                   Descubra as melhores palavras-chave para encontrar anúncios de WhatsApp no gerenciador de anúncios
                 </p>
@@ -369,6 +361,14 @@ const GeradorPalavrasChaves = () => {
                   )}
                 </Button>
               </div>
+              
+              {/* Credit cost notice - small, below input */}
+              {(isCreditsActive || isSemiFullMember) && (
+                <p className="text-[10px] text-muted-foreground text-center mt-1.5 flex items-center justify-center gap-1">
+                  <Coins className="h-2.5 w-2.5" />
+                  {CREDIT_COST.toFixed(2)} crédito por mensagem
+                </p>
+              )}
             </div>
           </div>
         </div>

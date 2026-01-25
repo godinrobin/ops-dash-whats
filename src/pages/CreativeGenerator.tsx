@@ -573,11 +573,11 @@ const CreativeGenerator = () => {
                     setShowReferenceDialog(true);
                   }}
                   variant="outline"
-                  className="w-full border-accent text-accent-foreground hover:bg-accent/10"
+                  className="w-full border-accent hover:bg-accent/10"
                   size="lg"
                 >
-                  <Upload className="h-4 w-4 mr-2" />
-                  Envie Imagem de Referência
+                  <Upload className="h-4 w-4 mr-2 text-accent" />
+                  <span className="text-accent">Envie Imagem de Referência</span>
                 </Button>
                 
                 <p className="text-xs text-muted-foreground text-center flex items-center justify-center gap-1.5 pt-2">
