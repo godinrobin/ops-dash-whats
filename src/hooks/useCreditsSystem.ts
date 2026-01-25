@@ -71,12 +71,14 @@ export const useCreditsSystem = (): UseCreditsSystemReturn => {
   const [isTestUser, setIsTestUser] = useState(false);
   const [isSemiFullMember, setIsSemiFullMember] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [userFlagsLoaded, setUserFlagsLoaded] = useState(false);
 
   // Check if user is a test user or semi-full member for credits system
   const checkUserFlags = useCallback(async () => {
     if (!user) {
       setIsTestUser(false);
       setIsSemiFullMember(false);
+      setUserFlagsLoaded(true);
       return;
     }
 
@@ -89,6 +91,7 @@ export const useCreditsSystem = (): UseCreditsSystemReturn => {
 
       if (error) {
         console.error('Error checking user flags:', error);
+        setUserFlagsLoaded(true);
         return;
       }
 
@@ -96,6 +99,8 @@ export const useCreditsSystem = (): UseCreditsSystemReturn => {
       setIsSemiFullMember(data?.is_semi_full_member ?? false);
     } catch (error) {
       console.error('Error:', error);
+    } finally {
+      setUserFlagsLoaded(true);
     }
   }, [user]);
 
@@ -127,9 +132,14 @@ export const useCreditsSystem = (): UseCreditsSystemReturn => {
     }
   }, []);
 
+  // Load both status and user flags in parallel, wait for both
   useEffect(() => {
-    fetchStatus();
-    checkUserFlags();
+    const loadAll = async () => {
+      setLoading(true);
+      setUserFlagsLoaded(false);
+      await Promise.all([fetchStatus(), checkUserFlags()]);
+    };
+    loadAll();
   }, [fetchStatus, checkUserFlags]);
 
   const updateStatus = useCallback(async (newStatus: CreditsSystemStatus): Promise<boolean> => {
@@ -192,6 +202,9 @@ export const useCreditsSystem = (): UseCreditsSystemReturn => {
   const isAdminTesting = config.status === 'admin_test' && isAdmin;
   const isSimulatingPartial = config.status === 'admin_partial_simulation' && isAdmin;
 
+  // Only return loaded = false when user flags are still loading
+  const isLoading = loading || !userFlagsLoaded;
+
   return {
     isActive,
     isAdminTesting,
@@ -200,7 +213,7 @@ export const useCreditsSystem = (): UseCreditsSystemReturn => {
     isSemiFullMember,
     systemStatus: config.status,
     activatedAt: config.activated_at,
-    loading,
+    loading: isLoading,
     refresh: () => fetchStatus(true),
     updateStatus
   };

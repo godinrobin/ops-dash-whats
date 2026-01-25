@@ -79,8 +79,8 @@ export default function MaturadorInstances() {
   const { registerInstance, freeInstancesRemaining } = useInstanceSubscription();
   
   // Credits system
-  const { isActive: isCreditsActive, isAdminTesting, isSimulatingPartial, isSemiFullMember } = useCreditsSystem();
-  const { canAfford, deductCredits } = useCredits();
+  const { isActive: isCreditsActive, isAdminTesting, isSimulatingPartial, isSemiFullMember, loading: creditsLoading } = useCreditsSystem();
+  const { canAfford, deductCredits, loading: balanceLoading } = useCredits();
   const { isFullMember } = useAccessLevel();
   const [showInsufficientCreditsModal, setShowInsufficientCreditsModal] = useState(false);
   const INSTANCE_COST = 6; // 6 credits for 30 days
@@ -251,6 +251,12 @@ export default function MaturadorInstances() {
   };
 
   const handleCreateInstance = async () => {
+    // Wait for credits system to fully load
+    if (creditsLoading || balanceLoading) {
+      toast.error('Aguarde, carregando informações...');
+      return;
+    }
+
     if (!newInstanceName.trim()) {
       toast.error('Nome do número é obrigatório');
       return;
@@ -886,13 +892,13 @@ export default function MaturadorInstances() {
               <Button variant="outline" onClick={() => setCreateModalOpen(false)}>
                 Cancelar
               </Button>
-              <Button onClick={handleCreateInstance} disabled={creating || !newInstanceName}>
-                {creating ? (
+              <Button onClick={handleCreateInstance} disabled={creating || !newInstanceName || creditsLoading || balanceLoading}>
+                {creating || creditsLoading || balanceLoading ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
                   <Plus className="h-4 w-4 mr-2" />
                 )}
-                Criar
+                {creditsLoading || balanceLoading ? 'Carregando...' : 'Criar'}
               </Button>
             </DialogFooter>
           </DialogContent>
