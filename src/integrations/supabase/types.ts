@@ -2988,6 +2988,7 @@ export type Database = {
           hide_sale_value_in_notification: boolean | null
           id: string
           is_full_member: boolean
+          is_semi_full_member: boolean | null
           lead_rotation_limit: number | null
           notify_on_disconnect: boolean | null
           notify_on_lead_rotation: boolean | null
@@ -3010,6 +3011,7 @@ export type Database = {
           hide_sale_value_in_notification?: boolean | null
           id: string
           is_full_member?: boolean
+          is_semi_full_member?: boolean | null
           lead_rotation_limit?: number | null
           notify_on_disconnect?: boolean | null
           notify_on_lead_rotation?: boolean | null
@@ -3032,6 +3034,7 @@ export type Database = {
           hide_sale_value_in_notification?: boolean | null
           id?: string
           is_full_member?: boolean
+          is_semi_full_member?: boolean | null
           lead_rotation_limit?: number | null
           notify_on_disconnect?: boolean | null
           notify_on_lead_rotation?: boolean | null

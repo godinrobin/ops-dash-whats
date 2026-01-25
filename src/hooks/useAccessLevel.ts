@@ -74,12 +74,14 @@ const clearCache = (): void => {
 export const useAccessLevel = () => {
   const { user } = useAuth();
   const [isFullMember, setIsFullMember] = useState<boolean | null>(null);
+  const [isSemiFullMember, setIsSemiFullMember] = useState<boolean>(false);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
 
   const checkAccessStatus = useCallback(async (forceRefresh = false) => {
     if (!user) {
       setIsFullMember(null);
+      setIsSemiFullMember(false);
       setIsAdmin(false);
       setLoading(false);
       clearCache();
@@ -98,11 +100,11 @@ export const useAccessLevel = () => {
     }
 
     try {
-      // Fetch membership status, admin role, and test user flag in parallel
+      // Fetch membership status, admin role, test user flag, and semi-full status in parallel
       const [profileResult, roleResult] = await Promise.all([
         supabase
           .from("profiles")
-          .select("is_full_member, credits_system_test_user")
+          .select("is_full_member, credits_system_test_user, is_semi_full_member")
           .eq("id", user.id)
           .maybeSingle(),
         supabase
@@ -113,15 +115,19 @@ export const useAccessLevel = () => {
           .maybeSingle()
       ]);
 
+      // Semi-full members: full navigation access but no free tier benefits
+      const semiFullStatus = profileResult.data?.is_semi_full_member ?? false;
+      
       // Credits test users should be treated as full members for navigation
       // but the credits system will still apply usage restrictions
       const isCreditsTestUser = profileResult.data?.credits_system_test_user ?? false;
       const baseMemberStatus = profileResult.data?.is_full_member ?? true;
-      // If test user, grant full navigation access (no locks in sidebar)
-      const memberStatus = isCreditsTestUser ? true : baseMemberStatus;
+      // If test user OR semi-full, grant full navigation access (no locks in sidebar)
+      const memberStatus = (isCreditsTestUser || semiFullStatus) ? true : baseMemberStatus;
       const adminStatus = !!roleResult.data;
 
       setIsFullMember(memberStatus);
+      setIsSemiFullMember(semiFullStatus);
       setIsAdmin(adminStatus);
       
       // Cache the result
@@ -185,6 +191,7 @@ export const useAccessLevel = () => {
 
   return {
     isFullMember,
+    isSemiFullMember,
     isAdmin,
     loading,
     canAccessSystem,

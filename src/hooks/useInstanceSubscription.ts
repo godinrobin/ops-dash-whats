@@ -51,7 +51,7 @@ const DAYS_PER_RENEWAL = 30;
 
 export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
   const { user } = useAuth();
-  const { isActive, activatedAt, isSimulatingPartial, isAdminTesting } = useCreditsSystem();
+  const { isActive, activatedAt, isSimulatingPartial, isAdminTesting, isSemiFullMember } = useCreditsSystem();
   const { isFullMember } = useAccessLevel();
   const { deductCredits, canAfford, refresh: refreshCredits } = useCredits();
   const [subscriptions, setSubscriptions] = useState<InstanceSubscription[]>([]);
@@ -123,9 +123,9 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
   
   const totalInstances = subscriptions.length;
   
-  // For full members (not simulating), they get 3 free instances (first 3 by creation order)
-  // When simulating partial, treat as 0 free instances
-  const effectiveFullMember = isSimulatingPartial ? false : isFullMember;
+  // For full members (not simulating and not semi-full), they get 3 free instances (first 3 by creation order)
+  // When simulating partial or semi-full member, treat as 0 free instances
+  const effectiveFullMember = (isSimulatingPartial || isSemiFullMember) ? false : isFullMember;
   
   // Count how many of the first 3 instances exist
   const freeInstancesUsed = effectiveFullMember 
@@ -140,8 +140,8 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
 
   // Check if an instance is free based on its position in creation order
   const isInstanceFree = useCallback((instanceId: string): boolean => {
-    if (isSimulatingPartial) {
-      // In partial simulation, no instances are free
+    if (isSimulatingPartial || isSemiFullMember) {
+      // In partial simulation or semi-full members, no instances are free
       return false;
     }
     
@@ -163,7 +163,7 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
     if (instanceIndex === -1) return false;
     
     return instanceIndex < FREE_INSTANCES_LIMIT;
-  }, [sortedSubscriptions, effectiveFullMember, isSimulatingPartial, instances]);
+  }, [sortedSubscriptions, effectiveFullMember, isSimulatingPartial, isSemiFullMember, instances]);
 
   const getDaysRemaining = useCallback((instanceId: string): number | null => {
     const subscription = subscriptions.find(s => s.instance_id === instanceId);

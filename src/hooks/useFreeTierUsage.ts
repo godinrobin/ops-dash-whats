@@ -78,7 +78,7 @@ const getPeriodBoundaries = (period: '10min' | 'day' | 'month' | null): { start:
 
 export const useFreeTierUsage = (): UseFreeTierUsageReturn => {
   const { user } = useAuth();
-  const { isActive, isSimulatingPartial } = useCreditsSystem();
+  const { isActive, isSimulatingPartial, isSemiFullMember } = useCreditsSystem();
   const { isFullMember } = useAccessLevel();
   const [usages, setUsages] = useState<FreeTierUsage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -119,11 +119,11 @@ export const useFreeTierUsage = (): UseFreeTierUsageReturn => {
   }, []);
 
   const hasFreeTier = useCallback((systemId: string): boolean => {
-    // Partial members (or simulating) have no free tier
-    if (isSimulatingPartial || !isFullMember) return false;
+    // Partial members, simulating partial, or semi-full members have no free tier
+    if (isSimulatingPartial || !isFullMember || isSemiFullMember) return false;
     
     return FREE_TIER_CONFIG.some(c => c.systemId === systemId);
-  }, [isFullMember, isSimulatingPartial]);
+  }, [isFullMember, isSimulatingPartial, isSemiFullMember]);
 
   const getUsage = useCallback((systemId: string): { used: number; limit: number; canUse: boolean } => {
     // If credits system is not active, no limits apply
