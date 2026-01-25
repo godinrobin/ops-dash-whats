@@ -64,7 +64,7 @@ interface CommentReaction {
 
 export const Feed = () => {
   const { user } = useAuth();
-  const { isFullMember, loading: accessLoading } = useAccessLevel();
+  const { isFullMember, isSemiFullMember, loading: accessLoading } = useAccessLevel();
   const { isAdmin } = useAdminStatus();
   const [posts, setPosts] = useState<Post[]>([]);
   const [pendingPosts, setPendingPosts] = useState<Post[]>([]);
@@ -349,8 +349,10 @@ export const Feed = () => {
     }
   };
 
-  // Blurred overlay for non-members
-  if (!accessLoading && !isFullMember) {
+  // Blurred overlay for non-members (semi-full members CAN access the feed)
+  const canAccessFeed = isFullMember || isSemiFullMember;
+  
+  if (!accessLoading && !canAccessFeed) {
     return (
       <div className="relative">
         <div className="absolute inset-0 z-10 flex items-center justify-center">
@@ -360,7 +362,7 @@ export const Feed = () => {
             </div>
             <h3 className="text-xl font-bold mb-2">Conteúdo Exclusivo</h3>
             <p className="text-muted-foreground">
-              O feed da comunidade está disponível apenas para membros completos.
+              O feed da comunidade está disponível apenas para membros.
             </p>
           </div>
         </div>
@@ -386,7 +388,8 @@ export const Feed = () => {
   return (
     <div className="space-y-4">
       {/* Create Post Card - only one instance now */}
-      {isFullMember && <CreatePostCard onPostCreated={() => { fetchPosts(); fetchPendingPosts(); }} isAdmin={isAdmin} />}
+      {/* Create Post Card - semi-full and full members can post */}
+      {canAccessFeed && <CreatePostCard onPostCreated={() => { fetchPosts(); fetchPendingPosts(); }} isAdmin={isAdmin} />}
 
       {/* Admin Pending Posts Section */}
       {isAdmin && pendingPosts.length > 0 && (
