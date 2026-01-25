@@ -3530,6 +3530,33 @@ export type Database = {
         }
         Relationships: []
       }
+      system_access: {
+        Row: {
+          created_at: string
+          expires_at: string | null
+          id: string
+          purchased_at: string
+          system_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          purchased_at?: string
+          system_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          purchased_at?: string
+          system_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       system_pricing: {
         Row: {
           credit_cost: number

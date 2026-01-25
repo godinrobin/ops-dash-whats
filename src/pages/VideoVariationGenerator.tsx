@@ -118,8 +118,8 @@ export default function VideoVariationGenerator() {
   const [showInsufficientCredits, setShowInsufficientCredits] = useState(false);
   
   // Credits system
-  const { isActive: isCreditsActive, isSemiFullMember } = useCreditsSystem();
-  const { deductCredits, canAfford, balance } = useCredits();
+  const { isActive: isCreditsActive, isSemiFullMember, loading: creditsLoading } = useCreditsSystem();
+  const { deductCredits, canAfford, balance, loading: balanceLoading } = useCredits();
   const CREDIT_COST_PER_VARIATION = 0.10;
   const SYSTEM_ID = 'gerador_variacoes';
   
@@ -832,6 +832,12 @@ export default function VideoVariationGenerator() {
   };
 
   const generateVariations = async () => {
+    // Wait for credits system to load to ensure proper enforcement
+    if (creditsLoading || balanceLoading) {
+      toast.error('Aguarde, carregando informações de créditos...');
+      return;
+    }
+
     if (hookVideos.length === 0 || bodyVideos.length === 0 || ctaVideos.length === 0) {
       toast.error('Adicione pelo menos um vídeo em cada seção');
       return;
@@ -1446,13 +1452,18 @@ export default function VideoVariationGenerator() {
                   )}
                   <Button
                     onClick={generateVariations}
-                    disabled={isGenerating || videoVariations === 0 || isUploading}
+                    disabled={isGenerating || videoVariations === 0 || isUploading || creditsLoading || balanceLoading}
                     className="bg-accent hover:bg-accent/90 text-accent-foreground"
                   >
                     {isGenerating ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Processando... {currentProcessing && `(${currentProcessing})`}
+                      </>
+                    ) : creditsLoading || balanceLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Carregando...
                       </>
                     ) : (
                       <>
