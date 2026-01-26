@@ -33,6 +33,7 @@ import { useCreditsSystem } from "@/hooks/useCreditsSystem";
 import { useAccessLevel } from "@/hooks/useAccessLevel";
 import { InsufficientCreditsModal } from "@/components/credits/InsufficientCreditsModal";
 import { Spinner } from "@/components/ui/spinner-1";
+import { TutorialButton } from "@/components/TutorialButton";
 
 const FREE_INSTANCES_LIMIT = 3;
 const INSTANCE_COST = 6;
@@ -1055,6 +1056,10 @@ export default function InboxDashboard() {
               </div>
             </div>
           </div>
+          <TutorialButton 
+            playerId="6977a7a4816e22aa9bb112a6" 
+            title="Tutorial - Automati-Zap" 
+          />
         </div>
 
         {/* Menu Cards */}
