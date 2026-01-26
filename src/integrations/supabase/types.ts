@@ -2144,6 +2144,136 @@ export type Database = {
           },
         ]
       }
+      inbox_group_messages: {
+        Row: {
+          content: string | null
+          created_at: string
+          group_jid: string
+          id: string
+          instance_id: string | null
+          is_from_me: boolean
+          media_mimetype: string | null
+          media_url: string | null
+          message_id: string
+          message_type: string
+          sender_jid: string
+          sender_name: string | null
+          sender_push_name: string | null
+          timestamp: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          group_jid: string
+          id?: string
+          instance_id?: string | null
+          is_from_me?: boolean
+          media_mimetype?: string | null
+          media_url?: string | null
+          message_id: string
+          message_type?: string
+          sender_jid: string
+          sender_name?: string | null
+          sender_push_name?: string | null
+          timestamp: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          group_jid?: string
+          id?: string
+          instance_id?: string | null
+          is_from_me?: boolean
+          media_mimetype?: string | null
+          media_url?: string | null
+          message_id?: string
+          message_type?: string
+          sender_jid?: string
+          sender_name?: string | null
+          sender_push_name?: string | null
+          timestamp?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbox_group_messages_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inbox_groups: {
+        Row: {
+          created_at: string
+          description: string | null
+          group_jid: string
+          id: string
+          instance_id: string | null
+          is_announce: boolean | null
+          is_community: boolean | null
+          last_message_at: string | null
+          last_message_preview: string | null
+          name: string
+          owner_jid: string | null
+          participant_count: number | null
+          profile_pic_url: string | null
+          unread_count: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          group_jid: string
+          id?: string
+          instance_id?: string | null
+          is_announce?: boolean | null
+          is_community?: boolean | null
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          name: string
+          owner_jid?: string | null
+          participant_count?: number | null
+          profile_pic_url?: string | null
+          unread_count?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          group_jid?: string
+          id?: string
+          instance_id?: string | null
+          is_announce?: boolean | null
+          is_community?: boolean | null
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          name?: string
+          owner_jid?: string | null
+          participant_count?: number | null
+          profile_pic_url?: string | null
+          unread_count?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbox_groups_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inbox_messages: {
         Row: {
           contact_id: string

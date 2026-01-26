@@ -3779,6 +3779,281 @@ Regras IMPORTANTES:
         break;
       }
 
+      case 'fetch-group-messages': {
+        const { instanceId, groupJid, limit = 100 } = params;
+        
+        if (!instanceId || !groupJid) {
+          return new Response(JSON.stringify({ error: 'instanceId and groupJid are required' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Get instance info
+        const { data: inst, error: instError } = await supabaseClient
+          .from('maturador_instances')
+          .select('id, instance_name, api_provider, uazapi_token, user_id')
+          .eq('id', instanceId)
+          .single();
+
+        if (instError || !inst) {
+          return new Response(JSON.stringify({ error: 'Instance not found' }), {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Verify ownership
+        if (inst.user_id !== user.id) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        console.log(`[FETCH-GROUP-MESSAGES] Fetching messages for group ${groupJid} from ${inst.instance_name}`);
+
+        const instanceConfig = await getInstanceApiConfig(supabaseClient, instanceId);
+        const globalConfig = await getGlobalApiConfig(supabaseClient);
+
+        let messages: any[] = [];
+
+        if (inst.api_provider === 'uazapi') {
+          // UazAPI: POST /chat/findMessages with group JID
+          const uazapiBaseUrl = (instanceConfig.provider === 'uazapi'
+            ? instanceConfig.baseUrl
+            : (globalConfig.provider === 'uazapi' ? globalConfig.baseUrl : 'https://zapdata.uazapi.com')
+          ).replace(/\/$/, '');
+          const uazapiToken = inst.uazapi_token;
+
+          if (!uazapiToken) {
+            return new Response(JSON.stringify({ error: 'No UAZAPI token for this instance' }), {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          const url = `${uazapiBaseUrl}/chat/findMessages`;
+          console.log(`[FETCH-GROUP-MESSAGES] UazAPI: POST ${url}`);
+
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'token': uazapiToken,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              chatid: groupJid,
+              limit: limit,
+            }),
+          });
+
+          if (!res.ok) {
+            const errorText = await res.text();
+            console.error(`[FETCH-GROUP-MESSAGES] UazAPI error:`, errorText);
+            result = { success: false, error: 'Failed to fetch messages', messages: [] };
+            break;
+          }
+
+          const data = await res.json();
+          messages = Array.isArray(data) ? data : (data?.messages || []);
+          console.log(`[FETCH-GROUP-MESSAGES] Got ${messages.length} messages from UazAPI`);
+
+        } else {
+          // Evolution API: POST /chat/findMessages/{instanceName}
+          const evolutionBaseUrl = globalConfig.baseUrl;
+          const evolutionApiKey = globalConfig.apiKey;
+
+          const url = `${evolutionBaseUrl}/chat/findMessages/${inst.instance_name}`;
+          console.log(`[FETCH-GROUP-MESSAGES] Evolution: POST ${url}`);
+
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'apikey': evolutionApiKey,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              where: {
+                key: { remoteJid: groupJid }
+              },
+              limit: limit,
+            }),
+          });
+
+          if (!res.ok) {
+            const errorText = await res.text();
+            console.error(`[FETCH-GROUP-MESSAGES] Evolution error:`, errorText);
+            result = { success: false, error: 'Failed to fetch messages', messages: [] };
+            break;
+          }
+
+          const data = await res.json();
+          messages = Array.isArray(data) ? data : (data?.messages || []);
+          console.log(`[FETCH-GROUP-MESSAGES] Got ${messages.length} messages from Evolution`);
+        }
+
+        result = {
+          success: true,
+          messages,
+          count: messages.length,
+        };
+        break;
+      }
+
+      case 'send-group-message': {
+        const { instanceId, groupJid, content, messageType = 'text', mediaUrl } = params;
+        
+        if (!instanceId || !groupJid || !content) {
+          return new Response(JSON.stringify({ error: 'instanceId, groupJid and content are required' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Get instance info
+        const { data: inst, error: instError } = await supabaseClient
+          .from('maturador_instances')
+          .select('id, instance_name, api_provider, uazapi_token, user_id')
+          .eq('id', instanceId)
+          .single();
+
+        if (instError || !inst) {
+          return new Response(JSON.stringify({ error: 'Instance not found' }), {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Verify ownership
+        if (inst.user_id !== user.id) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        console.log(`[SEND-GROUP-MESSAGE] Sending ${messageType} to group ${groupJid} via ${inst.instance_name}`);
+
+        const instanceConfig = await getInstanceApiConfig(supabaseClient, instanceId);
+        const globalConfig = await getGlobalApiConfig(supabaseClient);
+
+        if (inst.api_provider === 'uazapi') {
+          // UazAPI: POST /send/text
+          const uazapiBaseUrl = (instanceConfig.provider === 'uazapi'
+            ? instanceConfig.baseUrl
+            : (globalConfig.provider === 'uazapi' ? globalConfig.baseUrl : 'https://zapdata.uazapi.com')
+          ).replace(/\/$/, '');
+          const uazapiToken = inst.uazapi_token;
+
+          if (!uazapiToken) {
+            return new Response(JSON.stringify({ error: 'No UAZAPI token for this instance' }), {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          let sendEndpoint = '/send/text';
+          let sendPayload: any = {
+            number: groupJid,
+            text: content,
+          };
+
+          if (messageType === 'image' && mediaUrl) {
+            sendEndpoint = '/send/image';
+            sendPayload = {
+              number: groupJid,
+              image: mediaUrl,
+              caption: content,
+            };
+          } else if (messageType === 'audio' && mediaUrl) {
+            sendEndpoint = '/send/audio';
+            sendPayload = {
+              number: groupJid,
+              audio: mediaUrl,
+            };
+          } else if (messageType === 'document' && mediaUrl) {
+            sendEndpoint = '/send/document';
+            sendPayload = {
+              number: groupJid,
+              document: mediaUrl,
+              fileName: 'document',
+            };
+          }
+
+          const url = `${uazapiBaseUrl}${sendEndpoint}`;
+          console.log(`[SEND-GROUP-MESSAGE] UazAPI: POST ${url}`);
+
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'token': uazapiToken,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(sendPayload),
+          });
+
+          if (!res.ok) {
+            const errorText = await res.text();
+            console.error(`[SEND-GROUP-MESSAGE] UazAPI error:`, errorText);
+            return new Response(JSON.stringify({ error: 'Failed to send message', details: errorText }), {
+              status: 500,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          const data = await res.json();
+          result = { success: true, message: data };
+
+        } else {
+          // Evolution API
+          const evolutionBaseUrl = globalConfig.baseUrl;
+          const evolutionApiKey = globalConfig.apiKey;
+
+          let sendEndpoint = `/message/sendText/${inst.instance_name}`;
+          let sendPayload: any = {
+            number: groupJid,
+            text: content,
+          };
+
+          if (messageType === 'image' && mediaUrl) {
+            sendEndpoint = `/message/sendMedia/${inst.instance_name}`;
+            sendPayload = {
+              number: groupJid,
+              mediatype: 'image',
+              media: mediaUrl,
+              caption: content,
+            };
+          }
+
+          const url = `${evolutionBaseUrl}${sendEndpoint}`;
+          console.log(`[SEND-GROUP-MESSAGE] Evolution: POST ${url}`);
+
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'apikey': evolutionApiKey,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(sendPayload),
+          });
+
+          if (!res.ok) {
+            const errorText = await res.text();
+            console.error(`[SEND-GROUP-MESSAGE] Evolution error:`, errorText);
+            return new Response(JSON.stringify({ error: 'Failed to send message', details: errorText }), {
+              status: 500,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          const data = await res.json();
+          result = { success: true, message: data };
+        }
+
+        break;
+      }
+
       default:
         return new Response(JSON.stringify({ error: `Ação desconhecida: ${action}` }), {
           status: 400,
