@@ -22,6 +22,8 @@ import {
   DndContext,
   DragOverlay,
   closestCenter,
+  pointerWithin,
+  rectIntersection,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -30,6 +32,8 @@ import {
   DragEndEvent,
   DragOverEvent,
   useDroppable,
+  CollisionDetection,
+  getFirstCollision,
 } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -202,17 +206,21 @@ const KanbanCard = ({
 
 // Droppable zone for column content - allows dropping cards even when column is empty
 const ColumnDropZone = ({ tag, children }: { tag: string; children: React.ReactNode }) => {
-  const { setNodeRef, isOver } = useDroppable({
+  const { setNodeRef, isOver, active } = useDroppable({
     id: `dropzone-${tag}`,
     data: { type: 'column', tag },
   });
+
+  // Only show highlight when dragging a card (not a column)
+  const isDraggingCard = active && !(active.id as string).startsWith('column-');
+  const showHighlight = isOver && isDraggingCard;
 
   return (
     <div 
       ref={setNodeRef} 
       className={cn(
-        "flex-1 transition-colors duration-150",
-        isOver && "bg-accent/20 rounded-b-lg"
+        "flex-1 transition-all duration-200 min-h-[120px]",
+        showHighlight && "bg-accent/30 rounded-b-lg ring-2 ring-accent ring-inset"
       )}
     >
       {children}
@@ -595,12 +603,41 @@ export default function InboxKanbanPage() {
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
+      activationConstraint: { distance: 5 },
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  // Custom collision detection that prioritizes dropzones (columns) over cards
+  const customCollisionDetection: CollisionDetection = useCallback((args) => {
+    // First, check for pointer collisions with dropzones
+    const pointerCollisions = pointerWithin(args);
+    const dropzoneCollisions = pointerCollisions.filter(
+      collision => (collision.id as string).startsWith('dropzone-')
+    );
+    
+    // If pointer is inside a dropzone, prioritize it
+    if (dropzoneCollisions.length > 0) {
+      return dropzoneCollisions;
+    }
+    
+    // Otherwise, use rectangle intersection for better accuracy
+    const rectCollisions = rectIntersection(args);
+    
+    // Prioritize dropzones in rect collisions too
+    const dropzoneRect = rectCollisions.filter(
+      collision => (collision.id as string).startsWith('dropzone-')
+    );
+    
+    if (dropzoneRect.length > 0) {
+      return dropzoneRect;
+    }
+    
+    // Fall back to closest center for cards and columns
+    return closestCenter(args);
+  }, []);
 
   const userId = effectiveUserId || user?.id;
 
@@ -901,11 +938,15 @@ export default function InboxKanbanPage() {
     // Determine target column from the over element
     let targetTag: string | null = null;
     
-    // Check if dropped on a droppable zone (column area)
+    // Priority 1: Check if dropped on a droppable zone (column area) - most reliable
     if (overIdStr.startsWith('dropzone-')) {
       targetTag = overIdStr.replace('dropzone-', '');
     }
-    // Check if dropped on another card
+    // Priority 2: Check if dropped on a column header
+    else if (overIdStr.startsWith('column-')) {
+      targetTag = overIdStr.replace('column-', '');
+    }
+    // Priority 3: Check if dropped on another card - find which column that card belongs to
     else {
       const overContact = contacts.find(c => c.id === overIdStr);
       if (overContact) {
@@ -916,15 +957,38 @@ export default function InboxKanbanPage() {
       }
     }
 
-    if (!targetTag) return;
+    if (!targetTag) {
+      console.log('[Kanban] No target tag found, aborting drag');
+      return;
+    }
 
     // If dropping in the same column, do nothing
     const currentTag = activeContact.tags.length > 0 
       ? activeContact.tags[activeContact.tags.length - 1] 
       : 'Sem etiqueta';
-    if (currentTag === targetTag) return;
+    
+    if (currentTag === targetTag) {
+      console.log('[Kanban] Same column, no action needed');
+      return;
+    }
 
-    // Update tags - add target tag at the END so it becomes the "current" column
+    console.log('[Kanban] Moving contact from', currentTag, 'to', targetTag);
+
+    // Optimistic update - move card immediately in UI
+    setContacts(prev => prev.map(c => {
+      if (c.id !== activeContact.id) return c;
+      
+      let newTags: string[];
+      if (targetTag === 'Sem etiqueta') {
+        newTags = [];
+      } else {
+        const filteredTags = c.tags.filter(t => t !== targetTag);
+        newTags = [...filteredTags, targetTag];
+      }
+      return { ...c, tags: newTags };
+    }));
+
+    // Update tags in database
     let newTags: string[];
     if (targetTag === 'Sem etiqueta') {
       newTags = [];
@@ -937,8 +1001,8 @@ export default function InboxKanbanPage() {
     await updateContactTags(activeContact.id, newTags);
   };
 
-  const handleDragOver = () => {
-    // We could add visual feedback here
+  const handleDragOver = (event: DragOverEvent) => {
+    // Visual feedback is handled by ColumnDropZone isOver state
   };
 
   const toggleColumnVisibility = (tag: string) => {
@@ -1189,7 +1253,7 @@ export default function InboxKanbanPage() {
         ) : (
           <DndContext
             sensors={sensors}
-            collisionDetection={closestCenter}
+            collisionDetection={customCollisionDetection}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
             onDragOver={handleDragOver}
