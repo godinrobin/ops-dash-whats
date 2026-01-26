@@ -237,6 +237,7 @@ Deno.serve(async (req) => {
     // e também filtramos apenas os nomes que de fato existem na UAZAPI (fonte de verdade).
 
     // Buscar lista real de instâncias na UAZAPI (se configurado)
+    // Se falhar, uazapiNameSet permanece null e NÃO filtramos (fallback para mostrar tudo do banco)
     let uazapiNameSet: Set<string> | null = null;
     try {
       const { data: config } = await supabaseClient
@@ -244,9 +245,13 @@ Deno.serve(async (req) => {
         .select('uazapi_base_url, uazapi_api_token')
         .maybeSingle();
 
+      console.log('[admin-get-all-data] UAZAPI config found:', !!config?.uazapi_base_url, !!config?.uazapi_api_token);
+
       if (config?.uazapi_base_url && config?.uazapi_api_token) {
         const baseUrl = (config.uazapi_base_url as string).replace(/\/$/, '');
         const adminToken = config.uazapi_api_token as string;
+
+        console.log('[admin-get-all-data] Fetching UAZAPI instances from:', baseUrl);
 
         const uazapiResp = await fetch(`${baseUrl}/instance/all`, {
           method: 'GET',
@@ -256,13 +261,35 @@ Deno.serve(async (req) => {
           },
         });
 
+        console.log('[admin-get-all-data] UAZAPI response status:', uazapiResp.status);
+
         if (uazapiResp.ok) {
           const uazapiInstances = await uazapiResp.json();
-          uazapiNameSet = new Set(
-            (Array.isArray(uazapiInstances) ? uazapiInstances : [])
-              .map((i: any) => (i?.instance ?? '').toString().toLowerCase().trim())
-              .filter(Boolean)
-          );
+          console.log('[admin-get-all-data] UAZAPI returned', Array.isArray(uazapiInstances) ? uazapiInstances.length : 0, 'instances');
+          
+          // Log sample for debugging
+          if (Array.isArray(uazapiInstances) && uazapiInstances.length > 0) {
+            console.log('[admin-get-all-data] Sample UAZAPI instance:', JSON.stringify(uazapiInstances[0]));
+          }
+          
+          // Only set the filter if we got a non-empty array with valid instance names
+          // UAZAPI uses "name" field for the instance name (not "instance")
+          if (Array.isArray(uazapiInstances) && uazapiInstances.length > 0) {
+            const names = uazapiInstances
+              .map((i: any) => (i?.name ?? i?.instance ?? '').toString().toLowerCase().trim())
+              .filter(Boolean);
+            
+            console.log('[admin-get-all-data] Extracted', names.length, 'instance names. Sample:', names.slice(0, 3));
+            
+            if (names.length > 0) {
+              uazapiNameSet = new Set(names);
+              console.log('[admin-get-all-data] uazapiNameSet size:', uazapiNameSet.size);
+            } else {
+              console.warn('[admin-get-all-data] No valid instance names found in UAZAPI response, skipping filter');
+            }
+          } else {
+            console.warn('[admin-get-all-data] UAZAPI returned empty array, skipping filter');
+          }
         } else {
           const errTxt = await uazapiResp.text();
           console.warn('[admin-get-all-data] UAZAPI list failed:', uazapiResp.status, errTxt);
@@ -271,6 +298,8 @@ Deno.serve(async (req) => {
     } catch (e) {
       console.warn('[admin-get-all-data] Failed to fetch UAZAPI instances list:', e);
     }
+    
+    console.log('[admin-get-all-data] Will filter by UAZAPI:', uazapiNameSet !== null);
 
     const { data: instancesData } = await supabaseClient
       .from('maturador_instances')
