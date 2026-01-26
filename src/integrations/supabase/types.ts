@@ -5114,6 +5114,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      add_tag_to_contact: {
+        Args: { p_contact_id: string; p_tag_name: string }
+        Returns: string[]
+      }
       claim_push_notifications: {
         Args: { batch_size?: number }
         Returns: {
@@ -5162,6 +5166,10 @@ export type Database = {
       increment_deliverable_prompt: {
         Args: { p_user_id: string }
         Returns: number
+      }
+      remove_tag_from_contact: {
+        Args: { p_contact_id: string; p_tag_name: string }
+        Returns: string[]
       }
     }
     Enums: {
