@@ -74,7 +74,7 @@ export const Header = ({ mode, onModeChange, onSidebarToggle }: HeaderProps) => 
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
                   mode === "sistemas" 
-                    ? "bg-card text-foreground shadow-sm" 
+                    ? "bg-accent text-accent-foreground shadow-sm" 
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -86,7 +86,7 @@ export const Header = ({ mode, onModeChange, onSidebarToggle }: HeaderProps) => 
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
                   mode === "marketplace" 
-                    ? "bg-card text-foreground shadow-sm" 
+                    ? "bg-accent text-accent-foreground shadow-sm" 
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -98,7 +98,7 @@ export const Header = ({ mode, onModeChange, onSidebarToggle }: HeaderProps) => 
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
                   mode === "ads" 
-                    ? "bg-card text-foreground shadow-sm" 
+                    ? "bg-accent text-accent-foreground shadow-sm" 
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
