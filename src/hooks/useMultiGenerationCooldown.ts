@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAdminStatus } from "./useAdminStatus";
 
-const COOLDOWN_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+const COOLDOWN_DURATION = 10 * 60 * 1000; // 10 minutes in milliseconds
 
 interface GenerationRecord {
   timestamps: number[];
