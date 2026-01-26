@@ -57,10 +57,10 @@ export const Header = ({ mode, onModeChange, onSidebarToggle }: HeaderProps) => 
               onClick={() => navigate("/")} 
               className="flex items-center gap-2 group"
             >
-              <div className="w-8 h-8 rounded-md bg-accent flex items-center justify-center">
+              <div className="w-8 h-8 rounded-md bg-accent flex items-center justify-center shadow-lg shadow-accent/20">
                 <span className="text-accent-foreground font-bold text-sm">Z</span>
               </div>
-              <span className="font-semibold text-foreground group-hover:text-accent transition-colors hidden sm:block">
+              <span className="font-semibold text-accent group-hover:text-accent/80 transition-colors hidden sm:block">
                 Zapdata
               </span>
             </button>

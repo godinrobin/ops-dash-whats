@@ -116,7 +116,7 @@ const CollapsibleSection = ({ title, children, defaultOpen = true }: Collapsible
     <div className="mb-1">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 w-full px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+        className="flex items-center gap-2 w-full px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-accent hover:text-accent/80 transition-colors"
       >
         {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
         {title}
@@ -212,10 +212,10 @@ export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: 
           onClick={() => { navigate("/"); onToggle?.(); }}
           className="flex items-center gap-2 group"
         >
-          <div className="w-8 h-8 rounded-md bg-accent flex items-center justify-center">
+          <div className="w-8 h-8 rounded-md bg-accent flex items-center justify-center shadow-lg shadow-accent/20">
             <span className="text-accent-foreground font-bold text-sm">Z</span>
           </div>
-          <span className="font-semibold text-foreground group-hover:text-accent transition-colors">Zapdata</span>
+          <span className="font-semibold text-accent group-hover:text-accent/80 transition-colors">Zapdata</span>
         </button>
       </div>
 
