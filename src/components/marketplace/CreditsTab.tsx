@@ -216,7 +216,7 @@ export const CreditsTab = ({ onRecharge }: CreditsTabProps) => {
             <div>
               <p className="font-semibold text-green-500">🎁 Bônus 2x Ativo!</p>
               <p className="text-sm text-muted-foreground">
-                Como membro completo, você recebe o DOBRO de créditos em qualquer pacote!
+                Como membro da comunidade, você recebe o DOBRO de créditos em qualquer pacote!
               </p>
             </div>
           </CardContent>
