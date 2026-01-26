@@ -48,12 +48,8 @@ export const GroupChatPanel = ({ group }: GroupChatPanelProps) => {
     }
   }, [messages]);
 
-  // Sync messages when group changes
-  useEffect(() => {
-    if (group) {
-      syncMessages();
-    }
-  }, [group?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Note: Auto-sync is now handled by useGroupMessages hook
+  // No need for manual sync on group change here
 
   if (!group) {
     return (

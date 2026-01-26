@@ -167,10 +167,13 @@ export const useInboxGroups = (selectedInstanceId?: string) => {
     }
   }, [userId, selectedInstanceId, fetchGroups]);
 
-  // Initial fetch
+  // Initial fetch - load from DB and auto-sync from API
   useEffect(() => {
-    fetchGroups();
-  }, [fetchGroups]);
+    fetchGroups().then(() => {
+      // Auto-sync groups from WhatsApp API on mount
+      syncGroups();
+    });
+  }, [fetchGroups]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Subscribe to realtime updates
   useEffect(() => {
