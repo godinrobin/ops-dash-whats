@@ -2507,29 +2507,46 @@ export type Database = {
       logzz_webhooks: {
         Row: {
           created_at: string | null
+          event_type: string
+          flow_id: string | null
           id: string
           is_active: boolean | null
+          name: string | null
           updated_at: string | null
           user_id: string
           webhook_token: string
         }
         Insert: {
           created_at?: string | null
+          event_type?: string
+          flow_id?: string | null
           id?: string
           is_active?: boolean | null
+          name?: string | null
           updated_at?: string | null
           user_id: string
           webhook_token?: string
         }
         Update: {
           created_at?: string | null
+          event_type?: string
+          flow_id?: string | null
           id?: string
           is_active?: boolean | null
+          name?: string | null
           updated_at?: string | null
           user_id?: string
           webhook_token?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "logzz_webhooks_flow_id_fkey"
+            columns: ["flow_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_flows"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       marketplace_orders: {
         Row: {
