@@ -306,8 +306,8 @@ export const ChatMessage = ({ message, allMessages = [], contact, onReply, onMes
       case 'sent':
       case 'delivered':
       case 'read':
-        // Show single check for all sent statuses (delivery/read tracking disabled)
-        return <Check className="h-3 w-3 text-muted-foreground" />;
+        // Show single check with strong orange for sent statuses
+        return <Check className="h-3 w-3 text-accent-strong" />;
       case 'failed':
         return <XCircle className="h-3 w-3 text-destructive" />;
       default:
@@ -459,7 +459,7 @@ export const ChatMessage = ({ message, allMessages = [], contact, onReply, onMes
                   style={{ width: `${audioProgress}%` }}
                 />
               </div>
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-[10px] text-accent-strong font-medium">
                 {audioLoading ? 'Carregando...' : formatDuration(audioDuration)}
               </span>
             </div>
