@@ -36,14 +36,16 @@ interface Flow {
 
 interface WebhookHistoryItem {
   id: string;
-  order_number: string | null;
+  order_number?: string | null;
   client_name: string | null;
-  order_status: string | null;
+  order_status?: string | null;
+  cart_status?: string | null;
   created_at: string;
 }
 
 const EVENT_TYPES = [
-  { value: "pedido", label: "Pedido" }
+  { value: "pedido", label: "Pedido", endpoint: "webhook-logzz-order" },
+  { value: "abandono_carrinho", label: "Abandono de Carrinho", endpoint: "webhook-logzz-cart" }
 ];
 
 export function LogzzIntegrationSettings() {
@@ -62,7 +64,7 @@ export function LogzzIntegrationSettings() {
   const [expandedWebhook, setExpandedWebhook] = useState<string | null>(null);
   const [history, setHistory] = useState<Record<string, WebhookHistoryItem[]>>({});
 
-  const WEBHOOK_BASE_URL = "https://dcjizoulbggsavizbukq.supabase.co/functions/v1/webhook-logzz-order";
+  const WEBHOOK_BASE_URL = "https://dcjizoulbggsavizbukq.supabase.co/functions/v1";
 
   useEffect(() => {
     if (user && isAdmin) {
@@ -77,18 +79,38 @@ export function LogzzIntegrationSettings() {
   useEffect(() => {
     if (!user || !isAdmin || !expandedWebhook) return;
 
+    const webhook = webhooks.find(w => w.id === expandedWebhook);
+    if (!webhook) return;
+
     const fetchHistory = async () => {
       const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString();
-      const { data, error } = await supabase
-        .from('logzz_orders')
-        .select('id, order_number, client_name, order_status, created_at')
-        .eq('user_id', user.id)
-        .gte('created_at', thirtySecondsAgo)
-        .order('created_at', { ascending: false })
-        .limit(10);
+      
+      // Choose the right table based on event type
+      if (webhook.event_type === 'abandono_carrinho') {
+        const { data, error } = await supabase
+          .from('logzz_cart_abandonments')
+          .select('id, client_name, cart_status, created_at')
+          .eq('user_id', user.id)
+          .eq('webhook_id', webhook.id)
+          .gte('created_at', thirtySecondsAgo)
+          .order('created_at', { ascending: false })
+          .limit(10);
 
-      if (!error && data) {
-        setHistory(prev => ({ ...prev, [expandedWebhook]: data as WebhookHistoryItem[] }));
+        if (!error && data) {
+          setHistory(prev => ({ ...prev, [expandedWebhook]: data as WebhookHistoryItem[] }));
+        }
+      } else {
+        const { data, error } = await supabase
+          .from('logzz_orders')
+          .select('id, order_number, client_name, order_status, created_at')
+          .eq('user_id', user.id)
+          .gte('created_at', thirtySecondsAgo)
+          .order('created_at', { ascending: false })
+          .limit(10);
+
+        if (!error && data) {
+          setHistory(prev => ({ ...prev, [expandedWebhook]: data as WebhookHistoryItem[] }));
+        }
       }
     };
 
@@ -96,7 +118,7 @@ export function LogzzIntegrationSettings() {
     const interval = setInterval(fetchHistory, 3000);
 
     return () => clearInterval(interval);
-  }, [user, isAdmin, expandedWebhook]);
+  }, [user, isAdmin, expandedWebhook, webhooks]);
 
   const fetchWebhooks = async () => {
     if (!user) return;
@@ -255,7 +277,9 @@ export function LogzzIntegrationSettings() {
   };
 
   const getWebhookUrl = (webhook: LogzzWebhook) => {
-    return `${WEBHOOK_BASE_URL}?token=${webhook.webhook_token}`;
+    const eventConfig = EVENT_TYPES.find(e => e.value === webhook.event_type);
+    const endpoint = eventConfig?.endpoint || 'webhook-logzz-order';
+    return `${WEBHOOK_BASE_URL}/${endpoint}?token=${webhook.webhook_token}`;
   };
 
   if (adminLoading || loading) {
@@ -462,9 +486,13 @@ export function LogzzIntegrationSettings() {
                               className="flex items-center justify-between p-2 rounded bg-muted/50 text-sm"
                             >
                               <div className="flex items-center gap-2">
-                                <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                                <div className="h-2 w-2 rounded-full bg-positive animate-pulse" />
                                 <div>
-                                  <p className="font-medium">{item.order_number || 'Sem número'}</p>
+                                  <p className="font-medium">
+                                    {webhook.event_type === 'abandono_carrinho' 
+                                      ? (item.cart_status || 'Carrinho abandonado')
+                                      : (item.order_number || 'Sem número')}
+                                  </p>
                                   <p className="text-xs text-muted-foreground">{item.client_name}</p>
                                 </div>
                               </div>
@@ -538,7 +566,7 @@ export function LogzzIntegrationSettings() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Mais tipos de eventos serão adicionados em breve
+                Selecione o tipo de evento que deseja receber
               </p>
             </div>
 

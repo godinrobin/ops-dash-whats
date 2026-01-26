@@ -2354,6 +2354,104 @@ export type Database = {
           },
         ]
       }
+      logzz_cart_abandonments: {
+        Row: {
+          affiliate_email: string | null
+          affiliate_name: string | null
+          affiliate_phone: string | null
+          cart_status: string | null
+          checkout_url: string | null
+          client_address: string | null
+          client_address_city: string | null
+          client_address_comp: string | null
+          client_address_country: string | null
+          client_address_district: string | null
+          client_address_number: string | null
+          client_address_state: string | null
+          client_document: string | null
+          client_email: string | null
+          client_name: string | null
+          client_phone: string | null
+          client_zip_code: string | null
+          created_at: string
+          date_open_cart: string | null
+          id: string
+          producer_email: string | null
+          producer_name: string | null
+          products: Json | null
+          raw_payload: Json | null
+          sale_name: string | null
+          user_id: string
+          webhook_id: string | null
+        }
+        Insert: {
+          affiliate_email?: string | null
+          affiliate_name?: string | null
+          affiliate_phone?: string | null
+          cart_status?: string | null
+          checkout_url?: string | null
+          client_address?: string | null
+          client_address_city?: string | null
+          client_address_comp?: string | null
+          client_address_country?: string | null
+          client_address_district?: string | null
+          client_address_number?: string | null
+          client_address_state?: string | null
+          client_document?: string | null
+          client_email?: string | null
+          client_name?: string | null
+          client_phone?: string | null
+          client_zip_code?: string | null
+          created_at?: string
+          date_open_cart?: string | null
+          id?: string
+          producer_email?: string | null
+          producer_name?: string | null
+          products?: Json | null
+          raw_payload?: Json | null
+          sale_name?: string | null
+          user_id: string
+          webhook_id?: string | null
+        }
+        Update: {
+          affiliate_email?: string | null
+          affiliate_name?: string | null
+          affiliate_phone?: string | null
+          cart_status?: string | null
+          checkout_url?: string | null
+          client_address?: string | null
+          client_address_city?: string | null
+          client_address_comp?: string | null
+          client_address_country?: string | null
+          client_address_district?: string | null
+          client_address_number?: string | null
+          client_address_state?: string | null
+          client_document?: string | null
+          client_email?: string | null
+          client_name?: string | null
+          client_phone?: string | null
+          client_zip_code?: string | null
+          created_at?: string
+          date_open_cart?: string | null
+          id?: string
+          producer_email?: string | null
+          producer_name?: string | null
+          products?: Json | null
+          raw_payload?: Json | null
+          sale_name?: string | null
+          user_id?: string
+          webhook_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "logzz_cart_abandonments_webhook_id_fkey"
+            columns: ["webhook_id"]
+            isOneToOne: false
+            referencedRelation: "logzz_webhooks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       logzz_orders: {
         Row: {
           affiliate_commission: string | null
