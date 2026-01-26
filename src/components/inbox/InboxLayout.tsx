@@ -10,7 +10,7 @@ import { useInboxConversations } from '@/hooks/useInboxConversations';
 import { useInboxMessages } from '@/hooks/useInboxMessages';
 import { useInboxFlows } from '@/hooks/useInboxFlows';
 import { InboxContact } from '@/types/inbox';
-import { WhatsAppGroup } from '@/types/groups';
+import { InboxGroup } from '@/hooks/useInboxGroups';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -29,7 +29,7 @@ export const InboxLayout = () => {
   
   // View mode: 'conversations' or 'groups'
   const [viewMode, setViewMode] = useState<'conversations' | 'groups'>('conversations');
-  const [selectedGroup, setSelectedGroup] = useState<WhatsAppGroup | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<InboxGroup | null>(null);
 
   const { contacts, loading: contactsLoading, refetch: refetchContacts } = useInboxConversations(selectedInstanceId);
   const { messages, loading: messagesLoading, error: messagesError, sendMessage, refetch: refetchMessages } = useInboxMessages(selectedContact?.id || null);
