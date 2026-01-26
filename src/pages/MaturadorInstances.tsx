@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ArrowLeft, Plus, RefreshCw, Loader2, Smartphone, QrCode, Trash2, PowerOff, RotateCcw, Phone, ChevronDown, ChevronRight, Hash, Wifi, MapPin, CheckCircle, XCircle } from "lucide-react";
+import { TutorialButton } from "@/components/TutorialButton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -636,6 +637,10 @@ export default function MaturadorInstances() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <TutorialButton 
+              playerId="6977a7a4816e22aa9bb112a6" 
+              title="Tutorial - Automati-Zap" 
+            />
             <Button variant="outline" size="icon" onClick={handleRefresh} disabled={refreshing || syncing}>
               <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             </Button>

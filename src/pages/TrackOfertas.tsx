@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { SystemLayout } from "@/components/layout/SystemLayout";
+import { TutorialButton } from "@/components/TutorialButton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -368,7 +369,11 @@ const TrackOfertas = () => {
             </p>
           </div>
           
-          <div className="flex gap-3">
+          <div className="flex items-center gap-3">
+            <TutorialButton 
+              playerId="6977a7afff8bb56335472fe7" 
+              title="Tutorial - Track Ofertas" 
+            />
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
                 <Button size="lg" className="bg-accent hover:bg-accent/90">

@@ -143,6 +143,24 @@ serve(async (req) => {
 
     console.log(`[${runId}] Shipment saved successfully:`, insertedShipment.id);
 
+    // Log event for admin visibility
+    try {
+      await supabase
+        .from('logzz_webhook_events')
+        .insert({
+          user_id: userId,
+          event_type: 'shipment',
+          customer_name: body.recipient_name || null,
+          customer_phone: recipientPhone,
+          product_name: body.product || null,
+          order_id: body.code || body.tracking_code || null,
+          raw_payload: body,
+        });
+      console.log(`[${runId}] Event logged for admin`);
+    } catch (logError) {
+      console.warn(`[${runId}] Failed to log event (non-critical):`, logError);
+    }
+
     let flowTriggered = false;
     let flowError: string | null = null;
 

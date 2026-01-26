@@ -172,6 +172,25 @@ serve(async (req) => {
 
     console.log(`[${runId}] Cart abandonment saved successfully:`, insertedCart.id);
 
+    // Log event for admin visibility
+    try {
+      const productName = body.products?.main?.[0]?.product_name || body.products?.[0]?.product_name || body.sale_name || null;
+      await supabase
+        .from('logzz_webhook_events')
+        .insert({
+          user_id: userId,
+          event_type: 'cart',
+          customer_name: body.client_name || null,
+          customer_phone: clientPhone,
+          product_name: productName,
+          checkout_url: body.checkout_url || null,
+          raw_payload: body,
+        });
+      console.log(`[${runId}] Event logged for admin`);
+    } catch (logError) {
+      console.warn(`[${runId}] Failed to log event (non-critical):`, logError);
+    }
+
     // If there's a flow_id configured and we have a valid phone, trigger the flow
     let flowTriggered = false;
     let flowError: string | null = null;

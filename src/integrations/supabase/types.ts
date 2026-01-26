@@ -2727,6 +2727,45 @@ export type Database = {
           },
         ]
       }
+      logzz_webhook_events: {
+        Row: {
+          checkout_url: string | null
+          created_at: string
+          customer_name: string | null
+          customer_phone: string | null
+          event_type: string
+          id: string
+          order_id: string | null
+          product_name: string | null
+          raw_payload: Json | null
+          user_id: string
+        }
+        Insert: {
+          checkout_url?: string | null
+          created_at?: string
+          customer_name?: string | null
+          customer_phone?: string | null
+          event_type: string
+          id?: string
+          order_id?: string | null
+          product_name?: string | null
+          raw_payload?: Json | null
+          user_id: string
+        }
+        Update: {
+          checkout_url?: string | null
+          created_at?: string
+          customer_name?: string | null
+          customer_phone?: string | null
+          event_type?: string
+          id?: string
+          order_id?: string | null
+          product_name?: string | null
+          raw_payload?: Json | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       logzz_webhooks: {
         Row: {
           created_at: string | null
