@@ -269,18 +269,45 @@ export default function InboxDashboard() {
     if (!userId) return;
 
     try {
-      // Pega mensagens dos últimos 7 dias
+      // Pega mensagens dos últimos 7 dias - buscar em chunks por dia para não perder dados
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      sevenDaysAgo.setHours(0, 0, 0, 0);
       
       // Use count: 'exact' to get accurate counts beyond 1000 limit
-      const [contactsCountRes, contactsRes, messagesRes] = await Promise.all([
+      const [contactsCountRes, contactsRes] = await Promise.all([
         // Get exact count of contacts (bypasses 1000 limit)
         supabase.from('inbox_contacts').select('*', { count: 'exact', head: true }).eq('user_id', userId),
         // Get contacts with instance_id for grouping (limited to 1000 for display, but count is accurate)
         supabase.from('inbox_contacts').select('id, instance_id, created_at').eq('user_id', userId).limit(10000),
-        supabase.from('inbox_messages').select('id, instance_id, contact_id, created_at, direction').eq('user_id', userId).gte('created_at', sevenDaysAgo.toISOString()).order('created_at', { ascending: false }).limit(10000),
       ]);
+
+      // Fetch messages in daily chunks to ensure we get data from all 7 days
+      // This prevents the 10k limit from cutting off older data
+      const allMessages: any[] = [];
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      
+      for (let i = 0; i < 7; i++) {
+        const dayEnd = new Date(today);
+        dayEnd.setDate(today.getDate() - i);
+        dayEnd.setHours(23, 59, 59, 999);
+        
+        const dayStart = new Date(dayEnd);
+        dayStart.setHours(0, 0, 0, 0);
+        
+        const { data: dayMessages } = await supabase
+          .from('inbox_messages')
+          .select('id, instance_id, contact_id, created_at, direction')
+          .eq('user_id', userId)
+          .gte('created_at', dayStart.toISOString())
+          .lte('created_at', dayEnd.toISOString())
+          .limit(50000); // Higher limit per day to capture all conversations
+        
+        if (dayMessages) {
+          allMessages.push(...dayMessages);
+        }
+      }
 
       // Use count if available, otherwise use data length
       if (contactsRes.data) {
@@ -289,7 +316,7 @@ export default function InboxDashboard() {
         (contactsWithCount as any)._exactCount = contactsCountRes.count || contactsRes.data.length;
         setContacts(contactsWithCount);
       }
-      if (messagesRes.data) setMessages(messagesRes.data);
+      setMessages(allMessages);
     } catch (error) {
       console.error('Error fetching secondary data:', error);
     }
