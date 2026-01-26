@@ -208,10 +208,13 @@ serve(async (req) => {
           }
 
           // Add custom_data for events that support value
+          // Increment value by 1 centavo per event to prevent Facebook deduplication
           if (["Purchase", "InitiateCheckout", "AddToCart"].includes(event_name)) {
+            const baseValue = value || 0;
+            const incrementedValue = baseValue + (eventIndex * 0.01);
             eventData.custom_data = {
               currency: currency || "BRL",
-              value: value || 0,
+              value: Math.round(incrementedValue * 100) / 100, // Round to 2 decimal places
             };
           }
 
