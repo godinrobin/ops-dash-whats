@@ -26,7 +26,7 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { contactId, tagName, userId } = await req.json();
+    const { contactId, tagName, userId, sourceFlowId } = await req.json();
 
     if (!contactId || !tagName || !userId) {
       return new Response(
@@ -35,7 +35,7 @@ serve(async (req) => {
       );
     }
 
-    console.log(`[trigger-tag-flow] Tag "${tagName}" added to contact ${contactId} for user ${userId}`);
+    console.log(`[trigger-tag-flow] Tag "${tagName}" added to contact ${contactId} for user ${userId}${sourceFlowId ? ` (from flow ${sourceFlowId})` : ''}`);
 
     // Get contact details
     const { data: contact, error: contactError } = await supabase
@@ -87,6 +87,12 @@ serve(async (req) => {
 
     // Filter flows that match the added tag
     const matchingFlows = tagFlows.filter((flow) => {
+      // Skip the source flow to prevent infinite loops
+      if (sourceFlowId && flow.id === sourceFlowId) {
+        console.log(`[trigger-tag-flow] Skipping source flow ${flow.id} to prevent loop`);
+        return false;
+      }
+      
       const triggerTags = (flow.trigger_tags as string[]) || [];
       const tagMatches = triggerTags.some(
         (t) => t.toLowerCase().trim() === tagName.toLowerCase().trim()

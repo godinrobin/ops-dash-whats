@@ -19,9 +19,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Clock, Moon, Smartphone } from 'lucide-react';
+import { Clock, Moon, Smartphone, Tag } from 'lucide-react';
 import { InboxFlow } from '@/types/inbox';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+
+interface InboxTag {
+  id: string;
+  name: string;
+  color: string;
+}
 
 interface Instance {
   id: string;
@@ -45,11 +53,12 @@ export const FlowSettingsDialog = ({
   instances,
   onSave,
 }: FlowSettingsDialogProps) => {
+  const { user } = useAuth();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [triggerType, setTriggerType] = useState<'keyword' | 'all' | 'schedule' | 'sale' | 'tag'>('keyword');
   const [triggerKeywords, setTriggerKeywords] = useState('');
-  const [triggerTags, setTriggerTags] = useState('');
+  const [selectedTriggerTags, setSelectedTriggerTags] = useState<string[]>([]);
   const [keywordMatchType, setKeywordMatchType] = useState<'exact' | 'contains' | 'not_contains'>('exact');
   const [assignedInstances, setAssignedInstances] = useState<string[]>([]);
   const [pauseOnMedia, setPauseOnMedia] = useState(false);
@@ -62,6 +71,48 @@ export const FlowSettingsDialog = ({
   const [replyInterval, setReplyInterval] = useState(3);
   const [pauseOtherFlows, setPauseOtherFlows] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Available tags from database
+  const [availableTags, setAvailableTags] = useState<InboxTag[]>([]);
+  const [loadingTags, setLoadingTags] = useState(false);
+
+  // Predefined tags that always appear
+  const predefinedTags = [
+    { name: 'Lead', color: '#3b82f6' },
+    { name: 'Pendente', color: '#eab308' },
+    { name: 'Pago', color: '#22c55e' },
+    { name: 'VIP', color: '#a855f7' },
+    { name: 'Suporte', color: '#f97316' },
+  ];
+
+  // Fetch user tags when dialog opens
+  useEffect(() => {
+    const fetchTags = async () => {
+      if (!open || !user?.id) return;
+      
+      setLoadingTags(true);
+      try {
+        const { data } = await supabase
+          .from('inbox_tags')
+          .select('id, name, color')
+          .eq('user_id', user.id);
+        
+        setAvailableTags(data || []);
+      } catch (error) {
+        console.error('Error fetching tags:', error);
+      } finally {
+        setLoadingTags(false);
+      }
+    };
+    
+    fetchTags();
+  }, [open, user?.id]);
+
+  // All tags combined (predefined + custom)
+  const allTags = [
+    ...predefinedTags.map(t => ({ id: `predefined-${t.name}`, ...t })),
+    ...availableTags.filter(t => !predefinedTags.some(p => p.name.toLowerCase() === t.name.toLowerCase()))
+  ];
 
   useEffect(() => {
     if (flow) {
@@ -69,7 +120,7 @@ export const FlowSettingsDialog = ({
       setDescription(flow.description || '');
       setTriggerType(flow.trigger_type || 'keyword');
       setTriggerKeywords(flow.trigger_keywords?.join(', ') || '');
-      setTriggerTags((flow as any).trigger_tags?.join(', ') || '');
+      setSelectedTriggerTags((flow as any).trigger_tags || []);
       setKeywordMatchType((flow as any).keyword_match_type || 'exact');
       setAssignedInstances(flow.assigned_instances || []);
       setPauseOnMedia(flow.pause_on_media || false);
@@ -83,6 +134,14 @@ export const FlowSettingsDialog = ({
       setPauseOtherFlows(flow.pause_other_flows || false);
     }
   }, [flow]);
+
+  const toggleTag = (tagName: string) => {
+    setSelectedTriggerTags((prev) =>
+      prev.includes(tagName)
+        ? prev.filter((t) => t !== tagName)
+        : [...prev, tagName]
+    );
+  };
 
   const toggleInstance = (instanceId: string) => {
     setAssignedInstances((prev) =>
@@ -107,17 +166,12 @@ export const FlowSettingsDialog = ({
       .map((k) => k.trim().toLowerCase())
       .filter((k) => k.length > 0);
 
-    const tags = triggerTags
-      .split(',')
-      .map((t) => t.trim())
-      .filter((t) => t.length > 0);
-
     const updates: Partial<InboxFlow> & { keyword_match_type?: string; trigger_tags?: string[] } = {
       name: name.trim(),
       description: description.trim() || null,
       trigger_type: triggerType,
       trigger_keywords: keywords,
-      trigger_tags: tags,
+      trigger_tags: selectedTriggerTags,
       keyword_match_type: keywordMatchType,
       assigned_instances: assignedInstances,
       pause_on_media: pauseOnMedia,
@@ -226,16 +280,65 @@ export const FlowSettingsDialog = ({
           {/* Etiquetas gatilho */}
           {triggerType === 'tag' && (
             <div className="space-y-2">
-              <Label>Etiquetas que Acionam o Fluxo</Label>
-              <Textarea
-                value={triggerTags}
-                onChange={(e) => setTriggerTags(e.target.value)}
-                placeholder="Lead, VIP, Interessado (separadas por vírgula)"
-                rows={2}
-              />
-              <p className="text-xs text-muted-foreground">
-                Separe as etiquetas por vírgula. Quando qualquer uma dessas etiquetas for adicionada ao contato, o fluxo será iniciado.
+              <Label className="flex items-center gap-2">
+                <Tag className="h-4 w-4" />
+                Etiquetas que Acionam o Fluxo
+              </Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Selecione quais etiquetas devem acionar este fluxo. Quando qualquer uma for adicionada ao contato, o fluxo será iniciado.
               </p>
+              {loadingTags ? (
+                <p className="text-sm text-muted-foreground text-center py-2">
+                  Carregando etiquetas...
+                </p>
+              ) : allTags.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-2">
+                  Nenhuma etiqueta encontrada. Crie etiquetas no Kanban primeiro.
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto border rounded-md p-2">
+                  {allTags.map((tag) => (
+                    <div
+                      key={tag.id}
+                      className="flex items-center space-x-3 p-2 rounded hover:bg-muted"
+                    >
+                      <Checkbox
+                        id={`tag-${tag.id}`}
+                        checked={selectedTriggerTags.includes(tag.name)}
+                        onCheckedChange={() => toggleTag(tag.name)}
+                      />
+                      <label
+                        htmlFor={`tag-${tag.id}`}
+                        className="flex-1 cursor-pointer flex items-center gap-2"
+                      >
+                        <Badge 
+                          className="text-white text-xs"
+                          style={{ backgroundColor: tag.color }}
+                        >
+                          {tag.name}
+                        </Badge>
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {selectedTriggerTags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  <span className="text-xs text-muted-foreground">Selecionadas:</span>
+                  {selectedTriggerTags.map((tagName) => {
+                    const tag = allTags.find(t => t.name === tagName);
+                    return (
+                      <Badge 
+                        key={tagName}
+                        className="text-white text-xs"
+                        style={{ backgroundColor: tag?.color || '#6b7280' }}
+                      >
+                        {tagName}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
