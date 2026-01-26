@@ -171,14 +171,17 @@ export const useGroupMessages = (groupJid: string | null, instanceId: string | n
     }
   }, [userId, groupJid, instanceId, syncMessages]);
 
-  // Initial fetch when group changes
+  // Initial fetch when group changes - load from DB and auto-sync
   useEffect(() => {
     if (groupJid && instanceId) {
-      fetchMessages();
+      fetchMessages().then(() => {
+        // Auto-sync messages from WhatsApp API when group is selected
+        syncMessages();
+      });
     } else {
       setMessages([]);
     }
-  }, [groupJid, instanceId, fetchMessages]);
+  }, [groupJid, instanceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Subscribe to realtime updates
   useEffect(() => {

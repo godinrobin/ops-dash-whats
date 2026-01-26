@@ -3819,7 +3819,7 @@ Regras IMPORTANTES:
         let messages: any[] = [];
 
         if (inst.api_provider === 'uazapi') {
-          // UazAPI: POST /chat/findMessages with group JID
+          // UazAPI: POST /message/find with chatid (per UAZAPI v2 OpenAPI spec)
           const uazapiBaseUrl = (instanceConfig.provider === 'uazapi'
             ? instanceConfig.baseUrl
             : (globalConfig.provider === 'uazapi' ? globalConfig.baseUrl : 'https://zapdata.uazapi.com')
@@ -3833,8 +3833,8 @@ Regras IMPORTANTES:
             });
           }
 
-          const url = `${uazapiBaseUrl}/chat/findMessages`;
-          console.log(`[FETCH-GROUP-MESSAGES] UazAPI: POST ${url}`);
+          const url = `${uazapiBaseUrl}/message/find`;
+          console.log(`[FETCH-GROUP-MESSAGES] UazAPI: POST ${url} with chatid=${groupJid}`);
 
           const res = await fetch(url, {
             method: 'POST',
@@ -3845,6 +3845,7 @@ Regras IMPORTANTES:
             body: JSON.stringify({
               chatid: groupJid,
               limit: limit,
+              offset: 0,
             }),
           });
 
@@ -3856,7 +3857,8 @@ Regras IMPORTANTES:
           }
 
           const data = await res.json();
-          messages = Array.isArray(data) ? data : (data?.messages || []);
+          // UAZAPI /message/find returns { messages: [...], returnedMessages, ... }
+          messages = Array.isArray(data?.messages) ? data.messages : (Array.isArray(data) ? data : []);
           console.log(`[FETCH-GROUP-MESSAGES] Got ${messages.length} messages from UazAPI`);
 
         } else {
