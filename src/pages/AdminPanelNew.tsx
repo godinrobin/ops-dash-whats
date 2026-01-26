@@ -32,6 +32,7 @@ import { AdminCreditsControl } from "@/components/admin/AdminCreditsControl";
 import { AdminSystemPricing } from "@/components/admin/AdminSystemPricing";
 import { AdminCreditPackages } from "@/components/admin/AdminCreditPackages";
 import { AdminZapSpyUsers } from "@/components/admin/AdminZapSpyUsers";
+import { AdminLogzzEvents } from "@/components/admin/AdminLogzzEvents";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 
 // Product image imports for admin
@@ -136,6 +137,13 @@ const SIDEBAR_MENU = [
       { id: "marketplace-products", label: "Produtos", icon: Package },
       { id: "marketplace-sales", label: "Vendas de Ativos", icon: ShoppingBag },
       { id: "proxy-orders", label: "Vendas de Proxies", icon: Globe },
+    ]
+  },
+  {
+    category: "Integrações",
+    icon: Globe,
+    items: [
+      { id: "logzz-events", label: "Eventos Logzz", icon: Package },
     ]
   },
   {
@@ -2472,6 +2480,24 @@ const AdminPanelNew = () => {
 
       case 'ads-metrics':
         return <AdminAdsMetrics />;
+
+      case 'logzz-events':
+        return (
+          <Card className="border-2 border-accent">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="h-5 w-5 text-accent" />
+                Eventos Logzz
+              </CardTitle>
+              <CardDescription>
+                Todos os webhooks recebidos da integração Logzz
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AdminLogzzEvents />
+            </CardContent>
+          </Card>
+        );
 
       case 'whatsapp-api':
         return <AdminWhatsAppApiConfig />;

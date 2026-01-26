@@ -7,6 +7,7 @@ import { MetricsTable } from "@/components/MetricsTable";
 import { ProductNavigation } from "@/components/ProductNavigation";
 import { CreateProductModal } from "@/components/CreateProductModal";
 import { SystemLayout } from "@/components/layout/SystemLayout";
+import { TutorialButton } from "@/components/TutorialButton";
 import { getProduct, getProducts } from "@/utils/storage";
 import { Product } from "@/types/product";
 import { ArrowLeft } from "lucide-react";
@@ -63,14 +64,19 @@ const ProductMetrics = () => {
       <div className="min-h-screen bg-background pb-24">
         <div className="container mx-auto max-w-7xl p-6 md:p-10">
           <header className="mb-8">
-            <Button
-              variant="secondary"
-              onClick={() => navigate("/")}
-              className="mb-4"
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Voltar
-            </Button>
+            <div className="flex items-center justify-between mb-4">
+              <Button
+                variant="secondary"
+                onClick={() => navigate("/")}
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Voltar
+              </Button>
+              <TutorialButton 
+                playerId="6977a78ae7ce8e87a3dbb2d3" 
+                title="Tutorial - Sistema de Métricas" 
+              />
+            </div>
             <h1 className="text-3xl md:text-4xl font-bold text-center mb-2">{product.name}</h1>
             <p className="text-center text-muted-foreground">
               Última atualização: {product.lastUpdate}

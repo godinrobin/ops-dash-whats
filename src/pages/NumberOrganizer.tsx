@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { SystemLayout } from "@/components/layout/SystemLayout";
+import { TutorialButton } from "@/components/TutorialButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -424,7 +425,13 @@ const NumberOrganizer = () => {
     <SystemLayout>
       <div className="min-h-screen bg-background p-6 md:p-10">
         <div className="container mx-auto max-w-6xl">
-          <header className="text-center mb-12">
+          <header className="text-center mb-12 relative">
+            <div className="absolute right-0 top-0">
+              <TutorialButton 
+                playerId="6977a7b6b831c6d863f8a754" 
+                title="Tutorial - Organizador de Números" 
+              />
+            </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-4">📱 Organizador de Números</h1>
             <p className="text-muted-foreground text-lg">
               Gerencie seus números de trabalho com facilidade
