@@ -108,12 +108,18 @@ serve(async (req) => {
         
         if (subDelError) console.error(`[INSTANCE-RENEWALS] Error deleting subscription:`, subDelError);
 
-        // 6. Delete the instance from UazAPI (optional - may already be deleted)
+        // 6. Delete the instance from UazAPI (fetch credentials from database)
         try {
-          const uazapiUrl = Deno.env.get('UAZAPI_URL');
-          const uazapiToken = Deno.env.get('UAZAPI_TOKEN');
+          const { data: apiConfig } = await supabase
+            .from('whatsapp_api_config')
+            .select('uazapi_base_url, uazapi_api_token')
+            .single();
+          
+          const uazapiUrl = apiConfig?.uazapi_base_url?.replace(/\/$/, '');
+          const uazapiToken = apiConfig?.uazapi_api_token;
           
           if (uazapiUrl && uazapiToken) {
+            console.log(`[INSTANCE-RENEWALS] Deleting instance from UazAPI: ${instance.instance_name}`);
             const deleteResp = await fetch(`${uazapiUrl}/instance/delete/${instance.instance_name}`, {
               method: 'DELETE',
               headers: {
@@ -122,6 +128,8 @@ serve(async (req) => {
               },
             });
             console.log(`[INSTANCE-RENEWALS] UazAPI delete response: ${deleteResp.status}`);
+          } else {
+            console.warn(`[INSTANCE-RENEWALS] UazAPI credentials not found in whatsapp_api_config`);
           }
         } catch (uazError) {
           console.error(`[INSTANCE-RENEWALS] Error deleting from UazAPI:`, uazError);
