@@ -2354,6 +2354,183 @@ export type Database = {
           },
         ]
       }
+      logzz_orders: {
+        Row: {
+          affiliate_commission: string | null
+          affiliate_email: string | null
+          affiliate_name: string | null
+          affiliate_phone: string | null
+          client_address: string | null
+          client_address_city: string | null
+          client_address_comp: string | null
+          client_address_country: string | null
+          client_address_district: string | null
+          client_address_number: string | null
+          client_address_state: string | null
+          client_document: string | null
+          client_email: string | null
+          client_name: string | null
+          client_phone: string | null
+          client_zip_code: string | null
+          commission: string | null
+          created_at: string | null
+          date_delivery: string | null
+          date_delivery_day: string | null
+          date_order: string | null
+          date_order_day: string | null
+          delivery_estimate: string | null
+          delivery_man: string | null
+          delivery_man_phone: string | null
+          first_order: boolean | null
+          id: string
+          logistic_operator: string | null
+          order_final_price: string | null
+          order_number: string | null
+          order_quantity: number | null
+          order_status: string | null
+          order_status_description: string | null
+          producer_commission: string | null
+          producer_email: string | null
+          producer_name: string | null
+          products: Json | null
+          raw_payload: Json | null
+          second_order: boolean | null
+          user_id: string
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_id: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
+          webhook_type: string | null
+        }
+        Insert: {
+          affiliate_commission?: string | null
+          affiliate_email?: string | null
+          affiliate_name?: string | null
+          affiliate_phone?: string | null
+          client_address?: string | null
+          client_address_city?: string | null
+          client_address_comp?: string | null
+          client_address_country?: string | null
+          client_address_district?: string | null
+          client_address_number?: string | null
+          client_address_state?: string | null
+          client_document?: string | null
+          client_email?: string | null
+          client_name?: string | null
+          client_phone?: string | null
+          client_zip_code?: string | null
+          commission?: string | null
+          created_at?: string | null
+          date_delivery?: string | null
+          date_delivery_day?: string | null
+          date_order?: string | null
+          date_order_day?: string | null
+          delivery_estimate?: string | null
+          delivery_man?: string | null
+          delivery_man_phone?: string | null
+          first_order?: boolean | null
+          id?: string
+          logistic_operator?: string | null
+          order_final_price?: string | null
+          order_number?: string | null
+          order_quantity?: number | null
+          order_status?: string | null
+          order_status_description?: string | null
+          producer_commission?: string | null
+          producer_email?: string | null
+          producer_name?: string | null
+          products?: Json | null
+          raw_payload?: Json | null
+          second_order?: boolean | null
+          user_id: string
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_id?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+          webhook_type?: string | null
+        }
+        Update: {
+          affiliate_commission?: string | null
+          affiliate_email?: string | null
+          affiliate_name?: string | null
+          affiliate_phone?: string | null
+          client_address?: string | null
+          client_address_city?: string | null
+          client_address_comp?: string | null
+          client_address_country?: string | null
+          client_address_district?: string | null
+          client_address_number?: string | null
+          client_address_state?: string | null
+          client_document?: string | null
+          client_email?: string | null
+          client_name?: string | null
+          client_phone?: string | null
+          client_zip_code?: string | null
+          commission?: string | null
+          created_at?: string | null
+          date_delivery?: string | null
+          date_delivery_day?: string | null
+          date_order?: string | null
+          date_order_day?: string | null
+          delivery_estimate?: string | null
+          delivery_man?: string | null
+          delivery_man_phone?: string | null
+          first_order?: boolean | null
+          id?: string
+          logistic_operator?: string | null
+          order_final_price?: string | null
+          order_number?: string | null
+          order_quantity?: number | null
+          order_status?: string | null
+          order_status_description?: string | null
+          producer_commission?: string | null
+          producer_email?: string | null
+          producer_name?: string | null
+          products?: Json | null
+          raw_payload?: Json | null
+          second_order?: boolean | null
+          user_id?: string
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_id?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+          webhook_type?: string | null
+        }
+        Relationships: []
+      }
+      logzz_webhooks: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          updated_at: string | null
+          user_id: string
+          webhook_token: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          updated_at?: string | null
+          user_id: string
+          webhook_token?: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          updated_at?: string | null
+          user_id?: string
+          webhook_token?: string
+        }
+        Relationships: []
+      }
       marketplace_orders: {
         Row: {
           created_at: string
