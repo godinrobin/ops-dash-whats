@@ -881,7 +881,10 @@ export default function InboxKanbanPage() {
     // Check if dropped on another card
     const overContact = contacts.find(c => c.id === overIdStr);
     if (overContact) {
-      targetTag = overContact.tags[0] || 'Sem etiqueta';
+      // Use the LAST tag (most recently added) which determines the column
+      targetTag = overContact.tags.length > 0 
+        ? overContact.tags[overContact.tags.length - 1] 
+        : 'Sem etiqueta';
     }
 
     if (!targetTag) return;

@@ -82,15 +82,16 @@ interface FlowCanvasProps {
     edges: { id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string }[],
     silent?: boolean
   ) => void | Promise<void>;
-  triggerType?: 'keyword' | 'all' | 'schedule' | 'sale';
+  triggerType?: 'keyword' | 'all' | 'schedule' | 'sale' | 'tag';
   triggerKeywords?: string[];
+  triggerTags?: string[];
   keywordMatchType?: 'exact' | 'contains' | 'not_contains';
   pauseOtherFlows?: boolean;
-  onUpdateFlowSettings?: (settings: { triggerType?: string; triggerKeywords?: string[]; keywordMatchType?: string; pauseOtherFlows?: boolean }) => void;
+  onUpdateFlowSettings?: (settings: { triggerType?: string; triggerKeywords?: string[]; triggerTags?: string[]; keywordMatchType?: string; pauseOtherFlows?: boolean }) => void;
   flowId?: string;
 }
 
-const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, triggerKeywords, keywordMatchType, pauseOtherFlows, onUpdateFlowSettings, flowId }: FlowCanvasProps) => {
+const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, triggerKeywords, triggerTags, keywordMatchType, pauseOtherFlows, onUpdateFlowSettings, flowId }: FlowCanvasProps) => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, fitView } = useReactFlow();
   
@@ -434,6 +435,7 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
         onSave={handleSave}
         triggerType={triggerType}
         triggerKeywords={triggerKeywords}
+        triggerTags={triggerTags}
         keywordMatchType={keywordMatchType}
         pauseOtherFlows={pauseOtherFlows}
         onUpdateFlowSettings={onUpdateFlowSettings}
