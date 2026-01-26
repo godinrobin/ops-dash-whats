@@ -3,12 +3,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { Button } from "@/components/ui/button";
-import { LogOut, ArrowLeft, User, Shield, LayoutGrid, ShoppingBag, Megaphone, Menu, Settings } from "lucide-react";
+import { LogOut, User, Shield, LayoutGrid, ShoppingBag, Megaphone, Menu, Settings } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ProfileModal } from "./ProfileModal";
-import Dock from "@/components/ui/dock";
-import { AnimatedText } from "@/components/ui/animated-shiny-text";
-import { motion } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 export type AppMode = "sistemas" | "marketplace" | "ads";
 
@@ -30,124 +28,125 @@ export const Header = ({ mode, onModeChange, onSidebarToggle }: HeaderProps) => 
   const isOnAuthPage = location.pathname === "/auth";
   const isInAdsSection = location.pathname.startsWith("/ads");
   
-  // Show sidebar toggle on home page or on system pages (not auth, not ads)
   const showSidebarToggle = !isOnAuthPage && !isInAdsSection;
   const showModeToggle = (isOnHomePage || isInAdsSection) && mode && onModeChange;
 
-  const dockItems = [
-    { 
-      icon: User, 
-      label: "Perfil", 
-      onClick: () => setProfileOpen(true),
-      active: false
-    },
-    {
-      icon: Settings,
-      label: "Config",
-      onClick: () => navigate("/settings"),
-      active: false
-    },
-    ...(isAdmin ? [{
-      icon: Shield,
-      label: "Admin",
-      onClick: () => navigate("/admin-panel"),
-      active: false
-    }] : []),
-    {
-      icon: LogOut,
-      label: "Sair",
-      onClick: signOut,
-      active: false
-    }
-  ];
-
-  // When impersonating, offset the header below the banner (banner height ~40px)
   const headerTopClass = isImpersonating ? "top-10" : "top-0";
 
   return (
     <>
-      <header className={`fixed ${headerTopClass} left-0 right-0 bg-background/95 backdrop-blur-sm border-b border-border z-50`}>
-        <div className="container mx-auto px-4 h-14 md:h-16 flex items-center justify-between">
+      <header className={cn(
+        "fixed left-0 right-0 h-14 bg-card border-b border-border z-50",
+        headerTopClass
+      )}>
+        <div className="h-full px-4 flex items-center justify-between">
+          {/* Left section */}
           <div className="flex items-center gap-3">
-            {/* Sidebar toggle - on all pages except auth and ads */}
             {showSidebarToggle && onSidebarToggle && (
-              <motion.div
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onSidebarToggle}
+                className="h-9 w-9 text-muted-foreground hover:text-foreground"
               >
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={onSidebarToggle}
-                  className="shrink-0"
-                >
-                  <Menu className="h-5 w-5" />
-                </Button>
-              </motion.div>
+                <Menu className="h-5 w-5" />
+              </Button>
             )}
-            <button onClick={() => navigate("/")} className="focus:outline-none flex items-center gap-2">
-              <AnimatedText 
-                text="Zapdata" 
-                gradientColors="linear-gradient(90deg, hsl(var(--accent)), hsl(35 100% 60%), hsl(var(--accent)))"
-                gradientAnimationDuration={2}
-                textClassName="text-xl font-bold cursor-pointer hover:opacity-80 transition-opacity"
-              />
+            
+            <button 
+              onClick={() => navigate("/")} 
+              className="flex items-center gap-2 group"
+            >
+              <div className="w-8 h-8 rounded-md bg-accent flex items-center justify-center">
+                <span className="text-accent-foreground font-bold text-sm">Z</span>
+              </div>
+              <span className="font-semibold text-foreground group-hover:text-accent transition-colors hidden sm:block">
+                Zapdata
+              </span>
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Mode Toggle */}
-            {showModeToggle && (
-              <div className="flex items-center bg-secondary/50 rounded-lg p-1 border border-border/50 mr-2">
-                <motion.button
-                  onClick={() => onModeChange("sistemas")}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className={`
-                    flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all
-                    ${mode === "sistemas" 
-                      ? "bg-blue-500/20 text-blue-400 border border-blue-500/50" 
-                      : "text-muted-foreground hover:text-foreground"
-                    }
-                  `}
-                >
-                  <LayoutGrid className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Sistemas</span>
-                </motion.button>
-                <motion.button
-                  onClick={() => onModeChange("marketplace")}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className={`
-                    flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all
-                    ${mode === "marketplace" 
-                      ? "bg-accent/20 text-accent border border-accent/50" 
-                      : "text-muted-foreground hover:text-foreground"
-                    }
-                  `}
-                >
-                  <ShoppingBag className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Marketplace</span>
-                </motion.button>
-                <motion.button
-                  onClick={() => onModeChange("ads")}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className={`
-                    flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all
-                    ${mode === "ads" 
-                      ? "bg-purple-500/20 text-purple-400 border border-purple-500/50" 
-                      : "text-muted-foreground hover:text-foreground"
-                    }
-                  `}
-                >
-                  <Megaphone className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">ADS</span>
-                </motion.button>
-              </div>
-            )}
+          {/* Center - Mode Toggle */}
+          {showModeToggle && (
+            <div className="flex items-center bg-secondary rounded-lg p-1">
+              <button
+                onClick={() => onModeChange("sistemas")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+                  mode === "sistemas" 
+                    ? "bg-card text-foreground shadow-sm" 
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <LayoutGrid className="h-4 w-4" />
+                <span className="hidden sm:inline">Sistemas</span>
+              </button>
+              <button
+                onClick={() => onModeChange("marketplace")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+                  mode === "marketplace" 
+                    ? "bg-card text-foreground shadow-sm" 
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <ShoppingBag className="h-4 w-4" />
+                <span className="hidden sm:inline">Marketplace</span>
+              </button>
+              <button
+                onClick={() => onModeChange("ads")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+                  mode === "ads" 
+                    ? "bg-card text-foreground shadow-sm" 
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Megaphone className="h-4 w-4" />
+                <span className="hidden sm:inline">ADS</span>
+              </button>
+            </div>
+          )}
 
-            <Dock items={dockItems} />
+          {/* Right section - Actions */}
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setProfileOpen(true)}
+              className="h-9 w-9 text-muted-foreground hover:text-foreground"
+            >
+              <User className="h-4 w-4" />
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate("/settings")}
+              className="h-9 w-9 text-muted-foreground hover:text-foreground"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+
+            {isAdmin && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => navigate("/admin-panel")}
+                className="h-9 w-9 text-muted-foreground hover:text-foreground"
+              >
+                <Shield className="h-4 w-4" />
+              </Button>
+            )}
+            
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={signOut}
+              className="h-9 w-9 text-muted-foreground hover:text-foreground"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </header>
