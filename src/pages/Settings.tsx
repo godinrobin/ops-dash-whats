@@ -1,15 +1,16 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { Bell, Megaphone, ChevronLeft, Settings as SettingsIcon, ShoppingBag, ChevronRight } from "lucide-react";
+import { Bell, Megaphone, ChevronLeft, Settings as SettingsIcon, ShoppingBag, ChevronRight, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { PushNotificationsSettings } from "@/components/settings/PushNotificationsSettings";
 import { PixelSettings } from "@/components/settings/PixelSettings";
+import { LogzzIntegrationSettings } from "@/components/settings/LogzzIntegrationSettings";
 
-type SettingsSection = "notifications" | "pixel";
+type SettingsSection = "notifications" | "pixel" | "logzz";
 
 export default function Settings() {
   const { user } = useAuth();
@@ -42,6 +43,12 @@ export default function Settings() {
       label: "Pixel do Facebook",
       icon: Megaphone,
       description: "Gerencie seus pixels e tokens"
+    },
+    {
+      id: "logzz" as const,
+      label: "Integrações",
+      icon: Package,
+      description: "Logzz e outras plataformas"
     }
   ];
 
@@ -51,6 +58,8 @@ export default function Settings() {
         return <PushNotificationsSettings />;
       case "pixel":
         return <PixelSettings />;
+      case "logzz":
+        return <LogzzIntegrationSettings />;
       default:
         return <PushNotificationsSettings />;
     }

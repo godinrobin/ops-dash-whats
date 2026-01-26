@@ -206,3 +206,6 @@ verify_jwt = true
 
 [functions.admin-backfill-sales-attribution]
 verify_jwt = false
+
+[functions.webhook-logzz-order]
+verify_jwt = false
