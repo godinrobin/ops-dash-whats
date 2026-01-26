@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Coins, Sparkles, Zap, Check, Loader2 } from "lucide-react";
+import { Coins, Sparkles, Zap, Check, Loader2, Gift } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCredits } from "@/hooks/useCredits";
@@ -30,10 +30,14 @@ export const CreditsTab = ({ onRecharge }: CreditsTabProps) => {
   const [packages, setPackages] = useState<CreditPackage[]>([]);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState<string | null>(null);
+  const [doubleCreditsEnabled, setDoubleCreditsEnabled] = useState(false);
+  const [isFullMember, setIsFullMember] = useState(false);
 
   useEffect(() => {
     loadPackages();
-  }, []);
+    loadDoubleCreditsStatus();
+    loadUserStatus();
+  }, [user]);
 
   const loadPackages = async () => {
     try {
@@ -49,6 +53,38 @@ export const CreditsTab = ({ onRecharge }: CreditsTabProps) => {
       console.error("Error loading packages:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadDoubleCreditsStatus = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('credits_system_config')
+        .select('value')
+        .eq('key', 'double_credits_enabled')
+        .maybeSingle();
+
+      if (error) throw error;
+      const configValue = data?.value as { enabled?: boolean } | null;
+      setDoubleCreditsEnabled(configValue?.enabled ?? false);
+    } catch (error) {
+      console.error('Error loading double credits status:', error);
+    }
+  };
+
+  const loadUserStatus = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('is_full_member')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      setIsFullMember(data?.is_full_member ?? false);
+    } catch (error) {
+      console.error('Error loading user status:', error);
     }
   };
 
@@ -170,6 +206,23 @@ export const CreditsTab = ({ onRecharge }: CreditsTabProps) => {
         </CardContent>
       </Card>
 
+      {/* Double Credits Banner */}
+      {doubleCreditsEnabled && isFullMember && (
+        <Card className="mb-4 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-green-500/50">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="p-2 bg-green-500/20 rounded-full">
+              <Gift className="h-6 w-6 text-green-500" />
+            </div>
+            <div>
+              <p className="font-semibold text-green-500">🎁 Bônus 2x Ativo!</p>
+              <p className="text-sm text-muted-foreground">
+                Como membro completo, você recebe o DOBRO de créditos em qualquer pacote!
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Packages Grid */}
       <div>
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -187,7 +240,11 @@ export const CreditsTab = ({ onRecharge }: CreditsTabProps) => {
           </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {packages.map((pkg, index) => (
+            {packages.map((pkg, index) => {
+              const showDoubleBonus = doubleCreditsEnabled && isFullMember;
+              const displayCredits = showDoubleBonus ? pkg.credits * 2 : pkg.credits;
+              
+              return (
               <motion.div
                 key={pkg.id}
                 initial={{ opacity: 0, y: 20 }}
@@ -195,14 +252,22 @@ export const CreditsTab = ({ onRecharge }: CreditsTabProps) => {
                 transition={{ delay: index * 0.1 }}
               >
                 <Card 
-                  className={`bg-gradient-to-br ${getPackageColor(pkg.credits)} hover:scale-[1.02] transition-transform cursor-pointer`}
+                  className={`bg-gradient-to-br ${getPackageColor(pkg.credits)} hover:scale-[1.02] transition-transform cursor-pointer relative overflow-hidden ${showDoubleBonus ? 'ring-2 ring-green-500/50' : ''}`}
                 >
+                  {showDoubleBonus && (
+                    <div className="absolute top-2 right-2 z-10">
+                      <Badge className="bg-green-500 text-white font-bold animate-pulse">
+                        <Gift className="h-3 w-3 mr-1" />
+                        2x
+                      </Badge>
+                    </div>
+                  )}
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between">
                       <div className="p-2 bg-background/50 rounded-lg">
                         {getPackageIcon(pkg.credits)}
                       </div>
-                      {pkg.credits >= 100 && (
+                      {pkg.credits >= 100 && !showDoubleBonus && (
                         <Badge className="bg-amber-500 text-white">
                           Popular
                         </Badge>
@@ -212,9 +277,21 @@ export const CreditsTab = ({ onRecharge }: CreditsTabProps) => {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div>
-                      <p className="text-3xl font-bold">
-                        {pkg.credits} <span className="text-lg font-normal text-muted-foreground">créditos</span>
-                      </p>
+                      {showDoubleBonus ? (
+                        <div className="flex items-baseline gap-2">
+                          <p className="text-3xl font-bold text-green-500">
+                            {displayCredits}
+                          </p>
+                          <span className="text-lg font-normal text-muted-foreground line-through">
+                            {pkg.credits}
+                          </span>
+                          <span className="text-lg font-normal text-muted-foreground">créditos</span>
+                        </div>
+                      ) : (
+                        <p className="text-3xl font-bold">
+                          {pkg.credits} <span className="text-lg font-normal text-muted-foreground">créditos</span>
+                        </p>
+                      )}
                       <p className="text-2xl font-semibold text-green-500 mt-1">
                         R$ {pkg.price_brl.toFixed(2).replace('.', ',')}
                       </p>
@@ -255,7 +332,8 @@ export const CreditsTab = ({ onRecharge }: CreditsTabProps) => {
                   </CardContent>
                 </Card>
               </motion.div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
