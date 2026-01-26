@@ -20,11 +20,12 @@ interface PropertiesPanelProps {
   onDeleteNode: (nodeId: string) => void;
   onDuplicateNode: (nodeId: string) => void;
   onSave: () => void;
-  triggerType?: 'keyword' | 'all' | 'schedule' | 'sale';
+  triggerType?: 'keyword' | 'all' | 'schedule' | 'sale' | 'tag';
   triggerKeywords?: string[];
+  triggerTags?: string[];
   keywordMatchType?: 'exact' | 'contains' | 'not_contains';
   pauseOtherFlows?: boolean;
-  onUpdateFlowSettings?: (settings: { triggerType?: string; triggerKeywords?: string[]; keywordMatchType?: string; pauseOtherFlows?: boolean }) => void;
+  onUpdateFlowSettings?: (settings: { triggerType?: string; triggerKeywords?: string[]; triggerTags?: string[]; keywordMatchType?: string; pauseOtherFlows?: boolean }) => void;
   allNodes?: Node[];
 }
 // System variables that are always available (synchronized with backend)
@@ -87,6 +88,7 @@ export const PropertiesPanel = ({
   onSave,
   triggerType = 'keyword',
   triggerKeywords = [],
+  triggerTags = [],
   keywordMatchType = 'exact',
   pauseOtherFlows = false,
   onUpdateFlowSettings,
@@ -227,8 +229,14 @@ export const PropertiesPanel = ({
                   <SelectItem value="keyword">Palavra-chave</SelectItem>
                   <SelectItem value="all">Todas as mensagens</SelectItem>
                   <SelectItem value="sale">Venda</SelectItem>
+                  <SelectItem value="tag">Etiqueta</SelectItem>
                 </SelectContent>
               </Select>
+              {triggerType === 'tag' && (
+                <p className="text-xs text-muted-foreground">
+                  O fluxo será acionado automaticamente quando uma das etiquetas for adicionada ao contato.
+                </p>
+              )}
             </div>
 
             {triggerType === 'keyword' && (
@@ -283,8 +291,37 @@ export const PropertiesPanel = ({
               </div>
             )}
 
-            {/* Pausar outros fluxos - only for sale trigger */}
-            {triggerType === 'sale' && (
+            {/* Etiquetas gatilho */}
+            {triggerType === 'tag' && (
+              <div className="space-y-2">
+                <Label>Etiquetas que Acionam o Fluxo</Label>
+                <Textarea
+                  placeholder="Lead, VIP, Interessado (separadas por vírgula)"
+                  value={triggerTags.join(', ')}
+                  onChange={(e) => {
+                    const tags = e.target.value.split(',').map(t => t.trim()).filter(Boolean);
+                    onUpdateFlowSettings?.({ triggerTags: tags });
+                  }}
+                  rows={2}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Separe as etiquetas por vírgula. Quando qualquer uma dessas etiquetas for adicionada ao contato, o fluxo será iniciado.
+                </p>
+              </div>
+            )}
+
+            {triggerTags.length > 0 && triggerType === 'tag' && (
+              <div className="flex flex-wrap gap-1">
+                {triggerTags.map((tag, i) => (
+                  <Badge key={i} variant="outline" className="text-xs bg-orange-500/10 border-orange-500/50 text-orange-500">
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+            )}
+
+            {/* Pausar outros fluxos - for sale and tag triggers */}
+            {(triggerType === 'sale' || triggerType === 'tag') && (
               <div className="flex items-center justify-between p-3 border rounded-md bg-amber-500/10 border-amber-500/30">
                 <div>
                   <Label className="flex items-center gap-2">
@@ -292,7 +329,7 @@ export const PropertiesPanel = ({
                     Pausar outros fluxos
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    Pausa todos os outros fluxos ativos do contato para priorizar este fluxo de venda
+                    Pausa todos os outros fluxos ativos do contato para priorizar este fluxo
                   </p>
                 </div>
                 <Switch

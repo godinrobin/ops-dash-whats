@@ -50,8 +50,9 @@ const FlowEditorPage = () => {
   const [saving, setSaving] = useState(false);
   const [flowName, setFlowName] = useState('');
   const [flowDescription, setFlowDescription] = useState('');
-  const [triggerType, setTriggerType] = useState<'keyword' | 'all' | 'schedule' | 'sale'>('keyword');
+  const [triggerType, setTriggerType] = useState<'keyword' | 'all' | 'schedule' | 'sale' | 'tag'>('keyword');
   const [triggerKeywords, setTriggerKeywords] = useState('');
+  const [triggerTags, setTriggerTags] = useState('');
   const [keywordMatchType, setKeywordMatchType] = useState<'exact' | 'contains' | 'not_contains'>('exact');
   const [isActive, setIsActive] = useState(false);
   const [pauseOnMedia, setPauseOnMedia] = useState(false);
@@ -157,8 +158,9 @@ const FlowEditorPage = () => {
         setFlow(flowData);
         setFlowName(data.name);
         setFlowDescription(data.description || '');
-        setTriggerType(data.trigger_type as 'keyword' | 'all' | 'schedule' | 'sale');
+        setTriggerType(data.trigger_type as 'keyword' | 'all' | 'schedule' | 'sale' | 'tag');
         setTriggerKeywords(data.trigger_keywords?.join(', ') || '');
+        setTriggerTags((data as any).trigger_tags?.join(', ') || '');
         setKeywordMatchType((data as any).keyword_match_type || 'exact');
         setIsActive(data.is_active);
         setPauseOnMedia(data.pause_on_media || false);
@@ -204,6 +206,7 @@ const FlowEditorPage = () => {
           edges: JSON.parse(JSON.stringify(cleanedEdges)),
           trigger_type: triggerType,
           trigger_keywords: triggerKeywords.split(',').map(k => k.trim()).filter(Boolean),
+          trigger_tags: triggerTags.split(',').map(t => t.trim()).filter(Boolean),
           keyword_match_type: keywordMatchType,
           assigned_instances: assignedInstances,
           is_active: isActive,
@@ -214,7 +217,7 @@ const FlowEditorPage = () => {
           reply_to_last_message: replyToLastMessage,
           reply_mode: replyToLastMessage ? replyMode : 'all',
           reply_interval: replyToLastMessage && replyMode === 'interval' ? replyInterval : 3,
-          pause_other_flows: triggerType === 'sale' ? pauseOtherFlows : false,
+          pause_other_flows: (triggerType === 'sale' || triggerType === 'tag') ? pauseOtherFlows : false,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)
@@ -616,11 +619,13 @@ const FlowEditorPage = () => {
             onSave={handleSave}
             triggerType={triggerType}
             triggerKeywords={triggerKeywords.split(',').map(k => k.trim()).filter(Boolean)}
+            triggerTags={triggerTags.split(',').map(t => t.trim()).filter(Boolean)}
             keywordMatchType={keywordMatchType}
             pauseOtherFlows={pauseOtherFlows}
             onUpdateFlowSettings={(settings) => {
-              if (settings.triggerType) setTriggerType(settings.triggerType as 'keyword' | 'all' | 'schedule' | 'sale');
+              if (settings.triggerType) setTriggerType(settings.triggerType as 'keyword' | 'all' | 'schedule' | 'sale' | 'tag');
               if (settings.triggerKeywords) setTriggerKeywords(settings.triggerKeywords.join(', '));
+              if (settings.triggerTags) setTriggerTags(settings.triggerTags.join(', '));
               if (settings.keywordMatchType) setKeywordMatchType(settings.keywordMatchType as 'exact' | 'contains' | 'not_contains');
               if (settings.pauseOtherFlows !== undefined) setPauseOtherFlows(settings.pauseOtherFlows);
             }}
