@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MessageSquare, Filter, Zap, Tag, RefreshCw, Menu } from 'lucide-react';
+import { MessageSquare, Filter, Zap, Tag, RefreshCw, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
@@ -94,10 +94,10 @@ export const InboxSidebar = ({ selectedInstanceId, onInstanceChange }: InboxSide
             variant="ghost"
             size="icon"
             className="w-10 h-10"
-            onClick={() => setMenuOpen(true)}
-            title="Menu"
+            onClick={() => navigate('/inbox')}
+            title="Voltar"
           >
-            <Menu className="h-5 w-5" />
+            <ArrowLeft className="h-5 w-5" />
           </Button>
 
           <Button

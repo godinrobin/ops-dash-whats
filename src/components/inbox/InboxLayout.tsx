@@ -153,15 +153,6 @@ export const InboxLayout = () => {
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] md:h-[calc(100vh-4rem)] bg-background relative">
-      {/* Back button */}
-      <Button 
-        variant="ghost" 
-        size="icon" 
-        className="absolute top-2 left-2 z-20 h-8 w-8"
-        onClick={() => navigate('/inbox')}
-      >
-        <ArrowLeft className="h-4 w-4" />
-      </Button>
 
       {/* Sidebar - Filtros */}
       <InboxSidebar 
