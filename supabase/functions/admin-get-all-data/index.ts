@@ -232,13 +232,85 @@ Deno.serve(async (req) => {
     }) || []
 
     // Buscar instâncias do maturador - apenas as que têm uazapi_token (são da UAZAPI)
+    // OBS: existem casos de duplicidade no banco (mesmo instance_name repetido).
+    // Para o admin, retornamos apenas 1 registro por instance_name (o melhor candidato),
+    // e também filtramos apenas os nomes que de fato existem na UAZAPI (fonte de verdade).
+
+    // Buscar lista real de instâncias na UAZAPI (se configurado)
+    let uazapiNameSet: Set<string> | null = null;
+    try {
+      const { data: config } = await supabaseClient
+        .from('whatsapp_api_config')
+        .select('uazapi_base_url, uazapi_api_token')
+        .maybeSingle();
+
+      if (config?.uazapi_base_url && config?.uazapi_api_token) {
+        const baseUrl = (config.uazapi_base_url as string).replace(/\/$/, '');
+        const adminToken = config.uazapi_api_token as string;
+
+        const uazapiResp = await fetch(`${baseUrl}/instance/all`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'admintoken': adminToken,
+          },
+        });
+
+        if (uazapiResp.ok) {
+          const uazapiInstances = await uazapiResp.json();
+          uazapiNameSet = new Set(
+            (Array.isArray(uazapiInstances) ? uazapiInstances : [])
+              .map((i: any) => (i?.instance ?? '').toString().toLowerCase().trim())
+              .filter(Boolean)
+          );
+        } else {
+          const errTxt = await uazapiResp.text();
+          console.warn('[admin-get-all-data] UAZAPI list failed:', uazapiResp.status, errTxt);
+        }
+      }
+    } catch (e) {
+      console.warn('[admin-get-all-data] Failed to fetch UAZAPI instances list:', e);
+    }
+
     const { data: instancesData } = await supabaseClient
       .from('maturador_instances')
       .select('*')
       .not('uazapi_token', 'is', null)
       .order('created_at', { ascending: false })
 
-    const instances = instancesData?.map(inst => {
+    const pickBestInstance = (a: any, b: any) => {
+      const isConnected = (s: string | null | undefined) => s === 'connected' || s === 'open';
+      const aConnected = isConnected(a?.status);
+      const bConnected = isConnected(b?.status);
+
+      // Prefer a connected/open record
+      if (aConnected && !bConnected) return a;
+      if (!aConnected && bConnected) return b;
+
+      // Prefer most recently connected_at when both connected
+      const aConn = a?.connected_at ? Date.parse(a.connected_at) : 0;
+      const bConn = b?.connected_at ? Date.parse(b.connected_at) : 0;
+      if (aConnected && bConnected && aConn !== bConn) return aConn > bConn ? a : b;
+
+      // Otherwise prefer latest created_at
+      const aCreated = a?.created_at ? Date.parse(a.created_at) : 0;
+      const bCreated = b?.created_at ? Date.parse(b.created_at) : 0;
+      return aCreated >= bCreated ? a : b;
+    };
+
+    const uniqueByName = new Map<string, any>();
+    for (const inst of instancesData ?? []) {
+      const key = (inst.instance_name ?? '').toLowerCase().trim();
+      if (!key) continue;
+
+      // If we have a UAZAPI source-of-truth list, only keep names that exist there
+      if (uazapiNameSet && !uazapiNameSet.has(key)) continue;
+
+      const existing = uniqueByName.get(key);
+      uniqueByName.set(key, existing ? pickBestInstance(existing, inst) : inst);
+    }
+
+    const instances = Array.from(uniqueByName.values()).map(inst => {
       const authUser = authUsers.users.find(u => u.id === inst.user_id)
       const profile = profiles?.find(p => p.id === inst.user_id)
       return {
@@ -259,7 +331,16 @@ Deno.serve(async (req) => {
     }) || []
 
     return new Response(
-      JSON.stringify({ users, numbers, products, offers, metrics, activities, instances }),
+      JSON.stringify({
+        users,
+        numbers,
+        products,
+        offers,
+        metrics,
+        activities,
+        instances,
+        instancesCount: instances.length,
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (error) {
