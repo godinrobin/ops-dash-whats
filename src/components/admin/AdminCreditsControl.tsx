@@ -10,11 +10,13 @@ import {
   AlertTriangle,
   Check,
   Loader2,
-  Calendar
+  Calendar,
+  Gift
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ColoredSwitch } from "@/components/ui/colored-switch";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,9 +49,12 @@ export const AdminCreditsControl = () => {
     partialMembers: 0,
     fullMembers: 0
   });
+  const [doubleCreditsEnabled, setDoubleCreditsEnabled] = useState(false);
+  const [togglingDoubleCredits, setTogglingDoubleCredits] = useState(false);
 
   useEffect(() => {
     loadStats();
+    loadDoubleCreditsStatus();
   }, []);
 
   const loadStats = async () => {
@@ -75,6 +80,53 @@ export const AdminCreditsControl = () => {
       });
     } catch (error) {
       console.error('Error loading stats:', error);
+    }
+  };
+
+  const loadDoubleCreditsStatus = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('credits_system_config')
+        .select('value')
+        .eq('key', 'double_credits_enabled')
+        .maybeSingle();
+
+      if (error) throw error;
+      const configValue = data?.value as { enabled?: boolean } | null;
+      setDoubleCreditsEnabled(configValue?.enabled ?? false);
+    } catch (error) {
+      console.error('Error loading double credits status:', error);
+    }
+  };
+
+  const toggleDoubleCredits = async () => {
+    setTogglingDoubleCredits(true);
+    try {
+      const newEnabled = !doubleCreditsEnabled;
+      const { error } = await supabase
+        .from('credits_system_config')
+        .upsert({
+          key: 'double_credits_enabled',
+          value: {
+            enabled: newEnabled,
+            enabled_at: newEnabled ? new Date().toISOString() : null,
+            enabled_by: null
+          },
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'key' });
+
+      if (error) throw error;
+      
+      setDoubleCreditsEnabled(newEnabled);
+      toast.success(newEnabled 
+        ? '🎁 Créditos dobrados ativados para membros completos!' 
+        : 'Créditos dobrados desativados'
+      );
+    } catch (error) {
+      console.error('Error toggling double credits:', error);
+      toast.error('Erro ao alterar configuração');
+    } finally {
+      setTogglingDoubleCredits(false);
     }
   };
 
@@ -264,6 +316,30 @@ export const AdminCreditsControl = () => {
               </span>
             </div>
           )}
+
+          {/* Double Credits Toggle */}
+          <div className={`flex items-center justify-between p-4 rounded-lg border ${
+            doubleCreditsEnabled 
+              ? 'bg-green-500/10 border-green-500/30' 
+              : 'bg-secondary/50 border-border'
+          }`}>
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${doubleCreditsEnabled ? 'bg-green-500/20' : 'bg-secondary'}`}>
+                <Gift className={`h-5 w-5 ${doubleCreditsEnabled ? 'text-green-500' : 'text-muted-foreground'}`} />
+              </div>
+              <div>
+                <p className="font-medium">Créditos Dobrados (2x)</p>
+                <p className="text-sm text-muted-foreground">
+                  Membros completos recebem o dobro de créditos na compra de pacotes
+                </p>
+              </div>
+            </div>
+            <ColoredSwitch
+              checked={doubleCreditsEnabled}
+              onCheckedChange={toggleDoubleCredits}
+              disabled={togglingDoubleCredits}
+            />
+          </div>
 
           {/* Control buttons */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
