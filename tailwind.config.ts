@@ -38,6 +38,7 @@ export default {
         accent: {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
+          strong: "hsl(var(--accent-strong))",
         },
         popover: {
           DEFAULT: "hsl(var(--popover))",
@@ -50,9 +51,9 @@ export default {
         positive: "hsl(var(--positive))",
         negative: "hsl(var(--negative))",
         orange: {
-          400: "hsl(25 95% 53%)",
-          500: "hsl(25 95% 48%)",
-          600: "hsl(25 95% 43%)",
+          400: "hsl(30 85% 55%)",
+          500: "hsl(25 100% 50%)",
+          600: "hsl(25 100% 45%)",
         },
       },
       boxShadow: {

@@ -23,8 +23,9 @@
 }
 
 /* Clean Dark Design System
-   Dark neutral background with orange accent (#FF6B00 = 25 100% 50%)
-   Professional, developer-focused aesthetic
+   Dark neutral background with orange accent
+   --accent: Softer orange for backgrounds (30 85% 55%)
+   --accent-strong: Bold orange for icons/highlights (#FF6B00 = 25 100% 50%)
 */
 
 @layer base {
@@ -38,7 +39,7 @@
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 10%;
 
-    --primary: 25 100% 50%;
+    --primary: 30 85% 55%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 0 0% 96%;
@@ -47,8 +48,10 @@
     --muted: 0 0% 96%;
     --muted-foreground: 0 0% 45%;
 
-    --accent: 25 100% 50%;
+    --accent: 30 85% 55%;
     --accent-foreground: 0 0% 100%;
+    
+    --accent-strong: 25 100% 50%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
@@ -58,7 +61,7 @@
 
     --border: 0 0% 90%;
     --input: 0 0% 90%;
-    --ring: 25 100% 50%;
+    --ring: 30 85% 55%;
 
     --radius: 0.5rem;
 
@@ -78,7 +81,7 @@
     --popover: 0 0% 10%;
     --popover-foreground: 0 0% 98%;
 
-    --primary: 25 100% 50%;
+    --primary: 30 85% 55%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 0 0% 14%;
@@ -87,8 +90,10 @@
     --muted: 0 0% 18%;
     --muted-foreground: 0 0% 55%;
 
-    --accent: 25 100% 50%;
+    --accent: 30 85% 55%;
     --accent-foreground: 0 0% 100%;
+    
+    --accent-strong: 25 100% 50%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
@@ -98,7 +103,7 @@
 
     --border: 0 0% 18%;
     --input: 0 0% 14%;
-    --ring: 25 100% 50%;
+    --ring: 30 85% 55%;
 
     --radius: 0.5rem;
 
