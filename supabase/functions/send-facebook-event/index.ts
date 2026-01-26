@@ -209,12 +209,14 @@ serve(async (req) => {
 
           // Add custom_data for events that support value
           // Increment value by 1 centavo per event to prevent Facebook deduplication
+          let eventValue: number | undefined;
           if (["Purchase", "InitiateCheckout", "AddToCart"].includes(event_name)) {
             const baseValue = value || 0;
             const incrementedValue = baseValue + (eventIndex * 0.01);
+            eventValue = Math.round(incrementedValue * 100) / 100; // Round to 2 decimal places
             eventData.custom_data = {
               currency: currency || "BRL",
-              value: Math.round(incrementedValue * 100) / 100, // Round to 2 decimal places
+              value: eventValue,
             };
           }
 
@@ -234,13 +236,13 @@ serve(async (req) => {
             console.log(`[SEND-FB-EVENT] Event ${eventIndex + 1}/${quantity}, Pixel ${pixel.pixel_id} response:`, JSON.stringify(eventsResult));
           }
 
-          // Prepare log entry
+          // Prepare log entry - use the actual incremented value sent to Facebook
           const logEntry: EventLogEntry = {
             user_id: user.id,
             contact_id: contact_id || undefined,
             phone,
             event_name,
-            event_value: event_name === "Purchase" ? (value || 0) : undefined,
+            event_value: eventValue,
             pixel_id: pixel.pixel_id,
             action_source: actionSource,
             page_id: pixel.page_id || undefined,
