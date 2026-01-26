@@ -604,7 +604,7 @@ export default function InboxKanbanPage() {
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { distance: 3 },
+      activationConstraint: { delay: 0, tolerance: 0 },
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
@@ -613,8 +613,8 @@ export default function InboxKanbanPage() {
 
   // Drop animation for smooth card placement
   const dropAnimation = {
-    duration: 200,
-    easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+    duration: 150,
+    easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
   };
 
   // Custom collision detection that prioritizes dropzones (columns) over cards
