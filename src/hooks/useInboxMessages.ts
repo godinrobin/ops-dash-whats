@@ -397,10 +397,10 @@ export const useInboxMessages = (contactId: string | null) => {
     };
 
     // Give realtime a chance to subscribe before starting polling
-    const initialTimeout = setTimeout(tick, 4000);
+    const initialTimeout = setTimeout(tick, 2000);
 
-    // Poll every 15 seconds
-    intervalId = setInterval(tick, 15000);
+    // Poll every 8 seconds for faster sync
+    intervalId = setInterval(tick, 8000);
 
     return () => {
       clearTimeout(initialTimeout);
