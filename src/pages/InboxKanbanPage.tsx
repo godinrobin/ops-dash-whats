@@ -29,6 +29,7 @@ import {
   DragStartEvent,
   DragEndEvent,
   DragOverEvent,
+  useDroppable,
 } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -199,8 +200,28 @@ const KanbanCard = ({
   );
 };
 
+// Droppable zone for column content - allows dropping cards even when column is empty
+const ColumnDropZone = ({ tag, children }: { tag: string; children: React.ReactNode }) => {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `dropzone-${tag}`,
+    data: { type: 'column', tag },
+  });
+
+  return (
+    <div 
+      ref={setNodeRef} 
+      className={cn(
+        "flex-1 transition-colors duration-150",
+        isOver && "bg-accent/20 rounded-b-lg"
+      )}
+    >
+      {children}
+    </div>
+  );
+};
+
 // Sortable Column component
-const SortableKanbanColumn = ({ 
+const SortableKanbanColumn = ({
   tag, 
   contacts, 
   instances, 
@@ -285,32 +306,34 @@ const SortableKanbanColumn = ({
         </div>
       </div>
 
-      {/* Column content */}
-      <ScrollArea className="h-[calc(100vh-280px)]" orientation="vertical" withScrollbarPadding>
-        <div className="px-2 py-1.5 space-y-1.5 overflow-x-hidden">
-          <SortableContext 
-            items={contacts.map(c => c.id)} 
-            strategy={verticalListSortingStrategy}
-          >
-            {contacts.map(contact => (
-              <KanbanCard
-                key={contact.id}
-                contact={contact}
-                instances={instances}
-                customTags={customTags}
-                onClick={() => onCardClick(contact)}
-              />
-            ))}
-          </SortableContext>
-          
-          {contacts.length === 0 && (
-            <div className="text-center py-6 text-muted-foreground text-xs">
-              <Tag className="h-6 w-6 mx-auto mb-1.5 opacity-50" />
-              <p>Nenhum lead</p>
-            </div>
-          )}
-        </div>
-      </ScrollArea>
+      {/* Column content - droppable area */}
+      <ColumnDropZone tag={tag}>
+        <ScrollArea className="h-[calc(100vh-280px)]" orientation="vertical" withScrollbarPadding>
+          <div className="px-2 py-1.5 space-y-1.5 overflow-x-hidden min-h-[100px]">
+            <SortableContext 
+              items={contacts.map(c => c.id)} 
+              strategy={verticalListSortingStrategy}
+            >
+              {contacts.map(contact => (
+                <KanbanCard
+                  key={contact.id}
+                  contact={contact}
+                  instances={instances}
+                  customTags={customTags}
+                  onClick={() => onCardClick(contact)}
+                />
+              ))}
+            </SortableContext>
+            
+            {contacts.length === 0 && (
+              <div className="text-center py-6 text-muted-foreground text-xs">
+                <Tag className="h-6 w-6 mx-auto mb-1.5 opacity-50" />
+                <p>Nenhum lead</p>
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+      </ColumnDropZone>
     </div>
   );
 };
@@ -878,13 +901,19 @@ export default function InboxKanbanPage() {
     // Determine target column from the over element
     let targetTag: string | null = null;
     
+    // Check if dropped on a droppable zone (column area)
+    if (overIdStr.startsWith('dropzone-')) {
+      targetTag = overIdStr.replace('dropzone-', '');
+    }
     // Check if dropped on another card
-    const overContact = contacts.find(c => c.id === overIdStr);
-    if (overContact) {
-      // Use the LAST tag (most recently added) which determines the column
-      targetTag = overContact.tags.length > 0 
-        ? overContact.tags[overContact.tags.length - 1] 
-        : 'Sem etiqueta';
+    else {
+      const overContact = contacts.find(c => c.id === overIdStr);
+      if (overContact) {
+        // Use the LAST tag (most recently added) which determines the column
+        targetTag = overContact.tags.length > 0 
+          ? overContact.tags[overContact.tags.length - 1] 
+          : 'Sem etiqueta';
+      }
     }
 
     if (!targetTag) return;
