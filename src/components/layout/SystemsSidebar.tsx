@@ -196,7 +196,7 @@ export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: 
         <span className="flex-1 min-w-0 text-left truncate">{system.title}</span>
         {isLocked && !isComingSoon && <Lock className="w-3 h-3 text-muted-foreground flex-shrink-0" />}
         {isComingSoon && (
-          <span className="text-[9px] px-1.5 py-0.5 bg-muted text-muted-foreground rounded font-medium">
+          <span className="text-[9px] px-1.5 py-0.5 bg-accent/20 text-accent rounded font-medium">
             breve
           </span>
         )}
