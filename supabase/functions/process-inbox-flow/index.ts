@@ -1990,26 +1990,56 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
             const tagAction = currentNode.data.action as string || 'add';
             
             if (tagName) {
-              // Re-fetch current tags to ensure we have the latest
-              const { data: currentContact } = await supabaseClient
-                .from('inbox_contacts')
-                .select('tags')
-                .eq('id', contact.id)
-                .single();
-              
-              const currentTags = (currentContact?.tags as string[]) || [];
-              let newTags: string[];
+              // Use atomic database functions to avoid race conditions with concurrent tag additions
+              let newTags: string[] = [];
               
               if (tagAction === 'add') {
-                newTags = [...new Set([...currentTags, tagName])];
+                const { data: addResult, error: addError } = await supabaseClient
+                  .rpc('add_tag_to_contact', {
+                    p_contact_id: contact.id,
+                    p_tag_name: tagName
+                  });
+                
+                if (addError) {
+                  console.error(`[${runId}] Error adding tag atomically:`, addError);
+                  // Fallback to regular update
+                  const { data: currentContact } = await supabaseClient
+                    .from('inbox_contacts')
+                    .select('tags')
+                    .eq('id', contact.id)
+                    .single();
+                  newTags = [...new Set([...(currentContact?.tags as string[] || []), tagName])];
+                  await supabaseClient
+                    .from('inbox_contacts')
+                    .update({ tags: newTags })
+                    .eq('id', contact.id);
+                } else {
+                  newTags = addResult || [];
+                }
               } else {
-                newTags = currentTags.filter(t => t !== tagName);
+                const { data: removeResult, error: removeError } = await supabaseClient
+                  .rpc('remove_tag_from_contact', {
+                    p_contact_id: contact.id,
+                    p_tag_name: tagName
+                  });
+                
+                if (removeError) {
+                  console.error(`[${runId}] Error removing tag atomically:`, removeError);
+                  // Fallback to regular update
+                  const { data: currentContact } = await supabaseClient
+                    .from('inbox_contacts')
+                    .select('tags')
+                    .eq('id', contact.id)
+                    .single();
+                  newTags = (currentContact?.tags as string[] || []).filter(t => t !== tagName);
+                  await supabaseClient
+                    .from('inbox_contacts')
+                    .update({ tags: newTags })
+                    .eq('id', contact.id);
+                } else {
+                  newTags = removeResult || [];
+                }
               }
-              
-              await supabaseClient
-                .from('inbox_contacts')
-                .update({ tags: newTags })
-                .eq('id', contact.id);
               
               // Update local contact reference for subsequent condition checks
               contact = { ...contact, tags: newTags };
