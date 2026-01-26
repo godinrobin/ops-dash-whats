@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/ProductCard";
 import { CreateProductModal } from "@/components/CreateProductModal";
 import { SystemLayout } from "@/components/layout/SystemLayout";
+import { TutorialButton } from "@/components/TutorialButton";
 import { getProducts } from "@/utils/storage";
 import { Product } from "@/types/product";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
@@ -34,7 +35,13 @@ const Index = () => {
     <SystemLayout>
       <div className="min-h-screen bg-background p-6 md:p-10">
         <div className="container mx-auto max-w-6xl">
-          <header className="text-center mb-12">
+          <header className="text-center mb-12 relative">
+            <div className="absolute right-0 top-0">
+              <TutorialButton 
+                playerId="6977a78ae7ce8e87a3dbb2d3" 
+                title="Tutorial - Sistema de Métricas" 
+              />
+            </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-4">📊 Meus Produtos</h1>
             <p className="text-muted-foreground text-lg">
               Gerencie suas métricas de WhatsApp com facilidade
