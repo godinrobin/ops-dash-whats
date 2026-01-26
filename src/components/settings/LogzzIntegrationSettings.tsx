@@ -6,15 +6,25 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { ColoredSwitch } from "@/components/ui/colored-switch";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Copy, RefreshCw, ExternalLink, Package, Clock, CheckCircle2, Loader2 } from "lucide-react";
+import { Copy, RefreshCw, ExternalLink, Package, Clock, CheckCircle2, Loader2, History, XCircle } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 interface LogzzWebhook {
   id: string;
   webhook_token: string;
   is_active: boolean;
+  created_at: string;
+}
+
+interface WebhookHistoryItem {
+  id: string;
+  order_number: string | null;
+  client_name: string | null;
+  order_status: string | null;
   created_at: string;
 }
 
@@ -25,6 +35,7 @@ export function LogzzIntegrationSettings() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [history, setHistory] = useState<WebhookHistoryItem[]>([]);
 
   const WEBHOOK_BASE_URL = "https://dcjizoulbggsavizbukq.supabase.co/functions/v1/webhook-logzz-order";
 
@@ -35,6 +46,31 @@ export function LogzzIntegrationSettings() {
       setLoading(false);
     }
   }, [user, isAdmin]);
+
+  // Fetch recent webhook history (last 30 seconds)
+  useEffect(() => {
+    if (!user || !isAdmin || !webhook?.is_active) return;
+
+    const fetchHistory = async () => {
+      const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString();
+      const { data, error } = await supabase
+        .from('logzz_orders')
+        .select('id, order_number, client_name, order_status, created_at')
+        .eq('user_id', user.id)
+        .gte('created_at', thirtySecondsAgo)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (!error && data) {
+        setHistory(data as WebhookHistoryItem[]);
+      }
+    };
+
+    fetchHistory();
+    const interval = setInterval(fetchHistory, 3000); // Poll every 3 seconds
+
+    return () => clearInterval(interval);
+  }, [user, isAdmin, webhook?.is_active]);
 
   const fetchWebhook = async () => {
     if (!user) return;
@@ -184,14 +220,17 @@ export function LogzzIntegrationSettings() {
               </CardDescription>
             </div>
             {webhook && (
-              <Badge variant={webhook.is_active ? "default" : "secondary"}>
+              <Badge variant={webhook.is_active ? "default" : "secondary"} className={webhook.is_active ? "bg-green-500" : "bg-red-500 text-white"}>
                 {webhook.is_active ? (
                   <>
                     <CheckCircle2 className="h-3 w-3 mr-1" />
                     Ativo
                   </>
                 ) : (
-                  'Inativo'
+                  <>
+                    <XCircle className="h-3 w-3 mr-1" />
+                    Inativo
+                  </>
                 )}
               </Badge>
             )}
@@ -239,7 +278,7 @@ export function LogzzIntegrationSettings() {
 
               <div className="flex items-center justify-between pt-4 border-t">
                 <div className="flex items-center gap-2">
-                  <Switch 
+                  <ColoredSwitch 
                     checked={webhook.is_active}
                     onCheckedChange={toggleWebhook}
                   />
@@ -263,6 +302,57 @@ export function LogzzIntegrationSettings() {
           )}
         </CardContent>
       </Card>
+
+      {/* Histórico de requisições - últimos 30s */}
+      {webhook?.is_active && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <History className="h-5 w-5" />
+              Histórico de Requisições
+              <Badge variant="outline" className="ml-2">
+                Últimos 30s
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              Requisições recebidas nos últimos 30 segundos (atualiza automaticamente)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {history.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <History className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>Nenhuma requisição nos últimos 30 segundos</p>
+                <p className="text-xs mt-1">As requisições aparecerão aqui quando recebidas</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {history.map((item) => (
+                  <div 
+                    key={item.id} 
+                    className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                      <div>
+                        <p className="font-medium text-sm">
+                          {item.order_number || 'Pedido sem número'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {item.client_name || 'Cliente não informado'} • {item.order_status || 'Status não informado'}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {formatDistanceToNow(new Date(item.created_at), { addSuffix: true, locale: ptBR })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
