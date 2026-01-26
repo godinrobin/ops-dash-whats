@@ -43,38 +43,41 @@ const HomePage = () => {
     return <Marketplace onModeChange={setMode} currentMode={mode} />;
   }
 
-  // Add extra spacing for impersonation banner
-  const spacerHeight = isImpersonating ? "h-24 md:h-[104px]" : "h-14 md:h-16";
+  const spacerHeight = isImpersonating ? "h-24" : "h-14";
 
   return (
-    <>
+    <div className="min-h-screen bg-background">
       <Header mode={mode} onModeChange={setMode} onSidebarToggle={() => setSidebarOpen(!sidebarOpen)} />
       <div className={spacerHeight} />
       
-      <SystemsSidebar onRestrictedClick={handleRestrictedClick} isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
+      <SystemsSidebar 
+        onRestrictedClick={handleRestrictedClick} 
+        isOpen={sidebarOpen} 
+        onToggle={() => setSidebarOpen(!sidebarOpen)} 
+      />
       
       {/* Main Content Area */}
-      <div className={`${sidebarOpen ? 'lg:ml-64' : ''} min-h-screen bg-background transition-all duration-300`}>
-        <div className="container mx-auto max-w-2xl px-4 py-6">
+      <main className={`${sidebarOpen ? 'lg:ml-64' : ''} transition-all duration-200`}>
+        <div className="max-w-2xl mx-auto px-4 py-8">
           {/* Feed Header */}
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold mb-2">Feed da Comunidade</h1>
-            <p className="text-muted-foreground text-sm">
+          <div className="mb-8">
+            <h1 className="text-xl font-semibold text-foreground">Feed da Comunidade</h1>
+            <p className="text-sm text-muted-foreground mt-1">
               Compartilhe suas experiências e interaja com outros membros
             </p>
           </div>
 
-          {/* Feed (includes CreatePostCard, pending posts for admin, and approved posts) */}
+          {/* Feed */}
           <Feed key={refreshFeed} />
         </div>
-      </div>
+      </main>
 
       <RestrictedFeatureModal
         open={restrictedModalOpen}
         onOpenChange={setRestrictedModalOpen}
         featureName={selectedFeatureName}
       />
-    </>
+    </div>
   );
 };
 
