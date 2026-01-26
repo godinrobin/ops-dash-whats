@@ -99,7 +99,7 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
         .select('id, event_name, event_value, pixel_id, action_source, success, error_message, created_at')
         .eq('contact_id', contact.id)
         .order('created_at', { ascending: false })
-        .limit(10);
+        .limit(100);
 
       if (error) throw error;
       setEventLogs((data || []) as EventLog[]);
@@ -417,6 +417,9 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
               <div className="flex items-center gap-2">
                 <History className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Histórico de Eventos</span>
+                {eventLogs.length > 0 && (
+                  <Badge variant="secondary" className="text-xs">{eventLogs.length}</Badge>
+                )}
               </div>
               {showEventHistory ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </Button>
@@ -445,7 +448,7 @@ export const ContactDetails = ({ contact, onClose }: ContactDetailsProps) => {
                     Nenhum evento enviado ainda.
                   </p>
                 ) : (
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                  <div className="space-y-2 max-h-80 overflow-y-auto">
                     {eventLogs.map((log) => (
                       <div
                         key={log.id}
