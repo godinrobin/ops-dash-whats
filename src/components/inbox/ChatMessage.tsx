@@ -760,7 +760,7 @@ export const ChatMessage = ({ message, allMessages = [], contact, onReply, onMes
           <div className={cn(
             "rounded-lg px-3 py-2 shadow-sm transition-all relative",
             isOutbound 
-              ? "bg-primary text-primary-foreground rounded-br-none" 
+              ? "bg-zinc-900 text-white rounded-br-none" 
               : "bg-card border border-border rounded-bl-none",
             message.status === 'pending' && "opacity-70",
             message.status === 'failed' && "border-destructive bg-destructive/10"
