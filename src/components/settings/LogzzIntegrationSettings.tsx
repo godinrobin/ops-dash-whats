@@ -9,15 +9,29 @@ import { Label } from "@/components/ui/label";
 import { ColoredSwitch } from "@/components/ui/colored-switch";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Copy, RefreshCw, ExternalLink, Package, Clock, CheckCircle2, Loader2, History, XCircle } from "lucide-react";
+import { Copy, RefreshCw, ExternalLink, Package, Clock, CheckCircle2, Loader2, History, XCircle, Plus, Trash2, Workflow, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface LogzzWebhook {
   id: string;
   webhook_token: string;
   is_active: boolean;
   created_at: string;
+  event_type: string;
+  flow_id: string | null;
+  name: string | null;
+  flow?: {
+    id: string;
+    name: string;
+  } | null;
+}
+
+interface Flow {
+  id: string;
+  name: string;
 }
 
 interface WebhookHistoryItem {
@@ -28,28 +42,40 @@ interface WebhookHistoryItem {
   created_at: string;
 }
 
+const EVENT_TYPES = [
+  { value: "pedido", label: "Pedido" }
+];
+
 export function LogzzIntegrationSettings() {
   const { user } = useAuth();
   const { isAdmin, loading: adminLoading } = useAdminStatus();
-  const [webhook, setWebhook] = useState<LogzzWebhook | null>(null);
+  const [webhooks, setWebhooks] = useState<LogzzWebhook[]>([]);
+  const [flows, setFlows] = useState<Flow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
-  const [history, setHistory] = useState<WebhookHistoryItem[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newIntegration, setNewIntegration] = useState({
+    name: "",
+    event_type: "pedido",
+    flow_id: ""
+  });
+  const [expandedWebhook, setExpandedWebhook] = useState<string | null>(null);
+  const [history, setHistory] = useState<Record<string, WebhookHistoryItem[]>>({});
 
   const WEBHOOK_BASE_URL = "https://dcjizoulbggsavizbukq.supabase.co/functions/v1/webhook-logzz-order";
 
   useEffect(() => {
     if (user && isAdmin) {
-      fetchWebhook();
+      fetchWebhooks();
+      fetchFlows();
     } else {
       setLoading(false);
     }
   }, [user, isAdmin]);
 
-  // Fetch recent webhook history (last 30 seconds)
+  // Fetch recent webhook history for expanded webhook
   useEffect(() => {
-    if (!user || !isAdmin || !webhook?.is_active) return;
+    if (!user || !isAdmin || !expandedWebhook) return;
 
     const fetchHistory = async () => {
       const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString();
@@ -62,84 +88,131 @@ export function LogzzIntegrationSettings() {
         .limit(10);
 
       if (!error && data) {
-        setHistory(data as WebhookHistoryItem[]);
+        setHistory(prev => ({ ...prev, [expandedWebhook]: data as WebhookHistoryItem[] }));
       }
     };
 
     fetchHistory();
-    const interval = setInterval(fetchHistory, 3000); // Poll every 3 seconds
+    const interval = setInterval(fetchHistory, 3000);
 
     return () => clearInterval(interval);
-  }, [user, isAdmin, webhook?.is_active]);
+  }, [user, isAdmin, expandedWebhook]);
 
-  const fetchWebhook = async () => {
+  const fetchWebhooks = async () => {
     if (!user) return;
 
     try {
       const { data, error } = await supabase
         .from('logzz_webhooks')
-        .select('*')
+        .select(`
+          *,
+          flow:inbox_flows(id, name)
+        `)
         .eq('user_id', user.id)
-        .maybeSingle();
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setWebhook(data as LogzzWebhook | null);
+      setWebhooks((data || []) as LogzzWebhook[]);
     } catch (error) {
-      console.error('Error fetching webhook:', error);
+      console.error('Error fetching webhooks:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const generateWebhook = async () => {
+  const fetchFlows = async () => {
     if (!user) return;
 
-    setGenerating(true);
     try {
       const { data, error } = await supabase
-        .from('logzz_webhooks')
-        .insert({ user_id: user.id })
-        .select()
-        .single();
+        .from('inbox_flows')
+        .select('id, name')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .order('name');
 
       if (error) throw error;
-      setWebhook(data as LogzzWebhook);
-      toast.success('Webhook gerado com sucesso!');
+      setFlows((data || []) as Flow[]);
     } catch (error) {
-      console.error('Error generating webhook:', error);
-      toast.error('Erro ao gerar webhook');
-    } finally {
-      setGenerating(false);
+      console.error('Error fetching flows:', error);
     }
   };
 
-  const regenerateWebhook = async () => {
-    if (!user || !webhook) return;
+  const createWebhook = async () => {
+    if (!user) return;
+    if (!newIntegration.name.trim()) {
+      toast.error('Digite um nome para a integração');
+      return;
+    }
 
-    setRegenerating(true);
+    setCreating(true);
+    try {
+      const { data, error } = await supabase
+        .from('logzz_webhooks')
+        .insert({
+          user_id: user.id,
+          name: newIntegration.name,
+          event_type: newIntegration.event_type,
+          flow_id: newIntegration.flow_id || null
+        })
+        .select(`
+          *,
+          flow:inbox_flows(id, name)
+        `)
+        .single();
+
+      if (error) throw error;
+      setWebhooks(prev => [data as LogzzWebhook, ...prev]);
+      setShowCreateModal(false);
+      setNewIntegration({ name: "", event_type: "pedido", flow_id: "" });
+      toast.success('Integração criada com sucesso!');
+    } catch (error) {
+      console.error('Error creating webhook:', error);
+      toast.error('Erro ao criar integração');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const deleteWebhook = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('logzz_webhooks')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      setWebhooks(prev => prev.filter(w => w.id !== id));
+      toast.success('Integração removida!');
+    } catch (error) {
+      console.error('Error deleting webhook:', error);
+      toast.error('Erro ao remover integração');
+    }
+  };
+
+  const regenerateToken = async (webhook: LogzzWebhook) => {
     try {
       const newToken = crypto.randomUUID();
       const { data, error } = await supabase
         .from('logzz_webhooks')
         .update({ webhook_token: newToken })
         .eq('id', webhook.id)
-        .select()
+        .select(`
+          *,
+          flow:inbox_flows(id, name)
+        `)
         .single();
 
       if (error) throw error;
-      setWebhook(data as LogzzWebhook);
-      toast.success('Webhook regenerado com sucesso!');
+      setWebhooks(prev => prev.map(w => w.id === webhook.id ? data as LogzzWebhook : w));
+      toast.success('Token regenerado!');
     } catch (error) {
-      console.error('Error regenerating webhook:', error);
-      toast.error('Erro ao regenerar webhook');
-    } finally {
-      setRegenerating(false);
+      console.error('Error regenerating token:', error);
+      toast.error('Erro ao regenerar token');
     }
   };
 
-  const toggleWebhook = async (active: boolean) => {
-    if (!webhook) return;
-
+  const toggleWebhook = async (webhook: LogzzWebhook, active: boolean) => {
     try {
       const { error } = await supabase
         .from('logzz_webhooks')
@@ -147,21 +220,41 @@ export function LogzzIntegrationSettings() {
         .eq('id', webhook.id);
 
       if (error) throw error;
-      setWebhook({ ...webhook, is_active: active });
-      toast.success(active ? 'Webhook ativado!' : 'Webhook desativado!');
+      setWebhooks(prev => prev.map(w => w.id === webhook.id ? { ...w, is_active: active } : w));
+      toast.success(active ? 'Integração ativada!' : 'Integração desativada!');
     } catch (error) {
       console.error('Error toggling webhook:', error);
-      toast.error('Erro ao alterar status do webhook');
+      toast.error('Erro ao alterar status');
+    }
+  };
+
+  const updateWebhookFlow = async (webhook: LogzzWebhook, flowId: string | null) => {
+    try {
+      const { data, error } = await supabase
+        .from('logzz_webhooks')
+        .update({ flow_id: flowId })
+        .eq('id', webhook.id)
+        .select(`
+          *,
+          flow:inbox_flows(id, name)
+        `)
+        .single();
+
+      if (error) throw error;
+      setWebhooks(prev => prev.map(w => w.id === webhook.id ? data as LogzzWebhook : w));
+      toast.success('Fluxo atualizado!');
+    } catch (error) {
+      console.error('Error updating flow:', error);
+      toast.error('Erro ao atualizar fluxo');
     }
   };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    toast.success('Copiado para a área de transferência!');
+    toast.success('Copiado!');
   };
 
-  const getWebhookUrl = () => {
-    if (!webhook) return '';
+  const getWebhookUrl = (webhook: LogzzWebhook) => {
     return `${WEBHOOK_BASE_URL}?token=${webhook.webhook_token}`;
   };
 
@@ -173,7 +266,6 @@ export function LogzzIntegrationSettings() {
     );
   }
 
-  // Se não é admin, mostra "Em Breve"
   if (!isAdmin) {
     return (
       <Card className="border-dashed">
@@ -207,153 +299,192 @@ export function LogzzIntegrationSettings() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Package className="h-5 w-5" />
-                Integração Logzz - Pedidos
-              </CardTitle>
-              <CardDescription>
-                Receba webhooks de pedidos da plataforma Logzz
-              </CardDescription>
-            </div>
-            {webhook && (
-              <Badge variant={webhook.is_active ? "default" : "secondary"} className={webhook.is_active ? "bg-green-500" : "bg-red-500 text-white"}>
-                {webhook.is_active ? (
-                  <>
-                    <CheckCircle2 className="h-3 w-3 mr-1" />
-                    Ativo
-                  </>
-                ) : (
-                  <>
-                    <XCircle className="h-3 w-3 mr-1" />
-                    Inativo
-                  </>
-                )}
-              </Badge>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!webhook ? (
-            <div className="text-center py-6">
-              <p className="text-muted-foreground mb-4">
-                Gere um webhook para integrar com a Logzz
-              </p>
-              <Button onClick={generateWebhook} disabled={generating}>
-                {generating ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Gerando...
-                  </>
-                ) : (
-                  'Gerar Webhook'
-                )}
-              </Button>
-            </div>
-          ) : (
-            <>
-              <div className="space-y-2">
-                <Label>URL do Webhook</Label>
-                <div className="flex gap-2">
-                  <Input 
-                    value={getWebhookUrl()} 
-                    readOnly 
-                    className="font-mono text-sm"
-                  />
-                  <Button 
-                    variant="outline" 
-                    size="icon"
-                    onClick={() => copyToClipboard(getWebhookUrl())}
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Cole esta URL na configuração de webhook da Logzz
-                </p>
-              </div>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold flex items-center gap-2">
+            <Package className="h-5 w-5" />
+            Integrações Logzz
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Receba webhooks de pedidos e acione fluxos automaticamente
+          </p>
+        </div>
+        <Button onClick={() => setShowCreateModal(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Nova Integração
+        </Button>
+      </div>
 
-              <div className="flex items-center justify-between pt-4 border-t">
-                <div className="flex items-center gap-2">
-                  <ColoredSwitch 
-                    checked={webhook.is_active}
-                    onCheckedChange={toggleWebhook}
-                  />
-                  <Label>Webhook ativo</Label>
-                </div>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={regenerateWebhook}
-                  disabled={regenerating}
-                >
-                  {regenerating ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                  )}
-                  Regenerar Token
-                </Button>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Histórico de requisições - últimos 30s */}
-      {webhook?.is_active && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <History className="h-5 w-5" />
-              Histórico de Requisições
-              <Badge variant="outline" className="ml-2">
-                Últimos 30s
-              </Badge>
-            </CardTitle>
-            <CardDescription>
-              Requisições recebidas nos últimos 30 segundos (atualiza automaticamente)
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {history.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <History className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>Nenhuma requisição nos últimos 30 segundos</p>
-                <p className="text-xs mt-1">As requisições aparecerão aqui quando recebidas</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {history.map((item) => (
-                  <div 
-                    key={item.id} 
-                    className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                      <div>
-                        <p className="font-medium text-sm">
-                          {item.order_number || 'Pedido sem número'}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {item.client_name || 'Cliente não informado'} • {item.order_status || 'Status não informado'}
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      {formatDistanceToNow(new Date(item.created_at), { addSuffix: true, locale: ptBR })}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+      {/* Webhooks List */}
+      {webhooks.length === 0 ? (
+        <Card className="border-dashed">
+          <CardContent className="py-12 text-center">
+            <Package className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <h3 className="font-medium mb-2">Nenhuma integração configurada</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Crie sua primeira integração para começar a receber eventos da Logzz
+            </p>
+            <Button onClick={() => setShowCreateModal(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Criar Integração
+            </Button>
           </CardContent>
         </Card>
+      ) : (
+        <div className="grid gap-4">
+          {webhooks.map((webhook) => (
+            <Card key={webhook.id} className="overflow-hidden">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      {webhook.name || 'Integração sem nome'}
+                      <Badge variant={webhook.is_active ? "default" : "secondary"} className={webhook.is_active ? "bg-green-500" : "bg-red-500 text-white"}>
+                        {webhook.is_active ? (
+                          <>
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            Ativo
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="h-3 w-3 mr-1" />
+                            Inativo
+                          </>
+                        )}
+                      </Badge>
+                    </CardTitle>
+                    <CardDescription className="flex items-center gap-2 mt-1">
+                      <Badge variant="outline" className="text-xs">
+                        Evento: {EVENT_TYPES.find(e => e.value === webhook.event_type)?.label || webhook.event_type}
+                      </Badge>
+                      {webhook.flow && (
+                        <Badge variant="secondary" className="text-xs">
+                          <Workflow className="h-3 w-3 mr-1" />
+                          {webhook.flow.name}
+                        </Badge>
+                      )}
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <ColoredSwitch 
+                      checked={webhook.is_active}
+                      onCheckedChange={(checked) => toggleWebhook(webhook, checked)}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => deleteWebhook(webhook.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Webhook URL */}
+                <div className="space-y-2">
+                  <Label className="text-xs">URL do Webhook</Label>
+                  <div className="flex gap-2">
+                    <Input 
+                      value={getWebhookUrl(webhook)} 
+                      readOnly 
+                      className="font-mono text-xs"
+                    />
+                    <Button 
+                      variant="outline" 
+                      size="icon"
+                      onClick={() => copyToClipboard(getWebhookUrl(webhook))}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="icon"
+                      onClick={() => regenerateToken(webhook)}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Flow Selector */}
+                <div className="space-y-2">
+                  <Label className="text-xs">Fluxo a ser acionado</Label>
+                  <Select
+                    value={webhook.flow_id || "none"}
+                    onValueChange={(value) => updateWebhookFlow(webhook, value === "none" ? null : value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um fluxo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhum fluxo</SelectItem>
+                      {flows.map((flow) => (
+                        <SelectItem key={flow.id} value={flow.id}>
+                          {flow.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* History Toggle */}
+                {webhook.is_active && (
+                  <div className="pt-2 border-t">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full justify-between"
+                      onClick={() => setExpandedWebhook(expandedWebhook === webhook.id ? null : webhook.id)}
+                    >
+                      <span className="flex items-center gap-2">
+                        <History className="h-4 w-4" />
+                        Histórico (últimos 30s)
+                      </span>
+                      <Badge variant="outline" className="text-xs">
+                        {history[webhook.id]?.length || 0}
+                      </Badge>
+                    </Button>
+                    
+                    {expandedWebhook === webhook.id && (
+                      <div className="mt-2 space-y-2">
+                        {(history[webhook.id] || []).length === 0 ? (
+                          <div className="text-center py-4 text-muted-foreground text-sm">
+                            <History className="h-6 w-6 mx-auto mb-1 opacity-50" />
+                            Nenhuma requisição recente
+                          </div>
+                        ) : (
+                          (history[webhook.id] || []).map((item) => (
+                            <div 
+                              key={item.id} 
+                              className="flex items-center justify-between p-2 rounded bg-muted/50 text-sm"
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                                <div>
+                                  <p className="font-medium">{item.order_number || 'Sem número'}</p>
+                                  <p className="text-xs text-muted-foreground">{item.client_name}</p>
+                                </div>
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                {formatDistanceToNow(new Date(item.created_at), { addSuffix: true, locale: ptBR })}
+                              </span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       )}
 
+      {/* Instructions Card */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Como configurar na Logzz</CardTitle>
@@ -363,11 +494,98 @@ export function LogzzIntegrationSettings() {
             <li>Acesse <a href="https://app.logzz.com.br/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">app.logzz.com.br</a></li>
             <li>Vá em Configurações → Integrações → Webhooks</li>
             <li>Adicione um novo webhook de "Pedidos"</li>
-            <li>Cole a URL do webhook gerada acima</li>
+            <li>Cole a URL do webhook da integração desejada</li>
             <li>Salve e teste a integração</li>
           </ol>
         </CardContent>
       </Card>
+
+      {/* Create Modal */}
+      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Nova Integração Logzz</DialogTitle>
+            <DialogDescription>
+              Configure uma nova integração para receber eventos da Logzz
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Nome da Integração</Label>
+              <Input
+                placeholder="Ex: Webhook de Pedidos"
+                value={newIntegration.name}
+                onChange={(e) => setNewIntegration(prev => ({ ...prev, name: e.target.value }))}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Tipo de Evento</Label>
+              <Select
+                value={newIntegration.event_type}
+                onValueChange={(value) => setNewIntegration(prev => ({ ...prev, event_type: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {EVENT_TYPES.map((event) => (
+                    <SelectItem key={event.value} value={event.value}>
+                      {event.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Mais tipos de eventos serão adicionados em breve
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Fluxo a ser acionado (opcional)</Label>
+              <Select
+                value={newIntegration.flow_id || "none"}
+                onValueChange={(value) => setNewIntegration(prev => ({ ...prev, flow_id: value === "none" ? "" : value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um fluxo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum fluxo</SelectItem>
+                  {flows.map((flow) => (
+                    <SelectItem key={flow.id} value={flow.id}>
+                      {flow.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                O fluxo será acionado automaticamente quando o evento for recebido
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateModal(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={createWebhook} disabled={creating}>
+              {creating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Criando...
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Criar Integração
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
