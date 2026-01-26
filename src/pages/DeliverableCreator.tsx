@@ -990,22 +990,52 @@ const DeliverableCreator = () => {
   };
 
   const startGeneration = async (finalConfig: DeliverableConfig) => {
-    // Check credits for semi-full members (they pay from first use, no free tier)
+    // When credits system is active, check if full member has free prompts remaining
     if (isCreditsActive || isSemiFullMember) {
-      if (!canAfford(CREDIT_COST)) {
-        setShowInsufficientCredits(true);
-        return;
-      }
-      
-      const success = await deductCredits(
-        CREDIT_COST,
-        SYSTEM_ID,
-        'Geração de entregável'
-      );
-      
-      if (!success) {
-        setShowInsufficientCredits(true);
-        return;
+      // Semi-full members have no free tier - always charge credits
+      if (isSemiFullMember) {
+        if (!canAfford(CREDIT_COST)) {
+          setShowInsufficientCredits(true);
+          return;
+        }
+        
+        const success = await deductCredits(
+          CREDIT_COST,
+          SYSTEM_ID,
+          'Geração de entregável'
+        );
+        
+        if (!success) {
+          setShowInsufficientCredits(true);
+          return;
+        }
+      } else {
+        // Full members: check if they still have free prompts (30/day)
+        if (!hasReachedLimit) {
+          // Use free tier
+          const canProceed = await incrementPrompt();
+          if (!canProceed) {
+            toast.error("Erro ao registrar uso. Tente novamente.");
+            return;
+          }
+        } else {
+          // Free tier exhausted - charge credits
+          if (!canAfford(CREDIT_COST)) {
+            setShowInsufficientCredits(true);
+            return;
+          }
+          
+          const success = await deductCredits(
+            CREDIT_COST,
+            SYSTEM_ID,
+            'Geração de entregável (além do limite grátis)'
+          );
+          
+          if (!success) {
+            setShowInsufficientCredits(true);
+            return;
+          }
+        }
       }
     }
     
@@ -1081,22 +1111,52 @@ ${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as se
   };
 
   const generateWithEdit = async (editRequest: string) => {
-    // Check credits for semi-full members (they pay from first use)
+    // When credits system is active, check if full member has free prompts remaining
     if (isCreditsActive || isSemiFullMember) {
-      if (!canAfford(CREDIT_COST)) {
-        setShowInsufficientCredits(true);
-        return;
-      }
-      
-      const success = await deductCredits(
-        CREDIT_COST,
-        SYSTEM_ID,
-        'Edição de entregável'
-      );
-      
-      if (!success) {
-        setShowInsufficientCredits(true);
-        return;
+      // Semi-full members have no free tier - always charge credits
+      if (isSemiFullMember) {
+        if (!canAfford(CREDIT_COST)) {
+          setShowInsufficientCredits(true);
+          return;
+        }
+        
+        const success = await deductCredits(
+          CREDIT_COST,
+          SYSTEM_ID,
+          'Edição de entregável'
+        );
+        
+        if (!success) {
+          setShowInsufficientCredits(true);
+          return;
+        }
+      } else {
+        // Full members: check if they still have free prompts (30/day)
+        if (!hasReachedLimit) {
+          // Use free tier
+          const canProceed = await incrementPrompt();
+          if (!canProceed) {
+            toast.error("Erro ao registrar uso. Tente novamente.");
+            return;
+          }
+        } else {
+          // Free tier exhausted - charge credits
+          if (!canAfford(CREDIT_COST)) {
+            setShowInsufficientCredits(true);
+            return;
+          }
+          
+          const success = await deductCredits(
+            CREDIT_COST,
+            SYSTEM_ID,
+            'Edição de entregável (além do limite grátis)'
+          );
+          
+          if (!success) {
+            setShowInsufficientCredits(true);
+            return;
+          }
+        }
       }
     } else {
       // For non-credits users, check prompt limit

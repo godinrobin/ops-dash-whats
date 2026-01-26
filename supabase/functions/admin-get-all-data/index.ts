@@ -231,10 +231,11 @@ Deno.serve(async (req) => {
       }
     }) || []
 
-    // Buscar instâncias do maturador (todas, com service role ignora RLS)
+    // Buscar instâncias do maturador - apenas as que têm uazapi_token (são da UAZAPI)
     const { data: instancesData } = await supabaseClient
       .from('maturador_instances')
       .select('*')
+      .not('uazapi_token', 'is', null)
       .order('created_at', { ascending: false })
 
     const instances = instancesData?.map(inst => {
