@@ -32,6 +32,7 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditsSystem } from "@/hooks/useCreditsSystem";
 import { useAccessLevel } from "@/hooks/useAccessLevel";
 import { InsufficientCreditsModal } from "@/components/credits/InsufficientCreditsModal";
+import { Spinner } from "@/components/ui/spinner-1";
 
 const FREE_INSTANCES_LIMIT = 3;
 const INSTANCE_COST = 6;
@@ -1101,7 +1102,13 @@ export default function InboxDashboard() {
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Total de Contatos</CardDescription>
-              <CardTitle className="text-3xl">{(contacts as any)._exactCount || contacts.length}</CardTitle>
+              {loading ? (
+                <div className="h-9 flex items-center">
+                  <Spinner size={32} color="#ff6a00" />
+                </div>
+              ) : (
+                <CardTitle className="text-3xl">{(contacts as any)._exactCount || contacts.length}</CardTitle>
+              )}
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1113,7 +1120,13 @@ export default function InboxDashboard() {
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Conversas Hoje</CardDescription>
-              <CardTitle className="text-3xl">{todayConversationsCount}</CardTitle>
+              {loading ? (
+                <div className="h-9 flex items-center">
+                  <Spinner size={32} color="#ff6a00" />
+                </div>
+              ) : (
+                <CardTitle className="text-3xl">{todayConversationsCount}</CardTitle>
+              )}
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
