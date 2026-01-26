@@ -18,6 +18,7 @@ import {
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import zapdataLogo from "@/assets/zapdata-logo.png";
 
 const Auth = () => {
   const [loginEmail, setLoginEmail] = useState("");
@@ -444,13 +445,15 @@ const Auth = () => {
             {/* Logo and header */}
             <div className="relative flex flex-col items-center mb-8">
               <motion.div
-                className="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent to-accent/80 flex items-center justify-center mb-4 relative overflow-hidden"
+                className="mb-4"
                 whileHover={{ scale: 1.05 }}
                 transition={{ type: "spring", stiffness: 400, damping: 10 }}
               >
-                <span className="text-2xl font-bold text-accent-foreground">Z</span>
-                {/* Inner lighting effect */}
-                <div className="absolute inset-0 bg-gradient-to-t from-transparent via-white/20 to-white/10 pointer-events-none" />
+                <img 
+                  src={zapdataLogo} 
+                  alt="Zapdata" 
+                  className="h-14 w-auto object-contain"
+                />
               </motion.div>
               <h1 className="text-2xl font-bold text-foreground">{activeTab === "login" ? "Bem-vindo de volta" : "Bem-vindo"}</h1>
               <p className="text-muted-foreground text-sm mt-1">
