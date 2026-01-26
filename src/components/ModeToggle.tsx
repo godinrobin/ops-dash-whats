@@ -25,7 +25,7 @@ export const ModeToggle = ({ mode, onModeChange }: ModeToggleProps) => {
           `}
         >
           <LayoutGrid className="h-4 w-4" />
-          <span className="hidden sm:inline">Sistemas</span>
+          <span className="hidden sm:inline">Home</span>
         </button>
         <button
           onClick={() => onModeChange("marketplace")}
