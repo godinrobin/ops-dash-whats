@@ -38,14 +38,18 @@ interface WebhookHistoryItem {
   id: string;
   order_number?: string | null;
   client_name: string | null;
+  recipient_name?: string | null;
   order_status?: string | null;
   cart_status?: string | null;
+  status?: string | null;
+  tracking_code?: string | null;
   created_at: string;
 }
 
 const EVENT_TYPES = [
   { value: "pedido", label: "Pedido", endpoint: "webhook-logzz-order" },
-  { value: "abandono_carrinho", label: "Abandono de Carrinho", endpoint: "webhook-logzz-cart" }
+  { value: "abandono_carrinho", label: "Abandono de Carrinho", endpoint: "webhook-logzz-cart" },
+  { value: "expedicao_tradicional", label: "Expedição Tradicional", endpoint: "webhook-logzz-shipment" }
 ];
 
 export function LogzzIntegrationSettings() {
@@ -97,13 +101,28 @@ export function LogzzIntegrationSettings() {
           .limit(10);
 
         if (!error && data) {
-          setHistory(prev => ({ ...prev, [expandedWebhook]: data as WebhookHistoryItem[] }));
+          setHistory(prev => ({ ...prev, [expandedWebhook]: data as unknown as WebhookHistoryItem[] }));
+        }
+      } else if (webhook.event_type === 'expedicao_tradicional') {
+        const { data, error } = await supabase
+          .from('logzz_shipments')
+          .select('id, recipient_name, status, tracking_code, created_at')
+          .eq('user_id', user.id)
+          .eq('webhook_id', webhook.id)
+          .gte('created_at', thirtySecondsAgo)
+          .order('created_at', { ascending: false })
+          .limit(10);
+
+        if (!error && data) {
+          setHistory(prev => ({ ...prev, [expandedWebhook]: data as unknown as WebhookHistoryItem[] }));
         }
       } else {
-        const { data, error } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
           .from('logzz_orders')
           .select('id, order_number, client_name, order_status, created_at')
           .eq('user_id', user.id)
+          .eq('webhook_id', webhook.id)
           .gte('created_at', thirtySecondsAgo)
           .order('created_at', { ascending: false })
           .limit(10);
@@ -491,9 +510,13 @@ export function LogzzIntegrationSettings() {
                                   <p className="font-medium">
                                     {webhook.event_type === 'abandono_carrinho' 
                                       ? (item.cart_status || 'Carrinho abandonado')
-                                      : (item.order_number || 'Sem número')}
+                                      : webhook.event_type === 'expedicao_tradicional'
+                                        ? (item.tracking_code || item.status || 'Expedição')
+                                        : (item.order_number || 'Sem número')}
                                   </p>
-                                  <p className="text-xs text-muted-foreground">{item.client_name}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {item.client_name || item.recipient_name}
+                                  </p>
                                 </div>
                               </div>
                               <span className="text-xs text-muted-foreground">

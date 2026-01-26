@@ -2602,6 +2602,131 @@ export type Database = {
         }
         Relationships: []
       }
+      logzz_shipments: {
+        Row: {
+          agency_city: string | null
+          agency_neighborhood: string | null
+          agency_number: string | null
+          agency_street: string | null
+          agency_zip_code: string | null
+          carrier: string | null
+          code: string | null
+          cost: number | null
+          created_at: string | null
+          creation_date: string | null
+          delivery_date: string | null
+          external_id: string | null
+          freight_cost: number | null
+          freight_modality: string | null
+          id: string
+          product: string | null
+          quantity: number | null
+          raw_payload: Json | null
+          recipient_city: string | null
+          recipient_complement: string | null
+          recipient_country: string | null
+          recipient_document: string | null
+          recipient_email: string | null
+          recipient_name: string | null
+          recipient_neighborhood: string | null
+          recipient_number: string | null
+          recipient_phone: string | null
+          recipient_state: string | null
+          recipient_street: string | null
+          recipient_zip_code: string | null
+          sender: string | null
+          shipping_date: string | null
+          status: string | null
+          tracking_code: string | null
+          user_id: string
+          webhook_id: string | null
+        }
+        Insert: {
+          agency_city?: string | null
+          agency_neighborhood?: string | null
+          agency_number?: string | null
+          agency_street?: string | null
+          agency_zip_code?: string | null
+          carrier?: string | null
+          code?: string | null
+          cost?: number | null
+          created_at?: string | null
+          creation_date?: string | null
+          delivery_date?: string | null
+          external_id?: string | null
+          freight_cost?: number | null
+          freight_modality?: string | null
+          id?: string
+          product?: string | null
+          quantity?: number | null
+          raw_payload?: Json | null
+          recipient_city?: string | null
+          recipient_complement?: string | null
+          recipient_country?: string | null
+          recipient_document?: string | null
+          recipient_email?: string | null
+          recipient_name?: string | null
+          recipient_neighborhood?: string | null
+          recipient_number?: string | null
+          recipient_phone?: string | null
+          recipient_state?: string | null
+          recipient_street?: string | null
+          recipient_zip_code?: string | null
+          sender?: string | null
+          shipping_date?: string | null
+          status?: string | null
+          tracking_code?: string | null
+          user_id: string
+          webhook_id?: string | null
+        }
+        Update: {
+          agency_city?: string | null
+          agency_neighborhood?: string | null
+          agency_number?: string | null
+          agency_street?: string | null
+          agency_zip_code?: string | null
+          carrier?: string | null
+          code?: string | null
+          cost?: number | null
+          created_at?: string | null
+          creation_date?: string | null
+          delivery_date?: string | null
+          external_id?: string | null
+          freight_cost?: number | null
+          freight_modality?: string | null
+          id?: string
+          product?: string | null
+          quantity?: number | null
+          raw_payload?: Json | null
+          recipient_city?: string | null
+          recipient_complement?: string | null
+          recipient_country?: string | null
+          recipient_document?: string | null
+          recipient_email?: string | null
+          recipient_name?: string | null
+          recipient_neighborhood?: string | null
+          recipient_number?: string | null
+          recipient_phone?: string | null
+          recipient_state?: string | null
+          recipient_street?: string | null
+          recipient_zip_code?: string | null
+          sender?: string | null
+          shipping_date?: string | null
+          status?: string | null
+          tracking_code?: string | null
+          user_id?: string
+          webhook_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "logzz_shipments_webhook_id_fkey"
+            columns: ["webhook_id"]
+            isOneToOne: false
+            referencedRelation: "logzz_webhooks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       logzz_webhooks: {
         Row: {
           created_at: string | null
