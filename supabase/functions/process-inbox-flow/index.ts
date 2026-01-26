@@ -2046,6 +2046,32 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
               
               console.log(`[${runId}] Tag ${tagAction}: ${tagName}, new tags:`, newTags);
               processedActions.push(`${tagAction === 'add' ? 'Added' : 'Removed'} tag: ${tagName}`);
+              
+              // Trigger tag-based flows when a tag is added (not removed)
+              if (tagAction === 'add') {
+                console.log(`[${runId}] Triggering tag-based flows for tag: ${tagName}`);
+                try {
+                  const sbUrl = Deno.env.get('SUPABASE_URL') ?? '';
+                  const sbKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+                  const triggerResponse = await fetch(`${sbUrl}/functions/v1/trigger-tag-flow`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${sbKey}`,
+                    },
+                    body: JSON.stringify({
+                      contactId: contact.id,
+                      tagName: tagName,
+                      userId: flow.user_id,
+                      sourceFlowId: flow.id, // Pass source flow to prevent infinite loops
+                    }),
+                  });
+                  const triggerResult = await triggerResponse.json();
+                  console.log(`[${runId}] Tag trigger result:`, triggerResult);
+                } catch (triggerError) {
+                  console.error(`[${runId}] Error triggering tag flows:`, triggerError);
+                }
+              }
             }
             
             const tagEdge = edges.find(e => e.source === currentNodeId);
