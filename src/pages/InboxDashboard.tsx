@@ -75,6 +75,7 @@ export default function InboxDashboard() {
   const [contacts, setContacts] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingContacts, setLoadingContacts] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedInstances, setExpandedInstances] = useState<Set<string>>(new Set());
   const [tagsMenuOpen, setTagsMenuOpen] = useState(false);
@@ -269,6 +270,7 @@ export default function InboxDashboard() {
     const userId = effectiveUserId || user?.id;
     if (!userId) return;
 
+    setLoadingContacts(true);
     try {
       // Pega mensagens dos últimos 7 dias - buscar em chunks por dia para não perder dados
       const sevenDaysAgo = new Date();
@@ -320,6 +322,8 @@ export default function InboxDashboard() {
       setMessages(allMessages);
     } catch (error) {
       console.error('Error fetching secondary data:', error);
+    } finally {
+      setLoadingContacts(false);
     }
   };
 
@@ -1102,7 +1106,7 @@ export default function InboxDashboard() {
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Total de Contatos</CardDescription>
-              {loading ? (
+              {loadingContacts ? (
                 <div className="h-9 flex items-center">
                   <Spinner size={32} color="#ff6a00" />
                 </div>
@@ -1120,7 +1124,7 @@ export default function InboxDashboard() {
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Conversas Hoje</CardDescription>
-              {loading ? (
+              {loadingContacts ? (
                 <div className="h-9 flex items-center">
                   <Spinner size={32} color="#ff6a00" />
                 </div>
