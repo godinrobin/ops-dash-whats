@@ -364,10 +364,17 @@ Deno.serve(async (req) => {
           if (uazapiResp.ok) {
             const uazapiList = await uazapiResp.json();
             if (Array.isArray(uazapiList)) {
+              let unnamedCounter = 0;
               for (const u of uazapiList) {
-                const name = (u?.name ?? u?.instance ?? '').toString().toLowerCase().trim();
-                if (name) uazapiInstancesMap.set(name, u);
+                let name = (u?.name ?? u?.instance ?? '').toString().toLowerCase().trim();
+                // If name is empty, use a unique placeholder
+                if (!name) {
+                  unnamedCounter++;
+                  name = `__unnamed_${unnamedCounter}__`;
+                }
+                uazapiInstancesMap.set(name, u);
               }
+              console.log('[admin-get-all-data] uazapiInstancesMap size:', uazapiInstancesMap.size, 'unnamed:', unnamedCounter);
             }
           }
         }
