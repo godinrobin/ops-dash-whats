@@ -327,37 +327,140 @@ Deno.serve(async (req) => {
       return aCreated >= bCreated ? a : b;
     };
 
-    const uniqueByName = new Map<string, any>();
+    // Create a map of DB instances by normalized name
+    const dbInstancesByName = new Map<string, any>();
     for (const inst of instancesData ?? []) {
       const key = (inst.instance_name ?? '').toLowerCase().trim();
       if (!key) continue;
-
-      // If we have a UAZAPI source-of-truth list, only keep names that exist there
-      if (uazapiNameSet && !uazapiNameSet.has(key)) continue;
-
-      const existing = uniqueByName.get(key);
-      uniqueByName.set(key, existing ? pickBestInstance(existing, inst) : inst);
+      const existing = dbInstancesByName.get(key);
+      dbInstancesByName.set(key, existing ? pickBestInstance(existing, inst) : inst);
     }
 
-    const instances = Array.from(uniqueByName.values()).map(inst => {
-      const authUser = authUsers.users.find(u => u.id === inst.user_id)
-      const profile = profiles?.find(p => p.id === inst.user_id)
-      return {
-        id: inst.id,
-        user_id: inst.user_id,
-        user_email: authUser?.email || 'N/A',
-        username: profile?.username || 'N/A',
-        instance_name: inst.instance_name,
-        phone_number: inst.phone_number,
-        label: inst.label,
-        status: inst.status,
-        conversation_count: inst.conversation_count || 0,
-        last_conversation_sync: inst.last_conversation_sync,
-        created_at: inst.created_at,
-        connected_at: inst.connected_at,
-        disconnected_at: inst.disconnected_at,
+    // Now build the final list: start with ALL UAZAPI instances
+    const instances: any[] = [];
+    
+    if (uazapiNameSet && uazapiNameSet.size > 0) {
+      // We have UAZAPI data - use it as source of truth
+      // First, get the full UAZAPI instances list again for status info
+      let uazapiInstancesMap = new Map<string, any>();
+      try {
+        const { data: config } = await supabaseClient
+          .from('whatsapp_api_config')
+          .select('uazapi_base_url, uazapi_api_token')
+          .maybeSingle();
+        
+        if (config?.uazapi_base_url && config?.uazapi_api_token) {
+          const baseUrl = (config.uazapi_base_url as string).replace(/\/$/, '');
+          const adminToken = config.uazapi_api_token as string;
+          
+          const uazapiResp = await fetch(`${baseUrl}/instance/all`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'admintoken': adminToken,
+            },
+          });
+          
+          if (uazapiResp.ok) {
+            const uazapiList = await uazapiResp.json();
+            if (Array.isArray(uazapiList)) {
+              for (const u of uazapiList) {
+                const name = (u?.name ?? u?.instance ?? '').toString().toLowerCase().trim();
+                if (name) uazapiInstancesMap.set(name, u);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[admin-get-all-data] Failed to re-fetch UAZAPI for status:', e);
       }
-    }) || []
+
+      // Iterate over all UAZAPI instances
+      for (const [uazapiName, uazapiInst] of uazapiInstancesMap) {
+        const dbInst = dbInstancesByName.get(uazapiName);
+        
+        // Map UAZAPI status
+        const uazapiStatus = (uazapiInst?.status ?? '').toLowerCase();
+        let mappedStatus = 'disconnected';
+        if (uazapiStatus === 'open' || uazapiStatus === 'connected') {
+          mappedStatus = 'connected';
+        } else if (uazapiStatus === 'connecting' || uazapiStatus === 'qrcode') {
+          mappedStatus = 'connecting';
+        }
+        
+        // Extract phone from UAZAPI
+        let phoneNumber = uazapiInst?.number;
+        if (!phoneNumber && uazapiInst?.me?.number) {
+          phoneNumber = uazapiInst.me.number;
+        }
+        if (!phoneNumber && uazapiInst?.me?.id) {
+          const jid = uazapiInst.me.id;
+          const match = jid.match(/^(\d+)@/);
+          if (match) phoneNumber = match[1];
+        }
+
+        if (dbInst) {
+          // We have a DB record - use combined data
+          const authUser = authUsers.users.find(u => u.id === dbInst.user_id);
+          const profile = profiles?.find(p => p.id === dbInst.user_id);
+          instances.push({
+            id: dbInst.id,
+            user_id: dbInst.user_id,
+            user_email: authUser?.email || 'N/A',
+            username: profile?.username || 'N/A',
+            instance_name: dbInst.instance_name,
+            phone_number: phoneNumber || dbInst.phone_number,
+            label: dbInst.label,
+            status: mappedStatus, // Use UAZAPI status as source of truth
+            conversation_count: dbInst.conversation_count || 0,
+            last_conversation_sync: dbInst.last_conversation_sync,
+            created_at: dbInst.created_at,
+            connected_at: dbInst.connected_at,
+            disconnected_at: dbInst.disconnected_at,
+          });
+        } else {
+          // No DB record - this is an orphan instance in UAZAPI
+          instances.push({
+            id: null,
+            user_id: null,
+            user_email: '⚠️ Sem usuário',
+            username: '⚠️ Órfã na UAZAPI',
+            instance_name: uazapiInst?.name ?? uazapiInst?.instance ?? uazapiName,
+            phone_number: phoneNumber || null,
+            label: null,
+            status: mappedStatus,
+            conversation_count: 0,
+            last_conversation_sync: null,
+            created_at: null,
+            connected_at: null,
+            disconnected_at: null,
+          });
+        }
+      }
+    } else {
+      // Fallback: no UAZAPI data, show all DB instances
+      for (const [, inst] of dbInstancesByName) {
+        const authUser = authUsers.users.find(u => u.id === inst.user_id);
+        const profile = profiles?.find(p => p.id === inst.user_id);
+        instances.push({
+          id: inst.id,
+          user_id: inst.user_id,
+          user_email: authUser?.email || 'N/A',
+          username: profile?.username || 'N/A',
+          instance_name: inst.instance_name,
+          phone_number: inst.phone_number,
+          label: inst.label,
+          status: inst.status,
+          conversation_count: inst.conversation_count || 0,
+          last_conversation_sync: inst.last_conversation_sync,
+          created_at: inst.created_at,
+          connected_at: inst.connected_at,
+          disconnected_at: inst.disconnected_at,
+        });
+      }
+    }
+    
+    console.log('[admin-get-all-data] Final instances count:', instances.length);
 
     return new Response(
       JSON.stringify({
