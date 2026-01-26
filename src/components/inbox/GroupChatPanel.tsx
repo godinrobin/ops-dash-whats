@@ -1,17 +1,12 @@
-import { useState, useRef, useEffect } from 'react';
-import { Users, Send, RefreshCw, Loader2, Settings, Image as ImageIcon, Mic, FileText, Smile } from 'lucide-react';
+import { useState } from 'react';
+import { Users, Settings, MessageSquare, Link, UserPlus, LogOut, Shield, Edit, ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { InboxGroup } from '@/hooks/useInboxGroups';
-import { useGroupMessages, GroupMessage } from '@/hooks/useGroupMessages';
+import { WhatsAppGroup } from '@/types/groups';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { cn } from '@/lib/utils';
 import {
   Sheet,
   SheetContent,
@@ -19,37 +14,27 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 
 interface GroupChatPanelProps {
-  group: InboxGroup | null;
+  group: WhatsAppGroup | null;
 }
 
 export const GroupChatPanel = ({ group }: GroupChatPanelProps) => {
   const [showSettings, setShowSettings] = useState(false);
-  const [messageInput, setMessageInput] = useState('');
-  const [sending, setSending] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  
-  const { 
-    messages, 
-    loading, 
-    syncing, 
-    syncMessages, 
-    sendMessage 
-  } = useGroupMessages(
-    group?.group_jid || null, 
-    group?.instance_id || null
-  );
-
-  // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
-
-  // Note: Auto-sync is now handled by useGroupMessages hook
-  // No need for manual sync on group change here
+  const [editNameDialog, setEditNameDialog] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [editDescDialog, setEditDescDialog] = useState(false);
+  const [newGroupDesc, setNewGroupDesc] = useState('');
 
   if (!group) {
     return (
@@ -69,74 +54,35 @@ export const GroupChatPanel = ({ group }: GroupChatPanelProps) => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
-  const getSenderName = (msg: GroupMessage) => {
-    if (msg.is_from_me) return 'Você';
-    return msg.sender_push_name || msg.sender_name || msg.sender_jid.split('@')[0];
+  const handleCopyInviteLink = () => {
+    toast.info('Funcionalidade de link de convite em desenvolvimento');
   };
 
-  const formatMessageTime = (timestamp: string) => {
-    try {
-      return format(new Date(timestamp), 'HH:mm', { locale: ptBR });
-    } catch {
-      return '';
-    }
+  const handleAddMember = () => {
+    toast.info('Funcionalidade de adicionar membro em desenvolvimento');
   };
 
-  const formatMessageDate = (timestamp: string) => {
-    try {
-      const date = new Date(timestamp);
-      const now = new Date();
-      const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-      
-      if (diffDays === 0) return 'Hoje';
-      if (diffDays === 1) return 'Ontem';
-      return format(date, "dd 'de' MMMM", { locale: ptBR });
-    } catch {
-      return '';
-    }
+  const handleLeaveGroup = () => {
+    toast.info('Funcionalidade de sair do grupo em desenvolvimento');
   };
 
-  const handleSendMessage = async () => {
-    if (!messageInput.trim() || sending) return;
-    
-    const content = messageInput.trim();
-    setMessageInput('');
-    setSending(true);
-    
-    try {
-      const result = await sendMessage(content);
-      if (result.error) {
-        toast.error(result.error);
-        setMessageInput(content); // Restore on error
-      }
-    } catch (err) {
-      toast.error('Erro ao enviar mensagem');
-      setMessageInput(content);
-    } finally {
-      setSending(false);
+  const handleSaveGroupName = () => {
+    if (!newGroupName.trim()) {
+      toast.error('Digite um nome para o grupo');
+      return;
     }
+    toast.info(`Renomear grupo para "${newGroupName}" - Em desenvolvimento`);
+    setEditNameDialog(false);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
+  const handleSaveGroupDesc = () => {
+    toast.info('Salvar descrição - Em desenvolvimento');
+    setEditDescDialog(false);
   };
 
-  // Group messages by date
-  const groupedMessages: { date: string; messages: GroupMessage[] }[] = [];
-  let currentDate = '';
-  
-  messages.forEach(msg => {
-    const msgDate = formatMessageDate(msg.timestamp);
-    if (msgDate !== currentDate) {
-      currentDate = msgDate;
-      groupedMessages.push({ date: msgDate, messages: [msg] });
-    } else {
-      groupedMessages[groupedMessages.length - 1].messages.push(msg);
-    }
-  });
+  const handleChangePhoto = () => {
+    toast.info('Alterar foto do grupo - Em desenvolvimento');
+  };
 
   return (
     <div className="flex-1 flex flex-col bg-background">
@@ -157,7 +103,7 @@ export const GroupChatPanel = ({ group }: GroupChatPanelProps) => {
               <div className="flex-1 min-w-0">
                 <h3 className="font-semibold text-sm truncate">{group.name}</h3>
                 <p className="text-xs text-muted-foreground">
-                  {group.participant_count} participantes
+                  {group.participant_count} membros
                 </p>
               </div>
             </div>
@@ -167,7 +113,7 @@ export const GroupChatPanel = ({ group }: GroupChatPanelProps) => {
             <SheetHeader>
               <SheetTitle className="flex items-center gap-2">
                 <Settings className="h-5 w-5" />
-                Informações do Grupo
+                Configurações do Grupo
               </SheetTitle>
             </SheetHeader>
             
@@ -175,20 +121,43 @@ export const GroupChatPanel = ({ group }: GroupChatPanelProps) => {
               <div className="space-y-6">
                 {/* Group Info */}
                 <div className="flex flex-col items-center">
-                  <Avatar className="h-24 w-24">
-                    {group.profile_pic_url && (
-                      <AvatarImage src={group.profile_pic_url} alt={group.name} />
-                    )}
-                    <AvatarFallback className="text-2xl bg-primary/10 text-primary">
-                      {getInitials(group.name)}
-                    </AvatarFallback>
-                  </Avatar>
+                  <div className="relative">
+                    <Avatar className="h-24 w-24">
+                      {group.profile_pic_url && (
+                        <AvatarImage src={group.profile_pic_url} alt={group.name} />
+                      )}
+                      <AvatarFallback className="text-2xl bg-primary/10 text-primary">
+                        {getInitials(group.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <Button
+                      size="icon"
+                      variant="secondary"
+                      className="absolute bottom-0 right-0 h-8 w-8 rounded-full"
+                      onClick={handleChangePhoto}
+                    >
+                      <ImageIcon className="h-4 w-4" />
+                    </Button>
+                  </div>
                   
                   <div className="mt-4 text-center">
-                    <h3 className="font-semibold text-lg">{group.name}</h3>
+                    <div className="flex items-center justify-center gap-2">
+                      <h3 className="font-semibold text-lg">{group.name}</h3>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6"
+                        onClick={() => {
+                          setNewGroupName(group.name);
+                          setEditNameDialog(true);
+                        }}
+                      >
+                        <Edit className="h-3 w-3" />
+                      </Button>
+                    </div>
                     <Badge variant="secondary" className="mt-2">
                       <Users className="h-3 w-3 mr-1" />
-                      {group.participant_count} participantes
+                      {group.participant_count} membros
                     </Badge>
                   </div>
                 </div>
@@ -196,203 +165,140 @@ export const GroupChatPanel = ({ group }: GroupChatPanelProps) => {
                 <Separator />
                 
                 {/* Description */}
-                {group.description && (
-                  <>
-                    <div>
-                      <h4 className="text-sm font-medium mb-2">Descrição</h4>
-                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                        {group.description}
-                      </p>
-                    </div>
-                    <Separator />
-                  </>
-                )}
-                
-                {/* Group info badges */}
-                <div className="flex flex-wrap gap-2">
-                  {group.is_announce && (
-                    <Badge variant="outline">Somente admins enviam</Badge>
-                  )}
-                  {group.is_community && (
-                    <Badge variant="outline">Comunidade</Badge>
-                  )}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-sm font-medium">Descrição</Label>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6"
+                      onClick={() => {
+                        setNewGroupDesc(group.description || '');
+                        setEditDescDialog(true);
+                      }}
+                    >
+                      <Edit className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {group.description || 'Nenhuma descrição'}
+                  </p>
                 </div>
                 
-                {/* Instance info */}
-                {group.instance_name && (
-                  <div className="text-xs text-muted-foreground">
-                    Instância: {group.instance_name}
-                  </div>
-                )}
+                <Separator />
+                
+                {/* Actions */}
+                <div className="space-y-2">
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start gap-2"
+                    onClick={handleCopyInviteLink}
+                  >
+                    <Link className="h-4 w-4" />
+                    Copiar Link de Convite
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start gap-2"
+                    onClick={handleAddMember}
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    Adicionar Membro
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start gap-2"
+                  >
+                    <Shield className="h-4 w-4" />
+                    Configurar Permissões
+                  </Button>
+                  
+                  <Separator />
+                  
+                  <Button
+                    variant="destructive"
+                    className="w-full justify-start gap-2"
+                    onClick={handleLeaveGroup}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sair do Grupo
+                  </Button>
+                </div>
+                
+                <Separator />
+                
+                {/* Members Preview */}
+                <div>
+                  <h4 className="text-sm font-medium mb-3">Membros do Grupo</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Lista de membros em desenvolvimento...
+                  </p>
+                </div>
               </div>
             </ScrollArea>
           </SheetContent>
         </Sheet>
-        
-        {/* Sync button */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={syncMessages}
-          disabled={syncing}
-          title="Atualizar mensagens"
-        >
-          {syncing ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4" />
-          )}
-        </Button>
       </div>
 
-      {/* Messages Area */}
-      <ScrollArea className="flex-1 p-4" ref={scrollRef}>
-        {loading && messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
-            <Users className="h-12 w-12 mb-4 opacity-50" />
-            <p>Nenhuma mensagem ainda</p>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="mt-4"
-              onClick={syncMessages}
-              disabled={syncing}
-            >
-              {syncing ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Carregando...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Carregar Mensagens
-                </>
-              )}
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {groupedMessages.map((group, groupIndex) => (
-              <div key={groupIndex}>
-                {/* Date separator */}
-                <div className="flex items-center justify-center my-4">
-                  <div className="bg-muted px-3 py-1 rounded-full text-xs text-muted-foreground">
-                    {group.date}
-                  </div>
-                </div>
-                
-                {/* Messages */}
-                <div className="space-y-2">
-                  {group.messages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={cn(
-                        'flex',
-                        msg.is_from_me ? 'justify-end' : 'justify-start'
-                      )}
-                    >
-                      <div
-                        className={cn(
-                          'max-w-[70%] rounded-lg px-3 py-2',
-                          msg.is_from_me
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted'
-                        )}
-                      >
-                        {/* Sender name (for incoming messages) */}
-                        {!msg.is_from_me && (
-                          <p className="text-xs font-medium text-primary mb-1">
-                            {getSenderName(msg)}
-                          </p>
-                        )}
-                        
-                        {/* Message content */}
-                        {msg.message_type === 'text' ? (
-                          <p className="text-sm whitespace-pre-wrap break-words">
-                            {msg.content}
-                          </p>
-                        ) : msg.message_type === 'image' ? (
-                          <div className="space-y-1">
-                            {msg.media_url && (
-                              <img 
-                                src={msg.media_url} 
-                                alt="Imagem" 
-                                className="rounded max-w-full"
-                              />
-                            )}
-                            {msg.content && (
-                              <p className="text-sm">{msg.content}</p>
-                            )}
-                          </div>
-                        ) : msg.message_type === 'audio' ? (
-                          <div className="flex items-center gap-2">
-                            <Mic className="h-4 w-4" />
-                            <span className="text-sm">Áudio</span>
-                          </div>
-                        ) : msg.message_type === 'document' ? (
-                          <div className="flex items-center gap-2">
-                            <FileText className="h-4 w-4" />
-                            <span className="text-sm">Documento</span>
-                          </div>
-                        ) : (
-                          <p className="text-sm italic">
-                            [{msg.message_type}]
-                          </p>
-                        )}
-                        
-                        {/* Timestamp */}
-                        <p className={cn(
-                          'text-[10px] mt-1 text-right',
-                          msg.is_from_me 
-                            ? 'text-primary-foreground/70' 
-                            : 'text-muted-foreground'
-                        )}>
-                          {formatMessageTime(msg.timestamp)}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+      {/* Messages Area - Placeholder */}
+      <ScrollArea className="flex-1 p-4">
+        <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
+          <MessageSquare className="h-12 w-12 mb-4" />
+          <p>Mensagens do grupo</p>
+          <p className="text-sm mt-1">Em desenvolvimento...</p>
+        </div>
       </ScrollArea>
 
-      {/* Input Area */}
-      <div className="p-4 border-t border-border bg-card">
-        <div className="flex items-center gap-2">
-          <div className="flex-1 relative">
+      {/* Edit Name Dialog */}
+      <Dialog open={editNameDialog} onOpenChange={setEditNameDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Nome do Grupo</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
             <Input
-              placeholder="Digite uma mensagem..."
-              value={messageInput}
-              onChange={(e) => setMessageInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={sending}
-              className="pr-10"
+              placeholder="Nome do grupo"
+              value={newGroupName}
+              onChange={(e) => setNewGroupName(e.target.value)}
             />
           </div>
-          <Button
-            size="icon"
-            onClick={handleSendMessage}
-            disabled={!messageInput.trim() || sending}
-          >
-            {sending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
-        <p className="text-[10px] text-muted-foreground mt-2 text-center">
-          Mensagens de grupos não disparam fluxos automáticos
-        </p>
-      </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditNameDialog(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveGroupName}>
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Description Dialog */}
+      <Dialog open={editDescDialog} onOpenChange={setEditDescDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Descrição</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Textarea
+              placeholder="Descrição do grupo"
+              value={newGroupDesc}
+              onChange={(e) => setNewGroupDesc(e.target.value)}
+              rows={4}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDescDialog(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveGroupDesc}>
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
