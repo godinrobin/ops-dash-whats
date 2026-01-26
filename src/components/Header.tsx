@@ -7,7 +7,7 @@ import { LogOut, User, Shield, LayoutGrid, ShoppingBag, Megaphone, Menu, Setting
 import { useNavigate, useLocation } from "react-router-dom";
 import { ProfileModal } from "./ProfileModal";
 import { cn } from "@/lib/utils";
-
+import zapdataLogo from "@/assets/zapdata-logo.png";
 export type AppMode = "sistemas" | "marketplace" | "ads";
 
 interface HeaderProps {
@@ -57,12 +57,11 @@ export const Header = ({ mode, onModeChange, onSidebarToggle }: HeaderProps) => 
               onClick={() => navigate("/")} 
               className="flex items-center gap-2 group"
             >
-              <div className="w-8 h-8 rounded-md bg-accent flex items-center justify-center shadow-lg shadow-accent/20">
-                <span className="text-accent-foreground font-bold text-sm">Z</span>
-              </div>
-              <span className="font-semibold text-accent group-hover:text-accent/80 transition-colors hidden sm:block">
-                Zapdata
-              </span>
+              <img 
+                src={zapdataLogo} 
+                alt="Zapdata" 
+                className="h-8 w-auto object-contain"
+              />
             </button>
           </div>
 
