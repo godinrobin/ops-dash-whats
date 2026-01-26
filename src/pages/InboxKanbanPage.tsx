@@ -114,7 +114,8 @@ const KanbanCard = ({
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0 : 1,
+    visibility: isDragging ? 'hidden' as const : 'visible' as const,
   };
 
   const instance = instances.find(i => i.id === contact.instance_id);
@@ -603,12 +604,18 @@ export default function InboxKanbanPage() {
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { distance: 5 },
+      activationConstraint: { distance: 3 },
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  // Drop animation for smooth card placement
+  const dropAnimation = {
+    duration: 200,
+    easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+  };
 
   // Custom collision detection that prioritizes dropzones (columns) over cards
   const customCollisionDetection: CollisionDetection = useCallback((args) => {
@@ -1288,15 +1295,15 @@ export default function InboxKanbanPage() {
               </SortableContext>
             </div>
 
-            <DragOverlay>
+            <DragOverlay dropAnimation={dropAnimation}>
               {isColumnDrag && activeId ? (
-                <div className="w-[300px] bg-muted/50 rounded-lg border-2 border-accent p-4 shadow-xl">
+                <div className="w-[300px] bg-muted/50 rounded-lg border-2 border-accent p-4 shadow-xl cursor-grabbing">
                   <div className="text-center text-sm font-medium">
                     {activeId.replace('column-', '')}
                   </div>
                 </div>
               ) : activeContact ? (
-                <div className="bg-card border border-accent rounded-lg p-2.5 shadow-xl w-[280px] opacity-90">
+                <div className="bg-card border-2 border-accent rounded-lg p-2.5 shadow-2xl w-[280px] cursor-grabbing rotate-2 scale-105">
                   <div className="flex items-center gap-2">
                     {activeContact.profile_pic_url ? (
                       <img 
@@ -1309,7 +1316,7 @@ export default function InboxKanbanPage() {
                         <User className="h-4 w-4 text-muted-foreground" />
                       </div>
                     )}
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="font-medium text-xs truncate">
                         {activeContact.name || formatPhoneDisplay(activeContact.phone)}
                       </p>
