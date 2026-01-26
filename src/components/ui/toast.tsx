@@ -48,24 +48,24 @@ export interface ToasterRef {
 }
 
 const variantStyles: Record<Variant, string> = {
-  default: 'bg-card border-border text-foreground',
-  success: 'bg-card border-green-600/50',
-  error: 'bg-card border-destructive/50',
-  warning: 'bg-card border-amber-600/50',
+  default: 'bg-zinc-950 border-primary text-white',
+  success: 'bg-zinc-950 border-primary text-white',
+  error: 'bg-zinc-950 border-destructive text-white',
+  warning: 'bg-zinc-950 border-amber-500 text-white',
 };
 
 const titleColor: Record<Variant, string> = {
-  default: 'text-foreground',
-  success: 'text-green-600 dark:text-green-400',
+  default: 'text-white',
+  success: 'text-primary',
   error: 'text-destructive',
-  warning: 'text-amber-600 dark:text-amber-400',
+  warning: 'text-amber-500',
 };
 
 const iconColor: Record<Variant, string> = {
-  default: 'text-muted-foreground',
-  success: 'text-green-600 dark:text-green-400',
+  default: 'text-primary',
+  success: 'text-primary',
   error: 'text-destructive',
-  warning: 'text-amber-600 dark:text-amber-400',
+  warning: 'text-amber-500',
 };
 
 const variantIcons: Record<Variant, React.ComponentType<{ className?: string }>> = {
@@ -121,7 +121,7 @@ const Toaster = forwardRef<ToasterRef, { defaultPosition?: Position }>(
                       {title}
                     </p>
                   )}
-                  <p className="text-sm text-muted-foreground">{message}</p>
+                  <p className="text-sm text-zinc-300">{message}</p>
                 </div>
               </div>
 
