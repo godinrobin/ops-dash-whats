@@ -364,7 +364,63 @@ const DeliverableCreator = () => {
     ]);
   };
 
-  const handleUserMessage = async (message: string, attachment?: { url: string; type: AttachmentType; name?: string }) => {
+  // Handle free chat mode - conversation without actions
+  const handleChatModeMessage = async (message: string, attachment?: { url: string; type: AttachmentType; name?: string }) => {
+    setIsGenerating(true);
+    
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-deliverable`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            chatMode: true,
+            messages: [
+              {
+                role: "user",
+                content: message,
+                ...(attachment?.url && { imageUrl: attachment.url, attachmentType: attachment.type }),
+              },
+            ],
+            config,
+            currentHtml: generatedHtml || undefined,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Erro ao processar mensagem");
+      }
+
+      const data = await response.json();
+      const aiResponse = data.response || data.choices?.[0]?.message?.content || "Não consegui processar sua mensagem.";
+      
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: aiResponse,
+        },
+      ]);
+    } catch (error) {
+      console.error("Chat mode error:", error);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "❌ Ocorreu um erro ao processar sua mensagem. Tente novamente.",
+        },
+      ]);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleUserMessage = async (message: string, attachment?: { url: string; type: AttachmentType; name?: string }, isChatMode?: boolean) => {
     const userMsg: ChatMessage = { 
       role: "user", 
       content: message, 
@@ -373,6 +429,12 @@ const DeliverableCreator = () => {
       attachmentName: attachment?.name
     };
     setMessages((prev) => [...prev, userMsg]);
+
+    // If chat mode is active, handle as free conversation (no actions)
+    if (isChatMode) {
+      await handleChatModeMessage(message, attachment);
+      return;
+    }
 
     switch (step) {
       case "ask_niche":
