@@ -199,17 +199,19 @@ const DeliverableCreator = () => {
     setSavedDeliverables(mappedData);
   };
 
-  const saveDeliverable = async (html: string) => {
+  const saveDeliverable = async (html: string, configOverride?: DeliverableConfig) => {
     if (!user || !html) return;
+
+    const cfg = configOverride ?? config;
     
-    const deliverableName = config.niche ? `Entregável - ${config.niche}` : `Entregável ${new Date().toLocaleDateString("pt-BR")}`;
+    const deliverableName = cfg.niche ? `Entregável - ${cfg.niche}` : `Entregável ${new Date().toLocaleDateString("pt-BR")}`;
     
     if (currentDeliverableId) {
       // Update existing
       const { error } = await supabase
         .from("saved_deliverables")
         .update({
-          config: JSON.parse(JSON.stringify(config)),
+          config: JSON.parse(JSON.stringify(cfg)),
           html_content: html,
           name: deliverableName,
           updated_at: new Date().toISOString(),
@@ -228,7 +230,7 @@ const DeliverableCreator = () => {
           user_id: user.id,
           name: deliverableName,
           template_id: selectedTemplate || "app-course",
-          config: JSON.parse(JSON.stringify(config)),
+          config: JSON.parse(JSON.stringify(cfg)),
           html_content: html,
         })
         .select()
@@ -452,7 +454,7 @@ const DeliverableCreator = () => {
         break;
 
       case "ask_primary_color":
-        const primaryColor = parseColor(message);
+        const primaryColor = parseColor(message, config.primaryColor);
         setConfig((prev) => ({ ...prev, primaryColor }));
         setStep("ask_secondary_color");
         setTimeout(() => {
@@ -467,7 +469,7 @@ const DeliverableCreator = () => {
         break;
 
       case "ask_secondary_color":
-        const secondaryColor = parseColor(message);
+        const secondaryColor = parseColor(message, config.secondaryColor);
         setConfig((prev) => ({ ...prev, secondaryColor }));
         setStep("ask_audience");
         setTimeout(() => {
@@ -1247,6 +1249,25 @@ ${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as se
     setIsGenerating(true);
     
     try {
+      // If user asked to change colors, update the config used for THIS edit and for the next prompts
+      const reqLower = editRequest.toLowerCase();
+      let updatedConfig = config;
+      const wantsPrimary = /cor\s+(principal|prim[áa]ria)/i.test(reqLower);
+      const wantsSecondary = /cor\s+secund[áa]ria/i.test(reqLower);
+
+      if (wantsPrimary) {
+        updatedConfig = {
+          ...updatedConfig,
+          primaryColor: parseColor(editRequest, updatedConfig.primaryColor),
+        };
+      }
+      if (wantsSecondary) {
+        updatedConfig = {
+          ...updatedConfig,
+          secondaryColor: parseColor(editRequest, updatedConfig.secondaryColor),
+        };
+      }
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-deliverable`,
         {
@@ -1263,10 +1284,19 @@ ${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as se
               },
               {
                 role: "user",
-                content: `Faça a seguinte modificação no código HTML atual: ${editRequest}. Retorne o HTML completo modificado.`,
+                content: `Faça a seguinte modificação no código HTML atual: ${editRequest}.
+
+REGRAS IMPORTANTES:
+- NÃO reinicie o app do zero e NÃO recrie o layout.
+- Preserve toda a estrutura e seções existentes.
+- Preserve e utilize as cores atuais do projeto (obrigatório):
+  - Cor principal: ${updatedConfig.primaryColor}
+  - Cor secundária: ${updatedConfig.secondaryColor}
+
+Retorne o HTML completo modificado.`,
               },
             ],
-            config,
+            config: updatedConfig,
           }),
         }
       );
@@ -1279,7 +1309,11 @@ ${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as se
       
       // Auto-save after edit
       if (html) {
-        await saveDeliverable(html);
+        // Persist updated colors (if any) along with the edited HTML
+        if (updatedConfig !== config) {
+          setConfig(updatedConfig);
+        }
+        await saveDeliverable(html, updatedConfig);
       }
       
       setMessages((prev) => [
@@ -1366,7 +1400,7 @@ ${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as se
     return finalHtml;
   };
 
-  const parseColor = (input: string): string => {
+  const parseColor = (input: string, fallback: string = "#E91E63"): string => {
     const colorMap: Record<string, string> = {
       rosa: "#E91E63",
       pink: "#E91E63",
@@ -1393,13 +1427,30 @@ ${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as se
     };
 
     const lowerInput = input.toLowerCase().trim();
+
+    // 1) Hex anywhere in the sentence
+    const hexMatch = lowerInput.match(/#([0-9a-f]{3}|[0-9a-f]{6})\b/i);
+    if (hexMatch) {
+      return `#${hexMatch[1]}`.toUpperCase();
+    }
+
+    // 2) Exact color word
     if (colorMap[lowerInput]) {
       return colorMap[lowerInput];
     }
-    if (input.startsWith("#") && (input.length === 4 || input.length === 7)) {
-      return input;
+
+    // 3) Color word inside a longer sentence
+    const foundKey = Object.keys(colorMap).find((key) => lowerInput.includes(key));
+    if (foundKey) {
+      return colorMap[foundKey];
     }
-    return "#E91E63"; // Default
+
+    // 4) If user typed just a hex
+    if (input.startsWith("#") && (input.length === 4 || input.length === 7)) {
+      return input.toUpperCase();
+    }
+
+    return fallback;
   };
 
   if (step === "template_selection") {
