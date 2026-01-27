@@ -201,10 +201,9 @@ serve(async (req) => {
           };
 
           // Business Messaging payload per Meta CAPI docs
-          // IMPORTANT: page_id must be at root level, NOT inside user_data
           if (isBusinessMessaging) {
             eventData.messaging_channel = "whatsapp";
-            eventData.page_id = pixel.page_id; // Root level per Meta docs
+            eventData.user_data.page_id = pixel.page_id;
             eventData.user_data.ctwa_clid = finalCtwaClid;
           } else {
             eventData.user_data.client_user_agent = req.headers.get("user-agent") || "";
