@@ -118,8 +118,15 @@ export default function InboxDashboard() {
   // Proxy validation
   const { validateProxy, validating: validatingProxy, result: proxyValidationResult, clearResult: clearProxyResult } = useProxyValidator();
   
-  // Instance subscription for credits system
-  const { registerInstance, freeInstancesRemaining } = useInstanceSubscription();
+  // Instance subscription for credits system - share these with InstanceRenewalTag
+  const { 
+    registerInstance, 
+    freeInstancesRemaining, 
+    getDaysRemaining, 
+    isInstanceFree, 
+    isAboutToExpire, 
+    renewInstance 
+  } = useInstanceSubscription();
 
   // Credits system hooks
   const { 
@@ -1414,7 +1421,13 @@ export default function InboxDashboard() {
                           <div className={`w-2 h-2 rounded-full ${getStatusColor(instance.status)}`} />
                           {getStatusText(instance.status)}
                         </Badge>
-                        <InstanceRenewalTag instanceId={instance.id} />
+                        <InstanceRenewalTag 
+                          instanceId={instance.id}
+                          getDaysRemainingFn={getDaysRemaining}
+                          isInstanceFreeFn={isInstanceFree}
+                          isAboutToExpireFn={isAboutToExpire}
+                          renewInstanceFn={renewInstance}
+                        />
                       </div>
                       <CardDescription>{instance.phone_number || instance.instance_name}</CardDescription>
                     </CardHeader>

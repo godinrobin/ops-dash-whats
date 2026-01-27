@@ -17,15 +17,32 @@ import { useNavigate } from "react-router-dom";
 
 interface InstanceRenewalTagProps {
   instanceId: string;
+  /** Optional: Pass these from parent to avoid duplicate hook calls */
+  getDaysRemainingFn?: (instanceId: string) => number | null;
+  isInstanceFreeFn?: (instanceId: string) => boolean;
+  isAboutToExpireFn?: (instanceId: string) => boolean;
+  renewInstanceFn?: (instanceId: string) => Promise<boolean>;
 }
 
-export const InstanceRenewalTag = ({ instanceId }: InstanceRenewalTagProps) => {
+export const InstanceRenewalTag = ({ 
+  instanceId, 
+  getDaysRemainingFn,
+  isInstanceFreeFn,
+  isAboutToExpireFn,
+  renewInstanceFn
+}: InstanceRenewalTagProps) => {
   const { isActive, isAdminTesting, isSimulatingPartial } = useCreditsSystem();
-  const { getDaysRemaining, isAboutToExpire, isInstanceFree, renewInstance } = useInstanceSubscription();
+  const hookData = useInstanceSubscription();
   const { balance, canAfford } = useCredits();
   const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
   const [renewing, setRenewing] = useState(false);
+
+  // Use provided functions or fallback to hook
+  const getDaysRemaining = getDaysRemainingFn || hookData.getDaysRemaining;
+  const isInstanceFree = isInstanceFreeFn || hookData.isInstanceFree;
+  const isAboutToExpire = isAboutToExpireFn || hookData.isAboutToExpire;
+  const renewInstance = renewInstanceFn || hookData.renewInstance;
 
   // Show tag in any active/test mode
   const showTag = isActive || isAdminTesting || isSimulatingPartial;

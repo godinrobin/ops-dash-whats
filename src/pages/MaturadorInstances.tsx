@@ -76,8 +76,15 @@ export default function MaturadorInstances() {
   // Proxy validation (for create modal)
   const { validateProxy, validating: validatingProxy, result: proxyValidationResult, clearResult: clearProxyResult } = useProxyValidator();
   
-  // Instance subscription for credits system
-  const { registerInstance, freeInstancesRemaining } = useInstanceSubscription();
+  // Instance subscription for credits system - share these with InstanceRenewalTag
+  const { 
+    registerInstance, 
+    freeInstancesRemaining,
+    getDaysRemaining,
+    isInstanceFree,
+    isAboutToExpire,
+    renewInstance
+  } = useInstanceSubscription();
   
   // Credits system
   const { isActive: isCreditsActive, isAdminTesting, isSimulatingPartial, isSemiFullMember, loading: creditsLoading } = useCreditsSystem();
@@ -731,7 +738,13 @@ export default function MaturadorInstances() {
                   )}
                   <CardDescription className="flex items-center gap-2">
                     {instance.phone_number || instance.instance_name}
-                    <InstanceRenewalTag instanceId={instance.id} />
+                    <InstanceRenewalTag 
+                      instanceId={instance.id}
+                      getDaysRemainingFn={getDaysRemaining}
+                      isInstanceFreeFn={isInstanceFree}
+                      isAboutToExpireFn={isAboutToExpire}
+                      renewInstanceFn={renewInstance}
+                    />
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
