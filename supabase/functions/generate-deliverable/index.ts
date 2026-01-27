@@ -1105,23 +1105,54 @@ Gere o HTML completo seguindo EXATAMENTE o modelo indicado e usando AS CORES DO 
 
 📎 ARQUIVOS ENVIADOS PELO USUÁRIO PARA INCLUSÃO NO SITE:
 ${userAttachments.map((att: { index: number; type: string; name: string; url: string }) => 
-  `- [${att.index}] ${att.type.toUpperCase()}: "${att.name}"`
+  `- [ARQUIVO_${att.index}] ${att.type.toUpperCase()}: "${att.name}"`
 ).join('\n')}
 
 🔴 INSTRUÇÕES OBRIGATÓRIAS PARA ARQUIVOS:
-- Para PDFs enviados pelo usuário: crie CARDS ou BOTÕES de download usando <a href="DATA_URL_COMPLETA" download="nome_do_arquivo.pdf" class="download-btn">Baixar PDF</a>
-- Para IMAGENS enviadas: use <img src="DATA_URL_COMPLETA" alt="descrição">
-- Para VÍDEOS enviados: use <video src="DATA_URL_COMPLETA" controls>
-- Os DATA_URLs dos arquivos estão presentes nas mensagens do usuário. USE-OS DIRETAMENTE no HTML.
-- SE o usuário pedir para adicionar os arquivos enviados, INCLUA-OS no HTML com links de download funcionais.`;
+- Para IMAGENS enviadas: COPIE a URL completa do arquivo (data:image/...) e use em <img src="URL_AQUI" alt="descrição">
+- Para PDFs enviados: COPIE a URL completa e use em <a href="URL_AQUI" download="nome.pdf">Baixar</a>
+- Para VÍDEOS enviados: COPIE a URL completa e use em <video src="URL_AQUI" controls>
+- As URLs completas dos arquivos estão nas mensagens do usuário marcadas como ARQUIVO_X_URL
+- COPIE E COLE a URL INTEIRA (começando com data:...) no atributo src ou href`;
       }
     }
 
-    const allMessages = [
+    // Build messages array
+    const allMessages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }> = [
       { role: "system", content: SYSTEM_PROMPT },
       ...(contextMessage ? [{ role: "user", content: contextMessage }] : []),
-      ...messages,
     ];
+
+    // Process messages - if there are image attachments, convert to multimodal format
+    for (const msg of messages) {
+      if (msg.role === "user" && userAttachments && userAttachments.length > 0) {
+        // Check if this message contains the attachment URLs
+        const hasAttachmentUrls = typeof msg.content === "string" && msg.content.includes("ARQUIVO_");
+        
+        if (hasAttachmentUrls) {
+          // Build multimodal content with text + images
+          const contentParts: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
+            { type: "text", text: msg.content }
+          ];
+          
+          // Add image attachments as image_url parts for better AI understanding
+          for (const att of userAttachments) {
+            if (att.type === "image" && att.url) {
+              contentParts.push({
+                type: "image_url",
+                image_url: { url: att.url }
+              });
+            }
+          }
+          
+          allMessages.push({ role: msg.role, content: contentParts });
+        } else {
+          allMessages.push({ role: msg.role, content: msg.content });
+        }
+      } else {
+        allMessages.push({ role: msg.role, content: msg.content });
+      }
+    }
 
     console.log("Generating deliverable with config:", config);
     console.log("Messages count:", allMessages.length);

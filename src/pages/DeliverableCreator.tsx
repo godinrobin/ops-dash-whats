@@ -1310,15 +1310,18 @@ ${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as se
           }))
         : [];
 
+      // Build instruction text listing attachments
       const attachmentsInstruction = attachmentsInfo.length > 0
-        ? `\n\n📎 ARQUIVOS ENVIADOS PELO USUÁRIO (NÃO OMITA NENHUM):
-${attachmentsInfo.map(a => `- [${a.index}] ${a.type.toUpperCase()}: "${a.name}" (URL: ${a.url})`).join('\n')}
+        ? `\n\n📎 ARQUIVOS ENVIADOS PELO USUÁRIO (USE-OS CONFORME SOLICITADO):
+${attachmentsInfo.map(a => `- [ARQUIVO_${a.index}] ${a.type.toUpperCase()}: "${a.name}"`).join('\n')}
 
-INSTRUÇÕES PARA ARQUIVOS:
-- Se o pedido envolver download/materiais/moldes: adicione **UM CARD POR ARQUIVO** acima.
-- Para PDFs: use <a href="URL" download="NOME.pdf">Baixar</a>
-- Para IMAGENS: use <img src="URL" alt="...">
-- Para VÍDEOS: use <video src="URL" controls></video>`
+🔴 INSTRUÇÕES OBRIGATÓRIAS PARA ARQUIVOS:
+- Para IMAGENS: use a tag <img src="ARQUIVO_X_URL" alt="..."> substituindo ARQUIVO_X_URL pela URL completa fornecida abaixo.
+- Para PDFs: use <a href="ARQUIVO_X_URL" download="${attachmentsInfo.find(a => a.type === 'pdf')?.name || 'arquivo.pdf'}">Baixar</a>
+- Para VÍDEOS: use <video src="ARQUIVO_X_URL" controls></video>
+
+URLs DOS ARQUIVOS (COPIE E USE EXATAMENTE):
+${attachmentsInfo.map(a => `ARQUIVO_${a.index}_URL = ${a.url}`).join('\n\n')}`
         : "";
 
       const response = await fetch(
