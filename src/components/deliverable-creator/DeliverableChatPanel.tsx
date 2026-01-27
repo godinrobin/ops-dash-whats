@@ -3,12 +3,18 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, Bot, User, Loader2, ImagePlus, X } from "lucide-react";
-import { ChatMessage, ConversationStep } from "@/pages/DeliverableCreator";
+import { Send, Bot, User, Loader2, Paperclip, X, FileText, Video, Image as ImageIcon } from "lucide-react";
+import { ChatMessage, ConversationStep, AttachmentType } from "@/pages/DeliverableCreator";
+
+type Attachment = {
+  url: string;
+  type: AttachmentType;
+  name?: string;
+};
 
 interface DeliverableChatPanelProps {
   messages: ChatMessage[];
-  onSendMessage: (message: string, imageUrl?: string) => void;
+  onSendMessage: (message: string, attachment?: Attachment) => void;
   isGenerating: boolean;
   step: ConversationStep;
 }
@@ -20,7 +26,7 @@ export const DeliverableChatPanel = ({
   step,
 }: DeliverableChatPanelProps) => {
   const [input, setInput] = useState("");
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [attachment, setAttachment] = useState<Attachment | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -51,7 +57,11 @@ export const DeliverableChatPanel = ({
 
           const reader = new FileReader();
           reader.onload = (event) => {
-            setImagePreview(event.target?.result as string);
+            setAttachment({
+              url: event.target?.result as string,
+              type: "image",
+              name: file.name
+            });
           };
           reader.readAsDataURL(file);
           break;
@@ -63,26 +73,38 @@ export const DeliverableChatPanel = ({
     return () => document.removeEventListener("paste", handlePaste);
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if ((!input.trim() && !imagePreview) || isGenerating) return;
-    
-    onSendMessage(input.trim(), imagePreview || undefined);
-    setInput("");
-    setImagePreview(null);
+  const getFileType = (file: File): AttachmentType | null => {
+    if (file.type.startsWith("image/")) return "image";
+    if (file.type === "application/pdf") return "pdf";
+    if (file.type.startsWith("video/")) return "video";
+    return null;
   };
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if ((!input.trim() && !attachment) || isGenerating) return;
+    
+    onSendMessage(input.trim(), attachment || undefined);
+    setInput("");
+    setAttachment(null);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith("image/")) {
+    const fileType = getFileType(file);
+    if (!fileType) {
       return;
     }
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      setImagePreview(event.target?.result as string);
+      setAttachment({
+        url: event.target?.result as string,
+        type: fileType,
+        name: file.name
+      });
     };
     reader.readAsDataURL(file);
     
@@ -92,8 +114,19 @@ export const DeliverableChatPanel = ({
     }
   };
 
-  const removeImage = () => {
-    setImagePreview(null);
+  const removeAttachment = () => {
+    setAttachment(null);
+  };
+
+  const getAttachmentIcon = (type: AttachmentType) => {
+    switch (type) {
+      case "pdf":
+        return <FileText className="w-6 h-6 text-red-500" />;
+      case "video":
+        return <Video className="w-6 h-6 text-blue-500" />;
+      default:
+        return <ImageIcon className="w-6 h-6 text-green-500" />;
+    }
   };
 
   const getPlaceholder = () => {
@@ -145,13 +178,28 @@ export const DeliverableChatPanel = ({
               : "bg-secondary/50"
           }`}
         >
-          {/* Show image if present */}
+          {/* Show attachment if present */}
           {message.imageUrl && (
-            <img 
-              src={message.imageUrl} 
-              alt="Uploaded" 
-              className="max-w-full h-auto rounded-lg mb-2 max-h-48 object-contain"
-            />
+            <div className="mb-2">
+              {message.attachmentType === "pdf" ? (
+                <div className="flex items-center gap-2 p-2 bg-background/50 rounded-lg border">
+                  <FileText className="w-5 h-5 text-red-500" />
+                  <span className="text-sm truncate">{message.attachmentName || "Documento PDF"}</span>
+                </div>
+              ) : message.attachmentType === "video" ? (
+                <video 
+                  src={message.imageUrl} 
+                  controls 
+                  className="max-w-full h-auto rounded-lg max-h-48"
+                />
+              ) : (
+                <img 
+                  src={message.imageUrl} 
+                  alt="Uploaded" 
+                  className="max-w-full h-auto rounded-lg max-h-48 object-contain"
+                />
+              )}
+            </div>
           )}
           <div 
             className="text-sm whitespace-pre-wrap prose prose-sm dark:prose-invert max-w-none"
@@ -212,17 +260,29 @@ export const DeliverableChatPanel = ({
         </div>
       </ScrollArea>
 
-      {/* Image Preview */}
-      {imagePreview && (
+      {/* Attachment Preview */}
+      {attachment && (
         <div className="px-4 pb-2">
           <div className="relative inline-block">
-            <img 
-              src={imagePreview} 
-              alt="Preview" 
-              className="h-20 w-auto rounded-lg border border-border"
-            />
+            {attachment.type === "image" ? (
+              <img 
+                src={attachment.url} 
+                alt="Preview" 
+                className="h-20 w-auto rounded-lg border border-border"
+              />
+            ) : attachment.type === "video" ? (
+              <div className="flex items-center gap-2 p-3 bg-secondary/50 rounded-lg border border-border">
+                <Video className="w-6 h-6 text-blue-500" />
+                <span className="text-sm truncate max-w-[150px]">{attachment.name || "Vídeo"}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 p-3 bg-secondary/50 rounded-lg border border-border">
+                <FileText className="w-6 h-6 text-red-500" />
+                <span className="text-sm truncate max-w-[150px]">{attachment.name || "PDF"}</span>
+              </div>
+            )}
             <button
-              onClick={removeImage}
+              onClick={removeAttachment}
               className="absolute -top-2 -right-2 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center hover:bg-destructive/90"
             >
               <X className="w-3 h-3" />
@@ -238,21 +298,21 @@ export const DeliverableChatPanel = ({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
-            onChange={handleImageSelect}
+            accept="image/*,application/pdf,video/*"
+            onChange={handleFileSelect}
             className="hidden"
           />
           
-          {/* Image upload button */}
+          {/* Attachment button */}
           <Button
             type="button"
             variant="outline"
             size="icon"
             onClick={() => fileInputRef.current?.click()}
             disabled={isGenerating || step === "generating"}
-            title="Enviar imagem de referência"
+            title="Anexar arquivo (imagem, PDF ou vídeo)"
           >
-            <ImagePlus className="w-4 h-4" />
+            <Paperclip className="w-4 h-4" />
           </Button>
 
           <Input
@@ -266,7 +326,7 @@ export const DeliverableChatPanel = ({
           <Button
             type="submit"
             size="icon"
-            disabled={(!input.trim() && !imagePreview) || isGenerating || step === "generating"}
+            disabled={(!input.trim() && !attachment) || isGenerating || step === "generating"}
           >
             <Send className="w-4 h-4" />
           </Button>
