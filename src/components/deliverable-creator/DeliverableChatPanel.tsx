@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, Bot, User, Loader2, Paperclip, X, FileText, Video, Image as ImageIcon } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Send, Bot, User, Loader2, Paperclip, X, FileText, Video, Image as ImageIcon, Lightbulb } from "lucide-react";
 import { ChatMessage, ConversationStep, AttachmentType } from "@/pages/DeliverableCreator";
 
 type Attachment = {
@@ -14,7 +15,7 @@ type Attachment = {
 
 interface DeliverableChatPanelProps {
   messages: ChatMessage[];
-  onSendMessage: (message: string, attachment?: Attachment) => void;
+  onSendMessage: (message: string, attachment?: Attachment, isChatMode?: boolean) => void;
   isGenerating: boolean;
   step: ConversationStep;
 }
@@ -27,6 +28,7 @@ export const DeliverableChatPanel = ({
 }: DeliverableChatPanelProps) => {
   const [input, setInput] = useState("");
   const [attachment, setAttachment] = useState<Attachment | null>(null);
+  const [isChatMode, setIsChatMode] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -130,6 +132,9 @@ export const DeliverableChatPanel = ({
   };
 
   const getPlaceholder = () => {
+    if (isChatMode) {
+      return "Converse livremente sobre o projeto...";
+    }
     switch (step) {
       case "ask_niche":
         return "Digite o nicho (ex: Artesanato em Resina)...";
@@ -293,6 +298,13 @@ export const DeliverableChatPanel = ({
 
       {/* Input */}
       <form onSubmit={handleSubmit} className="p-4 border-t border-border bg-background flex-shrink-0">
+        {/* Chat mode indicator */}
+        {isChatMode && (
+          <div className="mb-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-600 dark:text-amber-400 flex items-center gap-2">
+            <Lightbulb className="w-3 h-3" />
+            <span>Modo Conversa ativo - As mensagens não executarão ações no projeto</span>
+          </div>
+        )}
         <div className="flex gap-2">
           {/* Hidden file input */}
           <input
@@ -323,6 +335,28 @@ export const DeliverableChatPanel = ({
             disabled={isGenerating || step === "generating"}
             className="flex-1"
           />
+          
+          {/* Chat mode toggle */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant={isChatMode ? "default" : "outline"}
+                  size="icon"
+                  onClick={() => setIsChatMode(!isChatMode)}
+                  disabled={isGenerating || step === "generating"}
+                  className={isChatMode ? "bg-amber-500 hover:bg-amber-600 text-white" : ""}
+                >
+                  <Lightbulb className="w-4 h-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p>{isChatMode ? "Desativar modo conversa" : "Ativar modo conversa (não executa ações)"}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          
           <Button
             type="submit"
             size="icon"

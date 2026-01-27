@@ -932,11 +932,75 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, config } = await req.json();
+    const { messages, config, chatMode, currentHtml } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY não configurada");
+    }
+
+    // Handle chat mode - free conversation without HTML generation
+    if (chatMode) {
+      const chatSystemPrompt = `Você é um assistente especialista em criação de entregáveis digitais (sites, landing pages, apps de conteúdo). 
+O usuário está usando uma ferramenta para criar sites HTML personalizados. 
+
+Seu papel é:
+- Responder perguntas sobre o projeto
+- Dar sugestões de melhoria
+- Ajudar a planejar o conteúdo
+- Explicar conceitos de design e marketing
+
+${config ? `
+Contexto do projeto atual:
+- Nicho: ${config.niche || "Não definido"}
+- Cores: ${config.primaryColor || "Não definida"} (principal) / ${config.secondaryColor || "Não definida"} (secundária)
+- Template: ${config.templateId || "Não definido"}
+- Público-alvo: ${config.targetAudience || "Não definido"}
+` : ""}
+
+${currentHtml ? "O usuário já gerou um HTML para o projeto." : "O usuário ainda não gerou o HTML do projeto."}
+
+IMPORTANTE: Você está no modo CONVERSA. NÃO gere código HTML. Apenas converse e ajude o usuário.
+Responda de forma amigável, clara e concisa.`;
+
+      const chatResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-3-flash-preview",
+          messages: [
+            { role: "system", content: chatSystemPrompt },
+            ...messages,
+          ],
+          stream: false,
+        }),
+      });
+
+      if (!chatResponse.ok) {
+        if (chatResponse.status === 429) {
+          return new Response(
+            JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns segundos." }),
+            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        const errorText = await chatResponse.text();
+        console.error("Chat mode error:", chatResponse.status, errorText);
+        return new Response(
+          JSON.stringify({ error: "Erro ao processar mensagem" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const chatData = await chatResponse.json();
+      const aiMessage = chatData.choices?.[0]?.message?.content || "Não consegui processar sua mensagem.";
+      
+      return new Response(
+        JSON.stringify({ response: aiMessage }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Build context from config if provided
@@ -962,14 +1026,22 @@ CONFIGURAÇÕES DO USUÁRIO (OBRIGATÓRIAS - SIGA EXATAMENTE):
 - ${templateInfo}
 - Nicho/Tema: ${config.niche || "Não especificado"}
 
-🎨 **CORES (OBRIGATÓRIAS - USE EXATAMENTE ESTAS CORES, NÃO INVENTE OUTRAS)**:
-- COR PRINCIPAL: ${config.primaryColor || "#E91E63"} - Use esta cor para: botões, títulos, badges, elementos de destaque, gradientes primários
-- COR SECUNDÁRIA: ${config.secondaryColor || "#FCE4EC"} - Use esta cor para: fundos, cards, elementos complementares, versões claras
+🎨 **CORES DO USUÁRIO (OBRIGATÓRIAS - USE EXATAMENTE ESTAS CORES EM TODO O SITE)**:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⭐ COR PRINCIPAL: ${config.primaryColor} ⭐
+   → Use para: botões, títulos, badges, ícones, links, bordas de destaque, gradientes
+   
+⭐ COR SECUNDÁRIA: ${config.secondaryColor} ⭐  
+   → Use para: fundos, cards, containers, elementos complementares
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-⚠️ REGRA DE CORES: NÃO use rosa, roxo, magenta ou qualquer outra cor que NÃO seja as cores especificadas acima. 
-Se a cor principal for "amarelo claro", use tons de amarelo (#FFEB3B, #FFF59D, #FFFDE7).
-Se a cor secundária for "marrom escuro", use tons de marrom (#5D4037, #795548, #3E2723).
-NUNCA substitua as cores do usuário por cores padrão do template!
+🚨 REGRAS ABSOLUTAS DE CORES:
+1. NÃO USE rosa (#E91E63, #FCE4EC) se o usuário NÃO escolheu rosa
+2. NÃO USE as cores padrão do template - use APENAS as cores acima
+3. Substitua TODAS as cores do template original pelas cores do usuário
+4. Se a cor do usuário for "amarelo" → use tons de amarelo (#FFD700, #FFF59D, etc.)
+5. Se a cor do usuário for "azul" → use tons de azul (#2196F3, #BBDEFB, etc.)
+6. Cores default como #E91E63 e #FCE4EC só devem aparecer SE o usuário escolheu rosa
 
 - Público Alvo: ${config.targetAudience || "Não especificado"}
 ${config.templateId === "devotional-app" ? `
@@ -1019,9 +1091,13 @@ ${config.additionalObservations ? `
 ${config.additionalObservations}
 ` : ""}
 
-🔴 LEMBRETE FINAL: Use EXATAMENTE as cores ${config.primaryColor} e ${config.secondaryColor} escolhidas pelo usuário. Não use cores padrão do template!
+🔴🔴🔴 LEMBRETE CRÍTICO DE CORES 🔴🔴🔴
+A COR PRINCIPAL É: ${config.primaryColor}
+A COR SECUNDÁRIA É: ${config.secondaryColor}
+NÃO USE #E91E63 ou #FCE4EC (rosa padrão) a menos que o usuário tenha explicitamente escolhido rosa!
+Se aparecer rosa no código e o usuário não pediu rosa, TROQUE pela cor que ele informou!
 
-Gere o HTML completo seguindo EXATAMENTE o modelo indicado e essas especificações.`;
+Gere o HTML completo seguindo EXATAMENTE o modelo indicado e usando AS CORES DO USUÁRIO.`;
     }
 
     const allMessages = [
