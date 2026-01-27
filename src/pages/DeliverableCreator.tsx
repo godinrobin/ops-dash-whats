@@ -68,10 +68,14 @@ export interface DeliverableConfig {
   superAppFeatures?: string[];
 }
 
+export type AttachmentType = "image" | "pdf" | "video";
+
 export type ChatMessage = {
   role: "user" | "assistant" | "system";
   content: string;
   imageUrl?: string;
+  attachmentType?: AttachmentType;
+  attachmentName?: string;
 };
 
 export type ConversationStep = 
@@ -360,8 +364,14 @@ const DeliverableCreator = () => {
     ]);
   };
 
-  const handleUserMessage = async (message: string, imageUrl?: string) => {
-    const userMsg: ChatMessage = { role: "user", content: message, imageUrl };
+  const handleUserMessage = async (message: string, attachment?: { url: string; type: AttachmentType; name?: string }) => {
+    const userMsg: ChatMessage = { 
+      role: "user", 
+      content: message, 
+      imageUrl: attachment?.url,
+      attachmentType: attachment?.type,
+      attachmentName: attachment?.name
+    };
     setMessages((prev) => [...prev, userMsg]);
 
     switch (step) {
