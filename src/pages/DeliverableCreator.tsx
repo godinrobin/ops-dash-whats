@@ -70,9 +70,17 @@ export interface DeliverableConfig {
 
 export type AttachmentType = "image" | "pdf" | "video";
 
+export type ChatAttachment = {
+  url: string;
+  type: AttachmentType;
+  name?: string;
+};
+
 export type ChatMessage = {
   role: "user" | "assistant" | "system";
   content: string;
+  attachments?: ChatAttachment[];
+  // Legacy single attachment support
   imageUrl?: string;
   attachmentType?: AttachmentType;
   attachmentName?: string;
@@ -367,7 +375,7 @@ const DeliverableCreator = () => {
   };
 
   // Handle free chat mode - conversation without actions
-  const handleChatModeMessage = async (message: string, attachment?: { url: string; type: AttachmentType; name?: string }) => {
+  const handleChatModeMessage = async (message: string, attachments?: ChatAttachment[]) => {
     setIsGenerating(true);
     
     try {
@@ -385,7 +393,9 @@ const DeliverableCreator = () => {
               {
                 role: "user",
                 content: message,
-                ...(attachment?.url && { imageUrl: attachment.url, attachmentType: attachment.type }),
+                ...(attachments && attachments.length > 0 && { 
+                  attachments: attachments.map(a => ({ url: a.url, type: a.type, name: a.name }))
+                }),
               },
             ],
             config,
@@ -422,19 +432,21 @@ const DeliverableCreator = () => {
     }
   };
 
-  const handleUserMessage = async (message: string, attachment?: { url: string; type: AttachmentType; name?: string }, isChatMode?: boolean) => {
+  const handleUserMessage = async (message: string, attachments?: ChatAttachment[], isChatMode?: boolean) => {
     const userMsg: ChatMessage = { 
       role: "user", 
       content: message, 
-      imageUrl: attachment?.url,
-      attachmentType: attachment?.type,
-      attachmentName: attachment?.name
+      attachments: attachments && attachments.length > 0 ? attachments : undefined,
+      // Keep legacy support for single attachment display
+      imageUrl: attachments?.[0]?.url,
+      attachmentType: attachments?.[0]?.type,
+      attachmentName: attachments?.[0]?.name
     };
     setMessages((prev) => [...prev, userMsg]);
 
     // If chat mode is active, handle as free conversation (no actions)
     if (isChatMode) {
-      await handleChatModeMessage(message, attachment);
+      await handleChatModeMessage(message, attachments);
       return;
     }
 

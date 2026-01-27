@@ -5,17 +5,14 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Send, Bot, User, Loader2, Paperclip, X, FileText, Video, Image as ImageIcon, Lightbulb } from "lucide-react";
-import { ChatMessage, ConversationStep, AttachmentType } from "@/pages/DeliverableCreator";
+import { ChatMessage, ConversationStep, AttachmentType, ChatAttachment } from "@/pages/DeliverableCreator";
 
-type Attachment = {
-  url: string;
-  type: AttachmentType;
-  name?: string;
-};
+// Re-export for external use
+export type Attachment = ChatAttachment;
 
 interface DeliverableChatPanelProps {
   messages: ChatMessage[];
-  onSendMessage: (message: string, attachment?: Attachment, isChatMode?: boolean) => void;
+  onSendMessage: (message: string, attachments?: Attachment[], isChatMode?: boolean) => void;
   isGenerating: boolean;
   step: ConversationStep;
 }
@@ -27,7 +24,7 @@ export const DeliverableChatPanel = ({
   step,
 }: DeliverableChatPanelProps) => {
   const [input, setInput] = useState("");
-  const [attachment, setAttachment] = useState<Attachment | null>(null);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isChatMode, setIsChatMode] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -59,11 +56,14 @@ export const DeliverableChatPanel = ({
 
           const reader = new FileReader();
           reader.onload = (event) => {
-            setAttachment({
-              url: event.target?.result as string,
-              type: "image",
-              name: file.name
-            });
+            setAttachments((prev) => [
+              ...prev,
+              {
+                url: event.target?.result as string,
+                type: "image",
+                name: file.name
+              }
+            ]);
           };
           reader.readAsDataURL(file);
           break;
@@ -84,31 +84,35 @@ export const DeliverableChatPanel = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if ((!input.trim() && !attachment) || isGenerating) return;
+    if ((!input.trim() && attachments.length === 0) || isGenerating) return;
     
-    onSendMessage(input.trim(), attachment || undefined);
+    onSendMessage(input.trim(), attachments.length > 0 ? attachments : undefined, isChatMode);
     setInput("");
-    setAttachment(null);
+    setAttachments([]);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    const fileType = getFileType(file);
-    if (!fileType) {
-      return;
-    }
+    // Process all selected files
+    Array.from(files).forEach((file) => {
+      const fileType = getFileType(file);
+      if (!fileType) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setAttachment({
-        url: event.target?.result as string,
-        type: fileType,
-        name: file.name
-      });
-    };
-    reader.readAsDataURL(file);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setAttachments((prev) => [
+          ...prev,
+          {
+            url: event.target?.result as string,
+            type: fileType,
+            name: file.name
+          }
+        ]);
+      };
+      reader.readAsDataURL(file);
+    });
     
     // Reset file input
     if (fileInputRef.current) {
@@ -116,8 +120,8 @@ export const DeliverableChatPanel = ({
     }
   };
 
-  const removeAttachment = () => {
-    setAttachment(null);
+  const removeAttachment = (index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
   const getAttachmentIcon = (type: AttachmentType) => {
@@ -265,34 +269,36 @@ export const DeliverableChatPanel = ({
         </div>
       </ScrollArea>
 
-      {/* Attachment Preview */}
-      {attachment && (
-        <div className="px-4 pb-2">
-          <div className="relative inline-block">
-            {attachment.type === "image" ? (
-              <img 
-                src={attachment.url} 
-                alt="Preview" 
-                className="h-20 w-auto rounded-lg border border-border"
-              />
-            ) : attachment.type === "video" ? (
-              <div className="flex items-center gap-2 p-3 bg-secondary/50 rounded-lg border border-border">
-                <Video className="w-6 h-6 text-blue-500" />
-                <span className="text-sm truncate max-w-[150px]">{attachment.name || "Vídeo"}</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 p-3 bg-secondary/50 rounded-lg border border-border">
-                <FileText className="w-6 h-6 text-red-500" />
-                <span className="text-sm truncate max-w-[150px]">{attachment.name || "PDF"}</span>
-              </div>
-            )}
-            <button
-              onClick={removeAttachment}
-              className="absolute -top-2 -right-2 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center hover:bg-destructive/90"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          </div>
+      {/* Attachments Preview */}
+      {attachments.length > 0 && (
+        <div className="px-4 pb-2 flex flex-wrap gap-2">
+          {attachments.map((att, index) => (
+            <div key={index} className="relative inline-block">
+              {att.type === "image" ? (
+                <img 
+                  src={att.url} 
+                  alt="Preview" 
+                  className="h-16 w-auto rounded-lg border border-border"
+                />
+              ) : att.type === "video" ? (
+                <div className="flex items-center gap-2 p-2 bg-secondary/50 rounded-lg border border-border">
+                  <Video className="w-5 h-5 text-blue-500" />
+                  <span className="text-xs truncate max-w-[100px]">{att.name || "Vídeo"}</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 p-2 bg-secondary/50 rounded-lg border border-border">
+                  <FileText className="w-5 h-5 text-red-500" />
+                  <span className="text-xs truncate max-w-[100px]">{att.name || "PDF"}</span>
+                </div>
+              )}
+              <button
+                onClick={() => removeAttachment(index)}
+                className="absolute -top-2 -right-2 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center hover:bg-destructive/90"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
         </div>
       )}
 
@@ -311,6 +317,7 @@ export const DeliverableChatPanel = ({
             ref={fileInputRef}
             type="file"
             accept="image/*,application/pdf,video/*"
+            multiple
             onChange={handleFileSelect}
             className="hidden"
           />
@@ -360,7 +367,7 @@ export const DeliverableChatPanel = ({
           <Button
             type="submit"
             size="icon"
-            disabled={(!input.trim() && !attachment) || isGenerating || step === "generating"}
+            disabled={(!input.trim() && attachments.length === 0) || isGenerating || step === "generating"}
           >
             <Send className="w-4 h-4" />
           </Button>
