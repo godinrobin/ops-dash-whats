@@ -171,6 +171,8 @@ const DeliverableCreator = () => {
   const [showSavedList, setShowSavedList] = useState(true);
   const [editingNameId, setEditingNameId] = useState<string | null>(null);
   const [editingNameValue, setEditingNameValue] = useState("");
+  // Store all user-uploaded attachments for use in generation
+  const [projectAttachments, setProjectAttachments] = useState<ChatAttachment[]>([]);
 
   // Fetch saved deliverables on mount
   useEffect(() => {
@@ -344,6 +346,7 @@ const DeliverableCreator = () => {
     setMessages([]);
     setGeneratedHtml("");
     setShowSavedList(true);
+    setProjectAttachments([]); // Clear accumulated attachments
   };
 
   const handleTemplateSelect = (templateId: string) => {
@@ -443,6 +446,11 @@ const DeliverableCreator = () => {
       attachmentName: attachments?.[0]?.name
     };
     setMessages((prev) => [...prev, userMsg]);
+
+    // Accumulate attachments for the project (to be used in generation/editing)
+    if (attachments && attachments.length > 0) {
+      setProjectAttachments((prev) => [...prev, ...attachments]);
+    }
 
     // If chat mode is active, handle as free conversation (no actions)
     if (isChatMode) {
@@ -1280,6 +1288,27 @@ ${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as se
         };
       }
 
+      // Include any user-uploaded attachments in the request
+      const attachmentsInfo = projectAttachments.length > 0 
+        ? projectAttachments.map((att, idx) => ({
+            index: idx + 1,
+            type: att.type,
+            name: att.name || `Arquivo ${idx + 1}`,
+            url: att.url, // data URL (base64)
+          }))
+        : [];
+
+      const attachmentsInstruction = attachmentsInfo.length > 0 
+        ? `\n\n📎 ARQUIVOS ENVIADOS PELO USUÁRIO (USE-OS NO HTML SE SOLICITADO):
+${attachmentsInfo.map(a => `- [${a.index}] ${a.type.toUpperCase()}: "${a.name}" → URL para usar no HTML: ${a.url.substring(0, 80)}...`).join('\n')}
+
+INSTRUÇÕES PARA ARQUIVOS:
+- Para PDFs: crie botões/cards de download usando <a href="URL_COMPLETA" download="nome.pdf">
+- Para IMAGENS: use <img src="URL_COMPLETA" alt="...">
+- Para VÍDEOS: use <video src="URL_COMPLETA" controls>
+- SE O USUÁRIO PEDIR para adicionar os arquivos, incorpore-os DIRETAMENTE no HTML usando as URLs acima.`
+        : '';
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-deliverable`,
         {
@@ -1304,11 +1333,13 @@ REGRAS IMPORTANTES:
 - Preserve e utilize as cores atuais do projeto (obrigatório):
   - Cor principal: ${updatedConfig.primaryColor}
   - Cor secundária: ${updatedConfig.secondaryColor}
+${attachmentsInstruction}
 
 Retorne o HTML completo modificado.`,
               },
             ],
             config: updatedConfig,
+            userAttachments: attachmentsInfo,
           }),
         }
       );
