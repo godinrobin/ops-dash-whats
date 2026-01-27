@@ -182,9 +182,13 @@ serve(async (req) => {
             console.log(`[SEND-FB-EVENT] Pixel ${pixel.pixel_id}, page_id: ${pixel.page_id || 'none'}, ctwa_clid: ${finalCtwaClid || 'none'}, action_source: ${actionSource}`);
           }
 
+          // Add time offset to each event (5 seconds apart) to help Facebook recognize as distinct
+          const baseTimestamp = Math.floor(Date.now() / 1000);
+          const eventTimestamp = baseTimestamp + (eventIndex * 5); // 5 seconds between each event
+
           const eventData: any = {
             event_name,
-            event_time: Math.floor(Date.now() / 1000),
+            event_time: eventTimestamp,
             event_id: uniqueEventId, // Meta uses event_name + event_id for deduplication within 48h
             action_source: actionSource,
             user_data: {
