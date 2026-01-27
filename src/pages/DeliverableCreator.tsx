@@ -1078,7 +1078,7 @@ const DeliverableCreator = () => {
 
       case "editing":
         // User is making edits to the generated site
-        await generateWithEdit(message);
+        await generateWithEdit(message, attachments);
         break;
     }
   };
@@ -1204,7 +1204,7 @@ ${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as se
     }
   };
 
-  const generateWithEdit = async (editRequest: string) => {
+  const generateWithEdit = async (editRequest: string, pendingAttachments?: ChatAttachment[]) => {
     // When credits system is active, check if full member has free prompts remaining
     if (isCreditsActive || isSemiFullMember) {
       // Semi-full members have no free tier - always charge credits
@@ -1288,9 +1288,21 @@ ${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as se
         };
       }
 
-      // Include any user-uploaded attachments in the request
-      const attachmentsInfo = projectAttachments.length > 0 
-        ? projectAttachments.map((att, idx) => ({
+      // Include any user-uploaded attachments in the request.
+      // IMPORTANT: during edits, attachments can arrive in the same message; React state may not be updated yet.
+      const allAttachments = [...projectAttachments, ...(pendingAttachments ?? [])]
+        .filter(Boolean)
+        .filter((att, idx, arr) => {
+          const key = `${att.type}::${att.name ?? ""}::${att.url?.slice(0, 64) ?? ""}`;
+          return (
+            arr.findIndex(
+              (a) => `${a.type}::${a.name ?? ""}::${a.url?.slice(0, 64) ?? ""}` === key
+            ) === idx
+          );
+        });
+
+      const attachmentsInfo = allAttachments.length > 0
+        ? allAttachments.map((att, idx) => ({
             index: idx + 1,
             type: att.type,
             name: att.name || `Arquivo ${idx + 1}`,
@@ -1298,16 +1310,16 @@ ${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as se
           }))
         : [];
 
-      const attachmentsInstruction = attachmentsInfo.length > 0 
-        ? `\n\n📎 ARQUIVOS ENVIADOS PELO USUÁRIO (USE-OS NO HTML SE SOLICITADO):
-${attachmentsInfo.map(a => `- [${a.index}] ${a.type.toUpperCase()}: "${a.name}" → URL para usar no HTML: ${a.url.substring(0, 80)}...`).join('\n')}
+      const attachmentsInstruction = attachmentsInfo.length > 0
+        ? `\n\n📎 ARQUIVOS ENVIADOS PELO USUÁRIO (NÃO OMITA NENHUM):
+${attachmentsInfo.map(a => `- [${a.index}] ${a.type.toUpperCase()}: "${a.name}" (URL: ${a.url})`).join('\n')}
 
 INSTRUÇÕES PARA ARQUIVOS:
-- Para PDFs: crie botões/cards de download usando <a href="URL_COMPLETA" download="nome.pdf">
-- Para IMAGENS: use <img src="URL_COMPLETA" alt="...">
-- Para VÍDEOS: use <video src="URL_COMPLETA" controls>
-- SE O USUÁRIO PEDIR para adicionar os arquivos, incorpore-os DIRETAMENTE no HTML usando as URLs acima.`
-        : '';
+- Se o pedido envolver download/materiais/moldes: adicione **UM CARD POR ARQUIVO** acima.
+- Para PDFs: use <a href="URL" download="NOME.pdf">Baixar</a>
+- Para IMAGENS: use <img src="URL" alt="...">
+- Para VÍDEOS: use <video src="URL" controls></video>`
+        : "";
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-deliverable`,
