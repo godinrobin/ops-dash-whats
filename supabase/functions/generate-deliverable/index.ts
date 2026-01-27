@@ -932,7 +932,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, config, chatMode, currentHtml } = await req.json();
+    const { messages, config, chatMode, currentHtml, userAttachments } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -1098,6 +1098,23 @@ NÃO USE #E91E63 ou #FCE4EC (rosa padrão) a menos que o usuário tenha explicit
 Se aparecer rosa no código e o usuário não pediu rosa, TROQUE pela cor que ele informou!
 
 Gere o HTML completo seguindo EXATAMENTE o modelo indicado e usando AS CORES DO USUÁRIO.`;
+
+      // Add user attachments info if provided
+      if (userAttachments && Array.isArray(userAttachments) && userAttachments.length > 0) {
+        contextMessage += `
+
+📎 ARQUIVOS ENVIADOS PELO USUÁRIO PARA INCLUSÃO NO SITE:
+${userAttachments.map((att: { index: number; type: string; name: string; url: string }) => 
+  `- [${att.index}] ${att.type.toUpperCase()}: "${att.name}"`
+).join('\n')}
+
+🔴 INSTRUÇÕES OBRIGATÓRIAS PARA ARQUIVOS:
+- Para PDFs enviados pelo usuário: crie CARDS ou BOTÕES de download usando <a href="DATA_URL_COMPLETA" download="nome_do_arquivo.pdf" class="download-btn">Baixar PDF</a>
+- Para IMAGENS enviadas: use <img src="DATA_URL_COMPLETA" alt="descrição">
+- Para VÍDEOS enviados: use <video src="DATA_URL_COMPLETA" controls>
+- Os DATA_URLs dos arquivos estão presentes nas mensagens do usuário. USE-OS DIRETAMENTE no HTML.
+- SE o usuário pedir para adicionar os arquivos enviados, INCLUA-OS no HTML com links de download funcionais.`;
+      }
     }
 
     const allMessages = [
