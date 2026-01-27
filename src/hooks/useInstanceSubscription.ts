@@ -47,7 +47,8 @@ interface UseInstanceSubscriptionReturn {
 
 const FREE_INSTANCES_LIMIT = 3;
 const RENEWAL_COST = 6; // 6 credits per 30 days
-const DAYS_PER_RENEWAL = 30;
+const INITIAL_DAYS = 3; // Initial expiration for new paid instances
+const DAYS_PER_RENEWAL = 30; // Days added after renewal
 
 export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
   const { user } = useAuth();
@@ -251,14 +252,20 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
 
       if (!success) return false;
 
-      // Calculate new expiration (from now + 30 days, or from current expiration + 30 days if still valid)
+      // Calculate new expiration
       const subscription = subscriptions.find(s => s.instance_id === instanceId);
       let newExpiration: Date;
       
-      if (subscription?.expires_at) {
+      // Check if this is the first renewal (never renewed before)
+      const isFirstRenewal = !subscription?.last_renewal;
+      
+      if (isFirstRenewal) {
+        // First renewal: always 30 days from NOW (not from expires_at)
+        newExpiration = new Date(Date.now() + DAYS_PER_RENEWAL * 24 * 60 * 60 * 1000);
+      } else if (subscription?.expires_at) {
         const currentExpiration = new Date(subscription.expires_at);
         const now = new Date();
-        // If current expiration is in the future, extend from there
+        // Subsequent renewals: extend from current expiration if still valid
         if (currentExpiration > now) {
           newExpiration = new Date(currentExpiration.getTime() + DAYS_PER_RENEWAL * 24 * 60 * 60 * 1000);
         } else {
@@ -307,8 +314,8 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
     let expiresAt: string | null = null;
     
     if (!shouldBeFree && isActive) {
-      // Paid instance: expires in 30 days
-      expiresAt = new Date(Date.now() + DAYS_PER_RENEWAL * 24 * 60 * 60 * 1000).toISOString();
+      // Paid instance: expires in 3 days initially (until first renewal)
+      expiresAt = new Date(Date.now() + INITIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
     }
 
     try {
@@ -319,7 +326,7 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
           user_id: user.id,
           is_free: shouldBeFree,
           expires_at: expiresAt,
-          last_renewal: shouldBeFree ? null : new Date().toISOString()
+          last_renewal: null // Always null initially - only set on first renewal
         });
 
       if (error) {
