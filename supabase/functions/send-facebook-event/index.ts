@@ -186,6 +186,9 @@ serve(async (req) => {
           // Using 1 second to avoid "timestamp in the future" errors for large batches
           const baseTimestamp = Math.floor(Date.now() / 1000);
           const eventTimestamp = baseTimestamp - (eventIndex * 1); // Go backwards in time instead of forward
+          // Generate unique external_id for maximum distinction
+          const externalId = `${eventTimestamp}_${crypto.randomUUID()}`;
+          
           const eventData: any = {
             event_name,
             event_time: eventTimestamp,
@@ -193,6 +196,7 @@ serve(async (req) => {
             action_source: actionSource,
             user_data: {
               ph: [hashedPhone],
+              external_id: [externalId], // Unique identifier per event for Facebook
             },
           };
 
