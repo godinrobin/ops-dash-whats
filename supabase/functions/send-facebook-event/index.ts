@@ -182,10 +182,10 @@ serve(async (req) => {
             console.log(`[SEND-FB-EVENT] Pixel ${pixel.pixel_id}, page_id: ${pixel.page_id || 'none'}, ctwa_clid: ${finalCtwaClid || 'none'}, action_source: ${actionSource}`);
           }
 
-          // Add time offset to each event (5 seconds apart) to help Facebook recognize as distinct
+          // Add time offset to each event (1 second apart) to help Facebook recognize as distinct
+          // Using 1 second to avoid "timestamp in the future" errors for large batches
           const baseTimestamp = Math.floor(Date.now() / 1000);
-          const eventTimestamp = baseTimestamp + (eventIndex * 5); // 5 seconds between each event
-
+          const eventTimestamp = baseTimestamp - (eventIndex * 1); // Go backwards in time instead of forward
           const eventData: any = {
             event_name,
             event_time: eventTimestamp,
