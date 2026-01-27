@@ -164,6 +164,19 @@ export const DeliverableChatPanel = ({
   const renderMessage = (message: ChatMessage, index: number) => {
     const isUser = message.role === "user";
 
+    const msgAttachments: Attachment[] =
+      message.attachments && message.attachments.length > 0
+        ? (message.attachments as Attachment[])
+        : message.imageUrl
+          ? ([
+              {
+                url: message.imageUrl,
+                type: (message.attachmentType || "image") as AttachmentType,
+                name: message.attachmentName,
+              },
+            ] as Attachment[])
+          : [];
+
     return (
       <motion.div
         key={index}
@@ -187,27 +200,31 @@ export const DeliverableChatPanel = ({
               : "bg-secondary/50"
           }`}
         >
-          {/* Show attachment if present */}
-          {message.imageUrl && (
-            <div className="mb-2">
-              {message.attachmentType === "pdf" ? (
-                <div className="flex items-center gap-2 p-2 bg-background/50 rounded-lg border">
-                  <FileText className="w-5 h-5 text-red-500" />
-                  <span className="text-sm truncate">{message.attachmentName || "Documento PDF"}</span>
+          {/* Show attachments if present */}
+          {msgAttachments.length > 0 && (
+            <div className="mb-2 space-y-2">
+              {msgAttachments.map((att, i) => (
+                <div key={`${index}-att-${i}`}>
+                  {att.type === "pdf" ? (
+                    <div className="flex items-center gap-2 p-2 bg-background/50 rounded-lg border">
+                      <FileText className="w-5 h-5 text-red-500" />
+                      <span className="text-sm truncate">{att.name || "Documento PDF"}</span>
+                    </div>
+                  ) : att.type === "video" ? (
+                    <video
+                      src={att.url}
+                      controls
+                      className="max-w-full h-auto rounded-lg max-h-48"
+                    />
+                  ) : (
+                    <img
+                      src={att.url}
+                      alt={att.name || "Imagem enviada"}
+                      className="max-w-full h-auto rounded-lg max-h-48 object-contain"
+                    />
+                  )}
                 </div>
-              ) : message.attachmentType === "video" ? (
-                <video 
-                  src={message.imageUrl} 
-                  controls 
-                  className="max-w-full h-auto rounded-lg max-h-48"
-                />
-              ) : (
-                <img 
-                  src={message.imageUrl} 
-                  alt="Uploaded" 
-                  className="max-w-full h-auto rounded-lg max-h-48 object-contain"
-                />
-              )}
+              ))}
             </div>
           )}
           <div 
