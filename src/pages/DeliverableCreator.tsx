@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { SystemLayout } from "@/components/layout/SystemLayout";
 import { DeliverableChatPanel } from "@/components/deliverable-creator/DeliverableChatPanel";
 import { DeliverablePreviewPanel } from "@/components/deliverable-creator/DeliverablePreviewPanel";
@@ -20,6 +20,48 @@ import { Progress } from "@/components/ui/progress";
 import { useCreditsSystem } from "@/hooks/useCreditsSystem";
 import { useCredits } from "@/hooks/useCredits";
 import { InsufficientCreditsModal } from "@/components/credits/InsufficientCreditsModal";
+
+// Helper to upload a data URL to Supabase Storage and return a public URL
+async function uploadAttachmentToStorage(
+  dataUrl: string,
+  fileName: string,
+  fileType: string,
+  userId: string
+): Promise<string | null> {
+  try {
+    // Convert data URL to blob
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
+
+    // Generate unique file path
+    const ext = fileName.split('.').pop() || (fileType === 'image' ? 'png' : fileType === 'pdf' ? 'pdf' : 'mp4');
+    const uniqueName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${ext}`;
+    const filePath = `${userId}/${uniqueName}`;
+
+    // Upload to Storage
+    const { data, error } = await supabase.storage
+      .from('deliverable-attachments')
+      .upload(filePath, blob, {
+        contentType: blob.type,
+        upsert: false,
+      });
+
+    if (error) {
+      console.error('Error uploading attachment:', error);
+      return null;
+    }
+
+    // Get public URL
+    const { data: publicUrlData } = supabase.storage
+      .from('deliverable-attachments')
+      .getPublicUrl(data.path);
+
+    return publicUrlData.publicUrl;
+  } catch (err) {
+    console.error('Error in uploadAttachmentToStorage:', err);
+    return null;
+  }
+}
 
 export interface DeliverableConfig {
   templateId: string;
@@ -1301,27 +1343,49 @@ ${finalConfig.includeVideos && finalConfig.videoLinks.length > 0 ? `Inclua as se
           );
         });
 
-      const attachmentsInfo = allAttachments.length > 0
-        ? allAttachments.map((att, idx) => ({
-            index: idx + 1,
-            type: att.type,
-            name: att.name || `Arquivo ${idx + 1}`,
-            url: att.url, // data URL (base64)
-          }))
-        : [];
+      // Upload attachments to Storage and get public URLs (instead of huge base64 data URLs)
+      const attachmentsInfo: Array<{ index: number; type: string; name: string; url: string }> = [];
+      if (allAttachments.length > 0 && user?.id) {
+        for (let idx = 0; idx < allAttachments.length; idx++) {
+          const att = allAttachments[idx];
+          const fileName = att.name || `Arquivo_${idx + 1}`;
+          
+          // Check if it's already a public URL (https://) or a data URL
+          if (att.url.startsWith('https://')) {
+            // Already a public URL, use as-is
+            attachmentsInfo.push({
+              index: idx + 1,
+              type: att.type,
+              name: fileName,
+              url: att.url,
+            });
+          } else if (att.url.startsWith('data:')) {
+            // Upload data URL to storage
+            const publicUrl = await uploadAttachmentToStorage(att.url, fileName, att.type, user.id);
+            if (publicUrl) {
+              attachmentsInfo.push({
+                index: idx + 1,
+                type: att.type,
+                name: fileName,
+                url: publicUrl,
+              });
+            } else {
+              console.warn(`Failed to upload attachment: ${fileName}`);
+            }
+          }
+        }
+      }
 
-      // Build instruction text listing attachments
+      // Build instruction text listing attachments with short public URLs
       const attachmentsInstruction = attachmentsInfo.length > 0
         ? `\n\n📎 ARQUIVOS ENVIADOS PELO USUÁRIO (USE-OS CONFORME SOLICITADO):
-${attachmentsInfo.map(a => `- [ARQUIVO_${a.index}] ${a.type.toUpperCase()}: "${a.name}"`).join('\n')}
+${attachmentsInfo.map(a => `- [ARQUIVO_${a.index}] ${a.type.toUpperCase()}: "${a.name}" - URL: ${a.url}`).join('\n')}
 
 🔴 INSTRUÇÕES OBRIGATÓRIAS PARA ARQUIVOS:
-- Para IMAGENS: use a tag <img src="ARQUIVO_X_URL" alt="..."> substituindo ARQUIVO_X_URL pela URL completa fornecida abaixo.
-- Para PDFs: use <a href="ARQUIVO_X_URL" download="${attachmentsInfo.find(a => a.type === 'pdf')?.name || 'arquivo.pdf'}">Baixar</a>
-- Para VÍDEOS: use <video src="ARQUIVO_X_URL" controls></video>
-
-URLs DOS ARQUIVOS (COPIE E USE EXATAMENTE):
-${attachmentsInfo.map(a => `ARQUIVO_${a.index}_URL = ${a.url}`).join('\n\n')}`
+- Para IMAGENS: use <img src="URL_DO_ARQUIVO" alt="descrição">
+- Para PDFs: use <a href="URL_DO_ARQUIVO" download="${attachmentsInfo.find(a => a.type === 'pdf')?.name || 'arquivo.pdf'}" class="download-btn">Baixar PDF</a>
+- Para VÍDEOS: use <video src="URL_DO_ARQUIVO" controls></video>
+- COPIE A URL EXATA do arquivo acima para o atributo src ou href.`
         : "";
 
       const response = await fetch(
