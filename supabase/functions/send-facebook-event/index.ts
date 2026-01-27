@@ -222,9 +222,23 @@ serve(async (req) => {
             const baseValue = value || 0;
             const incrementedValue = baseValue + (eventIndex * 0.01);
             eventValue = Math.round(incrementedValue * 100) / 100; // Round to 2 decimal places
+            
+            // Generate unique order and product IDs for maximum distinction
+            const uniqueOrderId = `order_${Date.now()}_${eventIndex}_${crypto.randomUUID().slice(0, 8)}`;
+            const uniqueProductId = `product_${eventIndex}_${Date.now()}`;
+            
             eventData.custom_data = {
               currency: currency || "BRL",
               value: eventValue,
+              order_id: uniqueOrderId,
+              content_type: "product",
+              content_ids: [uniqueProductId],
+              contents: [{
+                id: uniqueProductId,
+                quantity: 1,
+                item_price: eventValue,
+              }],
+              num_items: 1,
             };
           }
 
@@ -327,9 +341,9 @@ serve(async (req) => {
         }
       }
 
-      // Delay between events to prevent rate limiting (200ms)
+      // Delay between events to appear more natural and prevent rate limiting (500ms)
       if (eventIndex < quantity - 1) {
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
