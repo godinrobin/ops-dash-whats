@@ -12,45 +12,62 @@ export const VturbVideoPreview = ({ videoCode, optimizationCode, isVisible }: Vt
   useEffect(() => {
     if (!videoCode || !containerRef.current || !isVisible) return;
 
-    // Clear previous content
-    containerRef.current.innerHTML = '';
+    const container = containerRef.current;
 
-    // Create a temporary container to parse the HTML
-    const tempDiv = document.createElement('div');
+    const stripScriptTags = (code: string) =>
+      code
+        .replace(/<script[^>]*>/gi, "")
+        .replace(/<\/script>/gi, "")
+        .trim();
+
+    // Clear previous content
+    container.innerHTML = "";
+
+    // Parse HTML safely: append non-script nodes first, then re-create scripts.
+    const tempDiv = document.createElement("div");
     tempDiv.innerHTML = videoCode;
 
-    // Move all child nodes to the container
+    const extractedScripts = Array.from(tempDiv.querySelectorAll("script"));
+    extractedScripts.forEach((s) => s.remove());
+
+    // Append the remaining (non-script) markup
     while (tempDiv.firstChild) {
-      containerRef.current.appendChild(tempDiv.firstChild);
+      container.appendChild(tempDiv.firstChild);
     }
 
-    // If there's optimization code, create and execute it
-    if (optimizationCode) {
-      const script = document.createElement('script');
-      script.type = 'text/javascript';
-      // Remove any script tags from optimization code and get just the content
-      const optCode = optimizationCode
-        .replace(/<script[^>]*>/gi, '')
-        .replace(/<\/script>/gi, '');
-      script.textContent = optCode;
-      containerRef.current.appendChild(script);
-    }
-
-    // Execute any script tags that were in the video code
-    const scripts = containerRef.current.querySelectorAll('script');
-    scripts.forEach((oldScript) => {
-      const newScript = document.createElement('script');
-      Array.from(oldScript.attributes).forEach(attr => {
+    // Re-create scripts to force execution
+    const appendScript = (oldScript: HTMLScriptElement) => {
+      const newScript = document.createElement("script");
+      Array.from(oldScript.attributes).forEach((attr) => {
         newScript.setAttribute(attr.name, attr.value);
       });
-      newScript.textContent = oldScript.textContent;
-      oldScript.parentNode?.replaceChild(newScript, oldScript);
-    });
+
+      // External scripts
+      if (oldScript.src) {
+        newScript.src = oldScript.src;
+      } else {
+        const raw = oldScript.textContent ?? "";
+        // Some providers store `<script>...</script>` inside the text; strip to avoid `Unexpected token '<'`.
+        newScript.textContent = stripScriptTags(raw);
+      }
+
+      container.appendChild(newScript);
+    };
+
+    extractedScripts.forEach((s) => appendScript(s as HTMLScriptElement));
+
+    // If there's optimization code, create and execute it (as a separate inline script)
+    if (optimizationCode) {
+      const script = document.createElement("script");
+      script.type = "text/javascript";
+      script.textContent = stripScriptTags(optimizationCode);
+      container.appendChild(script);
+    }
 
     // Cleanup function
     return () => {
       if (containerRef.current) {
-        containerRef.current.innerHTML = '';
+        containerRef.current.innerHTML = "";
       }
     };
   }, [videoCode, optimizationCode, isVisible]);
