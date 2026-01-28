@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { RichTextEditor } from "@/components/feed/RichTextEditor";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -1946,22 +1947,30 @@ const AdminPanelNew = () => {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label>Título (opcional)</Label>
-                  <Input
-                    placeholder="Título do aviso"
-                    value={newAnnouncementTitle}
-                    onChange={(e) => setNewAnnouncementTitle(e.target.value)}
-                  />
+                  <p className="text-xs text-muted-foreground mb-1">
+                    Use a barra de ferramentas para formatar: negrito, itálico, sublinhado, cores
+                  </p>
+                  <div className="border rounded-lg p-3 bg-background">
+                    <RichTextEditor
+                      value={newAnnouncementTitle}
+                      onChange={setNewAnnouncementTitle}
+                      placeholder="Título do aviso (com formatação)"
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-2">
                   <Label>Conteúdo *</Label>
-                  <Textarea
-                    placeholder="Escreva o conteúdo do aviso..."
-                    value={newAnnouncementContent}
-                    onChange={(e) => setNewAnnouncementContent(e.target.value)}
-                    onPaste={handleAnnouncementImagePaste}
-                    rows={4}
-                  />
+                  <p className="text-xs text-muted-foreground mb-1">
+                    Use a barra de ferramentas para formatar: negrito, itálico, sublinhado, cores
+                  </p>
+                  <div className="border rounded-lg p-3 bg-background">
+                    <RichTextEditor
+                      value={newAnnouncementContent}
+                      onChange={setNewAnnouncementContent}
+                      placeholder="Escreva o conteúdo do aviso..."
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -2714,26 +2723,48 @@ const AdminPanelNew = () => {
 
       {/* Announcement Preview Modal */}
       <Dialog open={showAnnouncementPreview} onOpenChange={setShowAnnouncementPreview}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Prévia do Aviso</DialogTitle>
           </DialogHeader>
           <Card className="border-accent">
             <CardContent className="p-4 space-y-3">
+              {/* Title - Above video */}
               {newAnnouncementTitle && (
-                <h3 className="font-semibold text-lg">{newAnnouncementTitle}</h3>
+                <h3 
+                  className="font-semibold text-lg text-center"
+                  dangerouslySetInnerHTML={{ __html: newAnnouncementTitle }}
+                />
               )}
-              {newAnnouncementImage && (
+              
+              {/* Vturb Video Preview */}
+              {newAnnouncementVideoCode && (
+                <div 
+                  className="w-full rounded-lg overflow-hidden"
+                  dangerouslySetInnerHTML={{ 
+                    __html: newAnnouncementVideoCode + (newAnnouncementVideoOptCode || '') 
+                  }}
+                />
+              )}
+              
+              {/* Image (only if no video) */}
+              {!newAnnouncementVideoCode && newAnnouncementImage && (
                 <img src={newAnnouncementImage} alt="Preview" className="w-full rounded-lg" />
               )}
-              <p className="whitespace-pre-wrap">{newAnnouncementContent}</p>
+              
+              {/* Content - Below video */}
+              <div 
+                className="whitespace-pre-wrap text-center"
+                dangerouslySetInnerHTML={{ __html: newAnnouncementContent }}
+              />
+              
               {newAnnouncementRedirectType === 'custom_link' && newAnnouncementRedirectUrl && (
                 <Button className="w-full">
                   {newAnnouncementButtonText || "Acessar"}
                 </Button>
               )}
               {newAnnouncementRedirectType === 'system' && newAnnouncementSystems.length > 0 && (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 justify-center">
                   {newAnnouncementSystems.map(sysId => {
                     const sys = SYSTEMS.find(s => s.id === sysId);
                     return sys ? (

@@ -51,21 +51,41 @@ export const AnnouncementPopup = () => {
 
   // Load vturb scripts when announcement has video
   useEffect(() => {
-    if (announcement?.video_code && videoContainerRef.current) {
+    if (announcement?.video_code && videoContainerRef.current && isOpen) {
       // Clear previous content
       videoContainerRef.current.innerHTML = '';
       
-      // Add the video embed code
-      const videoDiv = document.createElement('div');
-      videoDiv.innerHTML = announcement.video_code;
-      videoContainerRef.current.appendChild(videoDiv);
+      // Create a temporary container to parse the HTML
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = announcement.video_code;
+      
+      // Move all child nodes to the container
+      while (tempDiv.firstChild) {
+        videoContainerRef.current.appendChild(tempDiv.firstChild);
+      }
 
-      // Add optimization script if provided
+      // If there's optimization code, create and execute it
       if (announcement.video_optimization_code) {
         const script = document.createElement('script');
-        script.innerHTML = announcement.video_optimization_code;
+        script.type = 'text/javascript';
+        // Remove any script tags from optimization code and get just the content
+        const optCode = announcement.video_optimization_code
+          .replace(/<script[^>]*>/gi, '')
+          .replace(/<\/script>/gi, '');
+        script.textContent = optCode;
         videoContainerRef.current.appendChild(script);
       }
+
+      // Execute any script tags that were in the video code
+      const scripts = videoContainerRef.current.querySelectorAll('script');
+      scripts.forEach((oldScript) => {
+        const newScript = document.createElement('script');
+        Array.from(oldScript.attributes).forEach(attr => {
+          newScript.setAttribute(attr.name, attr.value);
+        });
+        newScript.textContent = oldScript.textContent;
+        oldScript.parentNode?.replaceChild(newScript, oldScript);
+      });
     }
   }, [announcement?.video_code, announcement?.video_optimization_code, isOpen]);
 
