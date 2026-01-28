@@ -34,6 +34,7 @@ import { AdminSystemPricing } from "@/components/admin/AdminSystemPricing";
 import { AdminCreditPackages } from "@/components/admin/AdminCreditPackages";
 import { AdminZapSpyUsers } from "@/components/admin/AdminZapSpyUsers";
 import { AdminLogzzEvents } from "@/components/admin/AdminLogzzEvents";
+import { VturbVideoPreview } from "@/components/admin/VturbVideoPreview";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 
 // Product image imports for admin
@@ -2738,14 +2739,11 @@ const AdminPanelNew = () => {
               )}
               
               {/* Vturb Video Preview */}
-              {newAnnouncementVideoCode && (
-                <div 
-                  className="w-full rounded-lg overflow-hidden"
-                  dangerouslySetInnerHTML={{ 
-                    __html: newAnnouncementVideoCode + (newAnnouncementVideoOptCode || '') 
-                  }}
-                />
-              )}
+              <VturbVideoPreview
+                videoCode={newAnnouncementVideoCode}
+                optimizationCode={newAnnouncementVideoOptCode}
+                isVisible={showAnnouncementPreview}
+              />
               
               {/* Image (only if no video) */}
               {!newAnnouncementVideoCode && newAnnouncementImage && (
