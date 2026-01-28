@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { X, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
+import { VturbVideoPreview } from "@/components/admin/VturbVideoPreview";
 
 interface Announcement {
   id: string;
@@ -41,53 +42,12 @@ export const AnnouncementPopup = () => {
   const navigate = useNavigate();
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
-  const videoContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (user) {
       checkForUnseenAnnouncements();
     }
   }, [user]);
-
-  // Load vturb scripts when announcement has video
-  useEffect(() => {
-    if (announcement?.video_code && videoContainerRef.current && isOpen) {
-      // Clear previous content
-      videoContainerRef.current.innerHTML = '';
-      
-      // Create a temporary container to parse the HTML
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = announcement.video_code;
-      
-      // Move all child nodes to the container
-      while (tempDiv.firstChild) {
-        videoContainerRef.current.appendChild(tempDiv.firstChild);
-      }
-
-      // If there's optimization code, create and execute it
-      if (announcement.video_optimization_code) {
-        const script = document.createElement('script');
-        script.type = 'text/javascript';
-        // Remove any script tags from optimization code and get just the content
-        const optCode = announcement.video_optimization_code
-          .replace(/<script[^>]*>/gi, '')
-          .replace(/<\/script>/gi, '');
-        script.textContent = optCode;
-        videoContainerRef.current.appendChild(script);
-      }
-
-      // Execute any script tags that were in the video code
-      const scripts = videoContainerRef.current.querySelectorAll('script');
-      scripts.forEach((oldScript) => {
-        const newScript = document.createElement('script');
-        Array.from(oldScript.attributes).forEach(attr => {
-          newScript.setAttribute(attr.name, attr.value);
-        });
-        newScript.textContent = oldScript.textContent;
-        oldScript.parentNode?.replaceChild(newScript, oldScript);
-      });
-    }
-  }, [announcement?.video_code, announcement?.video_optimization_code, isOpen]);
 
   const checkForUnseenAnnouncements = async () => {
     try {
@@ -227,9 +187,10 @@ export const AnnouncementPopup = () => {
         <div className="space-y-4">
           {/* Video - appears between title and content */}
           {hasVideo && (
-            <div 
-              ref={videoContainerRef}
-              className="w-full rounded-lg overflow-hidden"
+            <VturbVideoPreview 
+              videoCode={announcement.video_code || ""}
+              optimizationCode={announcement.video_optimization_code}
+              isVisible={isOpen}
             />
           )}
 
