@@ -2724,12 +2724,12 @@ const AdminPanelNew = () => {
 
       {/* Announcement Preview Modal */}
       <Dialog open={showAnnouncementPreview} onOpenChange={setShowAnnouncementPreview}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" style={{ isolation: 'isolate' }}>
           <DialogHeader>
             <DialogTitle>Prévia do Aviso</DialogTitle>
           </DialogHeader>
-          <Card className="border-accent">
-            <CardContent className="p-4 space-y-3">
+          <Card className="border-accent relative" style={{ isolation: 'isolate', overflow: 'hidden' }}>
+            <CardContent className="p-4 space-y-3 relative" style={{ zIndex: 1 }}>
               {/* Title - Above video */}
               {newAnnouncementTitle && (
                 <h3 
