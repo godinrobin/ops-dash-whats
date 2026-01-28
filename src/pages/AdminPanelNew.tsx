@@ -34,6 +34,7 @@ import { AdminSystemPricing } from "@/components/admin/AdminSystemPricing";
 import { AdminCreditPackages } from "@/components/admin/AdminCreditPackages";
 import { AdminZapSpyUsers } from "@/components/admin/AdminZapSpyUsers";
 import { AdminLogzzEvents } from "@/components/admin/AdminLogzzEvents";
+import { AdminCreditsHistory } from "@/components/admin/AdminCreditsHistory";
 import { VturbVideoPreview } from "@/components/admin/VturbVideoPreview";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 
@@ -116,6 +117,7 @@ const SIDEBAR_MENU = [
     icon: Coins,
     items: [
       { id: "credits-control", label: "Controle do Sistema", icon: Coins },
+      { id: "credits-history", label: "Histórico de Compras", icon: History },
       { id: "credits-pricing", label: "Tabela de Preços", icon: Wallet },
       { id: "credits-packages", label: "Pacotes", icon: Package },
       { id: "zap-spy-users", label: "Zap Spy Users", icon: Eye },
@@ -1818,6 +1820,9 @@ const AdminPanelNew = () => {
 
       case "credits-control":
         return <AdminCreditsControl />;
+
+      case "credits-history":
+        return <AdminCreditsHistory />;
 
       case "credits-pricing":
         return <AdminSystemPricing />;
