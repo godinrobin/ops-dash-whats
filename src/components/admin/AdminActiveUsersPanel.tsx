@@ -30,21 +30,18 @@ export const AdminActiveUsersPanel = () => {
         .gte('last_seen_at', twoMinutesAgo)
         .eq('is_online', true) as any);
 
-      // Get today's unique logins from user_activities
+      // Get today's unique users from user_presence (anyone who sent a heartbeat today)
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
       
-      const { data: todayActivities } = await supabase
-        .from('user_activities')
-        .select('user_id')
-        .gte('created_at', todayStart.toISOString());
-
-      // Count unique users
-      const uniqueUsers = new Set(todayActivities?.map((a: any) => a.user_id) || []);
+      const { count: todayCount } = await (supabase
+        .from('user_presence' as any)
+        .select('*', { count: 'exact', head: true })
+        .gte('last_seen_at', todayStart.toISOString()) as any);
 
       setData({
         onlineNow: onlineCount || 0,
-        todayLogins: uniqueUsers.size,
+        todayLogins: todayCount || 0,
       });
     } catch (error) {
       console.error('Error fetching active users:', error);
