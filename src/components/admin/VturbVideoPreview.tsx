@@ -60,7 +60,13 @@ export const VturbVideoPreview = ({ videoCode, optimizationCode, isVisible }: Vt
   return (
     <div 
       ref={containerRef}
-      className="w-full rounded-lg overflow-hidden"
+      className="w-full rounded-lg overflow-hidden relative"
+      style={{
+        position: 'relative',
+        zIndex: 1,
+        maxWidth: '100%',
+        contain: 'layout paint',
+      }}
     />
   );
 };
