@@ -35,6 +35,7 @@ import {
 import tiktokLogo from "@/assets/tiktok-logo.png";
 import automatizapIcon from "@/assets/automatizap-icon.png";
 import disparazapIcon from "@/assets/disparazap-icon.png";
+import whatsappIcon from "@/assets/whatsapp-float-icon.png";
 
 interface SidebarItem {
   path: string;

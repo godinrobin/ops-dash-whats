@@ -15,7 +15,7 @@ import {
   Copy, Star, ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, Filter, Search, X, Key, Loader2, 
   UserPlus, Activity, Megaphone, Eye, MousePointer, Trash2, Image, Clock, Settings, Users, 
   BarChart3, Phone, FileText, Wallet, History, Percent, Menu, ShoppingBag, Package, Globe, RefreshCw,
-  Smartphone, Shield, TrendingUp, Wifi, WifiOff, Coins
+  Smartphone, Shield, TrendingUp, Wifi, WifiOff, Coins, Video
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -170,6 +170,8 @@ interface AnnouncementData {
   title: string | null;
   content: string;
   image_url: string | null;
+  video_code: string | null;
+  video_optimization_code: string | null;
   redirect_type: AnnouncementRedirectType;
   redirect_url: string | null;
   redirect_system: string | null;
@@ -369,6 +371,8 @@ const AdminPanelNew = () => {
   const [newAnnouncementTitle, setNewAnnouncementTitle] = useState("");
   const [newAnnouncementContent, setNewAnnouncementContent] = useState("");
   const [newAnnouncementImage, setNewAnnouncementImage] = useState<string | null>(null);
+  const [newAnnouncementVideoCode, setNewAnnouncementVideoCode] = useState("");
+  const [newAnnouncementVideoOptCode, setNewAnnouncementVideoOptCode] = useState("");
   const [newAnnouncementRedirectType, setNewAnnouncementRedirectType] = useState<AnnouncementRedirectType>("none");
   const [newAnnouncementRedirectUrl, setNewAnnouncementRedirectUrl] = useState("");
   const [newAnnouncementButtonText, setNewAnnouncementButtonText] = useState("");
@@ -813,6 +817,8 @@ const AdminPanelNew = () => {
         title: newAnnouncementTitle.trim() || null,
         content: newAnnouncementContent.trim(),
         image_url: newAnnouncementImage,
+        video_code: newAnnouncementVideoCode.trim() || null,
+        video_optimization_code: newAnnouncementVideoOptCode.trim() || null,
         redirect_type: newAnnouncementRedirectType,
         redirect_url: newAnnouncementRedirectType === 'custom_link' ? newAnnouncementRedirectUrl.trim() : null,
         redirect_system: newAnnouncementRedirectType === 'system' ? newAnnouncementSystems.join(",") : null,
@@ -834,6 +840,8 @@ const AdminPanelNew = () => {
       setNewAnnouncementTitle("");
       setNewAnnouncementContent("");
       setNewAnnouncementImage(null);
+      setNewAnnouncementVideoCode("");
+      setNewAnnouncementVideoOptCode("");
       setNewAnnouncementRedirectType("none");
       setNewAnnouncementRedirectUrl("");
       setNewAnnouncementButtonText("");
@@ -1991,6 +1999,33 @@ const AdminPanelNew = () => {
                       </div>
                     )}
                   </div>
+                </div>
+
+                {/* Vturb Video Fields */}
+                <div className="space-y-3 p-3 rounded-lg border border-accent/30 bg-accent/5">
+                  <Label className="flex items-center gap-2 text-accent">
+                    <Video className="h-4 w-4" />
+                    Vídeo Vturb (opcional)
+                  </Label>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Código do Vídeo</Label>
+                    <Input
+                      placeholder="Cole aqui o código do vídeo vturb"
+                      value={newAnnouncementVideoCode}
+                      onChange={(e) => setNewAnnouncementVideoCode(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Código de Otimização</Label>
+                    <Input
+                      placeholder="Cole aqui o código de otimização"
+                      value={newAnnouncementVideoOptCode}
+                      onChange={(e) => setNewAnnouncementVideoOptCode(e.target.value)}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Quando um vídeo é adicionado, o título fica acima e o conteúdo abaixo do vídeo.
+                  </p>
                 </div>
 
                 <div className="space-y-2">

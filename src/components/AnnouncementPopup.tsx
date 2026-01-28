@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,8 @@ interface Announcement {
   title: string | null;
   content: string;
   image_url: string | null;
+  video_code: string | null;
+  video_optimization_code: string | null;
   redirect_type: 'none' | 'custom_link' | 'system';
   redirect_url: string | null;
   redirect_system: string | null;
@@ -39,12 +41,33 @@ export const AnnouncementPopup = () => {
   const navigate = useNavigate();
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const videoContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (user) {
       checkForUnseenAnnouncements();
     }
   }, [user]);
+
+  // Load vturb scripts when announcement has video
+  useEffect(() => {
+    if (announcement?.video_code && videoContainerRef.current) {
+      // Clear previous content
+      videoContainerRef.current.innerHTML = '';
+      
+      // Add the video embed code
+      const videoDiv = document.createElement('div');
+      videoDiv.innerHTML = announcement.video_code;
+      videoContainerRef.current.appendChild(videoDiv);
+
+      // Add optimization script if provided
+      if (announcement.video_optimization_code) {
+        const script = document.createElement('script');
+        script.innerHTML = announcement.video_optimization_code;
+        videoContainerRef.current.appendChild(script);
+      }
+    }
+  }, [announcement?.video_code, announcement?.video_optimization_code, isOpen]);
 
   const checkForUnseenAnnouncements = async () => {
     try {
@@ -166,20 +189,32 @@ export const AnnouncementPopup = () => {
     ? announcement.redirect_system.split(",").map(s => s.trim())
     : [];
 
+  const hasVideo = !!announcement.video_code;
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="max-w-lg border-accent">
+      <DialogContent className="max-w-lg border-accent max-h-[90vh] overflow-y-auto">
         <DialogHeader>
+          {/* Title appears above video when video exists */}
           {announcement.title && (
-            <DialogTitle className="text-xl text-center">
-              {announcement.title}
-            </DialogTitle>
+            <DialogTitle 
+              className="text-xl text-center"
+              dangerouslySetInnerHTML={{ __html: announcement.title }}
+            />
           )}
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Imagem */}
-          {announcement.image_url && (
+          {/* Video - appears between title and content */}
+          {hasVideo && (
+            <div 
+              ref={videoContainerRef}
+              className="w-full rounded-lg overflow-hidden"
+            />
+          )}
+
+          {/* Image (only if no video) */}
+          {!hasVideo && announcement.image_url && (
             <div className="w-full rounded-lg overflow-hidden">
               <img 
                 src={announcement.image_url} 
@@ -189,10 +224,11 @@ export const AnnouncementPopup = () => {
             </div>
           )}
 
-          {/* Conteúdo */}
-          <p className="text-center text-muted-foreground whitespace-pre-wrap">
-            {announcement.content}
-          </p>
+          {/* Content - appears below video with rich text support */}
+          <div 
+            className="text-center text-muted-foreground whitespace-pre-wrap"
+            dangerouslySetInnerHTML={{ __html: announcement.content }}
+          />
 
           {/* Sistemas (quando redirect_type = 'system') */}
           {announcement.redirect_type === 'system' && selectedSystems.length > 0 && (

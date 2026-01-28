@@ -29,6 +29,8 @@ export type Database = {
           redirect_url: string | null
           scheduled_at: string | null
           title: string | null
+          video_code: string | null
+          video_optimization_code: string | null
           views_count: number
         }
         Insert: {
@@ -45,6 +47,8 @@ export type Database = {
           redirect_url?: string | null
           scheduled_at?: string | null
           title?: string | null
+          video_code?: string | null
+          video_optimization_code?: string | null
           views_count?: number
         }
         Update: {
@@ -61,6 +65,8 @@ export type Database = {
           redirect_url?: string | null
           scheduled_at?: string | null
           title?: string | null
+          video_code?: string | null
+          video_optimization_code?: string | null
           views_count?: number
         }
         Relationships: []
