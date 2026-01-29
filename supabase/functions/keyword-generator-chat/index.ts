@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { validateUserAccess, forbiddenResponse, unauthorizedResponse } from "../_shared/validateAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,6 +12,18 @@ serve(async (req) => {
   }
 
   try {
+    // Validate user access - requires member or admin
+    const authHeader = req.headers.get('Authorization');
+    const accessValidation = await validateUserAccess(authHeader, 'member');
+
+    if (!accessValidation.isValid) {
+      if (accessValidation.error === 'Missing or invalid authorization header' || 
+          accessValidation.error === 'Invalid or expired token') {
+        return unauthorizedResponse(accessValidation.error, corsHeaders);
+      }
+      return forbiddenResponse(accessValidation.error || 'Acesso negado. Plano premium necessário.', corsHeaders);
+    }
+
     const { messages, systemPrompt } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     

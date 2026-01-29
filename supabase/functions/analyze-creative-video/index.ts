@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { validateUserAccess, forbiddenResponse, unauthorizedResponse } from "../_shared/validateAccess.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -16,21 +17,26 @@ serve(async (req) => {
   }
 
   try {
+    // Validate user access - requires member or admin
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('Missing authorization header');
+    const accessValidation = await validateUserAccess(authHeader, 'member');
+
+    if (!accessValidation.isValid) {
+      if (accessValidation.error === 'Missing or invalid authorization header' || 
+          accessValidation.error === 'Invalid or expired token') {
+        return unauthorizedResponse(accessValidation.error, corsHeaders);
+      }
+      return forbiddenResponse(accessValidation.error || 'Acesso negado. Plano premium necessário.', corsHeaders);
     }
 
+    const userId = accessValidation.userId!;
+
+    // Create Supabase client for database operations
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
+      { global: { headers: { Authorization: authHeader! } } }
     );
-
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError || !user) {
-      throw new Error('Unauthorized');
-    }
 
     const { videoUrl, videoName, checkExisting } = await req.json();
     console.log(`Analyzing creative: ${videoName}`);
@@ -44,7 +50,7 @@ serve(async (req) => {
       const { data: existingAnalysis } = await supabaseClient
         .from('video_creative_analyses')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .eq('video_url', videoUrl)
         .maybeSingle();
 
@@ -251,7 +257,7 @@ Responda EXATAMENTE neste formato JSON (sem markdown, apenas o JSON puro):
     const { error: saveError } = await supabaseClient
       .from('video_creative_analyses')
       .insert({
-        user_id: user.id,
+        user_id: userId,
         video_url: videoUrl,
         video_name: videoName || 'Sem nome',
         hook_score: analysis.hookScore,
