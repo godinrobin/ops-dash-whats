@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCreditsSystem } from "./useCreditsSystem";
 import { useCredits } from "./useCredits";
 import { useAccessLevel } from "./useAccessLevel";
+import { useAdminStatus } from "./useAdminStatus";
 
 interface InstanceSubscription {
   id: string;
@@ -23,7 +24,7 @@ interface MaturadorInstance {
 }
 
 interface UseInstanceSubscriptionReturn {
-  /** Number of free instances remaining (3 for full members) */
+  /** Number of free instances remaining (3 for full members, unlimited for admins) */
   freeInstancesRemaining: number;
   /** Total instances the user has */
   totalInstances: number;
@@ -43,6 +44,8 @@ interface UseInstanceSubscriptionReturn {
   loading: boolean;
   /** Refresh data */
   refresh: () => Promise<void>;
+  /** Check if user is admin (unlimited instances) */
+  isAdminUser: boolean;
 }
 
 const FREE_INSTANCES_LIMIT = 3;
@@ -54,6 +57,7 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
   const { user } = useAuth();
   const { isActive, activatedAt, isSimulatingPartial, isAdminTesting, isSemiFullMember } = useCreditsSystem();
   const { isFullMember } = useAccessLevel();
+  const { isAdmin } = useAdminStatus();
   const { deductCredits, canAfford, refresh: refreshCredits } = useCredits();
   const [subscriptions, setSubscriptions] = useState<InstanceSubscription[]>([]);
   const [instances, setInstances] = useState<MaturadorInstance[]>([]);
@@ -124,23 +128,33 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
   
   const totalInstances = subscriptions.length;
   
+  // ADMIN BYPASS: Admins get unlimited free instances
   // For full members (not simulating and not semi-full), they get 3 free instances (first 3 by creation order)
   // When simulating partial or semi-full member, treat as 0 free instances
-  const effectiveFullMember = (isSimulatingPartial || isSemiFullMember) ? false : isFullMember;
+  const effectiveFullMember = isAdmin ? true : ((isSimulatingPartial || isSemiFullMember) ? false : isFullMember);
   
-  // Count how many of the first 3 instances exist
-  const freeInstancesUsed = effectiveFullMember 
-    ? Math.min(FREE_INSTANCES_LIMIT, sortedSubscriptions.length)
-    : 0;
-  const freeInstancesRemaining = effectiveFullMember 
-    ? Math.max(0, FREE_INSTANCES_LIMIT - freeInstancesUsed)
-    : 0;
+  // Count how many of the first 3 instances exist (admins: unlimited = always show remaining)
+  const freeInstancesUsed = isAdmin 
+    ? 0 // Admins always have "unlimited" remaining
+    : (effectiveFullMember 
+        ? Math.min(FREE_INSTANCES_LIMIT, sortedSubscriptions.length)
+        : 0);
+  const freeInstancesRemaining = isAdmin 
+    ? 999 // Unlimited for admins
+    : (effectiveFullMember 
+        ? Math.max(0, FREE_INSTANCES_LIMIT - freeInstancesUsed)
+        : 0);
   
   // In admin test mode or partial simulation, we simulate as if the system is active
   const isTestingActive = isAdminTesting || isSimulatingPartial;
 
   // Check if an instance is free based on its position in creation order
   const isInstanceFree = useCallback((instanceId: string): boolean => {
+    // ADMIN BYPASS: All instances are free for admins
+    if (isAdmin) {
+      return true;
+    }
+    
     if (isSimulatingPartial || isSemiFullMember) {
       // In partial simulation or semi-full members, no instances are free
       return false;
@@ -164,9 +178,14 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
     if (instanceIndex === -1) return false;
     
     return instanceIndex < FREE_INSTANCES_LIMIT;
-  }, [sortedSubscriptions, effectiveFullMember, isSimulatingPartial, isSemiFullMember, instances]);
+  }, [sortedSubscriptions, effectiveFullMember, isSimulatingPartial, isSemiFullMember, instances, isAdmin]);
 
   const getDaysRemaining = useCallback((instanceId: string): number | null => {
+    // ADMIN BYPASS: No expiration for admins
+    if (isAdmin) {
+      return null;
+    }
+    
     const subscription = subscriptions.find(s => s.instance_id === instanceId);
     
     // Check if this instance is free (using fallback logic)
@@ -232,7 +251,7 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
     const days = diff / (1000 * 60 * 60 * 24);
     if (days < 1) return 0; // Menos de 24h = "Expira hoje"
     return Math.floor(days);
-  }, [subscriptions, activatedAt, isTestingActive, isSimulatingPartial, effectiveFullMember, sortedSubscriptions, instances]);
+  }, [subscriptions, activatedAt, isTestingActive, isSimulatingPartial, effectiveFullMember, sortedSubscriptions, instances, isAdmin]);
 
   const isAboutToExpire = useCallback((instanceId: string): boolean => {
     const days = getDaysRemaining(instanceId);
@@ -328,12 +347,13 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
     }
 
     // Determine if this instance should be free
+    // ADMIN BYPASS: All admin instances are free
     // Full members get first 3 free (unless simulating partial)
     // Semi-full members NEVER get free instances
-    const effectiveFM = (isSimulatingPartial || isSemiFullMember) ? false : isFullMember;
-    const shouldBeFree = effectiveFM && currentSubCount < FREE_INSTANCES_LIMIT;
+    const effectiveFM = isAdmin ? true : ((isSimulatingPartial || isSemiFullMember) ? false : isFullMember);
+    const shouldBeFree = isAdmin ? true : (effectiveFM && currentSubCount < FREE_INSTANCES_LIMIT);
     
-    console.log('[REGISTER-INSTANCE] effectiveFM:', effectiveFM, 'currentSubCount:', currentSubCount, 'shouldBeFree:', shouldBeFree);
+    console.log('[REGISTER-INSTANCE] isAdmin:', isAdmin, 'effectiveFM:', effectiveFM, 'currentSubCount:', currentSubCount, 'shouldBeFree:', shouldBeFree);
 
     // Calculate expiration
     let expiresAt: string | null = null;
@@ -371,7 +391,7 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
       console.error('[REGISTER-INSTANCE] Error:', error);
       return false;
     }
-  }, [user, isActive, isFullMember, isSimulatingPartial, isSemiFullMember, fetchSubscriptions]);
+  }, [user, isActive, isFullMember, isSimulatingPartial, isSemiFullMember, isAdmin, fetchSubscriptions]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -389,6 +409,7 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
     registerInstance,
     subscriptions,
     loading,
-    refresh
+    refresh,
+    isAdminUser: isAdmin
   };
 };
