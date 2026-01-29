@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Search, Key, LogIn, Loader2, Users } from "lucide-react";
 import { toast } from "sonner";
 
-type MemberType = 'full' | 'semi_full' | 'partial';
+// Only two member types now: full or semi_full (partial no longer exists)
+type MemberType = 'full' | 'semi_full';
 
 interface UserData {
   id: string;
@@ -28,24 +29,23 @@ interface AdminUsersProps {
 }
 
 const getMemberType = (isFullMember: boolean, isSemiFullMember: boolean): MemberType => {
-  if (isSemiFullMember) return 'semi_full';
+  // If full member, return full
   if (isFullMember) return 'full';
-  return 'partial';
+  // Otherwise, always semi_full (partial no longer exists)
+  return 'semi_full';
 };
 
 const getMemberLabel = (type: MemberType): string => {
   switch (type) {
     case 'full': return 'Membro Completo';
     case 'semi_full': return 'Membro Semi-Full';
-    case 'partial': return 'Membro Parcial';
   }
 };
 
-const getMemberBadgeVariant = (type: MemberType): "default" | "secondary" | "outline" => {
+const getMemberBadgeVariant = (type: MemberType): "default" | "outline" => {
   switch (type) {
     case 'full': return 'default';
     case 'semi_full': return 'outline';
-    case 'partial': return 'secondary';
   }
 };
 
@@ -295,12 +295,6 @@ export const AdminUsers = ({ onImpersonate }: AdminUsersProps) => {
                               <div className="flex items-center gap-2">
                                 <Badge variant="outline">Membro Semi-Full</Badge>
                                 <span className="text-xs text-muted-foreground">Navegação, sem free tier</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="partial">
-                              <div className="flex items-center gap-2">
-                                <Badge variant="secondary">Membro Parcial</Badge>
-                                <span className="text-xs text-muted-foreground">Acesso limitado</span>
                               </div>
                             </SelectItem>
                           </SelectContent>
