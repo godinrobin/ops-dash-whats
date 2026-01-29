@@ -156,7 +156,14 @@ const FlowCanvasInner = ({ initialNodes, initialEdges, onSave, triggerType, trig
   }, [initialNodes, initialEdges, setNodes, setEdges]);
 
   const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
+    (params: Connection) => {
+      // Prevent self-loop edges (connecting a node to itself)
+      if (params.source === params.target) {
+        console.warn('[FlowCanvas] Blocked self-loop edge creation:', params.source);
+        return;
+      }
+      setEdges((eds) => addEdge(params, eds));
+    },
     [setEdges]
   );
 
