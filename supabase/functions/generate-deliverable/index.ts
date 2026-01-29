@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { validateUserAccess, forbiddenResponse } from "../_shared/validateAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -932,6 +933,15 @@ serve(async (req) => {
   }
 
   try {
+    // SECURITY: Validate premium membership before processing
+    const authHeader = req.headers.get('Authorization');
+    const access = await validateUserAccess(authHeader, 'member');
+    
+    if (!access.isValid) {
+      console.log('[SECURITY] Access denied for generate-deliverable:', access.error);
+      return forbiddenResponse(access.error || 'Premium membership required', corsHeaders);
+    }
+
     const { messages, config, chatMode, currentHtml, userAttachments } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
