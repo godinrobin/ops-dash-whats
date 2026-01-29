@@ -2447,7 +2447,15 @@ export type Database = {
           user_id?: string
           warning_shown?: boolean | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_instance_subscriptions_maturador_instances"
+            columns: ["instance_id"]
+            isOneToOne: true
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       lead_rotation_daily_counts: {
         Row: {
