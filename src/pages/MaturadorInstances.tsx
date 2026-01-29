@@ -295,16 +295,11 @@ export default function MaturadorInstances() {
       // Determine effective full member status (partial simulation or semi-full = not full member for free tier)
       const effectiveFM = (isSimulatingPartial || isSemiFullMember) ? false : isFullMember;
       
-      // Count current connected instances
-      const connectedCount = instances.filter(i => 
-        i.status === 'connected' || i.status === 'open'
-      ).length;
+      // FIX: Use freeInstancesRemaining from hook - counts ALL instances (not just connected)
+      // This prevents the exploit where users disconnect instances to get more free slots
+      const hasFreeSlot = effectiveFM && freeInstancesRemaining > 0;
       
-      console.log('[CREATE-INSTANCE] Effective Full Member:', effectiveFM, 'Connected:', connectedCount);
-      
-      // Check if user has free slots available
-      const hasFreeSlot = effectiveFM && connectedCount < FREE_INSTANCES_LIMIT;
-      
+      console.log('[CREATE-INSTANCE] Effective Full Member:', effectiveFM, 'freeInstancesRemaining:', freeInstancesRemaining);
       console.log('[CREATE-INSTANCE] Has free slot?', hasFreeSlot);
       
       if (!hasFreeSlot) {
