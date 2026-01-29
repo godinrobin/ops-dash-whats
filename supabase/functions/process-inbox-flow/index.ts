@@ -174,6 +174,21 @@ serve(async (req) => {
       sourceHandle?: string;
     }>;
 
+    // === HELPER: Find next edge, ignoring self-loops ===
+    // This prevents infinite loops when malformed edges exist (source === target)
+    const findNextEdge = (nodeId: string, sourceHandle?: string) => {
+      return edges.find(e => 
+        e.source === nodeId && 
+        e.target !== nodeId && // Prevent self-loop
+        (sourceHandle === undefined || e.sourceHandle === sourceHandle)
+      );
+    };
+
+    // Helper variant that only requires matching source (for fallbacks)
+    const findAnyNextEdge = (nodeId: string) => {
+      return edges.find(e => e.source === nodeId && e.target !== nodeId);
+    };
+
     let currentNodeId = session.current_node_id || 'start-1';
     let variables = (session.variables || {}) as Record<string, unknown>;
 
@@ -191,21 +206,21 @@ serve(async (req) => {
         const currentNode = nodes.find((n) => n.id === currentNodeId);
         if (currentNode?.type === 'waitInput') {
           // Prefer the explicit response output
-          let nextEdge = edges.find((e) => e.source === currentNodeId && e.sourceHandle === 'default');
+          let nextEdge = findNextEdge(currentNodeId, 'default');
 
           // Fallback: any edge that isn't timeout/followup
           if (!nextEdge) {
             nextEdge = edges.find(
               (e) =>
                 e.source === currentNodeId &&
+                e.target !== currentNodeId && // Prevent self-loop
                 e.sourceHandle !== 'timeout' &&
                 e.sourceHandle !== 'followup'
             );
           }
 
-          // Final fallback: any edge
           if (!nextEdge) {
-            nextEdge = edges.find((e) => e.source === currentNodeId);
+            nextEdge = findAnyNextEdge(currentNodeId);
           }
 
           if (nextEdge) {
@@ -458,14 +473,14 @@ serve(async (req) => {
           let nextEdge;
           if (currentNode?.type === 'waitInput') {
             // First try to find the 'default' (response) edge
-            nextEdge = edges.find(e => e.source === currentNodeId && e.sourceHandle === 'default');
+            nextEdge = findNextEdge(currentNodeId, 'default');
             // Fallback: find any edge without a specific timeout handle
             if (!nextEdge) {
-              nextEdge = edges.find(e => e.source === currentNodeId && e.sourceHandle !== 'timeout' && e.sourceHandle !== 'followup');
+              nextEdge = edges.find(e => e.source === currentNodeId && e.target !== currentNodeId && e.sourceHandle !== 'timeout' && e.sourceHandle !== 'followup');
             }
             console.log(`[${runId}] waitInput user response: using edge with sourceHandle=${nextEdge?.sourceHandle || 'fallback'}`);
           } else {
-            nextEdge = edges.find(e => e.source === currentNodeId);
+            nextEdge = findAnyNextEdge(currentNodeId);
           }
 
           if (nextEdge) {
@@ -658,7 +673,7 @@ serve(async (req) => {
           
           // Delay completed - move to next node
           console.log(`[${runId}] ✅ Delay completed! Moving from node ${pendingDelay.nodeId} to next node`);
-          const delayEdge = edges.find(e => e.source === pendingDelay.nodeId);
+          const delayEdge = findAnyNextEdge(pendingDelay.nodeId);
           if (delayEdge) {
             currentNodeId = delayEdge.target;
             console.log(`[${runId}] Next node after delay: ${currentNodeId}`);
@@ -1020,7 +1035,7 @@ serve(async (req) => {
             // Check if already sent (idempotency)
             if (sentNodeIds.includes(currentNodeId)) {
               console.log(`[${runId}] Node ${currentNodeId} already sent, skipping`);
-              const textEdge = edges.find(e => e.source === currentNodeId);
+              const textEdge = findAnyNextEdge(currentNodeId);
               if (textEdge) {
                 currentNodeId = textEdge.target;
               } else {
@@ -1075,7 +1090,7 @@ serve(async (req) => {
               processedActions.push(`Sent text: ${message.substring(0, 50)}`);
             }
             
-            const textEdge = edges.find(e => e.source === currentNodeId);
+            const textEdge = findAnyNextEdge(currentNodeId);
             if (textEdge) {
               currentNodeId = textEdge.target;
             } else {
@@ -1129,7 +1144,7 @@ serve(async (req) => {
             // Check if already sent (idempotency)
             if (sentNodeIds.includes(currentNodeId)) {
               console.log(`[${runId}] AI Text node ${currentNodeId} already sent, skipping`);
-              const aiTextEdge = edges.find(e => e.source === currentNodeId);
+              const aiTextEdge = findAnyNextEdge(currentNodeId);
               if (aiTextEdge) {
                 currentNodeId = aiTextEdge.target;
               } else {
@@ -1143,7 +1158,7 @@ serve(async (req) => {
             
             if (!baseMessage.trim()) {
               console.log(`[${runId}] AI Text node has no message, skipping`);
-              const emptyEdge = edges.find(e => e.source === currentNodeId);
+              const emptyEdge = findAnyNextEdge(currentNodeId);
               if (emptyEdge) {
                 currentNodeId = emptyEdge.target;
               } else {
@@ -1253,7 +1268,7 @@ Regras RIGOROSAS:
               processedActions.push(`Sent AI text: ${aiVariedMessage.substring(0, 50)}`);
             }
             
-            const aiTextEdge = edges.find(e => e.source === currentNodeId);
+            const aiTextEdge = findAnyNextEdge(currentNodeId);
             if (aiTextEdge) {
               currentNodeId = aiTextEdge.target;
             } else {
@@ -1309,7 +1324,7 @@ Regras RIGOROSAS:
             // Check if already sent (idempotency)
             if (sentNodeIds.includes(currentNodeId)) {
               console.log(`[${runId}] Node ${currentNodeId} already sent, skipping`);
-              const mediaEdge = edges.find(e => e.source === currentNodeId);
+              const mediaEdge = findAnyNextEdge(currentNodeId);
               if (mediaEdge) {
                 currentNodeId = mediaEdge.target;
               } else {
@@ -1389,7 +1404,7 @@ Regras RIGOROSAS:
               });
             }
             
-            const mediaEdge = edges.find(e => e.source === currentNodeId);
+            const mediaEdge = findAnyNextEdge(currentNodeId);
             if (mediaEdge) {
               currentNodeId = mediaEdge.target;
             } else {
@@ -1479,7 +1494,7 @@ Regras RIGOROSAS:
             await new Promise(resolve => setTimeout(resolve, delayMs));
             processedActions.push(`Waited ${delay}${unitLabel}${delayType === 'variable' ? ' (variable)' : ''}`);
             
-            const delayEdge = edges.find(e => e.source === currentNodeId);
+            const delayEdge = findAnyNextEdge(currentNodeId);
             if (delayEdge) {
               currentNodeId = delayEdge.target;
             } else {
@@ -1881,10 +1896,7 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
             console.log(`[${runId}] Condition evaluated: ${conditionMet} (${logicOperator}, ${conditions.length} conditions)`);
             processedActions.push(`Condition: ${conditionMet ? 'YES' : 'NO'}`);
             
-            const conditionEdge = edges.find(e => 
-              e.source === currentNodeId && 
-              e.sourceHandle === (conditionMet ? 'yes' : 'no')
-            );
+            const conditionEdge = findNextEdge(currentNodeId, conditionMet ? 'yes' : 'no');
             
             if (conditionEdge) {
               currentNodeId = conditionEdge.target;
@@ -1977,7 +1989,7 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
               console.log(`[${runId}] Set variable: ${varName} = ${varVal}`);
             }
             
-            const setVarEdge = edges.find(e => e.source === currentNodeId);
+            const setVarEdge = findAnyNextEdge(currentNodeId);
             if (setVarEdge) {
               currentNodeId = setVarEdge.target;
             } else {
@@ -2074,7 +2086,7 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
               }
             }
             
-            const tagEdge = edges.find(e => e.source === currentNodeId);
+            const tagEdge = findAnyNextEdge(currentNodeId);
             if (tagEdge) {
               currentNodeId = tagEdge.target;
             } else {
@@ -2172,7 +2184,7 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
               }
             }
             
-            const notifyEdge = edges.find(e => e.source === currentNodeId);
+            const notifyEdge = findAnyNextEdge(currentNodeId);
             if (notifyEdge) {
               currentNodeId = notifyEdge.target;
             } else {
@@ -2278,7 +2290,7 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
               }
             }
             
-            const aiEdge = edges.find(e => e.source === currentNodeId);
+            const aiEdge = findAnyNextEdge(currentNodeId);
             if (aiEdge) {
               currentNodeId = aiEdge.target;
             } else {
@@ -2324,7 +2336,7 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
               }
             }
             
-            const webhookEdge = edges.find(e => e.source === currentNodeId);
+            const webhookEdge = findAnyNextEdge(currentNodeId);
             if (webhookEdge) {
               currentNodeId = webhookEdge.target;
             } else {
@@ -2439,7 +2451,7 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
             }
             
             // Always advance to next node regardless of success/failure
-            const pixelEdge = edges.find(e => e.source === currentNodeId);
+            const pixelEdge = findAnyNextEdge(currentNodeId);
             if (pixelEdge) {
               currentNodeId = pixelEdge.target;
             } else {
@@ -2472,16 +2484,13 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
               // Find edge with matching sourceHandle
               // IMPORTANT: The frontend uses "split-{id}" format for handle IDs
               const expectedHandle = `split-${selectedSplitId}`;
-              const randomEdge = edges.find(e => 
-                e.source === currentNodeId && 
-                e.sourceHandle === expectedHandle
-              );
+              const randomEdge = findNextEdge(currentNodeId, expectedHandle);
               
               if (randomEdge) {
                 currentNodeId = randomEdge.target;
               } else {
                 // Fallback to first edge if no matching handle
-                const fallbackEdge = edges.find(e => e.source === currentNodeId);
+                const fallbackEdge = findAnyNextEdge(currentNodeId);
                 if (fallbackEdge) {
                   currentNodeId = fallbackEdge.target;
                 } else {
@@ -2489,7 +2498,7 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
                 }
               }
             } else {
-              const randEdge = edges.find(e => e.source === currentNodeId);
+              const randEdge = findAnyNextEdge(currentNodeId);
               if (randEdge) {
                 currentNodeId = randEdge.target;
               } else {
@@ -2746,7 +2755,7 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
               delete variables[paymentLastMsgKey];
               delete variables[paymentLastAnalysisKey];
 
-              const notPaidEdge = edges.find((e) => e.source === currentNodeId && e.sourceHandle === 'notPaid');
+              const notPaidEdge = findNextEdge(currentNodeId, 'notPaid');
               if (notPaidEdge) {
                 currentNodeId = notPaidEdge.target;
               } else {
@@ -3075,7 +3084,7 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
                 .delete()
                 .eq('session_id', sessionId);
 
-              const paidEdge = edges.find((e) => e.source === currentNodeId && e.sourceHandle === 'paid');
+              const paidEdge = findNextEdge(currentNodeId, 'paid');
               if (paidEdge) {
                 currentNodeId = paidEdge.target;
               } else {
@@ -3100,7 +3109,7 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
                 .delete()
                 .eq('session_id', sessionId);
 
-              const notPaidEdge = edges.find((e) => e.source === currentNodeId && e.sourceHandle === 'notPaid');
+              const notPaidEdge = findNextEdge(currentNodeId, 'notPaid');
               if (notPaidEdge) {
                 currentNodeId = notPaidEdge.target;
               } else {
@@ -3189,7 +3198,7 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
               processedActions.push('PIX button skipped (missing config)');
             }
             
-            const pixEdge = edges.find(e => e.source === currentNodeId);
+            const pixEdge = findAnyNextEdge(currentNodeId);
             if (pixEdge) {
               currentNodeId = pixEdge.target;
             } else {
@@ -3260,7 +3269,7 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
               processedActions.push('Charge not supported (requires UazAPI)');
             }
             
-            const chargeEdge = edges.find(e => e.source === currentNodeId);
+            const chargeEdge = findAnyNextEdge(currentNodeId);
             if (chargeEdge) {
               currentNodeId = chargeEdge.target;
             } else {
@@ -3309,7 +3318,7 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
               processedActions.push('Call skipped (missing config)');
             }
             
-            const callEdge = edges.find(e => e.source === currentNodeId);
+            const callEdge = findAnyNextEdge(currentNodeId);
             if (callEdge) {
               currentNodeId = callEdge.target;
             } else {
@@ -3360,13 +3369,13 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
                 
                 // Find the edge for the matched choice
                 if (matchedChoiceIndex >= 0) {
-                  const choiceEdge = edges.find(e => e.source === currentNodeId && e.sourceHandle === `choice-${matchedChoiceIndex}`);
+                  const choiceEdge = findNextEdge(currentNodeId, `choice-${matchedChoiceIndex}`);
                   if (choiceEdge) {
                     currentNodeId = choiceEdge.target;
                     console.log(`[${runId}] Routing to choice-${matchedChoiceIndex} -> ${currentNodeId}`);
                   } else {
                     // No specific edge for this choice, try default
-                    const defaultInteractiveEdge = edges.find(e => e.source === currentNodeId && !e.sourceHandle);
+                    const defaultInteractiveEdge = edges.find(e => e.source === currentNodeId && e.target !== currentNodeId && !e.sourceHandle);
                     if (defaultInteractiveEdge) {
                       currentNodeId = defaultInteractiveEdge.target;
                     } else {
@@ -3376,7 +3385,7 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
                 } else {
                   // No match found, try to find any connected edge
                   console.log(`[${runId}] No matching choice found for "${userResponse}"`);
-                  const anyEdge = edges.find(e => e.source === currentNodeId);
+                  const anyEdge = findAnyNextEdge(currentNodeId);
                   if (anyEdge) {
                     currentNodeId = anyEdge.target;
                   } else {
@@ -3547,7 +3556,7 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
               console.error(`[${runId}] IA Converter: missing knowledge base`);
               processedActions.push('IA Converter error: base de conhecimento não configurada');
               
-              const iaConverterEdge = edges.find(e => e.source === currentNodeId);
+              const iaConverterEdge = findAnyNextEdge(currentNodeId);
               if (iaConverterEdge) {
                 currentNodeId = iaConverterEdge.target;
               } else {
@@ -3562,7 +3571,7 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
                 console.error(`[${runId}] LOVABLE_API_KEY not configured`);
                 processedActions.push('IA Converter error: API key not configured');
                 
-                const iaConverterEdge = edges.find(e => e.source === currentNodeId);
+                const iaConverterEdge = findAnyNextEdge(currentNodeId);
                 if (iaConverterEdge) {
                   currentNodeId = iaConverterEdge.target;
                 } else {
@@ -3649,7 +3658,7 @@ Nome do cliente: ${variables.nome || variables.contactName || 'Cliente'}`;
                 console.error(`[${runId}] IA Converter API error:`, await iaResponse.text());
                 processedActions.push('IA Converter error: API request failed');
                 
-                const iaConverterEdge = edges.find(e => e.source === currentNodeId);
+                const iaConverterEdge = findAnyNextEdge(currentNodeId);
                 if (iaConverterEdge) {
                   currentNodeId = iaConverterEdge.target;
                 } else {
@@ -3665,7 +3674,7 @@ Nome do cliente: ${variables.nome || variables.contactName || 'Cliente'}`;
                 console.error(`[${runId}] IA Converter: empty response from AI`);
                 processedActions.push('IA Converter error: empty AI response');
                 
-                const iaConverterEdge = edges.find(e => e.source === currentNodeId);
+                const iaConverterEdge = findAnyNextEdge(currentNodeId);
                 if (iaConverterEdge) {
                   currentNodeId = iaConverterEdge.target;
                 } else {
@@ -3755,7 +3764,7 @@ Nome do cliente: ${variables.nome || variables.contactName || 'Cliente'}`;
               console.error(`[${runId}] IA Converter error:`, iaConverterError);
               processedActions.push('IA Converter error: Exception');
               
-              const iaConverterEdge = edges.find(e => e.source === currentNodeId);
+              const iaConverterEdge = findAnyNextEdge(currentNodeId);
               if (iaConverterEdge) {
                 currentNodeId = iaConverterEdge.target;
               } else {
@@ -3767,7 +3776,7 @@ Nome do cliente: ${variables.nome || variables.contactName || 'Cliente'}`;
 
           default:
             console.log(`[${runId}] Unknown node type: ${currentNode.type}`);
-            const defaultEdge = edges.find(e => e.source === currentNodeId);
+            const defaultEdge = findAnyNextEdge(currentNodeId);
             if (defaultEdge) {
               currentNodeId = defaultEdge.target;
             } else {
