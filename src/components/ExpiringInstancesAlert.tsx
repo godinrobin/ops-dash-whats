@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { AlertTriangle, X, Sparkles, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useAdminStatus } from "@/hooks/useAdminStatus";
 
 interface ExpiringInstance {
   id: string;
@@ -21,7 +20,6 @@ interface ExpiringInstancesAlertProps {
 
 export const ExpiringInstancesAlert = ({ alertKey }: ExpiringInstancesAlertProps) => {
   const { user } = useAuth();
-  const { isAdmin } = useAdminStatus();
   const [isOpen, setIsOpen] = useState(false);
   const [expiringInstances, setExpiringInstances] = useState<ExpiringInstance[]>([]);
   const [doubleCreditsEnabled, setDoubleCreditsEnabled] = useState(false);
@@ -30,15 +28,15 @@ export const ExpiringInstancesAlert = ({ alertKey }: ExpiringInstancesAlertProps
     if (user) {
       checkExpiringInstances();
     }
-  }, [user, isAdmin]);
+  }, [user]);
 
   const checkExpiringInstances = async () => {
-    // Storage key to track if alert was shown in this session
-    const storageKey = `expiring_instances_alert_${alertKey}_${user?.id}`;
-    const lastShown = sessionStorage.getItem(storageKey);
+    // Storage key to track if alert was dismissed (X button) in this session
+    const storageKey = `expiring_instances_dismissed_${alertKey}_${user?.id}`;
+    const wasDismissed = sessionStorage.getItem(storageKey);
     
-    // Only show once per session per alertKey
-    if (lastShown) return;
+    // Only skip if user explicitly dismissed with X button
+    if (wasDismissed) return;
 
     try {
       // Check if double credits is enabled
@@ -51,35 +49,6 @@ export const ExpiringInstancesAlert = ({ alertKey }: ExpiringInstancesAlertProps
       const isDoubleCreditsEnabled = configData?.value === true;
       setDoubleCreditsEnabled(isDoubleCreditsEnabled);
 
-      // FOR ADMIN TESTING: Simulate expiring instances
-      if (isAdmin) {
-        // Simulate 2 instances expiring within 3 days
-        const simulatedInstances: ExpiringInstance[] = [
-          {
-            id: "simulated-1",
-            instance_name: "Instância Teste 1",
-            phone_number: "5511999999999",
-            expires_at: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(),
-            days_remaining: 1,
-          },
-          {
-            id: "simulated-2",
-            instance_name: "Instância Teste 2",
-            phone_number: "5511888888888",
-            expires_at: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-            days_remaining: 2,
-          },
-        ];
-        
-        setExpiringInstances(simulatedInstances);
-        setIsOpen(true);
-        sessionStorage.setItem(storageKey, Date.now().toString());
-        return;
-      }
-
-      // FOR REGULAR USERS: Disabled until approved
-      // Uncomment below when ready to release to all users
-      /*
       // Fetch instances expiring within 3 days
       const threeDaysFromNow = new Date();
       threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
@@ -126,21 +95,27 @@ export const ExpiringInstancesAlert = ({ alertKey }: ExpiringInstancesAlertProps
       if (instances.length > 0) {
         setExpiringInstances(instances);
         setIsOpen(true);
-        sessionStorage.setItem(storageKey, Date.now().toString());
       }
-      */
     } catch (err) {
       console.error("Error checking expiring instances:", err);
     }
   };
 
-  const handleClose = () => {
+  // X button - dismiss for this screen only (stored in sessionStorage)
+  const handleDismiss = () => {
+    const storageKey = `expiring_instances_dismissed_${alertKey}_${user?.id}`;
+    sessionStorage.setItem(storageKey, Date.now().toString());
+    setIsOpen(false);
+  };
+
+  // "Depois" button - just close, will reappear on page reload
+  const handleLater = () => {
     setIsOpen(false);
   };
 
   const handleRecharge = () => {
     // Navigate to marketplace/credits tab
-    window.location.hash = "#/metricas"; // Or marketplace page
+    window.location.hash = "#/metricas";
     setIsOpen(false);
   };
 
@@ -150,7 +125,7 @@ export const ExpiringInstancesAlert = ({ alertKey }: ExpiringInstancesAlertProps
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="max-w-md border-orange-500/50 bg-zinc-950">
         <button
-          onClick={handleClose}
+          onClick={handleDismiss}
           className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
         >
           <X className="h-4 w-4 text-zinc-400" />
@@ -228,7 +203,7 @@ export const ExpiringInstancesAlert = ({ alertKey }: ExpiringInstancesAlertProps
             <Button
               variant="outline"
               className="flex-1 border-zinc-700 hover:bg-zinc-800"
-              onClick={handleClose}
+              onClick={handleLater}
             >
               Depois
             </Button>
@@ -239,13 +214,6 @@ export const ExpiringInstancesAlert = ({ alertKey }: ExpiringInstancesAlertProps
               Recarregar Créditos
             </Button>
           </div>
-
-          {/* Admin indicator */}
-          {isAdmin && (
-            <p className="text-xs text-center text-zinc-600 pt-2">
-              ⚠️ Modo Admin: Dados simulados
-            </p>
-          )}
         </div>
       </DialogContent>
     </Dialog>
