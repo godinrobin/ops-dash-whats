@@ -141,10 +141,10 @@ async function updateProfileWithRetry(
     }
     
     if (existingProfile) {
-      console.log(`[Profile Update] Profile exists, current is_full_member: ${existingProfile.is_full_member}, updating to true`);
+      console.log(`[Profile Update] Profile exists, current is_full_member: ${existingProfile.is_full_member}, updating to FULL MEMBER`);
       const { error: updateError } = await supabase
         .from("profiles")
-        .update({ is_full_member: true })
+        .update({ is_full_member: true, is_semi_full_member: false })
         .eq("id", userId);
       
       if (updateError) {
@@ -161,14 +161,15 @@ async function updateProfileWithRetry(
       return { success: true };
     }
     
-    // Profile doesn't exist yet, try upsert
-    console.log(`[Profile Update] Profile not found, attempting upsert with id=${userId}, username=${username}`);
+    // Profile doesn't exist yet, try upsert - SET AS FULL MEMBER (via Hubla purchase)
+    console.log(`[Profile Update] Profile not found, attempting upsert with id=${userId}, username=${username} as FULL MEMBER`);
     const { error: upsertError } = await supabase
       .from("profiles")
       .upsert({
         id: userId,
         username: username,
-        is_full_member: true
+        is_full_member: true,
+        is_semi_full_member: false  // Full member, not semi-full
       }, { onConflict: 'id' });
     
     if (!upsertError) {
