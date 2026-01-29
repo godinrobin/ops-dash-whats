@@ -5350,6 +5350,17 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: number
       }
+      marketplace_purchase: {
+        Args: {
+          p_metadata?: Json
+          p_product_name: string
+          p_product_type: string
+          p_quantity: number
+          p_total_price: number
+          p_user_id: string
+        }
+        Returns: Json
+      }
       remove_tag_from_contact: {
         Args: { p_contact_id: string; p_tag_name: string }
         Returns: string[]
