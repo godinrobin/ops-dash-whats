@@ -310,11 +310,30 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
   const registerInstance = useCallback(async (instanceId: string): Promise<boolean> => {
     if (!user) return false;
 
+    // FIX: Fetch the CURRENT count of subscriptions from the database
+    // to ensure accurate free slot calculation (avoiding stale state)
+    let currentSubCount = 0;
+    try {
+      const { count, error } = await supabase
+        .from('instance_subscriptions')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+      
+      if (!error && count !== null) {
+        currentSubCount = count;
+      }
+      console.log('[REGISTER-INSTANCE] Current subscription count from DB:', currentSubCount);
+    } catch (err) {
+      console.error('[REGISTER-INSTANCE] Error fetching subscription count:', err);
+    }
+
     // Determine if this instance should be free
     // Full members get first 3 free (unless simulating partial)
     // Semi-full members NEVER get free instances
     const effectiveFM = (isSimulatingPartial || isSemiFullMember) ? false : isFullMember;
-    const shouldBeFree = effectiveFM && sortedSubscriptions.length < FREE_INSTANCES_LIMIT;
+    const shouldBeFree = effectiveFM && currentSubCount < FREE_INSTANCES_LIMIT;
+    
+    console.log('[REGISTER-INSTANCE] effectiveFM:', effectiveFM, 'currentSubCount:', currentSubCount, 'shouldBeFree:', shouldBeFree);
 
     // Calculate expiration
     let expiresAt: string | null = null;
@@ -338,20 +357,21 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
       if (error) {
         // Might already exist, try upsert
         if (error.code === '23505') {
-          console.log('Instance subscription already exists');
+          console.log('[REGISTER-INSTANCE] Instance subscription already exists');
           return true;
         }
-        console.error('Error registering instance:', error);
+        console.error('[REGISTER-INSTANCE] Error registering instance:', error);
         return false;
       }
 
+      console.log('[REGISTER-INSTANCE] Successfully registered subscription for instance:', instanceId);
       await fetchSubscriptions();
       return true;
     } catch (error) {
-      console.error('Error:', error);
+      console.error('[REGISTER-INSTANCE] Error:', error);
       return false;
     }
-  }, [user, isActive, isFullMember, isSimulatingPartial, isSemiFullMember, sortedSubscriptions.length, fetchSubscriptions]);
+  }, [user, isActive, isFullMember, isSimulatingPartial, isSemiFullMember, fetchSubscriptions]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
