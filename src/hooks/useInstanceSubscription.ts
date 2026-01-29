@@ -195,8 +195,10 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
           const now = new Date();
           const expires = new Date(subscription.expires_at);
           const diff = expires.getTime() - now.getTime();
-          if (diff <= 0) return 0;
-          return Math.ceil(diff / (1000 * 60 * 60 * 24));
+        if (diff <= 0) return 0;
+        const days = diff / (1000 * 60 * 60 * 24);
+        if (days < 1) return 0; // Menos de 24h = "Expira hoje"
+        return Math.floor(days);
         }
         // Simulate 3 days for instances without expiration
         return 3;
@@ -208,7 +210,9 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
         const expires = new Date(subscription.expires_at);
         const diff = expires.getTime() - now.getTime();
         if (diff <= 0) return 0;
-        return Math.ceil(diff / (1000 * 60 * 60 * 24));
+        const days = diff / (1000 * 60 * 60 * 24);
+        if (days < 1) return 0;
+        return Math.floor(days);
       }
       return 3; // Default to 3 days for testing
     }
@@ -225,7 +229,9 @@ export const useInstanceSubscription = (): UseInstanceSubscriptionReturn => {
     const diff = expires.getTime() - now.getTime();
     
     if (diff <= 0) return 0;
-    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+    const days = diff / (1000 * 60 * 60 * 24);
+    if (days < 1) return 0; // Menos de 24h = "Expira hoje"
+    return Math.floor(days);
   }, [subscriptions, activatedAt, isTestingActive, isSimulatingPartial, effectiveFullMember, sortedSubscriptions, instances]);
 
   const isAboutToExpire = useCallback((instanceId: string): boolean => {
