@@ -34,6 +34,7 @@ import { useAccessLevel } from "@/hooks/useAccessLevel";
 import { InsufficientCreditsModal } from "@/components/credits/InsufficientCreditsModal";
 import { Spinner } from "@/components/ui/spinner-1";
 import { TutorialButton } from "@/components/TutorialButton";
+import { ExpiringInstancesAlert } from "@/components/ExpiringInstancesAlert";
 
 const FREE_INSTANCES_LIMIT = 3;
 const INSTANCE_COST = 6;
@@ -1743,6 +1744,9 @@ export default function InboxDashboard() {
         requiredCredits={INSTANCE_COST}
         systemName="Instância WhatsApp"
       />
+
+      {/* Expiring Instances Alert */}
+      <ExpiringInstancesAlert alertKey="inbox-dashboard" />
       </div>
     </SystemLayout>
   );
