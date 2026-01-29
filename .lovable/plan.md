@@ -1,92 +1,135 @@
 
-# Plano: Corrigir Exibição de Dias Restantes das Instâncias
 
-## Diagnóstico do Problema
+# Plano de Correção: Sistema de Cobrança de Instâncias WhatsApp
 
-O contador de "dias restantes" está usando `Math.ceil()` que arredonda frações para cima. Isso causa confusão porque:
+## Problema Identificado
 
-- **27/01**: 3.9 dias → exibe "4 dias"
-- **28/01**: 2.9 dias → exibe "3 dias"  
-- **29/01**: 2.1 dias → exibe "3 dias" ⚠️
+Após investigação completa, encontrei **2 bugs críticos** que estão permitindo a criação de instâncias sem cobrança:
 
-O usuário vê "3 dias" por dois dias consecutivos, parecendo que o contador travou.
+### Bug 1: Contagem Incorreta de Slots Gratuitos
 
-## Solução Proposta
+**Localização:** `src/pages/MaturadorInstances.tsx` (linhas 299-306)
 
-### 1. Alterar lógica de cálculo de dias
+```typescript
+// Código atual - PROBLEMÁTICO
+const connectedCount = instances.filter(i => 
+  i.status === 'connected' || i.status === 'open'
+).length;
 
-Trocar `Math.ceil()` por `Math.floor()` para mostrar dias **completos** restantes:
+const hasFreeSlot = effectiveFM && connectedCount < FREE_INSTANCES_LIMIT;
+```
 
-- 2.9 dias → "2 dias"
-- 2.1 dias → "2 dias"
-- 1.9 dias → "1 dia"
-- 0.9 dias → "Expira hoje"
+**O problema:** O código verifica apenas instâncias **atualmente conectadas**, não o **total de instâncias** (incluindo desconectadas). Isso permite:
 
-Isso é mais intuitivo pois mostra quantos dias **cheios** faltam.
+1. Usuário cria 3 instâncias gratuitas
+2. Desconecta 1 ou mais
+3. Cria nova instância → Sistema pensa que ainda tem slots gratuitos
+4. Ciclo se repete infinitamente
 
-### 2. Melhorar precisão para casos críticos
+### Bug 2: `registerInstance()` Não Está Sendo Chamado Corretamente
 
-Para instâncias com menos de 1 dia, mostrar "Expira hoje" ou "Expira em X horas" quando apropriado.
+**Localização:** `src/hooks/useInstanceSubscription.ts` (linha 317)
+
+```typescript
+// Usa sortedSubscriptions.length - que pode estar desatualizado
+const shouldBeFree = effectiveFM && sortedSubscriptions.length < FREE_INSTANCES_LIMIT;
+```
+
+**Evidência:** Verificando o banco de dados:
+- 18 instâncias criadas APÓS ativação do sistema (28/01 13:17)
+- NENHUMA tem registro em `instance_subscriptions` (subscription_id = null)
+- NENHUMA transação de créditos para `instancia_whatsapp`
+
+---
+
+## Plano de Correção
+
+### Fase 1: Corrigir Lógica de Contagem (MaturadorInstances.tsx)
+
+Alterar a verificação para contar **TODAS as instâncias** do usuário (não apenas conectadas), ou usar a tabela `instance_subscriptions` como fonte de verdade:
+
+```typescript
+// Opção A: Contar todas as instâncias
+const totalInstanceCount = instances.length;
+const hasFreeSlot = effectiveFM && totalInstanceCount < FREE_INSTANCES_LIMIT;
+
+// Opção B (mais segura): Usar subscriptions como fonte de verdade
+// Isto garante consistência mesmo se instâncias forem criadas por outros meios
+const hasFreeSlot = effectiveFM && freeInstancesRemaining > 0;
+```
+
+### Fase 2: Corrigir `registerInstance()` (useInstanceSubscription.ts)
+
+O hook precisa:
+1. Fazer refresh dos subscriptions ANTES de calcular se é grátis
+2. Contar TODAS as subscriptions existentes, não apenas as conectadas
+3. Adicionar logging para debug
+
+### Fase 3: Migração de Dados - Criar Registros Faltantes
+
+Criar registros em `instance_subscriptions` para as 18 instâncias criadas sem registro:
+
+```sql
+-- Identificar instâncias sem subscription
+INSERT INTO instance_subscriptions (instance_id, user_id, is_free, expires_at)
+SELECT 
+  mi.id,
+  mi.user_id,
+  -- Determinar se deve ser gratuita baseado na ordem de criação por usuário
+  (ROW_NUMBER() OVER (PARTITION BY mi.user_id ORDER BY mi.created_at) <= 3),
+  -- Se não for gratuita, expira em 3 dias
+  CASE 
+    WHEN ROW_NUMBER() OVER (PARTITION BY mi.user_id ORDER BY mi.created_at) > 3 
+    THEN NOW() + INTERVAL '3 days'
+    ELSE NULL 
+  END
+FROM maturador_instances mi
+LEFT JOIN instance_subscriptions ins ON mi.id = ins.instance_id
+WHERE ins.id IS NULL
+  AND mi.created_at > '2026-01-28 13:17:37+00'
+ON CONFLICT (instance_id) DO NOTHING;
+```
 
 ---
 
 ## Detalhes Técnicos
 
-### Arquivo: `src/hooks/useInstanceSubscription.ts`
+### Arquivos a Modificar:
 
-Alterar nas linhas 196-199, 206-211 e 223-228:
+| Arquivo | Alteração |
+|---------|-----------|
+| `src/pages/MaturadorInstances.tsx` | Corrigir lógica de `hasFreeSlot` para usar total de instâncias |
+| `src/hooks/useInstanceSubscription.ts` | Garantir que `registerInstance` sempre crie o registro corretamente |
+| Migração SQL | Popular `instance_subscriptions` para instâncias órfãs |
 
-```typescript
-// ANTES:
-if (diff <= 0) return 0;
-return Math.ceil(diff / (1000 * 60 * 60 * 24));
+### Fluxo Corrigido:
 
-// DEPOIS:
-if (diff <= 0) return 0;
-const days = diff / (1000 * 60 * 60 * 24);
-if (days < 1) return 0; // Menos de 24h = "Expira hoje"
-return Math.floor(days); // Dias completos restantes
-```
-
-### Arquivo: `src/components/credits/InstanceRenewalTag.tsx`
-
-Atualizar `getBadgeContent()` para lidar melhor com o caso de 0 dias:
-
-```typescript
-const getBadgeContent = () => {
-  if (daysRemaining === 0) return 'Expira hoje!';
-  if (daysRemaining === 1) return '1 dia';
-  if (daysRemaining !== null) return `${daysRemaining} dias`;
-  return null;
-};
-// Esta parte já está correta, apenas manter consistente
+```text
+Usuário clica "Criar Instância"
+       │
+       ▼
+Verificar freeInstancesRemaining (do hook)
+       │
+       ├── > 0 e isFullMember → Criar grátis
+       │
+       └── == 0 OU !isFullMember
+              │
+              ▼
+        Tem 6 créditos?
+              │
+              ├── Não → Modal "Créditos Insuficientes"
+              │
+              └── Sim → Debitar 6 créditos
+                         │
+                         ▼
+                   Criar instância + Registrar subscription
 ```
 
 ---
 
 ## Impacto Esperado
 
-| Situação | Antes | Depois |
-|----------|-------|--------|
-| 2.9 dias | "3 dias" | "2 dias" |
-| 2.1 dias | "3 dias" | "2 dias" |
-| 1.5 dias | "2 dias" | "1 dia" |
-| 0.5 dias | "1 dia" | "Expira hoje" |
+- **Novas instâncias:** Serão cobradas corretamente
+- **Instâncias existentes (18):** Receberão registros de subscription com expiração em 3 dias (forçando renovação)
+- **Membros completos:** Manterão suas 3 primeiras instâncias gratuitas, as demais cobradas
 
-O contador agora diminuirá **exatamente uma vez por dia**, às 13:17h (horário da expiração), evitando confusão do usuário.
-
----
-
-## Verificação de Dados no Banco
-
-As datas de expiração no banco estão corretas:
-- Todas as instâncias pagas expiram em **31/01/2026 13:17:37**
-- Isso foi definido pela migration de 27/01 que aplicou `NOW() + 3 days`
-- Nenhuma correção de dados é necessária
-
----
-
-## Resumo das Alterações
-
-1. **useInstanceSubscription.ts**: Trocar `Math.ceil` por `Math.floor` com tratamento especial para < 24h
-2. **InstanceRenewalTag.tsx**: Verificar que "Expira hoje" está funcionando para `daysRemaining === 0`
