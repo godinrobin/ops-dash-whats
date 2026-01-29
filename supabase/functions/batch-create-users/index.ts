@@ -114,10 +114,10 @@ serve(async (req: Request): Promise<Response> => {
         } else {
           console.log(`User created: ${email} (${newUser.user.id})`);
           
-          // Set user as full member
+          // Set user as full member (admin batch creation = full member)
           const { error: profileError } = await supabase
             .from("profiles")
-            .update({ is_full_member: true })
+            .update({ is_full_member: true, is_semi_full_member: false })
             .eq("id", newUser.user.id);
           
           if (profileError) {
