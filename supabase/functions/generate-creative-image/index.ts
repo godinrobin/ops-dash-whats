@@ -1,5 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { validateUserAccess, forbiddenResponse } from "../_shared/validateAccess.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,6 +13,15 @@ serve(async (req) => {
   }
 
   try {
+    // SECURITY: Validate premium membership before processing
+    const authHeader = req.headers.get('Authorization');
+    const access = await validateUserAccess(authHeader, 'member');
+    
+    if (!access.isValid) {
+      console.log('[SECURITY] Access denied for generate-creative-image:', access.error);
+      return forbiddenResponse(access.error || 'Premium membership required', corsHeaders);
+    }
+
     const { productName, includePrice, price, observation, modelType } = await req.json();
 
     const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
