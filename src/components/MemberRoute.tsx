@@ -37,8 +37,8 @@ export const MemberRoute = ({ children, featureName }: MemberRouteProps) => {
 
         if (error) {
           console.error("Error checking membership:", error);
-          // Default to full member if error (fail-safe for existing users)
-          setIsFullMember(true);
+          // SECURITY: Default to NO access if error (fail-secure)
+          setIsFullMember(false);
         } else {
           // Semi-full members and test users get full navigation access (no locks)
           const semiFullStatus = data?.is_semi_full_member ?? false;
@@ -56,7 +56,8 @@ export const MemberRoute = ({ children, featureName }: MemberRouteProps) => {
         }
       } catch (error) {
         console.error("Error:", error);
-        setIsFullMember(true);
+        // SECURITY: Default to NO access if error (fail-secure)
+        setIsFullMember(false);
       } finally {
         setLoading(false);
       }

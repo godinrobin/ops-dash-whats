@@ -22,8 +22,9 @@ const MEMBER_ONLY_SYSTEMS = [
 ];
 
 // Cache key for localStorage
-const CACHE_KEY = 'access_level_cache';
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+// SECURITY: Cache removed - always validate from backend
+// const CACHE_KEY = 'access_level_cache';
+// const CACHE_TTL = 5 * 60 * 1000;
 
 interface CachedAccessLevel {
   userId: string;
@@ -32,43 +33,19 @@ interface CachedAccessLevel {
   timestamp: number;
 }
 
-const getCache = (userId: string): CachedAccessLevel | null => {
-  try {
-    const cached = localStorage.getItem(CACHE_KEY);
-    if (!cached) return null;
-    
-    const data: CachedAccessLevel = JSON.parse(cached);
-    
-    // Verify cache is for current user and not expired
-    if (data.userId !== userId) return null;
-    if (Date.now() - data.timestamp > CACHE_TTL) return null;
-    
-    return data;
-  } catch {
-    return null;
-  }
+// SECURITY: Cache disabled - manipulable via DevTools
+const getCache = (_userId: string): CachedAccessLevel | null => {
+  return null; // Always return null to force backend validation
 };
 
-const setCache = (userId: string, isFullMember: boolean, isAdmin: boolean): void => {
-  try {
-    const data: CachedAccessLevel = {
-      userId,
-      isFullMember,
-      isAdmin,
-      timestamp: Date.now()
-    };
-    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-  } catch {
-    // Ignore localStorage errors
-  }
+// SECURITY: Cache disabled
+const setCache = (_userId: string, _isFullMember: boolean, _isAdmin: boolean): void => {
+  // No-op: cache removed for security
 };
 
+// SECURITY: Cache disabled
 const clearCache = (): void => {
-  try {
-    localStorage.removeItem(CACHE_KEY);
-  } catch {
-    // Ignore localStorage errors
-  }
+  // No-op: cache removed for security
 };
 
 export const useAccessLevel = () => {
@@ -135,8 +112,8 @@ export const useAccessLevel = () => {
       
     } catch (error) {
       console.error("Error checking access level:", error);
-      // On error, default to full access to avoid blocking users
-      setIsFullMember(true);
+      // SECURITY: On error, default to NO access (fail-secure)
+      setIsFullMember(false);
       setIsAdmin(false);
     } finally {
       setLoading(false);

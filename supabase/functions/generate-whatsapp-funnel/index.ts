@@ -1,5 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { validateUserAccess, forbiddenResponse, unauthorizedResponse } from "../_shared/validateAccess.ts";
 
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
 
@@ -14,6 +15,18 @@ serve(async (req) => {
   }
 
   try {
+    // Validate user access - requires member or admin
+    const authHeader = req.headers.get('Authorization');
+    const accessValidation = await validateUserAccess(authHeader, 'member');
+
+    if (!accessValidation.isValid) {
+      if (accessValidation.error === 'Missing or invalid authorization header' || 
+          accessValidation.error === 'Invalid or expired token') {
+        return unauthorizedResponse(accessValidation.error, corsHeaders);
+      }
+      return forbiddenResponse(accessValidation.error || 'Acesso negado. Plano premium necessário.', corsHeaders);
+    }
+
     const { niche, product, expertName, angle, tickets, tone, pegada, pixKey, pixName, pixBank, pixKeyType, siteUrl, bonus, ebookContent } = await req.json();
 
     console.log('Generating funnel for:', { niche, product, expertName, angle, tickets, tone, pegada, pixName, pixBank, pixKeyType });

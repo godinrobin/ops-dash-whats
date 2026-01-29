@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { validateUserAccess, forbiddenResponse, unauthorizedResponse } from "../_shared/validateAccess.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -15,22 +16,26 @@ serve(async (req) => {
   }
 
   try {
-    // Get user from auth header
+    // Validate user access - requires member or admin
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('No authorization header');
+    const accessValidation = await validateUserAccess(authHeader, 'member');
+
+    if (!accessValidation.isValid) {
+      if (accessValidation.error === 'Missing or invalid authorization header' || 
+          accessValidation.error === 'Invalid or expired token') {
+        return unauthorizedResponse(accessValidation.error, corsHeaders);
+      }
+      return forbiddenResponse(accessValidation.error || 'Acesso negado. Plano premium necessário.', corsHeaders);
     }
 
+    const userId = accessValidation.userId!;
+
+    // Create Supabase client for database operations
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
+      { global: { headers: { Authorization: authHeader! } } }
     );
-
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError || !user) {
-      throw new Error('User not authenticated');
-    }
 
     const { videoUrl, audioUrl, variationName, startOffset = 0 } = await req.json();
 
@@ -74,7 +79,7 @@ serve(async (req) => {
     const { error: dbError } = await supabaseClient
       .from('video_generation_jobs')
       .insert({
-        user_id: user.id,
+        user_id: userId,
         render_id: data.request_id,
         variation_name: variationName,
         status: 'processing',

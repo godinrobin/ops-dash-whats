@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { validateUserAccess, forbiddenResponse, unauthorizedResponse } from "../_shared/validateAccess.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,6 +13,18 @@ serve(async (req) => {
   }
 
   try {
+    // Validate user access - requires ADMIN role
+    const authHeader = req.headers.get('Authorization');
+    const accessValidation = await validateUserAccess(authHeader, 'admin');
+
+    if (!accessValidation.isValid) {
+      if (accessValidation.error === 'Missing or invalid authorization header' || 
+          accessValidation.error === 'Invalid or expired token') {
+        return unauthorizedResponse(accessValidation.error, corsHeaders);
+      }
+      return forbiddenResponse(accessValidation.error || 'Acesso negado. Permissão de admin necessária.', corsHeaders);
+    }
+
     const { action, instanceId, userId, message, senderPhone } = await req.json();
     
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -161,9 +174,6 @@ serve(async (req) => {
       }
 
       // Check if sender is an admin
-      // The sender phone can be:
-      // 1. A phone number from a connected instance (admin_instance_ids)
-      // 2. A phone number that matches one of the admin instances' phone_number
       const { data: adminInstances } = await supabase
         .from('maturador_instances')
         .select('id, phone_number')
