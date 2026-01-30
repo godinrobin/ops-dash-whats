@@ -763,12 +763,16 @@ Regras:
           insertData.proxy_string = proxyUrl;
           console.log(`[CREATE-INSTANCE] Saving proxy_string to database`);
         }
-        const { error: insertError } = await supabaseClient
+        const { data: insertedData, error: insertError } = await supabaseClient
           .from('maturador_instances')
-          .insert(insertData);
+          .insert(insertData)
+          .select('id')
+          .single();
 
         if (insertError) {
           console.error('Insert instance error:', insertError);
+        } else {
+          console.log(`[CREATE-INSTANCE] Instance inserted with ID: ${insertedData?.id}`);
         }
         
         // Configure webhook for this instance immediately
@@ -939,9 +943,10 @@ Regras:
           }
         }
 
-        // Return result with QR code
+        // Return result with QR code and instanceId
         result = {
           ...result,
+          instanceId: insertedData?.id,
           qrcode: qrCodeBase64 ? { base64: qrCodeBase64 } : result.qrcode,
           api_provider: apiProvider,
         };
