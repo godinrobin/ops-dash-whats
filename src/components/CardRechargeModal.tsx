@@ -176,6 +176,23 @@ function CardForm({
           variant: "destructive" 
         });
       } else if (paymentIntent?.status === 'succeeded') {
+        // Confirm payment and credit wallet on backend
+        const { data: confirmData, error: confirmError } = await supabase.functions.invoke('stripe-card-payment', {
+          body: { 
+            confirmPayment: true, 
+            paymentIntentId: paymentIntent.id 
+          }
+        });
+        
+        if (confirmError || confirmData?.error) {
+          console.error('Error confirming payment:', confirmError || confirmData?.error);
+          toast({ 
+            title: confirmData?.error || "Erro ao confirmar pagamento. Entre em contato com o suporte.", 
+            variant: "destructive" 
+          });
+          return;
+        }
+        
         // Auto-save the card for future purchases
         if (paymentIntent.payment_method) {
           const paymentMethodId = typeof paymentIntent.payment_method === 'string' 
