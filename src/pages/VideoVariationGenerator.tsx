@@ -832,10 +832,15 @@ export default function VideoVariationGenerator() {
   };
 
   const generateVariations = async () => {
-    // Wait for credits system to load to ensure proper enforcement
+    // Only wait for credits loading if system is potentially active
+    // If still loading after user action, proceed with generation (fail-safe)
+    const creditsSystemMightBeActive = !creditsLoading && (isCreditsActive || isSemiFullMember);
+    
+    // If credits system is still loading but user clicked, show message and proceed
+    // This prevents blocking users indefinitely
     if (creditsLoading || balanceLoading) {
-      toast.error('Aguarde, carregando informações de créditos...');
-      return;
+      console.log('[VIDEO-GEN] Credits still loading, proceeding with generation...');
+      // Don't block - proceed with generation
     }
 
     if (hookVideos.length === 0 || bodyVideos.length === 0 || ctaVideos.length === 0) {
@@ -872,8 +877,9 @@ export default function VideoVariationGenerator() {
     }
     const totalCreditCost = totalVariations * CREDIT_COST_PER_VARIATION;
 
-    // Credit system check (active for credits system users and semi-full members)
-    if (isCreditsActive || isSemiFullMember) {
+    // Credit system check - only if credits system is confirmed active
+    // Skip credit check if loading is stuck (fail-safe to not block users)
+    if (creditsSystemMightBeActive && !creditsLoading && !balanceLoading) {
       if (!canAfford(totalCreditCost)) {
         setShowInsufficientCredits(true);
         return;
