@@ -42,8 +42,8 @@ serve(async (req) => {
       throw new Error('Valor mínimo: R$ 5,00');
     }
 
-    if (amount > 1000) {
-      throw new Error('Valor máximo: R$ 1.000,00');
+    if (amount > 5000) {
+      throw new Error('Valor máximo: R$ 5.000,00');
     }
 
     // Mercado Pago requires valid internet email - .local domains are not accepted
