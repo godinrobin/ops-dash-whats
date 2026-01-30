@@ -2344,17 +2344,166 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
             }
             break;
 
-          case 'pixel':
+          case 'pixel': {
             // Pixel node - send Facebook event
             const pixelId = currentNode.data.pixelId as string || '';
             const pixelEventType = currentNode.data.eventType as string || 'Purchase';
-            const pixelEventValue = currentNode.data.eventValue as number || 0;
+            const pixelEventValueRaw = currentNode.data.eventValue as string || '';
+            const tryAllPixels = (currentNode.data.tryAllPixels as boolean) || pixelId === '__ALL_PIXELS__';
             
-            console.log(`[${runId}] Processing Pixel node: pixelId=${pixelId}, event=${pixelEventType}`);
+            // Resolve event value - support variables like {{event_value}}
+            let pixelEventValue = 0;
+            if (pixelEventValueRaw) {
+              let resolvedValue = pixelEventValueRaw;
+              // Replace variables with their values
+              const varMatches = pixelEventValueRaw.match(/\{\{([^}]+)\}\}/g);
+              if (varMatches) {
+                for (const match of varMatches) {
+                  const varName = match.replace(/\{\{|\}\}/g, '');
+                  const varValue = variables[varName];
+                  if (varValue !== undefined && varValue !== null) {
+                    resolvedValue = resolvedValue.replace(match, String(varValue));
+                  }
+                }
+              }
+              // Parse as number
+              const parsed = parseFloat(resolvedValue.replace(/[^\d.,]/g, '').replace(',', '.'));
+              if (!isNaN(parsed)) {
+                pixelEventValue = parsed;
+              }
+            }
             
-            if (pixelId) {
+            console.log(`[${runId}] Processing Pixel node: pixelId=${pixelId}, event=${pixelEventType}, value=${pixelEventValue}, tryAllPixels=${tryAllPixels}`);
+            
+            if (tryAllPixels) {
+              // Try ALL pixels until one succeeds
               try {
-                // Get the pixel details - pixelId is the Facebook pixel_id, not the UUID
+                const { data: allPixels, error: allPixelsError } = await supabaseClient
+                  .from('user_facebook_pixels')
+                  .select('*')
+                  .eq('user_id', session.user_id)
+                  .eq('is_active', true);
+                
+                if (allPixelsError || !allPixels || allPixels.length === 0) {
+                  console.error(`[${runId}] No active pixels found for user`);
+                  processedActions.push('Pixel error: no active pixels');
+                  
+                  // Log failure
+                  await supabaseClient.from("facebook_event_logs").insert({
+                    user_id: session.user_id,
+                    contact_id: session.contact_id,
+                    phone: contact.phone || '',
+                    pixel_id: 'ALL_PIXELS',
+                    event_name: pixelEventType,
+                    event_value: pixelEventValue,
+                    action_source: 'website',
+                    success: false,
+                    error_message: 'No active pixels configured',
+                  });
+                } else {
+                  console.log(`[${runId}] Trying ${allPixels.length} pixels until success...`);
+                  
+                  let anySuccess = false;
+                  const contactPhone = contact.phone?.replace(/\D/g, '') || '';
+                  const ctwaClid = contact.ctwa_clid || null;
+                  
+                  // Hash phone once
+                  const hashPhone = async (phoneNumber: string): Promise<string> => {
+                    const encoder = new TextEncoder();
+                    const dataBuffer = encoder.encode(phoneNumber.toLowerCase().trim());
+                    const hashBuffer = await crypto.subtle.digest("SHA-256", dataBuffer);
+                    const hashArray = Array.from(new Uint8Array(hashBuffer));
+                    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+                  };
+                  const hashedPhone = await hashPhone(contactPhone);
+                  
+                  for (const pixel of allPixels) {
+                    if (anySuccess) break; // Stop after first success
+                    
+                    const isBusinessMessaging = !!pixel.page_id && !!ctwaClid;
+                    
+                    const eventData: any = {
+                      event_name: pixelEventType,
+                      event_time: Math.floor(Date.now() / 1000),
+                      event_id: `flow_${sessionId}_${currentNodeId}_${Date.now()}`,
+                      action_source: isBusinessMessaging ? 'business_messaging' : 'website',
+                      user_data: { ph: [hashedPhone] },
+                    };
+                    
+                    if (isBusinessMessaging) {
+                      eventData.messaging_channel = 'whatsapp';
+                      eventData.user_data.page_id = pixel.page_id;
+                      eventData.user_data.ctwa_clid = ctwaClid;
+                    }
+                    
+                    if (['Purchase', 'InitiateCheckout', 'AddToCart'].includes(pixelEventType)) {
+                      eventData.custom_data = { currency: 'BRL', value: pixelEventValue || 0 };
+                    }
+                    
+                    try {
+                      const pixelEventsUrl = `https://graph.facebook.com/v21.0/${pixel.pixel_id}/events`;
+                      const pixelResponse = await fetch(pixelEventsUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ data: [eventData], access_token: pixel.access_token }),
+                      });
+                      
+                      const pixelResult = await pixelResponse.json();
+                      console.log(`[${runId}] Pixel ${pixel.pixel_id} response:`, JSON.stringify(pixelResult));
+                      
+                      if (pixelResult.error) {
+                        // Log failure for this pixel
+                        await supabaseClient.from("facebook_event_logs").insert({
+                          user_id: session.user_id,
+                          contact_id: session.contact_id,
+                          phone: contact.phone || '',
+                          pixel_id: pixel.pixel_id,
+                          page_id: pixel.page_id || null,
+                          event_name: pixelEventType,
+                          event_value: pixelEventValue || 0,
+                          action_source: isBusinessMessaging ? 'business_messaging' : 'website',
+                          success: false,
+                          error_message: pixelResult.error.message || 'Unknown error',
+                          ctwa_clid: ctwaClid,
+                        });
+                        console.log(`[${runId}] Pixel ${pixel.pixel_id} failed, trying next...`);
+                      } else {
+                        // Success!
+                        anySuccess = true;
+                        await supabaseClient.from("facebook_event_logs").insert({
+                          user_id: session.user_id,
+                          contact_id: session.contact_id,
+                          phone: contact.phone || '',
+                          pixel_id: pixel.pixel_id,
+                          page_id: pixel.page_id || null,
+                          event_name: pixelEventType,
+                          event_value: pixelEventValue || 0,
+                          action_source: isBusinessMessaging ? 'business_messaging' : 'website',
+                          success: true,
+                          error_message: null,
+                          ctwa_clid: ctwaClid,
+                          facebook_trace_id: pixelResult.fbtrace_id || null,
+                          events_received: pixelResult.events_received || 1,
+                        });
+                        processedActions.push(`Pixel event sent (${pixel.name || pixel.pixel_id}): ${pixelEventType}${pixelEventValue ? ` R$${pixelEventValue}` : ''}`);
+                        console.log(`[${runId}] ✅ Pixel ${pixel.pixel_id} succeeded!`);
+                      }
+                    } catch (singlePixelErr) {
+                      console.error(`[${runId}] Pixel ${pixel.pixel_id} exception:`, singlePixelErr);
+                    }
+                  }
+                  
+                  if (!anySuccess) {
+                    processedActions.push(`Pixel event failed: tried ${allPixels.length} pixels, none succeeded`);
+                  }
+                }
+              } catch (allPixelsErr) {
+                console.error(`[${runId}] All pixels exception:`, allPixelsErr);
+                processedActions.push('Pixel exception');
+              }
+            } else if (pixelId) {
+              // Original single-pixel logic
+              try {
                 const { data: pixel, error: pixelError } = await supabaseClient
                   .from('user_facebook_pixels')
                   .select('*')
@@ -2366,7 +2515,6 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
                   console.error(`[${runId}] Pixel not found for pixel_id=${pixelId}:`, pixelError);
                   processedActions.push('Pixel error: not found');
                 } else {
-                  // Hash phone for FB
                   const hashPhone = async (phoneNumber: string): Promise<string> => {
                     const encoder = new TextEncoder();
                     const dataBuffer = encoder.encode(phoneNumber.toLowerCase().trim());
@@ -2383,6 +2531,7 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
                   const eventData: any = {
                     event_name: pixelEventType,
                     event_time: Math.floor(Date.now() / 1000),
+                    event_id: `flow_${sessionId}_${currentNodeId}_${Date.now()}`,
                     action_source: isBusinessMessaging ? 'business_messaging' : 'website',
                     user_data: { ph: [hashedPhone] },
                   };
@@ -2411,7 +2560,6 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
                     console.error(`[${runId}] Pixel event error:`, pixelResult.error);
                     processedActions.push(`Pixel error: ${pixelResult.error.message}`);
                     
-                    // Log failure to facebook_event_logs
                     await supabaseClient.from("facebook_event_logs").insert({
                       user_id: session.user_id,
                       contact_id: session.contact_id,
@@ -2426,9 +2574,8 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
                       ctwa_clid: ctwaClid,
                     });
                   } else {
-                    processedActions.push(`Pixel event sent: ${pixelEventType}`);
+                    processedActions.push(`Pixel event sent: ${pixelEventType}${pixelEventValue ? ` R$${pixelEventValue}` : ''}`);
                     
-                    // Log success to facebook_event_logs
                     await supabaseClient.from("facebook_event_logs").insert({
                       user_id: session.user_id,
                       contact_id: session.contact_id,
@@ -2441,6 +2588,8 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
                       success: true,
                       error_message: null,
                       ctwa_clid: ctwaClid,
+                      facebook_trace_id: pixelResult.fbtrace_id || null,
+                      events_received: pixelResult.events_received || 1,
                     });
                   }
                 }
@@ -2458,6 +2607,7 @@ Avalie se o critério acima é VERDADEIRO com base no contexto. Responda SIM ou 
               continueProcessing = false;
             }
             break;
+          }
 
           case 'randomizer':
             // Randomizer node - pick a random path based on splits configuration

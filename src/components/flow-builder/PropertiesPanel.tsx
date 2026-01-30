@@ -1865,6 +1865,19 @@ export const PropertiesPanel = ({
         );
 
       case 'pixel':
+        // Get available variables for value input
+        const getAvailableVariablesForPixel = () => {
+          const nodeVariables = extractCustomVariablesFromNodes(allNodes);
+          const allVariables = [...SYSTEM_VARIABLES, ...dbCustomVariables, ...nodeVariables, 'event_value'];
+          return [...new Set(allVariables)].sort();
+        };
+        const pixelVariables = getAvailableVariablesForPixel();
+        
+        const insertPixelVariable = (varName: string) => {
+          const currentValue = (nodeData.eventValue as string) || '';
+          onUpdateNode(selectedNode.id, { eventValue: currentValue + `{{${varName}}}` });
+        };
+        
         return (
           <div className="space-y-4">
             <div className="space-y-2">
@@ -1872,17 +1885,32 @@ export const PropertiesPanel = ({
               <Select
                 value={(nodeData.pixelId as string) || ''}
                 onValueChange={(value) => {
-                  const pixel = pixelsList.find(p => p.pixel_id === value);
-                  onUpdateNode(selectedNode.id, { 
-                    pixelId: value,
-                    pixelName: pixel?.name || null
-                  });
+                  if (value === '__ALL_PIXELS__') {
+                    onUpdateNode(selectedNode.id, { 
+                      pixelId: '__ALL_PIXELS__',
+                      pixelName: 'Todos os Pixels',
+                      tryAllPixels: true
+                    });
+                  } else {
+                    const pixel = pixelsList.find(p => p.pixel_id === value);
+                    onUpdateNode(selectedNode.id, { 
+                      pixelId: value,
+                      pixelName: pixel?.name || null,
+                      tryAllPixels: false
+                    });
+                  }
                 }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione um pixel..." />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="__ALL_PIXELS__">
+                    <span className="flex items-center gap-2">
+                      <span className="text-blue-500">🔄</span>
+                      Todos os Pixels (tenta até acertar)
+                    </span>
+                  </SelectItem>
                   {pixelsList.map((pixel) => (
                     <SelectItem key={pixel.id} value={pixel.pixel_id}>
                       {pixel.name || `Pixel ${pixel.pixel_id.slice(-6)}`}
@@ -1890,6 +1918,11 @@ export const PropertiesPanel = ({
                   ))}
                 </SelectContent>
               </Select>
+              {(nodeData.pixelId as string) === '__ALL_PIXELS__' && (
+                <p className="text-xs text-blue-400">
+                  O sistema tentará enviar para cada pixel até encontrar o correto.
+                </p>
+              )}
               {pixelsList.length === 0 && (
                 <p className="text-xs text-amber-500">
                   Nenhum pixel configurado. Configure em Configurações → Pixel do Facebook.
@@ -1915,17 +1948,29 @@ export const PropertiesPanel = ({
               </Select>
             </div>
             
-            {(nodeData.eventType as string) === 'Purchase' && (
+            {['Purchase', 'InitiateCheckout', 'AddToCart'].includes((nodeData.eventType as string) || 'Purchase') && (
               <div className="space-y-2">
-                <Label>Valor (opcional)</Label>
+                <Label>Valor do Evento</Label>
                 <Input
                   type="text"
-                  placeholder="Ex: 97.00"
+                  placeholder="Ex: 97.00 ou {{event_value}}"
                   value={(nodeData.eventValue as string) || ''}
                   onChange={(e) => onUpdateNode(selectedNode.id, { eventValue: e.target.value })}
                 />
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {pixelVariables.slice(0, 5).map((varName) => (
+                    <Badge 
+                      key={varName}
+                      variant="secondary" 
+                      className="cursor-pointer hover:bg-primary hover:text-primary-foreground text-xs"
+                      onClick={() => insertPixelVariable(varName)}
+                    >
+                      {`{{${varName}}}`}
+                    </Badge>
+                  ))}
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  Deixe vazio para usar o valor extraído pelo fluxo (se houver)
+                  Use variáveis como {`{{event_value}}`} ou valor fixo. Deixe vazio para R$0.
                 </p>
               </div>
             )}
