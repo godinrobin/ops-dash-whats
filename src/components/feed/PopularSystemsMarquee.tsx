@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Zap, Flame, Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,10 +20,9 @@ const popularSystems: PopularSystem[] = [
 export const PopularSystemsMarquee = () => {
   const navigate = useNavigate();
   const [isPaused, setIsPaused] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Duplicate items for seamless loop
-  const items = [...popularSystems, ...popularSystems, ...popularSystems];
+  // Duplicate items multiple times for seamless infinite loop
+  const items = [...popularSystems, ...popularSystems, ...popularSystems, ...popularSystems];
 
   return (
     <div 
@@ -32,20 +31,16 @@ export const PopularSystemsMarquee = () => {
       onMouseLeave={() => setIsPaused(false)}
     >
       <div 
-        ref={containerRef}
         className={cn(
-          "flex gap-8 animate-marquee",
-          isPaused && "animation-paused"
+          "flex gap-8 marquee-track",
+          isPaused && "paused"
         )}
-        style={{
-          width: "max-content",
-        }}
       >
         {items.map((system, index) => (
           <button
             key={`${system.id}-${index}`}
             onClick={() => navigate(system.path)}
-            className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-background/80 border border-accent/30 hover:border-accent hover:bg-accent/10 transition-all cursor-pointer group whitespace-nowrap"
+            className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-background/80 border border-accent/30 hover:border-accent hover:bg-accent/10 transition-all cursor-pointer group whitespace-nowrap flex-shrink-0"
           >
             <span className="text-accent group-hover:scale-110 transition-transform">
               {system.icon}
@@ -61,20 +56,21 @@ export const PopularSystemsMarquee = () => {
       </div>
 
       <style>{`
-        @keyframes marquee {
+        @keyframes marquee-scroll {
           0% {
             transform: translateX(0);
           }
           100% {
-            transform: translateX(-33.333%);
+            transform: translateX(-50%);
           }
         }
         
-        .animate-marquee {
-          animation: marquee 15s linear infinite;
+        .marquee-track {
+          animation: marquee-scroll 20s linear infinite;
+          width: max-content;
         }
         
-        .animation-paused {
+        .marquee-track.paused {
           animation-play-state: paused;
         }
       `}</style>

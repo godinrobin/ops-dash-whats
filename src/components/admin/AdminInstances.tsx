@@ -8,7 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Smartphone, Search, RefreshCw, Loader2, Filter, 
-  Calendar, CheckCircle, XCircle, ArrowUpDown, Download
+  Calendar, CheckCircle, XCircle, ArrowUpDown, Download,
+  Clock, Gift, AlertTriangle
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -51,6 +52,7 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('connected');
+  const [selectedRenewalStatus, setSelectedRenewalStatus] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'days_connected' | 'renewal' | 'user' | 'recent'>('days_connected');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   
@@ -198,6 +200,25 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
       result = result.filter(inst => inst.user_id === selectedUser);
     }
 
+    // Apply renewal status filter
+    if (selectedRenewalStatus !== 'all') {
+      result = result.filter(inst => {
+        const renewal = getRenewalInfo(inst.id);
+        switch (selectedRenewalStatus) {
+          case 'free':
+            return renewal.isFree;
+          case 'expiring_soon':
+            return !renewal.isFree && renewal.daysRemaining !== null && renewal.daysRemaining <= 3;
+          case 'active':
+            return !renewal.isFree && renewal.daysRemaining !== null && renewal.daysRemaining > 3;
+          case 'no_subscription':
+            return !renewal.isFree && renewal.daysRemaining === null;
+          default:
+            return true;
+        }
+      });
+    }
+
     // Sort
     const sortedResult = [...result].sort((a, b) => {
       let comparison = 0;
@@ -226,7 +247,7 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
     });
 
     return sortedResult;
-  }, [instances, searchQuery, selectedUser, selectedStatus, sortBy, sortOrder]);
+  }, [instances, searchQuery, selectedUser, selectedStatus, selectedRenewalStatus, sortBy, sortOrder]);
 
   // Stats
   const stats = useMemo(() => {
@@ -237,8 +258,29 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
       ? Math.round(totalDaysConnected / connectedInstances.length) 
       : 0;
     
-    return { connected, disconnected, avgDaysConnected };
-  }, [instances, connectedInstances]);
+    // Renewal stats
+    let freeCount = 0;
+    let expiringSoonCount = 0; // <= 3 days
+    let activeCount = 0; // > 3 days
+    let noSubscriptionCount = 0;
+    
+    connectedInstances.forEach(inst => {
+      const renewal = getRenewalInfo(inst.id);
+      if (renewal.isFree) {
+        freeCount++;
+      } else if (renewal.daysRemaining !== null) {
+        if (renewal.daysRemaining <= 3) {
+          expiringSoonCount++;
+        } else {
+          activeCount++;
+        }
+      } else {
+        noSubscriptionCount++;
+      }
+    });
+    
+    return { connected, disconnected, avgDaysConnected, freeCount, expiringSoonCount, activeCount, noSubscriptionCount };
+  }, [instances, connectedInstances, subscriptions]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -320,7 +362,7 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -329,7 +371,7 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
               </div>
               <div>
                 <p className="text-2xl font-bold">{stats.connected}</p>
-                <p className="text-xs text-muted-foreground">Instâncias Conectadas</p>
+                <p className="text-xs text-muted-foreground">Conectadas</p>
               </div>
             </div>
           </CardContent>
@@ -343,7 +385,35 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
               </div>
               <div>
                 <p className="text-2xl font-bold">{stats.disconnected}</p>
-                <p className="text-xs text-muted-foreground">Instâncias Desconectadas</p>
+                <p className="text-xs text-muted-foreground">Desconectadas</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-emerald-500/10 rounded-lg">
+                <Gift className="h-5 w-5 text-emerald-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{stats.freeCount}</p>
+                <p className="text-xs text-muted-foreground">Grátis</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-orange-500/10 rounded-lg">
+                <AlertTriangle className="h-5 w-5 text-orange-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{stats.expiringSoonCount}</p>
+                <p className="text-xs text-muted-foreground">Vence ≤3 dias</p>
               </div>
             </div>
           </CardContent>
@@ -353,11 +423,25 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-blue-500/10 rounded-lg">
-                <Calendar className="h-5 w-5 text-blue-500" />
+                <Clock className="h-5 w-5 text-blue-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{stats.avgDaysConnected}</p>
-                <p className="text-xs text-muted-foreground">Média Dias Conectado</p>
+                <p className="text-2xl font-bold">{stats.activeCount}</p>
+                <p className="text-xs text-muted-foreground">Vence &gt;3 dias</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gray-500/10 rounded-lg">
+                <Calendar className="h-5 w-5 text-gray-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{stats.noSubscriptionCount}</p>
+                <p className="text-xs text-muted-foreground">Sem assinatura</p>
               </div>
             </div>
           </CardContent>
@@ -406,6 +490,22 @@ export const AdminInstances = ({ users, instances, onRefresh }: AdminInstancesPr
                 <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="connected">Conectadas</SelectItem>
                 <SelectItem value="disconnected">Desconectadas</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {/* Renewal Status Filter */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            <Select value={selectedRenewalStatus} onValueChange={setSelectedRenewalStatus}>
+              <SelectTrigger>
+                <SelectValue placeholder="Status de Renovação" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as renovações</SelectItem>
+                <SelectItem value="free">Grátis ({stats.freeCount})</SelectItem>
+                <SelectItem value="expiring_soon">Vence em ≤3 dias ({stats.expiringSoonCount})</SelectItem>
+                <SelectItem value="active">Vence em &gt;3 dias ({stats.activeCount})</SelectItem>
+                <SelectItem value="no_subscription">Sem assinatura ({stats.noSubscriptionCount})</SelectItem>
               </SelectContent>
             </Select>
 
