@@ -2698,6 +2698,7 @@ export type Database = {
           utm_medium: string | null
           utm_source: string | null
           utm_term: string | null
+          webhook_id: string | null
           webhook_type: string | null
         }
         Insert: {
@@ -2747,6 +2748,7 @@ export type Database = {
           utm_medium?: string | null
           utm_source?: string | null
           utm_term?: string | null
+          webhook_id?: string | null
           webhook_type?: string | null
         }
         Update: {
@@ -2796,9 +2798,18 @@ export type Database = {
           utm_medium?: string | null
           utm_source?: string | null
           utm_term?: string | null
+          webhook_id?: string | null
           webhook_type?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "logzz_orders_webhook_id_fkey"
+            columns: ["webhook_id"]
+            isOneToOne: false
+            referencedRelation: "logzz_webhooks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       logzz_shipments: {
         Row: {
