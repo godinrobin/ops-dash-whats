@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAccessLevel } from "@/hooks/useAccessLevel";
 import { supabase } from "@/integrations/supabase/client";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { AudioSection } from "@/components/AudioSection";
@@ -120,8 +121,12 @@ export default function VideoVariationGenerator() {
   // Credits system
   const { isActive: isCreditsActive, isSemiFullMember, loading: creditsLoading } = useCreditsSystem();
   const { deductCredits, canAfford, balance, loading: balanceLoading } = useCredits();
+  const { isFullMember, loading: accessLoading } = useAccessLevel();
   const CREDIT_COST_PER_VARIATION = 0.10;
   const SYSTEM_ID = 'gerador_variacoes';
+  
+  // Determine if user needs to pay credits (non-full members must pay)
+  const requiresCredits = !isFullMember || isSemiFullMember;
   
   // Analysis state
   const [isAnalyzing, setIsAnalyzing] = useState<string | null>(null);
@@ -832,15 +837,10 @@ export default function VideoVariationGenerator() {
   };
 
   const generateVariations = async () => {
-    // Only wait for credits loading if system is potentially active
-    // If still loading after user action, proceed with generation (fail-safe)
-    const creditsSystemMightBeActive = !creditsLoading && (isCreditsActive || isSemiFullMember);
-    
-    // If credits system is still loading but user clicked, show message and proceed
-    // This prevents blocking users indefinitely
-    if (creditsLoading || balanceLoading) {
-      console.log('[VIDEO-GEN] Credits still loading, proceeding with generation...');
-      // Don't block - proceed with generation
+    // If user requires credits, wait for credits system to load
+    if (requiresCredits && (creditsLoading || balanceLoading || accessLoading)) {
+      toast.error('Aguarde, carregando informações de créditos...');
+      return;
     }
 
     if (hookVideos.length === 0 || bodyVideos.length === 0 || ctaVideos.length === 0) {
@@ -877,9 +877,8 @@ export default function VideoVariationGenerator() {
     }
     const totalCreditCost = totalVariations * CREDIT_COST_PER_VARIATION;
 
-    // Credit system check - only if credits system is confirmed active
-    // Skip credit check if loading is stuck (fail-safe to not block users)
-    if (creditsSystemMightBeActive && !creditsLoading && !balanceLoading) {
+    // Credit check: only required for non-full members
+    if (requiresCredits) {
       if (!canAfford(totalCreditCost)) {
         setShowInsufficientCredits(true);
         return;
