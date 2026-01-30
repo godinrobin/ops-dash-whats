@@ -9,7 +9,7 @@ const corsHeaders = {
 
 const logStep = (step: string, details?: any) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
-  console.log(`[STRIPE-CREATE-PAYMENT-INTENT] ${step}${detailsStr}`);
+  console.log(`[STRIPE-CHECKOUT] ${step}${detailsStr}`);
 };
 
 serve(async (req) => {
@@ -52,7 +52,7 @@ serve(async (req) => {
 
     // Find or create Stripe customer
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
-    let customerId: string;
+    let customerId: string | undefined;
 
     if (customers.data.length > 0) {
       customerId = customers.data[0].id;
@@ -69,31 +69,41 @@ serve(async (req) => {
     // Convert to centavos (BRL minor units)
     const amountInCentavos = Math.round(amount * 100);
 
-    // Create PaymentIntent
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: amountInCentavos,
-      currency: 'brl',
+    const origin = req.headers.get("origin") || "https://ops-dash-whats.lovable.app";
+
+    // Create Checkout Session with Card + PIX
+    const session = await stripe.checkout.sessions.create({
       customer: customerId,
+      line_items: [
+        {
+          price_data: {
+            currency: 'brl',
+            product_data: {
+              name: `Recarga de R$ ${amount.toFixed(2)}`,
+              description: 'Créditos para sua carteira',
+            },
+            unit_amount: amountInCentavos,
+          },
+          quantity: 1,
+        },
+      ],
+      mode: 'payment',
+      payment_method_types: ['card', 'boleto', 'pix'],
+      success_url: `${origin}/?payment=success&amount=${amount}`,
+      cancel_url: `${origin}/?payment=cancelled`,
       metadata: {
         user_id: user.id,
         amount: amount.toString(),
         type: 'wallet_recharge',
       },
-      automatic_payment_methods: {
-        enabled: true,
-      },
     });
 
-    logStep("PaymentIntent created", { 
-      paymentIntentId: paymentIntent.id,
-      amount: amountInCentavos,
-      clientSecret: paymentIntent.client_secret?.substring(0, 20) + '...'
+    logStep("Checkout session created", { 
+      sessionId: session.id,
+      url: session.url,
     });
 
-    return new Response(JSON.stringify({ 
-      clientSecret: paymentIntent.client_secret,
-      paymentIntentId: paymentIntent.id
-    }), {
+    return new Response(JSON.stringify({ url: session.url }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
