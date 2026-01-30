@@ -67,33 +67,52 @@ function CardForm({
   const [loading, setLoading] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [isFlipped, setIsFlipped] = useState(false);
+  const [cardComplete, setCardComplete] = useState(false);
+  const [expiryComplete, setExpiryComplete] = useState(false);
+  const [cvvComplete, setCvvComplete] = useState(false);
   
   // Card display state
   const [displayCardNumber, setDisplayCardNumber] = useState("•••• •••• •••• ••••");
   const [displayExpiry, setDisplayExpiry] = useState("••/••");
   const [displayCvv, setDisplayCvv] = useState("•••");
   const [displayName, setDisplayName] = useState("");
-
-  // Custom input fields for visual display
-  const [inputCardNumber, setInputCardNumber] = useState("");
-  const [inputExpiry, setInputExpiry] = useState("");
-  const [inputCvv, setInputCvv] = useState("");
   const [inputName, setInputName] = useState("");
 
-  // Format and mask card number input
-  const handleCardNumberInput = (value: string) => {
-    const digits = value.replace(/\D/g, '').slice(0, 16);
-    const formatted = digits.replace(/(.{4})/g, '$1 ').trim();
-    setInputCardNumber(formatted);
+  // Track card number input for masking
+  const [cardNumberTracker, setCardNumberTracker] = useState("");
+
+  // Handle Stripe CardNumber change
+  const handleCardNumberChange = (event: any) => {
+    setCardComplete(event.complete);
     
-    if (digits.length === 0) {
+    // Stripe doesn't give us the actual value, but we can track length via brand detection
+    // We'll use a workaround: track input via a hidden field synced with brand changes
+    if (event.empty) {
       setDisplayCardNumber("•••• •••• •••• ••••");
-    } else if (digits.length <= 4) {
-      const masked = "*".repeat(digits.length);
-      setDisplayCardNumber(masked.padEnd(16, "•").replace(/(.{4})/g, '$1 ').trim());
-    } else {
-      const masked = "*".repeat(digits.length - 4) + digits.slice(-4);
-      setDisplayCardNumber(masked.padEnd(16, "•").replace(/(.{4})/g, '$1 ').trim());
+      setCardNumberTracker("");
+    } else if (event.complete) {
+      // When complete, show masked number with last 4 visible (placeholder approach)
+      setDisplayCardNumber("**** **** **** ••••");
+    }
+  };
+
+  // Handle Stripe Expiry change
+  const handleExpiryChange = (event: any) => {
+    setExpiryComplete(event.complete);
+    if (event.empty) {
+      setDisplayExpiry("••/••");
+    } else if (event.complete) {
+      setDisplayExpiry("••/••");
+    }
+  };
+
+  // Handle Stripe CVV change
+  const handleCvvChange = (event: any) => {
+    setCvvComplete(event.complete);
+    if (event.empty) {
+      setDisplayCvv("•••");
+    } else if (event.complete) {
+      setDisplayCvv("***");
     }
   };
 
@@ -102,37 +121,6 @@ function CardForm({
     const cleanName = value.toUpperCase().slice(0, 25);
     setInputName(cleanName);
     setDisplayName(cleanName || "TITULAR DO CARTÃO");
-  };
-
-  // Format expiry input
-  const handleExpiryInput = (value: string) => {
-    const digits = value.replace(/\D/g, '').slice(0, 4);
-    
-    let formatted = digits;
-    if (digits.length >= 2) {
-      formatted = digits.slice(0, 2) + ' / ' + digits.slice(2);
-    }
-    setInputExpiry(formatted);
-    
-    if (digits.length === 0) {
-      setDisplayExpiry("••/••");
-    } else if (digits.length <= 2) {
-      setDisplayExpiry(digits.padEnd(2, "•") + "/••");
-    } else {
-      setDisplayExpiry(digits.slice(0, 2) + "/" + digits.slice(2).padEnd(2, "•"));
-    }
-  };
-
-  // Format CVV input (all masked)
-  const handleCvvInput = (value: string) => {
-    const digits = value.replace(/\D/g, '').slice(0, 4);
-    setInputCvv(digits);
-    
-    if (digits.length === 0) {
-      setDisplayCvv("•••");
-    } else {
-      setDisplayCvv("*".repeat(digits.length));
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -254,58 +242,44 @@ function CardForm({
           />
         </div>
 
-        {/* Card Number */}
+        {/* Card Number - Stripe Element */}
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-muted-foreground">Número do Cartão</label>
-          <div className="relative">
-            <Input
-              type="text"
-              placeholder="0000 0000 0000 0000"
-              value={inputCardNumber}
-              onChange={(e) => handleCardNumberInput(e.target.value)}
-              className="bg-card border-border text-foreground placeholder:text-muted-foreground/50 h-11"
-              maxLength={19}
+          <div className="bg-card border border-border rounded-md px-3 py-3 h-11 flex items-center [&_.StripeElement]:w-full">
+            <CardNumberElement 
+              options={{ 
+                style: elementStyle,
+                showIcon: true,
+              }} 
+              onChange={handleCardNumberChange}
+              className="w-full"
             />
-            {/* Hidden Stripe Element for actual payment processing */}
-            <div className="absolute opacity-0 pointer-events-none">
-              <CardNumberElement options={{ style: elementStyle }} />
-            </div>
           </div>
         </div>
 
-        {/* Expiry and CVV */}
+        {/* Expiry and CVV - Stripe Elements */}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-muted-foreground">Validade</label>
-            <Input
-              type="text"
-              placeholder="MM / AA"
-              value={inputExpiry}
-              onChange={(e) => handleExpiryInput(e.target.value)}
-              onFocus={() => setIsFlipped(false)}
-              className="bg-card border-border text-foreground placeholder:text-muted-foreground/50 h-11"
-              maxLength={7}
-            />
-            {/* Hidden Stripe Element */}
-            <div className="absolute opacity-0 pointer-events-none">
-              <CardExpiryElement options={{ style: elementStyle }} />
+            <div className="bg-card border border-border rounded-md px-3 py-3 h-11 flex items-center [&_.StripeElement]:w-full">
+              <CardExpiryElement 
+                options={{ style: elementStyle }} 
+                onChange={handleExpiryChange}
+                onFocus={() => setIsFlipped(false)}
+                className="w-full"
+              />
             </div>
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-muted-foreground">CVV</label>
-            <Input
-              type="password"
-              placeholder="CVC"
-              value={inputCvv}
-              onChange={(e) => handleCvvInput(e.target.value)}
-              onFocus={() => setIsFlipped(true)}
-              onBlur={() => setIsFlipped(false)}
-              className="bg-card border-border text-foreground placeholder:text-muted-foreground/50 h-11"
-              maxLength={4}
-            />
-            {/* Hidden Stripe Element */}
-            <div className="absolute opacity-0 pointer-events-none">
-              <CardCvcElement options={{ style: elementStyle }} />
+            <div className="bg-card border border-border rounded-md px-3 py-3 h-11 flex items-center [&_.StripeElement]:w-full">
+              <CardCvcElement 
+                options={{ style: elementStyle }} 
+                onChange={handleCvvChange}
+                onFocus={() => setIsFlipped(true)}
+                onBlur={() => setIsFlipped(false)}
+                className="w-full"
+              />
             </div>
           </div>
         </div>
@@ -313,7 +287,7 @@ function CardForm({
 
       <Button
         type="submit"
-        disabled={!stripe || loading || inputCardNumber.length < 19 || inputExpiry.length < 7 || inputCvv.length < 3}
+        disabled={!stripe || loading || !cardComplete || !expiryComplete || !cvvComplete}
         className="w-full bg-accent text-accent-foreground hover:bg-accent/90 h-11"
       >
         {loading ? (
