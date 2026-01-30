@@ -46,14 +46,25 @@ interface WebhookHistoryItem {
   created_at: string;
 }
 
+// Canonical event types for creating new webhooks
 const EVENT_TYPES = [
   { value: "pedido", label: "Pedido", endpoint: "webhook-logzz-order" },
   { value: "abandono_carrinho", label: "Abandono de Carrinho", endpoint: "webhook-logzz-cart" },
-  { value: "expedicao_tradicional", label: "Expedição Tradicional", endpoint: "webhook-logzz-shipment" },
-  { value: "order", label: "Pedido", endpoint: "webhook-logzz-order" },
-  { value: "cart", label: "Abandono de Carrinho", endpoint: "webhook-logzz-cart" },
-  { value: "shipment", label: "Expedição", endpoint: "webhook-logzz-shipment" }
+  { value: "expedicao_tradicional", label: "Expedição Tradicional", endpoint: "webhook-logzz-shipment" }
 ];
+
+// Helper to normalize event type labels (handles legacy values like "order", "cart", "shipment")
+const getEventTypeLabel = (eventType: string): string => {
+  const labelMap: Record<string, string> = {
+    pedido: "Pedido",
+    order: "Pedido",
+    abandono_carrinho: "Abandono de Carrinho",
+    cart: "Abandono de Carrinho",
+    expedicao_tradicional: "Expedição Tradicional",
+    shipment: "Expedição Tradicional"
+  };
+  return labelMap[eventType] || eventType;
+};
 
 export function LogzzIntegrationSettings() {
   const { user } = useAuth();
@@ -104,7 +115,15 @@ export function LogzzIntegrationSettings() {
         .limit(20);
 
       if (!error && data) {
-        setHistory(prev => ({ ...prev, [expandedWebhook]: data as WebhookHistoryItem[] }));
+        // Deduplicate by order_id to prevent showing same event multiple times
+        const seen = new Set<string>();
+        const uniqueData = (data as WebhookHistoryItem[]).filter(item => {
+          const key = item.order_id || item.id;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setHistory(prev => ({ ...prev, [expandedWebhook]: uniqueData }));
       }
     };
 
@@ -374,7 +393,7 @@ export function LogzzIntegrationSettings() {
                     </CardTitle>
                     <CardDescription className="flex items-center gap-2 mt-1">
                       <Badge variant="outline" className="text-xs">
-                        Evento: {EVENT_TYPES.find(e => e.value === webhook.event_type)?.label || webhook.event_type}
+                        Evento: {getEventTypeLabel(webhook.event_type)}
                       </Badge>
                       {webhook.flow && (
                         <Badge variant="secondary" className="text-xs">
@@ -487,7 +506,7 @@ export function LogzzIntegrationSettings() {
                                   <div className="h-2 w-2 rounded-full bg-positive animate-pulse" />
                                   <div className="text-left">
                                     <p className="font-medium">
-                                      {item.order_id || item.product_name || EVENT_TYPES.find(e => e.value === item.event_type)?.label || item.event_type}
+                                      {item.order_id || item.product_name || getEventTypeLabel(item.event_type)}
                                     </p>
                                     <p className="text-xs text-muted-foreground">
                                       {item.customer_name || item.customer_phone || 'Sem identificação'}
@@ -530,7 +549,7 @@ export function LogzzIntegrationSettings() {
                                     {item.event_type && (
                                       <div>
                                         <span className="text-muted-foreground">Tipo:</span>
-                                        <span className="ml-1 font-medium">{EVENT_TYPES.find(e => e.value === item.event_type)?.label || item.event_type}</span>
+                                        <span className="ml-1 font-medium">{getEventTypeLabel(item.event_type)}</span>
                                       </div>
                                     )}
                                     {item.checkout_url && (
