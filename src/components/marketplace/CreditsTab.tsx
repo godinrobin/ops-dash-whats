@@ -94,60 +94,39 @@ export const CreditsTab = ({ onRecharge }: CreditsTabProps) => {
     setPurchasing(pkg.id);
     
     try {
-      // 1. Fetch wallet balance
-      const { data: wallet, error: walletError } = await supabase
-        .from('sms_user_wallets')
-        .select('balance')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      // Use atomic RPC function to prevent race conditions
+      const { data, error } = await supabase.rpc('purchase_credits', {
+        p_user_id: user.id,
+        p_package_id: pkg.id,
+        p_package_name: pkg.name,
+        p_credits: pkg.credits,
+        p_price_brl: pkg.price_brl
+      });
       
-      if (walletError) throw walletError;
+      if (error) {
+        console.error("RPC error:", error);
+        throw new Error("Erro ao processar compra");
+      }
       
-      const walletBalance = wallet?.balance ?? 0;
+      const result = data as { success: boolean; error?: string; credits_added?: number };
       
-      // 2. Check if user has sufficient balance
-      if (walletBalance < pkg.price_brl) {
-        toast.error(
-          `Saldo insuficiente. Você tem R$ ${walletBalance.toFixed(2).replace('.', ',')} e precisa de R$ ${pkg.price_brl.toFixed(2).replace('.', ',')}`,
-          { description: 'Recarregue sua carteira primeiro.' }
-        );
-        onRecharge();
+      if (!result.success) {
+        toast.error(result.error || "Erro ao processar compra", {
+          description: result.error?.includes('insuficiente') ? 'Recarregue sua carteira primeiro.' : undefined
+        });
+        if (result.error?.includes('insuficiente')) {
+          onRecharge();
+        }
         return;
       }
       
-      // 3. Debit from wallet
-      const { error: debitError } = await supabase
-        .from('sms_user_wallets')
-        .update({ balance: walletBalance - pkg.price_brl })
-        .eq('user_id', user.id);
-      
-      if (debitError) throw debitError;
-      
-      // 4. Add credits via RPC
-      const { error: creditError } = await supabase.rpc('add_credits', {
-        p_user_id: user.id,
-        p_amount: pkg.credits,
-        p_type: 'purchase',
-        p_description: `Compra de pacote: ${pkg.name}`,
-        p_reference_id: pkg.id
-      });
-      
-      if (creditError) {
-        // Rollback wallet debit on credit error
-        await supabase
-          .from('sms_user_wallets')
-          .update({ balance: walletBalance })
-          .eq('user_id', user.id);
-        throw creditError;
-      }
-      
-      // 5. Refresh credits display
+      // Refresh credits display
       await refreshCredits();
-      toast.success(`${pkg.credits} créditos adicionados com sucesso!`);
+      toast.success(`${result.credits_added || pkg.credits} créditos adicionados com sucesso!`);
       
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error purchasing:", err);
-      toast.error("Erro ao processar compra");
+      toast.error(err?.message || "Erro ao processar compra");
     } finally {
       setPurchasing(null);
     }
