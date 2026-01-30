@@ -1908,7 +1908,7 @@ export const PropertiesPanel = ({
                   <SelectItem value="__ALL_PIXELS__">
                     <span className="flex items-center gap-2">
                       <span className="text-blue-500">🔄</span>
-                      Todos os Pixels (tenta até acertar)
+                      Todos os Pixels
                     </span>
                   </SelectItem>
                   {pixelsList.map((pixel) => (
@@ -1918,11 +1918,6 @@ export const PropertiesPanel = ({
                   ))}
                 </SelectContent>
               </Select>
-              {(nodeData.pixelId as string) === '__ALL_PIXELS__' && (
-                <p className="text-xs text-blue-400">
-                  O sistema tentará enviar para cada pixel até encontrar o correto.
-                </p>
-              )}
               {pixelsList.length === 0 && (
                 <p className="text-xs text-amber-500">
                   Nenhum pixel configurado. Configure em Configurações → Pixel do Facebook.
@@ -1950,27 +1945,17 @@ export const PropertiesPanel = ({
             
             {['Purchase', 'InitiateCheckout', 'AddToCart'].includes((nodeData.eventType as string) || 'Purchase') && (
               <div className="space-y-2">
-                <Label>Valor do Evento</Label>
+                <Label>Valor do Evento (R$)</Label>
                 <Input
-                  type="text"
-                  placeholder="Ex: 97.00 ou {{event_value}}"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="Ex: 97.00"
                   value={(nodeData.eventValue as string) || ''}
                   onChange={(e) => onUpdateNode(selectedNode.id, { eventValue: e.target.value })}
                 />
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {pixelVariables.slice(0, 5).map((varName) => (
-                    <Badge 
-                      key={varName}
-                      variant="secondary" 
-                      className="cursor-pointer hover:bg-primary hover:text-primary-foreground text-xs"
-                      onClick={() => insertPixelVariable(varName)}
-                    >
-                      {`{{${varName}}}`}
-                    </Badge>
-                  ))}
-                </div>
                 <p className="text-xs text-muted-foreground">
-                  Use variáveis como {`{{event_value}}`} ou valor fixo. Deixe vazio para R$0.
+                  Insira o valor em reais. Deixe vazio ou 0 para não enviar valor.
                 </p>
               </div>
             )}
