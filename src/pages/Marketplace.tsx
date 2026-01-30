@@ -26,6 +26,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { toast } from "sonner";
 import { RechargeModal } from "@/components/RechargeModal";
+import { PaymentMethodModal } from "@/components/PaymentMethodModal";
+import { CardRechargeModal } from "@/components/CardRechargeModal";
 import { InsufficientBalanceModal } from "@/components/InsufficientBalanceModal";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { AnimatedSearchBar } from "@/components/ui/animated-search-bar";
@@ -96,7 +98,9 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
   const [products, setProducts] = useState<MarketplaceProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [balance, setBalance] = useState(0);
+  const [paymentMethodOpen, setPaymentMethodOpen] = useState(false);
   const [rechargeOpen, setRechargeOpen] = useState(false);
+  const [cardRechargeOpen, setCardRechargeOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   // Sync activeTab with URL query parameter
@@ -425,7 +429,7 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
                   </p>
                 </div>
               </div>
-              <Button onClick={() => setRechargeOpen(true)} className="bg-accent hover:bg-accent/90">
+              <Button onClick={() => setPaymentMethodOpen(true)} className="bg-accent hover:bg-accent/90">
                 <Plus className="h-4 w-4 mr-2" />
                 Recarregar
               </Button>
@@ -458,7 +462,7 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
             </AnimatedTabsList>
 
             <AnimatedTabsContent value="creditos">
-              <CreditsTab onRecharge={() => setRechargeOpen(true)} />
+              <CreditsTab onRecharge={() => setPaymentMethodOpen(true)} />
             </AnimatedTabsContent>
 
             <AnimatedTabsContent value="numeros-virtuais" className="-mx-4 md:-mx-6 -mb-4 md:-mb-6">
@@ -472,7 +476,7 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
             <AnimatedTabsContent value="proxies">
               <ProxiesTab 
                 balance={balance}
-                onRecharge={() => setRechargeOpen(true)}
+                onRecharge={() => setPaymentMethodOpen(true)}
                 onBalanceChange={setBalance}
               />
             </AnimatedTabsContent>
@@ -883,15 +887,40 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
       <InsufficientBalanceModal
         open={insufficientBalanceOpen}
         onOpenChange={setInsufficientBalanceOpen}
-        onRecharge={() => setRechargeOpen(true)}
+        onRecharge={() => setPaymentMethodOpen(true)}
         requiredAmount={requiredAmount}
         currentBalance={balance}
       />
 
+      {/* Payment Method Selection Modal */}
+      <PaymentMethodModal
+        open={paymentMethodOpen}
+        onOpenChange={setPaymentMethodOpen}
+        onSelectPix={() => {
+          setPaymentMethodOpen(false);
+          setRechargeOpen(true);
+        }}
+        onSelectCard={() => {
+          setPaymentMethodOpen(false);
+          setCardRechargeOpen(true);
+        }}
+      />
+
+      {/* PIX Recharge Modal */}
       <RechargeModal 
         open={rechargeOpen} 
         onOpenChange={setRechargeOpen}
         onSuccess={(newBalance) => setBalance(newBalance)}
+      />
+
+      {/* Card Recharge Modal */}
+      <CardRechargeModal
+        open={cardRechargeOpen}
+        onOpenChange={setCardRechargeOpen}
+        onBack={() => {
+          setCardRechargeOpen(false);
+          setPaymentMethodOpen(true);
+        }}
       />
 
     </>
