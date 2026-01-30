@@ -51,19 +51,6 @@ const elementStyle = {
   },
 };
 
-// Format card number for display (masked with last 4 visible)
-function formatCardNumberDisplay(length: number, last4?: string): string {
-  if (length === 0) return "•••• •••• •••• ••••";
-  
-  // Create masked display based on digits entered
-  const maskedPart = "*".repeat(Math.min(length, 12));
-  const visiblePart = last4 || "****";
-  
-  // Format with spaces
-  const fullNumber = maskedPart.padEnd(12, "*") + visiblePart;
-  return fullNumber.replace(/(.{4})/g, '$1 ').trim();
-}
-
 // Card Form Component
 function CardForm({ 
   amount, 
@@ -81,30 +68,24 @@ function CardForm({
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [isFlipped, setIsFlipped] = useState(false);
   
-  // Card display state - simulated values for visual feedback
-  const [cardNumberLength, setCardNumberLength] = useState(0);
-  const [cardComplete, setCardComplete] = useState(false);
+  // Card display state
   const [displayCardNumber, setDisplayCardNumber] = useState("•••• •••• •••• ••••");
   const [displayExpiry, setDisplayExpiry] = useState("••/••");
   const [displayCvv, setDisplayCvv] = useState("•••");
-  const [cvvLength, setCvvLength] = useState(0);
-  const [expiryTyping, setExpiryTyping] = useState(false);
+  const [displayName, setDisplayName] = useState("");
 
-  // Custom input fields for visual display (Stripe handles actual payment)
+  // Custom input fields for visual display
   const [inputCardNumber, setInputCardNumber] = useState("");
   const [inputExpiry, setInputExpiry] = useState("");
   const [inputCvv, setInputCvv] = useState("");
+  const [inputName, setInputName] = useState("");
 
   // Format and mask card number input
   const handleCardNumberInput = (value: string) => {
-    // Remove non-digits
     const digits = value.replace(/\D/g, '').slice(0, 16);
-    
-    // Format with spaces
     const formatted = digits.replace(/(.{4})/g, '$1 ').trim();
     setInputCardNumber(formatted);
     
-    // Update display on card (masked except last 4)
     if (digits.length === 0) {
       setDisplayCardNumber("•••• •••• •••• ••••");
     } else if (digits.length <= 4) {
@@ -114,6 +95,13 @@ function CardForm({
       const masked = "*".repeat(digits.length - 4) + digits.slice(-4);
       setDisplayCardNumber(masked.padEnd(16, "•").replace(/(.{4})/g, '$1 ').trim());
     }
+  };
+
+  // Handle cardholder name input
+  const handleNameInput = (value: string) => {
+    const cleanName = value.toUpperCase().slice(0, 25);
+    setInputName(cleanName);
+    setDisplayName(cleanName || "TITULAR DO CARTÃO");
   };
 
   // Format expiry input
@@ -126,7 +114,6 @@ function CardForm({
     }
     setInputExpiry(formatted);
     
-    // Update display
     if (digits.length === 0) {
       setDisplayExpiry("••/••");
     } else if (digits.length <= 2) {
@@ -141,7 +128,6 @@ function CardForm({
     const digits = value.replace(/\D/g, '').slice(0, 4);
     setInputCvv(digits);
     
-    // Update display (all asterisks)
     if (digits.length === 0) {
       setDisplayCvv("•••");
     } else {
@@ -176,10 +162,13 @@ function CardForm({
 
       const { clientSecret } = data;
 
-      // 2. Confirm payment with card
+      // 2. Confirm payment with card (including cardholder name)
       const { error: stripeError, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
         payment_method: {
           card: cardNumberElement,
+          billing_details: {
+            name: inputName || undefined,
+          },
         },
       });
 
@@ -226,7 +215,7 @@ function CardForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-3">
       <div className="flex items-center gap-2 mb-2">
         <Button
           type="button"
@@ -243,7 +232,7 @@ function CardForm({
       {/* Visual Credit Card */}
       <div className="flex justify-center mb-2">
         <FlippableCreditCard
-          cardholderName="TITULAR DO CARTÃO"
+          cardholderName={displayName || "TITULAR DO CARTÃO"}
           cardNumber={displayCardNumber}
           expiryDate={displayExpiry}
           cvv={displayCvv}
@@ -252,7 +241,20 @@ function CardForm({
       </div>
 
       <div className="space-y-3">
-        {/* Card Number - Custom Input + Hidden Stripe Element */}
+        {/* Cardholder Name */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-muted-foreground">Nome do Titular</label>
+          <Input
+            type="text"
+            placeholder="NOME COMO ESTÁ NO CARTÃO"
+            value={inputName}
+            onChange={(e) => handleNameInput(e.target.value)}
+            className="bg-card border-border text-foreground placeholder:text-muted-foreground/50 h-11 uppercase"
+            maxLength={25}
+          />
+        </div>
+
+        {/* Card Number */}
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-muted-foreground">Número do Cartão</label>
           <div className="relative">
