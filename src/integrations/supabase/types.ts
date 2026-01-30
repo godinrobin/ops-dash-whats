@@ -5361,6 +5361,16 @@ export type Database = {
         }
         Returns: Json
       }
+      purchase_credits: {
+        Args: {
+          p_credits: number
+          p_package_id: string
+          p_package_name: string
+          p_price_brl: number
+          p_user_id: string
+        }
+        Returns: Json
+      }
       remove_tag_from_contact: {
         Args: { p_contact_id: string; p_tag_name: string }
         Returns: string[]
