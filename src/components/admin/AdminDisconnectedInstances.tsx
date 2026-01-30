@@ -34,18 +34,15 @@ export const AdminDisconnectedInstances = () => {
   const [deletingBulk, setDeletingBulk] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState<{ current: number; total: number } | null>(null);
 
-  // Fetch disconnected instances
+  // Fetch disconnected instances - using the same logic as AdminInstances
+  // which gets data from admin-get-all-data (UAZAPI as source of truth)
   const fetchInstances = async () => {
     setLoading(true);
     try {
-      // Get disconnected instances with user info
-      const { data: instancesData, error: instancesError } = await supabase
-        .from('maturador_instances')
-        .select('id, user_id, instance_name, phone_number, status, created_at, updated_at')
-        .in('status', ['disconnected', 'close'])
-        .order('updated_at', { ascending: false, nullsFirst: false });
+      // Use admin-get-all-data to get instances with UAZAPI as source of truth
+      const { data, error } = await supabase.functions.invoke('admin-get-all-data');
 
-      if (instancesError) throw instancesError;
+      if (error) throw error;
 
       // Get user profiles
       const { data: profilesData, error: profilesError } = await supabase
@@ -63,20 +60,33 @@ export const AdminDisconnectedInstances = () => {
         });
       }
 
+      // Filter only disconnected instances from the response
+      const allInstances = data?.instances || [];
+      const disconnectedInstances = allInstances.filter((inst: any) => 
+        inst.status === 'disconnected' || inst.status === 'close'
+      );
+
       // Map instances with user info
-      const mappedInstances: DisconnectedInstance[] = (instancesData || []).map(inst => {
-        const userInfo = userMap.get(inst.user_id);
+      const mappedInstances: DisconnectedInstance[] = disconnectedInstances.map((inst: any) => {
+        const userInfo = inst.user_id ? userMap.get(inst.user_id) : null;
         return {
-          id: inst.id,
-          user_id: inst.user_id,
+          id: inst.id || `orphan-${inst.instance_name}`,
+          user_id: inst.user_id || '',
           instance_name: inst.instance_name,
           phone_number: inst.phone_number,
           status: inst.status,
-          created_at: inst.created_at,
-          updated_at: inst.updated_at,
-          user_email: userInfo?.email || 'Usuário não encontrado',
-          username: userInfo?.username || 'Sem nome',
+          created_at: inst.created_at || new Date().toISOString(),
+          updated_at: inst.disconnected_at || inst.created_at || null,
+          user_email: inst.user_email || userInfo?.email || 'Usuário não encontrado',
+          username: inst.username || userInfo?.username || 'Sem nome',
         };
+      });
+
+      // Sort by updated_at descending
+      mappedInstances.sort((a, b) => {
+        const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+        const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+        return dateB - dateA;
       });
 
       setInstances(mappedInstances);
