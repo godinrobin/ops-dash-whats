@@ -659,7 +659,8 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                   </div>
                 </div>
 
-                {/* Package Selector */}
+                {/* Package Selector - Hidden when plan is sold out */}
+                {!PLAN_CONFIG[planType].isSoldOut && (
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-foreground">Pacote de Proxies</label>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -708,6 +709,7 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                     })}
                   </div>
                 </div>
+                )}
 
                 {/* Country Selector */}
                 <div className="space-y-2">
