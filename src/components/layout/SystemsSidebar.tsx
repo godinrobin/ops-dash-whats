@@ -188,7 +188,7 @@ export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: 
         className={cn(
           "group flex items-center gap-3 w-full px-3 py-2 text-sm rounded-md transition-colors",
           isActive 
-            ? "bg-accent/10 text-accent" 
+            ? "bg-accent/20 text-accent font-medium" 
             : "text-muted-foreground hover:text-foreground hover:bg-secondary",
           isComingSoon && "opacity-40 cursor-not-allowed",
           isLocked && "opacity-60"
@@ -223,7 +223,7 @@ export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: 
         className={cn(
           "group flex items-center gap-3 w-full px-3 py-2 text-sm rounded-md transition-colors",
           isActive 
-            ? "bg-accent/10 text-accent" 
+            ? "bg-accent/20 text-accent font-medium" 
             : "text-muted-foreground hover:text-foreground hover:bg-secondary",
           isLocked && "opacity-60"
         )}
@@ -267,7 +267,7 @@ export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: 
           className={cn(
             "flex items-center gap-3 w-full px-3 py-2 text-sm rounded-md transition-colors",
             location.pathname === "/" 
-              ? "bg-accent/10 text-accent" 
+              ? "bg-accent/20 text-accent font-medium" 
               : "text-muted-foreground hover:text-foreground hover:bg-secondary"
           )}
         >
