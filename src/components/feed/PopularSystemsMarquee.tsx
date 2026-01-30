@@ -52,7 +52,7 @@ export const PopularSystemsMarquee = () => {
             </span>
             <span className="text-sm font-medium text-foreground">{system.title}</span>
             {system.tag && (
-              <span className="text-[10px] px-1.5 py-0.5 bg-accent/20 text-accent rounded font-semibold uppercase">
+              <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/20 text-purple-400 rounded font-semibold uppercase">
                 {system.tag}
               </span>
             )}
