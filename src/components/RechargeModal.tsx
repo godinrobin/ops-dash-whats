@@ -17,7 +17,8 @@ interface RechargeModalProps {
   onSuccess: (newBalance: number) => void;
 }
 
-const PRESET_VALUES = [10, 20, 50, 100, 200];
+const PRESET_VALUES_ROW1 = [10, 20, 50, 100, 200];
+const PRESET_VALUES_ROW2 = [500, 800, 1000, 2000, 5000];
 
 export function RechargeModal({ open, onOpenChange, onSuccess }: RechargeModalProps) {
   const { toast } = useToast();
@@ -103,8 +104,8 @@ export function RechargeModal({ open, onOpenChange, onSuccess }: RechargeModalPr
       return;
     }
 
-    if (amount > 1000) {
-      toast({ title: "Valor máximo: R$ 1.000,00", variant: "destructive" });
+    if (amount > 5000) {
+      toast({ title: "Valor máximo: R$ 5.000,00", variant: "destructive" });
       return;
     }
 
@@ -253,7 +254,7 @@ export function RechargeModal({ open, onOpenChange, onSuccess }: RechargeModalPr
           <div className="space-y-2">
             <label className="text-sm font-medium">Ou escolha um valor</label>
             <div className="grid grid-cols-5 gap-2">
-              {PRESET_VALUES.map((value) => (
+              {PRESET_VALUES_ROW1.map((value) => (
                 <Button
                   key={value}
                   variant={selectedAmount === value ? "default" : "outline"}
@@ -261,6 +262,18 @@ export function RechargeModal({ open, onOpenChange, onSuccess }: RechargeModalPr
                   className={`${selectedAmount === value ? "bg-accent text-accent-foreground" : ""} text-sm px-2`}
                 >
                   R$ {value}
+                </Button>
+              ))}
+            </div>
+            <div className="grid grid-cols-5 gap-2">
+              {PRESET_VALUES_ROW2.map((value) => (
+                <Button
+                  key={value}
+                  variant={selectedAmount === value ? "default" : "outline"}
+                  onClick={() => handleSelectAmount(value)}
+                  className={`${selectedAmount === value ? "bg-accent text-accent-foreground" : ""} text-sm px-2`}
+                >
+                  R$ {value >= 1000 ? `${(value / 1000).toFixed(0)}k` : value}
                 </Button>
               ))}
             </div>
@@ -283,7 +296,7 @@ export function RechargeModal({ open, onOpenChange, onSuccess }: RechargeModalPr
           </Button>
 
           <p className="text-xs text-center text-muted-foreground">
-            Valor mínimo: R$ 5,00 • Valor máximo: R$ 1.000,00
+            Valor mínimo: R$ 5,00 • Valor máximo: R$ 5.000,00
           </p>
         </div>
       </DialogContent>
