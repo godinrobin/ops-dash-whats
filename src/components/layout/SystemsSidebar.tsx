@@ -396,6 +396,15 @@ export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: 
 
               {/* Systems Navigation */}
               <div className="flex-1 overflow-y-auto scrollbar-sidebar px-2 pb-4">
+                {/* Popular Systems Section - Desktop */}
+                <div className="bg-accent/10 rounded-lg mx-1 mb-2">
+                  <CollapsibleSection title="Sistemas Mais Usados">
+                    <div className="space-y-0.5 pl-2">
+                      {popularSystems.map(renderPopularSystemButton)}
+                    </div>
+                  </CollapsibleSection>
+                </div>
+                
                 {systemGroups.map((group) => (
                   <CollapsibleSection key={group.id} title={group.title}>
                     <div className="space-y-0.5 pl-2">
