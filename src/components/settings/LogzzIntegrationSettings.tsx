@@ -36,20 +36,23 @@ interface Flow {
 
 interface WebhookHistoryItem {
   id: string;
-  order_number?: string | null;
-  client_name: string | null;
-  recipient_name?: string | null;
-  order_status?: string | null;
-  cart_status?: string | null;
-  status?: string | null;
-  tracking_code?: string | null;
+  event_type: string;
+  customer_name: string | null;
+  customer_phone: string | null;
+  product_name: string | null;
+  order_id: string | null;
+  checkout_url: string | null;
+  raw_payload: Record<string, unknown> | null;
   created_at: string;
 }
 
 const EVENT_TYPES = [
   { value: "pedido", label: "Pedido", endpoint: "webhook-logzz-order" },
   { value: "abandono_carrinho", label: "Abandono de Carrinho", endpoint: "webhook-logzz-cart" },
-  { value: "expedicao_tradicional", label: "Expedição Tradicional", endpoint: "webhook-logzz-shipment" }
+  { value: "expedicao_tradicional", label: "Expedição Tradicional", endpoint: "webhook-logzz-shipment" },
+  { value: "order", label: "Pedido", endpoint: "webhook-logzz-order" },
+  { value: "cart", label: "Abandono de Carrinho", endpoint: "webhook-logzz-cart" },
+  { value: "shipment", label: "Expedição", endpoint: "webhook-logzz-shipment" }
 ];
 
 export function LogzzIntegrationSettings() {
@@ -66,6 +69,7 @@ export function LogzzIntegrationSettings() {
     flow_id: ""
   });
   const [expandedWebhook, setExpandedWebhook] = useState<string | null>(null);
+  const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
   const [history, setHistory] = useState<Record<string, WebhookHistoryItem[]>>({});
 
   const WEBHOOK_BASE_URL = "https://dcjizoulbggsavizbukq.supabase.co/functions/v1";
@@ -89,47 +93,17 @@ export function LogzzIntegrationSettings() {
     const fetchHistory = async () => {
       const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString();
       
-      // Choose the right table based on event type
-      if (webhook.event_type === 'abandono_carrinho') {
-        const { data, error } = await supabase
-          .from('logzz_cart_abandonments')
-          .select('id, client_name, cart_status, created_at')
-          .eq('user_id', user.id)
-          .eq('webhook_id', webhook.id)
-          .gte('created_at', thirtySecondsAgo)
-          .order('created_at', { ascending: false })
-          .limit(10);
+      // Use logzz_webhook_events table for all event types
+      const { data, error } = await supabase
+        .from('logzz_webhook_events')
+        .select('id, event_type, customer_name, customer_phone, product_name, order_id, checkout_url, raw_payload, created_at')
+        .eq('user_id', user.id)
+        .gte('created_at', thirtySecondsAgo)
+        .order('created_at', { ascending: false })
+        .limit(20);
 
-        if (!error && data) {
-          setHistory(prev => ({ ...prev, [expandedWebhook]: data as unknown as WebhookHistoryItem[] }));
-        }
-      } else if (webhook.event_type === 'expedicao_tradicional') {
-        const { data, error } = await supabase
-          .from('logzz_shipments')
-          .select('id, recipient_name, status, tracking_code, created_at')
-          .eq('user_id', user.id)
-          .eq('webhook_id', webhook.id)
-          .gte('created_at', thirtySecondsAgo)
-          .order('created_at', { ascending: false })
-          .limit(10);
-
-        if (!error && data) {
-          setHistory(prev => ({ ...prev, [expandedWebhook]: data as unknown as WebhookHistoryItem[] }));
-        }
-      } else {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data, error } = await (supabase as any)
-          .from('logzz_orders')
-          .select('id, order_number, client_name, order_status, created_at')
-          .eq('user_id', user.id)
-          .eq('webhook_id', webhook.id)
-          .gte('created_at', thirtySecondsAgo)
-          .order('created_at', { ascending: false })
-          .limit(10);
-
-        if (!error && data) {
-          setHistory(prev => ({ ...prev, [expandedWebhook]: data as WebhookHistoryItem[] }));
-        }
+      if (!error && data) {
+        setHistory(prev => ({ ...prev, [expandedWebhook]: data as WebhookHistoryItem[] }));
       }
     };
 
@@ -492,7 +466,7 @@ export function LogzzIntegrationSettings() {
                     </Button>
                     
                     {expandedWebhook === webhook.id && (
-                      <div className="mt-2 space-y-2">
+                      <div className="mt-2 space-y-2 max-h-80 overflow-y-auto">
                         {(history[webhook.id] || []).length === 0 ? (
                           <div className="text-center py-4 text-muted-foreground text-sm">
                             <History className="h-6 w-6 mx-auto mb-1 opacity-50" />
@@ -502,26 +476,83 @@ export function LogzzIntegrationSettings() {
                           (history[webhook.id] || []).map((item) => (
                             <div 
                               key={item.id} 
-                              className="flex items-center justify-between p-2 rounded bg-muted/50 text-sm"
+                              className="rounded bg-muted/50 text-sm overflow-hidden"
                             >
-                              <div className="flex items-center gap-2">
-                                <div className="h-2 w-2 rounded-full bg-positive animate-pulse" />
-                                <div>
-                                  <p className="font-medium">
-                                    {webhook.event_type === 'abandono_carrinho' 
-                                      ? (item.cart_status || 'Carrinho abandonado')
-                                      : webhook.event_type === 'expedicao_tradicional'
-                                        ? (item.tracking_code || item.status || 'Expedição')
-                                        : (item.order_number || 'Sem número')}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {item.client_name || item.recipient_name}
-                                  </p>
+                              <button
+                                onClick={() => setExpandedEvent(expandedEvent === item.id ? null : item.id)}
+                                className="w-full flex items-center justify-between p-2 hover:bg-muted/80 transition-colors"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div className="h-2 w-2 rounded-full bg-positive animate-pulse" />
+                                  <div className="text-left">
+                                    <p className="font-medium">
+                                      {item.order_id || item.product_name || EVENT_TYPES.find(e => e.value === item.event_type)?.label || item.event_type}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {item.customer_name || item.customer_phone || 'Sem identificação'}
+                                    </p>
+                                  </div>
                                 </div>
-                              </div>
-                              <span className="text-xs text-muted-foreground">
-                                {formatDistanceToNow(new Date(item.created_at), { addSuffix: true, locale: ptBR })}
-                              </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {formatDistanceToNow(new Date(item.created_at), { addSuffix: true, locale: ptBR })}
+                                </span>
+                              </button>
+                              
+                              {/* Expanded event details */}
+                              {expandedEvent === item.id && (
+                                <div className="p-3 border-t border-border/50 bg-muted/30 space-y-2">
+                                  <div className="grid grid-cols-2 gap-2 text-xs">
+                                    {item.customer_name && (
+                                      <div>
+                                        <span className="text-muted-foreground">Cliente:</span>
+                                        <span className="ml-1 font-medium">{item.customer_name}</span>
+                                      </div>
+                                    )}
+                                    {item.customer_phone && (
+                                      <div>
+                                        <span className="text-muted-foreground">Telefone:</span>
+                                        <span className="ml-1 font-medium">{item.customer_phone}</span>
+                                      </div>
+                                    )}
+                                    {item.product_name && (
+                                      <div>
+                                        <span className="text-muted-foreground">Produto:</span>
+                                        <span className="ml-1 font-medium">{item.product_name}</span>
+                                      </div>
+                                    )}
+                                    {item.order_id && (
+                                      <div>
+                                        <span className="text-muted-foreground">Pedido:</span>
+                                        <span className="ml-1 font-medium">{item.order_id}</span>
+                                      </div>
+                                    )}
+                                    {item.event_type && (
+                                      <div>
+                                        <span className="text-muted-foreground">Tipo:</span>
+                                        <span className="ml-1 font-medium">{EVENT_TYPES.find(e => e.value === item.event_type)?.label || item.event_type}</span>
+                                      </div>
+                                    )}
+                                    {item.checkout_url && (
+                                      <div className="col-span-2">
+                                        <span className="text-muted-foreground">Checkout:</span>
+                                        <a href={item.checkout_url} target="_blank" rel="noopener noreferrer" className="ml-1 text-primary hover:underline truncate block">
+                                          {item.checkout_url}
+                                        </a>
+                                      </div>
+                                    )}
+                                  </div>
+                                  {item.raw_payload && (
+                                    <details className="text-xs">
+                                      <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                                        Ver payload completo
+                                      </summary>
+                                      <pre className="mt-2 p-2 bg-background rounded text-[10px] overflow-x-auto max-h-40">
+                                        {JSON.stringify(item.raw_payload, null, 2)}
+                                      </pre>
+                                    </details>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           ))
                         )}
