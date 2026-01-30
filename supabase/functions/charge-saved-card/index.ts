@@ -59,15 +59,33 @@ serve(async (req) => {
     if (!method) throw new Error("No payment method found");
 
     // Charge the card
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(amount * 100), // Convert to cents
-      currency: "brl",
-      customer: method.stripe_customer_id,
-      payment_method: method.stripe_payment_method_id,
-      off_session: true,
-      confirm: true,
-      description: `Recarga de créditos - R$ ${amount.toFixed(2)}`,
-    });
+    let paymentIntent;
+    try {
+      paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(amount * 100), // Convert to cents
+        currency: "brl",
+        customer: method.stripe_customer_id,
+        payment_method: method.stripe_payment_method_id,
+        off_session: true,
+        confirm: true,
+        description: `Recarga de créditos - R$ ${amount.toFixed(2)}`,
+      });
+    } catch (stripeError: any) {
+      // Handle cards that weren't set up for off-session payments
+      if (stripeError.code === 'card_declined' || 
+          stripeError.message?.includes('does not support') ||
+          stripeError.code === 'payment_intent_authentication_failure') {
+        // Delete the invalid payment method from database
+        await supabaseClient
+          .from("user_payment_methods")
+          .delete()
+          .eq("id", paymentMethodId || method.id)
+          .eq("user_id", user.id);
+        
+        throw new Error("Este cartão precisa ser recadastrado. Por favor, adicione o cartão novamente.");
+      }
+      throw stripeError;
+    }
 
     if (paymentIntent.status === "succeeded") {
       // Get credit price
