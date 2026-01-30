@@ -74,9 +74,12 @@ export const InsufficientCreditsModal = ({
         </div>
 
         <div className="flex flex-col gap-2">
-          <Button onClick={handleGoToMarketplace} className="w-full bg-accent hover:bg-accent/90">
+          <Button 
+            onClick={handleGoToMarketplace} 
+            className="w-full bg-orange-500 hover:bg-orange-600 text-white"
+          >
             <ShoppingCart className="h-4 w-4 mr-2" />
-            Recarregue seu saldo
+            Recarregar Créditos
           </Button>
           <Button variant="ghost" onClick={() => onOpenChange(false)} className="w-full">
             Cancelar

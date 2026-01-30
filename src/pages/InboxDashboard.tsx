@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ArrowLeft, MessageSquare, Smartphone, GitBranch, Bell, Plus, RefreshCw, Loader2, QrCode, Trash2, PowerOff, RotateCcw, ChevronDown, ChevronRight, Phone, Zap, Users, TrendingUp, Filter, Check, Hash, Wifi, MapPin, CheckCircle, XCircle, Wallet } from "lucide-react";
+import { ArrowLeft, MessageSquare, Smartphone, GitBranch, Bell, Plus, RefreshCw, Loader2, QrCode, Trash2, PowerOff, RotateCcw, ChevronDown, ChevronRight, Phone, Zap, Users, TrendingUp, Filter, Check, Hash, Wifi, MapPin, CheckCircle, XCircle, Wallet, ShoppingCart } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
@@ -1703,6 +1703,21 @@ export default function InboxDashboard() {
                 <Badge variant="destructive">Insuficiente</Badge>
               )}
             </div>
+
+            {/* Recharge Button when insufficient balance */}
+            {balance < INSTANCE_COST && (
+              <Button 
+                onClick={() => {
+                  setShowConfirmPurchaseModal(false);
+                  localStorage.setItem('homeMode', 'marketplace');
+                  navigate('/?tab=creditos');
+                }}
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white"
+              >
+                <ShoppingCart className="h-4 w-4 mr-2" />
+                Recarregar Créditos
+              </Button>
+            )}
           </div>
 
           <DialogFooter className="gap-2">
