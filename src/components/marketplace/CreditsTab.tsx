@@ -218,7 +218,7 @@ export const CreditsTab = ({ onRecharge }: CreditsTabProps) => {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {packages.map((pkg, index) => {
               const showDoubleBonus = doubleCreditsEnabled && isFullMember;
               const displayCredits = showDoubleBonus ? pkg.credits * 2 : pkg.credits;
