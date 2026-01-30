@@ -291,9 +291,11 @@ serve(async (req) => {
 
           if (contact) {
             // 3. Fetch the flow to get nodes
+            // Note: We don't check is_active here because Logzz webhooks are external triggers
+            // that should work regardless of the flow's active status (is_active is for keyword triggers)
             const { data: flow, error: flowFetchError } = await supabase
               .from('inbox_flows')
-              .select('id, name, nodes, is_active')
+              .select('id, name, nodes')
               .eq('id', flowId)
               .eq('user_id', userId)
               .maybeSingle();
@@ -301,10 +303,8 @@ serve(async (req) => {
             if (flowFetchError || !flow) {
               console.error(`[${runId}] Flow not found or error:`, flowFetchError);
               flowError = 'Flow not found';
-            } else if (!flow.is_active) {
-              console.warn(`[${runId}] Flow ${flow.name} is not active`);
-              flowError = 'Flow is inactive';
             } else {
+              // Flow found - proceed with triggering (Logzz webhook triggers bypass is_active check)
               // 4. Create flow session and trigger
               const nowIso = new Date().toISOString();
               const startNodeId = pickStartNodeId(flow.nodes);
