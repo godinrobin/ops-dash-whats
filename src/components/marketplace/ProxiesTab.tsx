@@ -85,6 +85,8 @@ const PLAN_CONFIG: Record<PlanType, { label: string; icon: React.ReactNode; desc
     description: 'IP residencial',
     color: 'bg-green-500/20 text-green-400 border-green-500/30',
     price: 6.50,
+    badge: 'Esgotado',
+    isSoldOut: true,
     packages: {
       unit: { quantity: 1, price: 6.50, label: 'Unitário' },
       pack10: { quantity: 10, price: 50, label: '10 Proxies', savings: 'Economize R$15' },
