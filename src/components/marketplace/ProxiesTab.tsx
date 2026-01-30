@@ -856,36 +856,47 @@ export function ProxiesTab({ balance, onRecharge, onBalanceChange }: ProxiesTabP
                   </div>
                 )}
 
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-3xl font-bold text-accent">
-                      R$ {currentPrice.toFixed(2).replace('.', ',')}
-                      <span className="text-sm font-normal text-muted-foreground ml-2">
-                        {packageQuantity > 1 && `(${packageQuantity} proxies)`}
-                      </span>
+                {/* Only show price and button if plan is not sold out */}
+                {!PLAN_CONFIG[planType].isSoldOut ? (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-3xl font-bold text-accent">
+                          R$ {currentPrice.toFixed(2).replace('.', ',')}
+                          <span className="text-sm font-normal text-muted-foreground ml-2">
+                            {packageQuantity > 1 && `(${packageQuantity} proxies)`}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                      <Button 
+                        onClick={handlePurchase}
+                        disabled={purchasing}
+                        className="bg-accent hover:bg-accent/90 text-accent-foreground flex-1"
+                      >
+                        {purchasing ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Processando {packageQuantity} proxies...
+                          </>
+                        ) : (
+                          <>
+                            <Globe className="h-4 w-4 mr-2" />
+                            Contratar {packageQuantity > 1 ? `${packageQuantity} Proxies` : 'Agora'}
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center p-4 bg-muted/30 rounded-lg border border-muted">
+                    <p className="text-muted-foreground text-center">
+                      Selecione um tipo de proxy disponível para continuar
                     </p>
                   </div>
-                </div>
-                
-                <div className="flex items-center gap-3">
-                  <Button 
-                    onClick={handlePurchase}
-                    disabled={purchasing}
-                    className="bg-accent hover:bg-accent/90 text-accent-foreground flex-1"
-                  >
-                    {purchasing ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Processando {packageQuantity} proxies...
-                      </>
-                    ) : (
-                      <>
-                        <Globe className="h-4 w-4 mr-2" />
-                        Contratar {packageQuantity > 1 ? `${packageQuantity} Proxies` : 'Agora'}
-                      </>
-                    )}
-                  </Button>
-                </div>
+                )}
               </div>
             </div>
           </div>
