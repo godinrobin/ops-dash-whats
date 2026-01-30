@@ -70,7 +70,8 @@ serve(async (req) => {
     // Amount in centavos (Stripe uses smallest currency unit)
     const amountInCentavos = Math.round(amount * 100);
 
-    const origin = req.headers.get("origin") || "https://ops-dash-whats.lovable.app";
+    // Always use production URL for redirects
+    const origin = "https://zapdata.co";
     
     // Create checkout session with dynamic pricing
     const session = await stripe.checkout.sessions.create({
