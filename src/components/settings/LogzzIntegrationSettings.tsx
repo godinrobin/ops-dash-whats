@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { ColoredSwitch } from "@/components/ui/colored-switch";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Copy, RefreshCw, ExternalLink, Package, Clock, CheckCircle2, Loader2, History, XCircle, Plus, Trash2, Workflow, X } from "lucide-react";
+import { Copy, RefreshCw, ExternalLink, Package, Clock, CheckCircle2, Loader2, History, XCircle, Plus, Trash2, Workflow, X, Smartphone } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -22,16 +22,30 @@ interface LogzzWebhook {
   created_at: string;
   event_type: string;
   flow_id: string | null;
+  instance_id: string | null;
   name: string | null;
   flow?: {
     id: string;
     name: string;
+  } | null;
+  instance?: {
+    id: string;
+    instance_name: string;
+    phone_number: string | null;
+    label: string | null;
   } | null;
 }
 
 interface Flow {
   id: string;
   name: string;
+}
+
+interface Instance {
+  id: string;
+  instance_name: string;
+  phone_number: string | null;
+  label: string | null;
 }
 
 interface WebhookHistoryItem {
@@ -71,13 +85,15 @@ export function LogzzIntegrationSettings() {
   const { isAdmin, loading: adminLoading } = useAdminStatus();
   const [webhooks, setWebhooks] = useState<LogzzWebhook[]>([]);
   const [flows, setFlows] = useState<Flow[]>([]);
+  const [instances, setInstances] = useState<Instance[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newIntegration, setNewIntegration] = useState({
     name: "",
     event_type: "pedido",
-    flow_id: ""
+    flow_id: "",
+    instance_id: ""
   });
   const [expandedWebhook, setExpandedWebhook] = useState<string | null>(null);
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
@@ -89,6 +105,7 @@ export function LogzzIntegrationSettings() {
     if (user && isAdmin) {
       fetchWebhooks();
       fetchFlows();
+      fetchInstances();
     } else {
       setLoading(false);
     }
@@ -141,7 +158,8 @@ export function LogzzIntegrationSettings() {
         .from('logzz_webhooks')
         .select(`
           *,
-          flow:inbox_flows(id, name)
+          flow:inbox_flows(id, name),
+          instance:maturador_instances(id, instance_name, phone_number, label)
         `)
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
@@ -173,6 +191,24 @@ export function LogzzIntegrationSettings() {
     }
   };
 
+  const fetchInstances = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('maturador_instances')
+        .select('id, instance_name, phone_number, label')
+        .eq('user_id', user.id)
+        .eq('status', 'connected')
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setInstances((data || []) as Instance[]);
+    } catch (error) {
+      console.error('Error fetching instances:', error);
+    }
+  };
+
   const createWebhook = async () => {
     if (!user) return;
     if (!newIntegration.name.trim()) {
@@ -188,18 +224,20 @@ export function LogzzIntegrationSettings() {
           user_id: user.id,
           name: newIntegration.name,
           event_type: newIntegration.event_type,
-          flow_id: newIntegration.flow_id || null
+          flow_id: newIntegration.flow_id || null,
+          instance_id: newIntegration.instance_id || null
         })
         .select(`
           *,
-          flow:inbox_flows(id, name)
+          flow:inbox_flows(id, name),
+          instance:maturador_instances(id, instance_name, phone_number, label)
         `)
         .single();
 
       if (error) throw error;
       setWebhooks(prev => [data as LogzzWebhook, ...prev]);
       setShowCreateModal(false);
-      setNewIntegration({ name: "", event_type: "pedido", flow_id: "" });
+      setNewIntegration({ name: "", event_type: "pedido", flow_id: "", instance_id: "" });
       toast.success('Integração criada com sucesso!');
     } catch (error) {
       console.error('Error creating webhook:', error);
@@ -234,7 +272,8 @@ export function LogzzIntegrationSettings() {
         .eq('id', webhook.id)
         .select(`
           *,
-          flow:inbox_flows(id, name)
+          flow:inbox_flows(id, name),
+          instance:maturador_instances(id, instance_name, phone_number, label)
         `)
         .single();
 
@@ -271,7 +310,8 @@ export function LogzzIntegrationSettings() {
         .eq('id', webhook.id)
         .select(`
           *,
-          flow:inbox_flows(id, name)
+          flow:inbox_flows(id, name),
+          instance:maturador_instances(id, instance_name, phone_number, label)
         `)
         .single();
 
@@ -281,6 +321,28 @@ export function LogzzIntegrationSettings() {
     } catch (error) {
       console.error('Error updating flow:', error);
       toast.error('Erro ao atualizar fluxo');
+    }
+  };
+
+  const updateWebhookInstance = async (webhook: LogzzWebhook, instanceId: string | null) => {
+    try {
+      const { data, error } = await supabase
+        .from('logzz_webhooks')
+        .update({ instance_id: instanceId })
+        .eq('id', webhook.id)
+        .select(`
+          *,
+          flow:inbox_flows(id, name),
+          instance:maturador_instances(id, instance_name, phone_number, label)
+        `)
+        .single();
+
+      if (error) throw error;
+      setWebhooks(prev => prev.map(w => w.id === webhook.id ? data as LogzzWebhook : w));
+      toast.success('Instância atualizada!');
+    } catch (error) {
+      console.error('Error updating instance:', error);
+      toast.error('Erro ao atualizar instância');
     }
   };
 
@@ -391,7 +453,7 @@ export function LogzzIntegrationSettings() {
                         )}
                       </Badge>
                     </CardTitle>
-                    <CardDescription className="flex items-center gap-2 mt-1">
+                    <CardDescription className="flex items-center gap-2 mt-1 flex-wrap">
                       <Badge variant="outline" className="text-xs">
                         Evento: {getEventTypeLabel(webhook.event_type)}
                       </Badge>
@@ -399,6 +461,12 @@ export function LogzzIntegrationSettings() {
                         <Badge variant="secondary" className="text-xs">
                           <Workflow className="h-3 w-3 mr-1" />
                           {webhook.flow.name}
+                        </Badge>
+                      )}
+                      {webhook.instance && (
+                        <Badge variant="secondary" className="text-xs bg-accent/20 text-accent">
+                          <Smartphone className="h-3 w-3 mr-1" />
+                          {webhook.instance.label || webhook.instance.phone_number || webhook.instance.instance_name}
                         </Badge>
                       )}
                     </CardDescription>
@@ -465,6 +533,33 @@ export function LogzzIntegrationSettings() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+
+                {/* Instance Selector */}
+                <div className="space-y-2">
+                  <Label className="text-xs flex items-center gap-1">
+                    <Smartphone className="h-3 w-3" />
+                    Instância para Disparo
+                  </Label>
+                  <Select
+                    value={webhook.instance_id || "none"}
+                    onValueChange={(value) => updateWebhookInstance(webhook, value === "none" ? null : value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione uma instância" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Usar primeira conectada</SelectItem>
+                      {instances.map((instance) => (
+                        <SelectItem key={instance.id} value={instance.id}>
+                          {instance.label || instance.phone_number || instance.instance_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Esta instância será usada para disparar o fluxo. Se nenhuma for selecionada, será usada a primeira conectada.
+                  </p>
                 </div>
 
                 {/* History Toggle */}
@@ -664,6 +759,32 @@ export function LogzzIntegrationSettings() {
               </Select>
               <p className="text-xs text-muted-foreground">
                 O fluxo será acionado automaticamente quando o evento for recebido
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1">
+                <Smartphone className="h-4 w-4" />
+                Instância para Disparo (opcional)
+              </Label>
+              <Select
+                value={newIntegration.instance_id || "none"}
+                onValueChange={(value) => setNewIntegration(prev => ({ ...prev, instance_id: value === "none" ? "" : value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione uma instância" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Usar primeira conectada</SelectItem>
+                  {instances.map((instance) => (
+                    <SelectItem key={instance.id} value={instance.id}>
+                      {instance.label || instance.phone_number || instance.instance_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Esta instância será usada para disparar o fluxo selecionado
               </p>
             </div>
           </div>

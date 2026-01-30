@@ -73,7 +73,7 @@ serve(async (req) => {
     // Validar token e buscar user_id + flow_id
     const { data: webhook, error: webhookError } = await supabase
       .from('logzz_webhooks')
-      .select('id, user_id, is_active, flow_id, event_type, name')
+      .select('id, user_id, is_active, flow_id, event_type, name, instance_id')
       .eq('webhook_token', token)
       .maybeSingle();
 
@@ -95,6 +95,7 @@ serve(async (req) => {
 
     const userId = webhook.user_id;
     const flowId = webhook.flow_id;
+    const configuredInstanceId = webhook.instance_id;
 
     // Parse payload
     const body = await req.json();
@@ -205,20 +206,46 @@ serve(async (req) => {
       console.log(`[${runId}] Flow configured (${flowId}), attempting to trigger with phone: ${clientPhone}`);
 
       try {
-        // 1. First, we need an instance to send messages. Get user's first active instance.
-        const { data: instance, error: instanceError } = await supabase
-          .from('maturador_instances')
-          .select('id, instance_name')
-          .eq('user_id', userId)
-          .eq('status', 'connected')
-          .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle();
+        // Use configured instance if available, otherwise get first connected instance
+        let instance: { id: string; instance_name: string } | null = null;
+        
+        if (configuredInstanceId) {
+          const { data: configuredInstance, error: configInstanceError } = await supabase
+            .from('maturador_instances')
+            .select('id, instance_name')
+            .eq('id', configuredInstanceId)
+            .eq('user_id', userId)
+            .eq('status', 'connected')
+            .maybeSingle();
+          
+          if (!configInstanceError && configuredInstance) {
+            instance = configuredInstance;
+            console.log(`[${runId}] Using configured instance: ${instance.instance_name} (${instance.id})`);
+          } else {
+            console.warn(`[${runId}] Configured instance ${configuredInstanceId} not available, falling back to first connected`);
+          }
+        }
+        
+        if (!instance) {
+          const { data: firstInstance, error: instanceError } = await supabase
+            .from('maturador_instances')
+            .select('id, instance_name')
+            .eq('user_id', userId)
+            .eq('status', 'connected')
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          
+          if (instanceError || !firstInstance) {
+            console.warn(`[${runId}] No connected instance found for user ${userId}`);
+            flowError = 'No connected instance available';
+          } else {
+            instance = firstInstance;
+            console.log(`[${runId}] Using first connected instance: ${instance.instance_name} (${instance.id})`);
+          }
+        }
 
-        if (instanceError || !instance) {
-          console.warn(`[${runId}] No connected instance found for user ${userId}`);
-          flowError = 'No connected instance available';
-        } else {
+        if (instance) {
           console.log(`[${runId}] Using instance: ${instance.instance_name} (${instance.id})`);
 
           // 2. Find or create inbox contact for this phone
@@ -282,14 +309,43 @@ serve(async (req) => {
               const nowIso = new Date().toISOString();
               const startNodeId = pickStartNodeId(flow.nodes);
 
+              // Helper to safely get a string value, defaulting to space if null/undefined/empty
+              const safeVar = (val: unknown): string => {
+                if (val === null || val === undefined || val === '') return ' ';
+                return String(val);
+              };
+
+              // Extract product name from products array
+              const productName = body.products?.main?.[0]?.product_name || body.products?.[0]?.product_name || '';
+
               const baseVariables = {
                 lastMessage: "",
-                contactName: contact.name || contact.phone,
-                nome: body.client_name || contact.name || clientPhone,
-                telefone: clientPhone,
-                pedido: body.order_number || '',
-                status_pedido: body.order_status || '',
-                valor_pedido: body.order_final_price?.toString() || '',
+                contactName: safeVar(contact.name || contact.phone),
+                nome: safeVar(body.client_name || contact.name || clientPhone),
+                telefone: safeVar(clientPhone),
+                pedido: safeVar(body.order_number),
+                status_pedido: safeVar(body.order_status),
+                valor_pedido: safeVar(body.order_final_price?.toString()),
+                // Logzz specific variables with logzz_ prefix
+                logzz_client_name: safeVar(body.client_name),
+                logzz_client_phone: safeVar(body.client_phone),
+                logzz_client_email: safeVar(body.client_email),
+                logzz_client_document: safeVar(body.client_document),
+                logzz_product_name: safeVar(productName),
+                logzz_order_number: safeVar(body.order_number || body.order_code),
+                logzz_order_status: safeVar(body.order_status),
+                logzz_order_value: safeVar(body.order_final_price?.toString()),
+                logzz_client_address_city: safeVar(body.client_address_city),
+                logzz_client_address_state: safeVar(body.client_address_state),
+                logzz_client_address_number: safeVar(body.client_address_number),
+                logzz_client_address_country: safeVar(body.client_address_country),
+                logzz_client_address_district: safeVar(body.client_address_district),
+                logzz_client_address: safeVar(body.client_address),
+                logzz_client_zip_code: safeVar(body.client_zip_code),
+                logzz_checkout_url: safeVar(body.checkout_url),
+                logzz_tracking_code: safeVar(body.tracking_code),
+                logzz_carrier: safeVar(body.logistic_operator || body.carrier),
+                logzz_delivery_estimate: safeVar(body.delivery_estimate),
                 _sent_node_ids: [] as string[],
                 _triggered_by: "logzz_webhook",
                 _logzz_order_id: insertedOrder.id,
