@@ -8,11 +8,19 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, CreditCard, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { Loader2, CreditCard, ArrowLeft, CheckCircle2, Lock } from "lucide-react";
 import { useToast } from "@/hooks/useSplashedToast";
 import { supabase } from "@/integrations/supabase/client";
 import { loadStripe } from "@stripe/stripe-js";
-import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import { 
+  Elements, 
+  CardNumberElement, 
+  CardExpiryElement, 
+  CardCvcElement, 
+  useStripe, 
+  useElements 
+} from "@stripe/react-stripe-js";
+import { FlippableCreditCard } from "@/components/ui/credit-debit-card";
 
 interface CardRechargeModalProps {
   open: boolean;
@@ -27,6 +35,21 @@ const PRESET_VALUES_ROW2 = [500, 800, 1000, 2000, 5000];
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
 type Step = 'select-amount' | 'card-form';
+
+const elementStyle = {
+  base: {
+    fontSize: '16px',
+    color: '#ffffff',
+    '::placeholder': {
+      color: '#a1a1aa',
+    },
+    iconColor: '#f97316',
+  },
+  invalid: {
+    color: '#ef4444',
+    iconColor: '#ef4444',
+  },
+};
 
 // Card Form Component
 function CardForm({ 
@@ -43,6 +66,12 @@ function CardForm({
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [isFlipped, setIsFlipped] = useState(false);
+  
+  // Card display state
+  const [displayCardNumber, setDisplayCardNumber] = useState("");
+  const [displayExpiry, setDisplayExpiry] = useState("");
+  const [displayCvv, setDisplayCvv] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,8 +81,8 @@ function CardForm({
       return;
     }
 
-    const cardElement = elements.getElement(CardElement);
-    if (!cardElement) {
+    const cardNumberElement = elements.getElement(CardNumberElement);
+    if (!cardNumberElement) {
       toast({ title: "Elemento de cartão não encontrado", variant: "destructive" });
       return;
     }
@@ -74,7 +103,7 @@ function CardForm({
       // 2. Confirm payment with card
       const { error: stripeError, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
         payment_method: {
-          card: cardElement,
+          card: cardNumberElement,
         },
       });
 
@@ -135,28 +164,77 @@ function CardForm({
         <span className="font-medium">Pagar R$ {amount.toFixed(2)}</span>
       </div>
 
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Dados do Cartão</label>
-        <div className="rounded-lg border border-border p-4 bg-card">
-          <CardElement
-            options={{
-              style: {
-                base: {
-                  fontSize: '16px',
-                  color: '#ffffff',
-                  '::placeholder': {
-                    color: '#a1a1aa',
-                  },
-                  iconColor: '#f97316',
-                },
-                invalid: {
-                  color: '#ef4444',
-                  iconColor: '#ef4444',
-                },
-              },
-              hidePostalCode: true,
-            }}
-          />
+      {/* Visual Credit Card */}
+      <div className="flex justify-center mb-4">
+        <FlippableCreditCard
+          cardholderName="TITULAR DO CARTÃO"
+          cardNumber={displayCardNumber || "•••• •••• •••• ••••"}
+          expiryDate={displayExpiry || "MM/AA"}
+          cvv={displayCvv || "•••"}
+          isFlipped={isFlipped}
+        />
+      </div>
+
+      <div className="space-y-4">
+        {/* Card Number */}
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Número do Cartão</label>
+          <div className="rounded-lg border border-border p-3 bg-card">
+            <CardNumberElement
+              options={{ style: elementStyle }}
+              onChange={(e) => {
+                if (e.complete) {
+                  // Show masked with last 4 simulated
+                  setDisplayCardNumber("**** **** **** ****");
+                } else if (e.empty) {
+                  setDisplayCardNumber("");
+                } else {
+                  setDisplayCardNumber("**** **** **** ****");
+                }
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Expiry and CVV */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Validade</label>
+            <div className="rounded-lg border border-border p-3 bg-card">
+              <CardExpiryElement
+                options={{ style: elementStyle }}
+                onChange={(e) => {
+                  if (e.complete) {
+                    setDisplayExpiry("••/••");
+                  } else if (e.empty) {
+                    setDisplayExpiry("");
+                  } else {
+                    setDisplayExpiry("••/••");
+                  }
+                }}
+                onFocus={() => setIsFlipped(false)}
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">CVV</label>
+            <div className="rounded-lg border border-border p-3 bg-card">
+              <CardCvcElement
+                options={{ style: elementStyle }}
+                onChange={(e) => {
+                  if (e.complete) {
+                    setDisplayCvv("***");
+                  } else if (e.empty) {
+                    setDisplayCvv("");
+                  } else {
+                    setDisplayCvv("***");
+                  }
+                }}
+                onFocus={() => setIsFlipped(true)}
+                onBlur={() => setIsFlipped(false)}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -178,8 +256,9 @@ function CardForm({
         )}
       </Button>
 
-      <p className="text-xs text-center text-muted-foreground">
-        Pagamento seguro processado pela <strong>Stripe</strong>
+      <p className="text-xs text-center text-muted-foreground flex items-center justify-center gap-1">
+        <Lock className="h-3 w-3" />
+        Pagamento seguro e criptografado.
       </p>
     </form>
   );
