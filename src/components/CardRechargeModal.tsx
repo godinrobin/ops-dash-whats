@@ -176,6 +176,23 @@ function CardForm({
           variant: "destructive" 
         });
       } else if (paymentIntent?.status === 'succeeded') {
+        // Auto-save the card for future purchases
+        if (paymentIntent.payment_method) {
+          const paymentMethodId = typeof paymentIntent.payment_method === 'string' 
+            ? paymentIntent.payment_method 
+            : paymentIntent.payment_method.id;
+          
+          // Save card in background (don't block success flow)
+          supabase.functions.invoke('manage-payment-methods', {
+            body: { 
+              action: 'save-payment-method', 
+              paymentMethodId 
+            },
+          }).catch(err => {
+            console.warn('Failed to auto-save card:', err);
+          });
+        }
+        
         setPaymentSuccess(true);
         setTimeout(() => {
           onSuccess();

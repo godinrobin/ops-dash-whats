@@ -69,12 +69,13 @@ serve(async (req) => {
     // Convert to centavos (BRL minor units)
     const amountInCentavos = Math.round(amount * 100);
 
-    // Create PaymentIntent for card only
+    // Create PaymentIntent for card only with setup_future_usage for automatic card saving
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amountInCentavos,
       currency: 'brl',
       customer: customerId,
       payment_method_types: ['card'],
+      setup_future_usage: 'off_session',
       metadata: {
         user_id: user.id,
         amount: amount.toString(),
