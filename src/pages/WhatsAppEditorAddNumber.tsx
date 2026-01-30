@@ -753,7 +753,7 @@ export default function WhatsAppEditorAddNumber() {
                   localStorage.setItem('homeMode', 'marketplace');
                   navigate('/?tab=creditos');
                 }}
-                className="w-full bg-orange-500 hover:bg-orange-600 text-white"
+                className="w-full bg-green-600 hover:bg-green-700 text-white"
               >
                 <ShoppingCart className="h-4 w-4 mr-2" />
                 Recarregar Créditos

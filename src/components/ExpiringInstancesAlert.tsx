@@ -31,12 +31,17 @@ export const ExpiringInstancesAlert = ({ alertKey }: ExpiringInstancesAlertProps
   }, [user]);
 
   const checkExpiringInstances = async () => {
-    // Storage key to track if alert was dismissed (X button) in this session
-    const storageKey = `expiring_instances_dismissed_${alertKey}_${user?.id}`;
-    const wasDismissed = sessionStorage.getItem(storageKey);
+    // Storage key to track when alert was last shown for this alertKey
+    const storageKey = `expiring_instances_shown_${alertKey}_${user?.id}`;
+    const lastShown = localStorage.getItem(storageKey);
     
-    // Only skip if user explicitly dismissed with X button
-    if (wasDismissed) return;
+    // Check if alert was shown today (once per day limit)
+    if (lastShown) {
+      const lastShownDate = new Date(parseInt(lastShown));
+      const now = new Date();
+      const isSameDay = lastShownDate.toDateString() === now.toDateString();
+      if (isSameDay) return; // Already shown today, skip
+    }
 
     try {
       // Check if double credits is enabled
@@ -101,16 +106,16 @@ export const ExpiringInstancesAlert = ({ alertKey }: ExpiringInstancesAlertProps
     }
   };
 
-  // X button - dismiss for this screen only (stored in sessionStorage)
+  // Both X button and "Depois" button - dismiss for 24 hours (stored in localStorage)
   const handleDismiss = () => {
-    const storageKey = `expiring_instances_dismissed_${alertKey}_${user?.id}`;
-    sessionStorage.setItem(storageKey, Date.now().toString());
+    const storageKey = `expiring_instances_shown_${alertKey}_${user?.id}`;
+    localStorage.setItem(storageKey, Date.now().toString());
     setIsOpen(false);
   };
 
-  // "Depois" button - just close, will reappear on page reload
+  // "Depois" button - same behavior as X button now (once per day)
   const handleLater = () => {
-    setIsOpen(false);
+    handleDismiss();
   };
 
   const handleRecharge = () => {
