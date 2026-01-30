@@ -58,9 +58,14 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Extrair token da URL
+    // Token can come from query (?token=) or (for internal tests) from body.token
     const url = new URL(req.url);
-    const token = url.searchParams.get('token');
+    const tokenFromQuery = url.searchParams.get('token');
+
+    // Parse payload early so we can optionally read token from body
+    const parsedBody = await req.json().catch(() => ({}));
+    const tokenFromBody = typeof parsedBody?.token === 'string' ? parsedBody.token : null;
+    const token = tokenFromQuery ?? tokenFromBody;
 
     if (!token) {
       console.error(`[${runId}] Missing webhook token`);
@@ -97,8 +102,9 @@ serve(async (req) => {
     const flowId = webhook.flow_id;
     const configuredInstanceId = webhook.instance_id;
 
-    // Parse payload
-    const body = await req.json();
+    // Sanitize payload so we never persist the token if it was provided via body
+    const body = { ...(parsedBody ?? {}) };
+    if ('token' in body) delete (body as Record<string, unknown>).token;
     console.log(`[${runId}] Received Logzz order webhook for user:`, userId);
     console.log(`[${runId}] Payload:`, JSON.stringify(body).substring(0, 500));
 
@@ -315,21 +321,53 @@ serve(async (req) => {
                 return String(val);
               };
 
-              // Extract product name from products object (can be nested as products.main or products.main[0])
+              // Extract product name from products (Logzz payload can vary: object, array, or stringified JSON)
               const extractProductName = (): string => {
-                const products = body.products;
+                let products: any = body.products;
                 if (!products) return '';
-                // Try products.main.product_name (object format)
-                if (products.main?.product_name) return products.main.product_name;
-                // Try products.main[0].product_name (array format)
-                if (Array.isArray(products.main) && products.main[0]?.product_name) return products.main[0].product_name;
-                // Try products[0].product_name (direct array)
-                if (Array.isArray(products) && products[0]?.product_name) return products[0].product_name;
-                // Try direct product_name on products
-                if (products.product_name) return products.product_name;
+
+                // Sometimes `products` can arrive as a JSON string
+                if (typeof products === 'string') {
+                  try {
+                    products = JSON.parse(products);
+                  } catch {
+                    // Keep as string; can't parse
+                  }
+                }
+
+                // 1) products.main.product_name (object format)
+                if (products?.main?.product_name) return String(products.main.product_name);
+                if (products?.main?.productName) return String(products.main.productName);
+                if (products?.main?.name) return String(products.main.name);
+
+                // 2) products.main[0].product_name (array format)
+                if (Array.isArray(products?.main)) {
+                  const first = products.main[0];
+                  if (first?.product_name) return String(first.product_name);
+                  if (first?.productName) return String(first.productName);
+                  if (first?.name) return String(first.name);
+                }
+
+                // 3) products[0].product_name (direct array)
+                if (Array.isArray(products)) {
+                  const first = products[0];
+                  if (first?.product_name) return String(first.product_name);
+                  if (first?.productName) return String(first.productName);
+                  if (first?.name) return String(first.name);
+                }
+
+                // 4) products.product_name (flat object)
+                if (products?.product_name) return String(products.product_name);
+                if (products?.productName) return String(products.productName);
+                if (products?.name) return String(products.name);
+
                 return '';
               };
+
               const productName = extractProductName();
+              console.log(
+                `[${runId}] Product extraction: name="${productName || '(empty)'}" | productsType=${typeof body.products}`
+              );
 
               const baseVariables = {
                 lastMessage: "",
