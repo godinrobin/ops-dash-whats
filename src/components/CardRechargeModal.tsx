@@ -8,9 +8,11 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, CreditCard, ArrowLeft } from "lucide-react";
+import { Loader2, CreditCard, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/useSplashedToast";
 import { supabase } from "@/integrations/supabase/client";
+import { loadStripe } from "@stripe/stripe-js";
+import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
 
 interface CardRechargeModalProps {
   open: boolean;
@@ -21,18 +23,181 @@ interface CardRechargeModalProps {
 const PRESET_VALUES_ROW1 = [10, 20, 50, 100, 200];
 const PRESET_VALUES_ROW2 = [500, 800, 1000, 2000, 5000];
 
+// Initialize Stripe
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
+
+type Step = 'select-amount' | 'card-form';
+
+// Card Form Component
+function CardForm({ 
+  amount, 
+  onSuccess, 
+  onBack 
+}: { 
+  amount: number; 
+  onSuccess: () => void; 
+  onBack: () => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!stripe || !elements) {
+      toast({ title: "Stripe não carregado", variant: "destructive" });
+      return;
+    }
+
+    const cardElement = elements.getElement(CardElement);
+    if (!cardElement) {
+      toast({ title: "Elemento de cartão não encontrado", variant: "destructive" });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // 1. Create PaymentIntent on backend
+      const { data, error } = await supabase.functions.invoke('stripe-card-payment', {
+        body: { amount }
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      const { clientSecret } = data;
+
+      // 2. Confirm payment with card
+      const { error: stripeError, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
+        payment_method: {
+          card: cardElement,
+        },
+      });
+
+      if (stripeError) {
+        console.error("Stripe error:", stripeError);
+        toast({ 
+          title: stripeError.message || "Erro ao processar pagamento", 
+          variant: "destructive" 
+        });
+      } else if (paymentIntent?.status === 'succeeded') {
+        setPaymentSuccess(true);
+        setTimeout(() => {
+          onSuccess();
+        }, 1500);
+      } else {
+        toast({ 
+          title: "Status do pagamento inesperado. Tente novamente.", 
+          variant: "destructive" 
+        });
+      }
+    } catch (err: any) {
+      console.error("Payment error:", err);
+      toast({ 
+        title: err.message || "Erro ao processar pagamento", 
+        variant: "destructive" 
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (paymentSuccess) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 space-y-4">
+        <CheckCircle2 className="h-16 w-16 text-accent animate-in zoom-in-50 duration-300" />
+        <div className="text-center space-y-2">
+          <h3 className="text-lg font-semibold text-accent">Pagamento Aprovado!</h3>
+          <p className="text-sm text-muted-foreground">
+            R$ {amount.toFixed(2)} foram adicionados ao seu saldo.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="flex items-center gap-2 mb-4">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={onBack}
+          className="h-8 w-8"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <span className="font-medium">Pagar R$ {amount.toFixed(2)}</span>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Dados do Cartão</label>
+        <div className="rounded-lg border border-border p-4 bg-card">
+          <CardElement
+            options={{
+              style: {
+                base: {
+                  fontSize: '16px',
+                  color: '#ffffff',
+                  '::placeholder': {
+                    color: '#a1a1aa',
+                  },
+                  iconColor: '#f97316',
+                },
+                invalid: {
+                  color: '#ef4444',
+                  iconColor: '#ef4444',
+                },
+              },
+              hidePostalCode: true,
+            }}
+          />
+        </div>
+      </div>
+
+      <Button
+        type="submit"
+        disabled={!stripe || loading}
+        className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+      >
+        {loading ? (
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            Processando...
+          </>
+        ) : (
+          <>
+            <CreditCard className="h-4 w-4 mr-2" />
+            Pagar R$ {amount.toFixed(2)}
+          </>
+        )}
+      </Button>
+
+      <p className="text-xs text-center text-muted-foreground">
+        Pagamento seguro processado pela <strong>Stripe</strong>
+      </p>
+    </form>
+  );
+}
+
 export function CardRechargeModal({ open, onOpenChange, onBack }: CardRechargeModalProps) {
   const { toast } = useToast();
   
   const [customAmount, setCustomAmount] = useState("");
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<Step>('select-amount');
 
   // Reset state when modal closes
   useEffect(() => {
     if (!open) {
       setCustomAmount("");
       setSelectedAmount(null);
+      setStep('select-amount');
     }
   }, [open]);
 
@@ -52,7 +217,7 @@ export function CardRechargeModal({ open, onOpenChange, onBack }: CardRechargeMo
     return isNaN(parsed) ? 0 : parsed;
   };
 
-  const handlePay = async () => {
+  const handleContinue = () => {
     const amount = getFinalAmount();
     
     if (amount < 5) {
@@ -65,133 +230,125 @@ export function CardRechargeModal({ open, onOpenChange, onBack }: CardRechargeMo
       return;
     }
 
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('stripe-create-checkout', {
-        body: { amount }
-      });
+    setStep('card-form');
+  };
 
-      if (error) throw error;
+  const handlePaymentSuccess = () => {
+    toast({ 
+      title: "Pagamento aprovado!",
+      description: `R$ ${getFinalAmount().toFixed(2)} foram adicionados ao seu saldo.`
+    });
+    onOpenChange(false);
+  };
 
-      if (data.error) {
-        toast({ title: data.error, variant: "destructive" });
-        return;
-      }
-
-      if (data.url) {
-        // Redirect to Stripe Checkout
-        window.location.href = data.url;
-      }
-    } catch (error: any) {
-      console.error('Error creating checkout:', error);
-      toast({ title: error.message || "Erro ao preparar pagamento", variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
+  const handleBackToAmount = () => {
+    setStep('select-amount');
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md border-2 border-accent">
-        <DialogHeader>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onBack}
-              className="h-8 w-8"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <DialogTitle className="flex items-center gap-2">
-              <CreditCard className="h-5 w-5 text-accent" />
-              Recarga via Cartão/PIX
-            </DialogTitle>
-          </div>
-          <DialogDescription>
-            Escolha o valor e pague com cartão ou PIX
-          </DialogDescription>
-        </DialogHeader>
-        
-        <div className="space-y-4">
-          {/* Campo de valor personalizado */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Valor personalizado</label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                R$
-              </span>
-              <Input
-                type="number"
-                placeholder="0,00"
-                value={customAmount}
-                onChange={(e) => handleCustomAmountChange(e.target.value)}
-                className="pl-10"
-                min={5}
-                max={5000}
-                step={0.01}
-              />
-            </div>
-          </div>
-
-          {/* Valores pré-definidos */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Ou escolha um valor</label>
-            <div className="grid grid-cols-5 gap-2">
-              {PRESET_VALUES_ROW1.map((value) => (
+        {step === 'select-amount' && (
+          <>
+            <DialogHeader>
+              <div className="flex items-center gap-2">
                 <Button
-                  key={value}
-                  variant={selectedAmount === value ? "default" : "outline"}
-                  onClick={() => handleSelectAmount(value)}
-                  className={`${selectedAmount === value ? "bg-accent text-accent-foreground" : ""} text-sm px-2`}
+                  variant="ghost"
+                  size="icon"
+                  onClick={onBack}
+                  className="h-8 w-8"
                 >
-                  R$ {value}
+                  <ArrowLeft className="h-4 w-4" />
                 </Button>
-              ))}
-            </div>
-            <div className="grid grid-cols-5 gap-2">
-              {PRESET_VALUES_ROW2.map((value) => (
-                <Button
-                  key={value}
-                  variant={selectedAmount === value ? "default" : "outline"}
-                  onClick={() => handleSelectAmount(value)}
-                  className={`${selectedAmount === value ? "bg-accent text-accent-foreground" : ""} text-sm px-2`}
-                >
-                  R$ {value >= 1000 ? `${(value / 1000).toFixed(0)}k` : value}
-                </Button>
-              ))}
-            </div>
-          </div>
+                <DialogTitle className="flex items-center gap-2">
+                  <CreditCard className="h-5 w-5 text-accent" />
+                  Recarga via Cartão
+                </DialogTitle>
+              </div>
+              <DialogDescription>
+                Escolha o valor para recarregar
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {/* Campo de valor personalizado */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Valor personalizado</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                    R$
+                  </span>
+                  <Input
+                    type="number"
+                    placeholder="0,00"
+                    value={customAmount}
+                    onChange={(e) => handleCustomAmountChange(e.target.value)}
+                    className="pl-10"
+                    min={5}
+                    max={5000}
+                    step={0.01}
+                  />
+                </div>
+              </div>
 
-          {/* Botão de pagar */}
-          <Button
-            onClick={handlePay}
-            disabled={loading || getFinalAmount() < 5}
-            className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Redirecionando...
-              </>
-            ) : (
-              <>
+              {/* Valores pré-definidos */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Ou escolha um valor</label>
+                <div className="grid grid-cols-5 gap-2">
+                  {PRESET_VALUES_ROW1.map((value) => (
+                    <Button
+                      key={value}
+                      variant={selectedAmount === value ? "default" : "outline"}
+                      onClick={() => handleSelectAmount(value)}
+                      className={`${selectedAmount === value ? "bg-accent text-accent-foreground" : ""} text-sm px-2`}
+                    >
+                      R$ {value}
+                    </Button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-5 gap-2">
+                  {PRESET_VALUES_ROW2.map((value) => (
+                    <Button
+                      key={value}
+                      variant={selectedAmount === value ? "default" : "outline"}
+                      onClick={() => handleSelectAmount(value)}
+                      className={`${selectedAmount === value ? "bg-accent text-accent-foreground" : ""} text-sm px-2`}
+                    >
+                      R$ {value >= 1000 ? `${(value / 1000).toFixed(0)}k` : value}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Botão de continuar */}
+              <Button
+                onClick={handleContinue}
+                disabled={getFinalAmount() < 5}
+                className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+              >
                 <CreditCard className="h-4 w-4 mr-2" />
                 {getFinalAmount() >= 5 
-                  ? `Pagar R$ ${getFinalAmount().toFixed(2)}`
-                  : 'Pagar'
+                  ? `Continuar com R$ ${getFinalAmount().toFixed(2)}`
+                  : 'Continuar'
                 }
-              </>
-            )}
-          </Button>
+              </Button>
 
-          <p className="text-xs text-center text-muted-foreground">
-            Valor mínimo: R$ 5,00 • Valor máximo: R$ 5.000,00
-          </p>
-          <p className="text-xs text-center text-muted-foreground">
-            Você será redirecionado para o checkout seguro da <strong>Stripe</strong>
-          </p>
-        </div>
+              <p className="text-xs text-center text-muted-foreground">
+                Valor mínimo: R$ 5,00 • Valor máximo: R$ 5.000,00
+              </p>
+            </div>
+          </>
+        )}
+
+        {step === 'card-form' && (
+          <Elements stripe={stripePromise}>
+            <CardForm 
+              amount={getFinalAmount()} 
+              onSuccess={handlePaymentSuccess}
+              onBack={handleBackToAmount}
+            />
+          </Elements>
+        )}
       </DialogContent>
     </Dialog>
   );
