@@ -236,7 +236,7 @@ export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: 
         </span>
         <span className="flex-1 min-w-0 text-left truncate">{system.title}</span>
         {system.tag && (
-          <span className="text-[9px] px-1.5 py-0.5 bg-accent/20 text-accent rounded font-semibold uppercase">
+          <span className="text-[9px] px-1.5 py-0.5 bg-purple-500/20 text-purple-400 rounded font-semibold uppercase">
             {system.tag}
           </span>
         )}
