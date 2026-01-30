@@ -30,9 +30,13 @@ export const ExpiringInstancesAlert = ({ alertKey }: ExpiringInstancesAlertProps
     }
   }, [user]);
 
+  // Use a GLOBAL storage key (not per alertKey) so the alert only shows once per day across ALL pages
+  const getStorageKey = () => `expiring_instances_shown_global_${user?.id}`;
+
   const checkExpiringInstances = async () => {
-    // Storage key to track when alert was last shown for this alertKey
-    const storageKey = `expiring_instances_shown_${alertKey}_${user?.id}`;
+    if (!user?.id) return; // Guard: ensure user is loaded
+    
+    const storageKey = getStorageKey();
     const lastShown = localStorage.getItem(storageKey);
     
     // Check if alert was shown today (once per day limit)
@@ -100,22 +104,22 @@ export const ExpiringInstancesAlert = ({ alertKey }: ExpiringInstancesAlertProps
       if (instances.length > 0) {
         setExpiringInstances(instances);
         setIsOpen(true);
+        // IMMEDIATELY mark as shown when opening the modal
+        localStorage.setItem(storageKey, Date.now().toString());
       }
     } catch (err) {
       console.error("Error checking expiring instances:", err);
     }
   };
 
-  // Both X button and "Depois" button - dismiss for 24 hours (stored in localStorage)
+  // Close the modal (localStorage already updated when modal opened)
   const handleDismiss = () => {
-    const storageKey = `expiring_instances_shown_${alertKey}_${user?.id}`;
-    localStorage.setItem(storageKey, Date.now().toString());
     setIsOpen(false);
   };
 
-  // "Depois" button - same behavior as X button now (once per day)
+  // "Depois" button - same behavior as X
   const handleLater = () => {
-    handleDismiss();
+    setIsOpen(false);
   };
 
   const handleRecharge = () => {
