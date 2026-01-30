@@ -165,20 +165,54 @@ serve(async (req) => {
     let flowTriggered = false;
     let flowError: string | null = null;
 
+    // Helper to replace null/empty with space
+    const safeVar = (val: unknown): string => {
+      if (val === null || val === undefined || val === '') return ' ';
+      return String(val);
+    };
+
     if (flowId && recipientPhone) {
       console.log(`[${runId}] Flow configured (${flowId}), attempting to trigger with phone: ${recipientPhone}`);
 
       try {
-        const { data: instance, error: instanceError } = await supabase
-          .from('maturador_instances')
-          .select('id, instance_name')
-          .eq('user_id', userId)
-          .eq('status', 'connected')
-          .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle();
+        let instance: { id: string; instance_name: string } | null = null;
 
-        if (instanceError || !instance) {
+        // First try to use the configured instance from webhook
+        if (configuredInstanceId) {
+          console.log(`[${runId}] Using configured instance from webhook: ${configuredInstanceId}`);
+          const { data: configuredInstance, error: configInstanceError } = await supabase
+            .from('maturador_instances')
+            .select('id, instance_name')
+            .eq('id', configuredInstanceId)
+            .eq('status', 'connected')
+            .maybeSingle();
+
+          if (!configInstanceError && configuredInstance) {
+            instance = configuredInstance;
+            console.log(`[${runId}] Found configured instance: ${instance.instance_name}`);
+          } else {
+            console.warn(`[${runId}] Configured instance not connected, falling back to first available`);
+          }
+        }
+
+        // Fallback to first connected instance
+        if (!instance) {
+          const { data: fallbackInstance, error: fallbackError } = await supabase
+            .from('maturador_instances')
+            .select('id, instance_name')
+            .eq('user_id', userId)
+            .eq('status', 'connected')
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle();
+
+          if (!fallbackError && fallbackInstance) {
+            instance = fallbackInstance;
+            console.log(`[${runId}] Using fallback instance: ${instance.instance_name}`);
+          }
+        }
+
+        if (!instance) {
           console.warn(`[${runId}] No connected instance found for user ${userId}`);
           flowError = 'No connected instance available';
         } else {
@@ -244,16 +278,41 @@ serve(async (req) => {
               const baseVariables = {
                 lastMessage: "",
                 contactName: contact.name || contact.phone,
-                nome: body.recipient_name || contact.name || recipientPhone,
+                nome: safeVar(body.recipient_name) !== ' ' ? body.recipient_name : (contact.name || recipientPhone),
                 telefone: recipientPhone,
-                codigo_envio: body.code || '',
-                status_envio: body.status || '',
-                produto: body.product || '',
-                quantidade: body.quantity?.toString() || '',
-                codigo_rastreio: body.tracking_code || '',
-                transportadora: body.carrier || '',
-                data_envio: body.shipping_date || '',
-                data_entrega: body.delivery_date || '',
+                // Logzz specific variables - shipment
+                logzz_client_name: safeVar(body.recipient_name),
+                logzz_client_phone: safeVar(body.recipient_phone),
+                logzz_client_email: safeVar(body.recipient_email),
+                logzz_client_document: safeVar(body.recipient_document),
+                logzz_client_address_city: safeVar(body.recipient_city),
+                logzz_client_address_state: safeVar(body.recipient_state),
+                logzz_client_address_number: safeVar(body.recipient_number),
+                logzz_client_address_country: safeVar(body.recipient_country),
+                logzz_client_address_district: safeVar(body.recipient_neighborhood),
+                logzz_client_address_street: safeVar(body.recipient_street),
+                logzz_client_address_complement: safeVar(body.recipient_complement),
+                logzz_client_address_zipcode: safeVar(body.recipient_zip_code),
+                logzz_product_name: safeVar(body.product),
+                logzz_quantity: safeVar(body.quantity),
+                logzz_order_id: safeVar(body.code),
+                logzz_order_status: safeVar(body.status),
+                logzz_order_value: safeVar(body.cost),
+                logzz_tracking_code: safeVar(body.tracking_code),
+                logzz_carrier: safeVar(body.carrier),
+                logzz_freight_modality: safeVar(body.freight_modality),
+                logzz_freight_cost: safeVar(body.freight_cost),
+                logzz_shipping_date: safeVar(body.shipping_date),
+                logzz_delivery_date: safeVar(body.delivery_date),
+                logzz_creation_date: safeVar(body.creation_date),
+                logzz_sender: safeVar(body.sender),
+                logzz_external_id: safeVar(body.external_id),
+                // Agency info
+                logzz_agency_city: safeVar(body.agency_city),
+                logzz_agency_neighborhood: safeVar(body.agency_neighborhood),
+                logzz_agency_street: safeVar(body.agency_street),
+                logzz_agency_number: safeVar(body.agency_number),
+                logzz_agency_zipcode: safeVar(body.agency_zip_code),
                 _sent_node_ids: [] as string[],
                 _triggered_by: "logzz_webhook_shipment",
                 _logzz_shipment_id: insertedShipment.id,

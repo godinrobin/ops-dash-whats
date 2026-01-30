@@ -19,11 +19,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Clock, Moon, Smartphone, Tag } from 'lucide-react';
+import { Clock, Moon, Smartphone, Tag, Package } from 'lucide-react';
 import { InboxFlow } from '@/types/inbox';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+
+interface LogzzWebhook {
+  id: string;
+  name: string;
+  instance_id: string | null;
+  flow_id: string | null;
+}
 
 interface InboxTag {
   id: string;
@@ -75,6 +82,9 @@ export const FlowSettingsDialog = ({
   // Available tags from database
   const [availableTags, setAvailableTags] = useState<InboxTag[]>([]);
   const [loadingTags, setLoadingTags] = useState(false);
+  
+  // Logzz webhooks that use this flow
+  const [logzzWebhooks, setLogzzWebhooks] = useState<LogzzWebhook[]>([]);
 
   // Predefined tags that always appear
   const predefinedTags = [
@@ -85,28 +95,38 @@ export const FlowSettingsDialog = ({
     { name: 'Suporte', color: '#f97316' },
   ];
 
-  // Fetch user tags when dialog opens
+  // Fetch user tags and logzz webhooks when dialog opens
   useEffect(() => {
-    const fetchTags = async () => {
-      if (!open || !user?.id) return;
+    const fetchData = async () => {
+      if (!open || !user?.id || !flow?.id) return;
       
       setLoadingTags(true);
       try {
-        const { data } = await supabase
+        // Fetch tags
+        const { data: tagsData } = await supabase
           .from('inbox_tags')
           .select('id, name, color')
           .eq('user_id', user.id);
         
-        setAvailableTags(data || []);
+        setAvailableTags(tagsData || []);
+        
+        // Fetch logzz webhooks that use this flow
+        const { data: webhooksData } = await supabase
+          .from('logzz_webhooks')
+          .select('id, name, instance_id, flow_id')
+          .eq('user_id', user.id)
+          .eq('flow_id', flow.id);
+        
+        setLogzzWebhooks(webhooksData || []);
       } catch (error) {
-        console.error('Error fetching tags:', error);
+        console.error('Error fetching data:', error);
       } finally {
         setLoadingTags(false);
       }
     };
     
-    fetchTags();
-  }, [open, user?.id]);
+    fetchData();
+  }, [open, user?.id, flow?.id]);
 
   // All tags combined (predefined + custom)
   const allTags = [
@@ -414,11 +434,39 @@ export const FlowSettingsDialog = ({
                         {instance.phone_number || 'Sem número'}
                       </p>
                     </label>
-                    <Badge variant="outline" className="text-green-500 border-green-500">
-                      Online
-                    </Badge>
+                    <div className="flex items-center gap-1">
+                      {logzzWebhooks.some(w => w.instance_id === instance.id) && (
+                        <Badge variant="secondary" className="text-xs bg-orange-500/20 text-orange-500 border-orange-500/30">
+                          <Package className="h-3 w-3 mr-1" />
+                          Logzz
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className="text-green-500 border-green-500">
+                        Online
+                      </Badge>
+                    </div>
                   </div>
                 ))}
+              </div>
+            )}
+            
+            {/* Show Logzz webhooks info */}
+            {logzzWebhooks.length > 0 && (
+              <div className="mt-2 p-2 bg-orange-500/10 border border-orange-500/30 rounded-md">
+                <p className="text-xs text-orange-500 flex items-center gap-1">
+                  <Package className="h-3 w-3" />
+                  Este fluxo está vinculado a {logzzWebhooks.length} integração(ões) Logzz
+                </p>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {logzzWebhooks.map(w => {
+                    const linkedInstance = instances.find(i => i.id === w.instance_id);
+                    return (
+                      <Badge key={w.id} variant="outline" className="text-xs">
+                        {w.name} {linkedInstance ? `→ ${linkedInstance.label || linkedInstance.instance_name}` : ''}
+                      </Badge>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
