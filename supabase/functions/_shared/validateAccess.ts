@@ -35,6 +35,21 @@ export async function validateUserAccess(
     };
   }
 
+  // Extract and validate JWT structure (must have 3 parts separated by dots)
+  const token = authHeader.replace('Bearer ', '');
+  const jwtParts = token.split('.');
+  if (jwtParts.length !== 3 || jwtParts.some(part => part.length === 0)) {
+    console.error('[SECURITY] Malformed JWT detected - invalid structure');
+    return {
+      isValid: false,
+      userId: null,
+      isFullMember: false,
+      isAdmin: false,
+      isSemiFullMember: false,
+      error: 'Malformed token'
+    };
+  }
+
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
 
@@ -54,8 +69,7 @@ export async function validateUserAccess(
   });
 
   try {
-    // Validate JWT and get claims
-    const token = authHeader.replace('Bearer ', '');
+    // Validate JWT and get claims (token already extracted and validated above)
     const { data: claimsData, error: claimsError } = await supabaseClient.auth.getClaims(token);
 
     if (claimsError || !claimsData?.claims) {

@@ -206,6 +206,7 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
 
     const totalPrice = selectedProduct.price * quantity;
     
+    // Pre-check balance locally for better UX
     if (balance < totalPrice) {
       setRequiredAmount(totalPrice);
       setInsufficientBalanceOpen(true);
@@ -214,15 +215,38 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
 
     setPurchasing(true);
     try {
-      // Deduct balance
-      const { error: walletError } = await supabase
-        .from("sms_user_wallets")
-        .update({ balance: balance - totalPrice })
-        .eq("user_id", user.id);
+      // Use atomic stored procedure for secure transaction
+      const { data: result, error: rpcError } = await supabase.rpc('marketplace_purchase', {
+        p_user_id: user.id,
+        p_product_type: 'marketplace',
+        p_product_name: selectedProduct.name,
+        p_quantity: quantity,
+        p_total_price: totalPrice,
+        p_metadata: { product_id: selectedProduct.id }
+      });
 
-      if (walletError) throw walletError;
+      if (rpcError) throw rpcError;
 
-      // Create order with status em_andamento
+      // Handle RPC result
+      const purchaseResult = result as { 
+        success: boolean; 
+        error?: string; 
+        order_id?: string;
+        new_balance?: number;
+        current_balance?: number;
+        required?: number;
+      };
+
+      if (!purchaseResult.success) {
+        if (purchaseResult.error === 'Saldo insuficiente') {
+          setRequiredAmount(purchaseResult.required || totalPrice);
+          setInsufficientBalanceOpen(true);
+          return;
+        }
+        throw new Error(purchaseResult.error || 'Erro desconhecido');
+      }
+
+      // Create marketplace order record (separate from sms_orders)
       const { data: orderData, error: orderError } = await supabase
         .from("marketplace_orders")
         .insert({
@@ -236,48 +260,41 @@ const Marketplace = ({ onModeChange, currentMode }: MarketplaceProps) => {
         .select()
         .single();
 
-      if (orderError) throw orderError;
+      if (orderError) {
+        console.error("Error creating marketplace order:", orderError);
+        // Purchase already succeeded, just log the order creation error
+      }
 
       // Add to local orders immediately for instant UI update
-      setUserOrders(prev => [{
-        id: orderData.id,
-        product_id: selectedProduct.id,
-        product_name: selectedProduct.name,
-        quantity,
-        total_price: totalPrice,
-        status: "em_andamento",
-        created_at: orderData.created_at,
-        customer_name: null,
-        customer_whatsapp: null
-      }, ...prev]);
+      if (orderData) {
+        setUserOrders(prev => [{
+          id: orderData.id,
+          product_name: selectedProduct.name,
+          quantity,
+          total_price: totalPrice,
+          status: "em_andamento",
+          created_at: orderData.created_at,
+        }, ...prev]);
+        setCurrentOrderId(orderData.id);
+      }
 
-      if (orderError) throw orderError;
-
-      // Update sold count
+      // Update sold count (best effort)
       await supabase
         .from("marketplace_products")
         .update({ sold_count: (selectedProduct.sold_count || 0) + quantity })
         .eq("id", selectedProduct.id);
 
-      // Record transaction
-      await supabase
-        .from("sms_transactions")
-        .insert({
-          user_id: user.id,
-          type: "purchase",
-          amount: -totalPrice,
-          description: `Compra: ${quantity}x ${selectedProduct.name}`
-        });
-
-      setBalance(prev => prev - totalPrice);
+      // Update local balance from RPC response
+      setBalance(purchaseResult.new_balance ?? (balance - totalPrice));
       setPurchasedProductName(`${quantity}x ${selectedProduct.name}`);
-      setCurrentOrderId(orderData.id);
       setSelectedProduct(null);
       setPurchaseSuccess(true);
       setOrderSaved(false);
       setCustomerName("");
       setCustomerWhatsApp("");
       loadProducts();
+      
+      toast.success("Compra realizada com sucesso!");
     } catch (err) {
       console.error("Error purchasing:", err);
       toast.error("Erro ao processar compra");
