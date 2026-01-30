@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { 
   ArrowLeft, Plus, RefreshCw, Loader2, QrCode, Trash2, PowerOff, 
-  RotateCcw, CheckCircle2, XCircle, Smartphone, Settings, Copy, Hash, Wallet
+  RotateCcw, CheckCircle2, XCircle, Smartphone, Settings, Copy, Hash, Wallet, ShoppingCart
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -744,6 +744,21 @@ export default function WhatsAppEditorAddNumber() {
                 <Badge variant="destructive">Insuficiente</Badge>
               )}
             </div>
+
+            {/* Recharge Button when insufficient balance */}
+            {balance < INSTANCE_COST && (
+              <Button 
+                onClick={() => {
+                  setShowConfirmPurchaseModal(false);
+                  localStorage.setItem('homeMode', 'marketplace');
+                  navigate('/?tab=creditos');
+                }}
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white"
+              >
+                <ShoppingCart className="h-4 w-4 mr-2" />
+                Recarregar Créditos
+              </Button>
+            )}
           </div>
 
           <DialogFooter className="gap-2">
