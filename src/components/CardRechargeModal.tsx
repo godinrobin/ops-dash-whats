@@ -34,7 +34,16 @@ const PRESET_VALUES_ROW2 = [500, 800, 1000, 2000, 5000];
 // Initialize Stripe
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
-type Step = 'select-amount' | 'card-form';
+type Step = 'select-amount' | 'select-method' | 'card-form';
+
+interface SavedCard {
+  id: string;
+  card_brand: string;
+  card_last4: string;
+  card_exp_month: number;
+  card_exp_year: number;
+  is_primary: boolean;
+}
 
 const elementStyle = {
   base: {
@@ -234,7 +243,7 @@ function CardForm({
           <label className="text-sm font-medium text-muted-foreground">Nome do Titular</label>
           <Input
             type="text"
-            placeholder="NOME COMO ESTÁ NO CARTÃO"
+            placeholder="TITULAR DO CARTÃO"
             value={inputName}
             onChange={(e) => handleNameInput(e.target.value)}
             className="bg-card border-border text-foreground placeholder:text-muted-foreground/50 h-11 uppercase"
@@ -317,15 +326,36 @@ export function CardRechargeModal({ open, onOpenChange, onBack }: CardRechargeMo
   const [customAmount, setCustomAmount] = useState("");
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
   const [step, setStep] = useState<Step>('select-amount');
+  const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
+  const [loadingCards, setLoadingCards] = useState(false);
+  const [selectedCard, setSelectedCard] = useState<SavedCard | null>(null);
+  const [chargingCard, setChargingCard] = useState(false);
 
-  // Reset state when modal closes
+  // Load saved cards when modal opens
   useEffect(() => {
-    if (!open) {
+    if (open) {
+      loadSavedCards();
+    } else {
       setCustomAmount("");
       setSelectedAmount(null);
       setStep('select-amount');
+      setSelectedCard(null);
     }
   }, [open]);
+
+  const loadSavedCards = async () => {
+    setLoadingCards(true);
+    try {
+      const { data } = await supabase.functions.invoke('manage-payment-methods', {
+        body: { action: 'list' },
+      });
+      setSavedCards(data?.methods || []);
+    } catch (error) {
+      console.error('Error loading saved cards:', error);
+    } finally {
+      setLoadingCards(false);
+    }
+  };
 
   const handleSelectAmount = (amount: number) => {
     setSelectedAmount(amount);
@@ -356,7 +386,43 @@ export function CardRechargeModal({ open, onOpenChange, onBack }: CardRechargeMo
       return;
     }
 
-    setStep('card-form');
+    // If user has saved cards, show selection screen
+    if (savedCards.length > 0) {
+      setStep('select-method');
+    } else {
+      setStep('card-form');
+    }
+  };
+
+  const handleChargeSavedCard = async () => {
+    if (!selectedCard) return;
+    
+    setChargingCard(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('charge-saved-card', {
+        body: { 
+          amount: getFinalAmount(), 
+          paymentMethodId: selectedCard.id 
+        },
+      });
+
+      if (error || data?.error) {
+        throw new Error(data?.error || 'Erro ao processar pagamento');
+      }
+
+      toast({ 
+        title: "Pagamento aprovado!",
+        description: `R$ ${getFinalAmount().toFixed(2)} foram adicionados ao seu saldo.`
+      });
+      onOpenChange(false);
+    } catch (err: any) {
+      toast({ 
+        title: err.message || "Erro ao cobrar cartão", 
+        variant: "destructive" 
+      });
+    } finally {
+      setChargingCard(false);
+    }
   };
 
   const handlePaymentSuccess = () => {
@@ -364,11 +430,17 @@ export function CardRechargeModal({ open, onOpenChange, onBack }: CardRechargeMo
       title: "Pagamento aprovado!",
       description: `R$ ${getFinalAmount().toFixed(2)} foram adicionados ao seu saldo.`
     });
+    loadSavedCards(); // Reload to get newly saved card
     onOpenChange(false);
   };
 
   const handleBackToAmount = () => {
     setStep('select-amount');
+    setSelectedCard(null);
+  };
+
+  const handleBackToMethodSelect = () => {
+    setStep('select-method');
   };
 
   return (
@@ -466,12 +538,104 @@ export function CardRechargeModal({ open, onOpenChange, onBack }: CardRechargeMo
           </>
         )}
 
+        {step === 'select-method' && (
+          <>
+            <DialogHeader>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleBackToAmount}
+                  className="h-8 w-8"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <DialogTitle className="flex items-center gap-2">
+                  <CreditCard className="h-5 w-5 text-accent" />
+                  Escolha o Método
+                </DialogTitle>
+              </div>
+              <DialogDescription>
+                Pagar R$ {getFinalAmount().toFixed(2)}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3">
+              {/* Saved cards */}
+              {savedCards.map((card) => (
+                <button
+                  key={card.id}
+                  onClick={() => setSelectedCard(card)}
+                  className={`w-full flex items-center justify-between p-4 rounded-lg border transition-all ${
+                    selectedCard?.id === card.id 
+                      ? 'border-accent bg-accent/10' 
+                      : 'border-border hover:border-accent/50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="text-2xl">💳</div>
+                    <div className="text-left">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium capitalize">{card.card_brand}</span>
+                        <span className="text-muted-foreground">****{card.card_last4}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Expira em {card.card_exp_month.toString().padStart(2, '0')}/{card.card_exp_year}
+                      </p>
+                    </div>
+                  </div>
+                  {selectedCard?.id === card.id && (
+                    <CheckCircle2 className="h-5 w-5 text-accent" />
+                  )}
+                </button>
+              ))}
+
+              {/* New card option */}
+              <button
+                onClick={() => setStep('card-form')}
+                className="w-full flex items-center gap-3 p-4 rounded-lg border border-dashed border-border hover:border-accent/50 transition-all"
+              >
+                <div className="p-2 rounded-full bg-accent/10">
+                  <CreditCard className="h-5 w-5 text-accent" />
+                </div>
+                <span className="font-medium">Usar novo cartão</span>
+              </button>
+
+              {/* Pay button */}
+              {selectedCard && (
+                <Button
+                  onClick={handleChargeSavedCard}
+                  disabled={chargingCard}
+                  className="w-full bg-accent text-accent-foreground hover:bg-accent/90 h-11"
+                >
+                  {chargingCard ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Processando...
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard className="h-4 w-4 mr-2" />
+                      Pagar R$ {getFinalAmount().toFixed(2)}
+                    </>
+                  )}
+                </Button>
+              )}
+
+              <p className="text-xs text-center text-muted-foreground flex items-center justify-center gap-1">
+                <Lock className="h-3 w-3" />
+                Pagamento seguro e criptografado.
+              </p>
+            </div>
+          </>
+        )}
+
         {step === 'card-form' && (
           <Elements stripe={stripePromise}>
             <CardForm 
               amount={getFinalAmount()} 
               onSuccess={handlePaymentSuccess}
-              onBack={handleBackToAmount}
+              onBack={savedCards.length > 0 ? handleBackToMethodSelect : handleBackToAmount}
             />
           </Elements>
         )}

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { Bell, Megaphone, ChevronLeft, Settings as SettingsIcon, ShoppingBag, ChevronRight, Package } from "lucide-react";
+import { Bell, Megaphone, ChevronLeft, Settings as SettingsIcon, ShoppingBag, ChevronRight, Package, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -9,8 +9,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { PushNotificationsSettings } from "@/components/settings/PushNotificationsSettings";
 import { PixelSettings } from "@/components/settings/PixelSettings";
 import { LogzzIntegrationSettings } from "@/components/settings/LogzzIntegrationSettings";
+import { PaymentsSettings } from "@/components/settings/PaymentsSettings";
 
-type SettingsSection = "notifications" | "pixel" | "logzz";
+type SettingsSection = "notifications" | "pixel" | "logzz" | "payments";
 
 export default function Settings() {
   const { user } = useAuth();
@@ -49,6 +50,12 @@ export default function Settings() {
       label: "Integrações",
       icon: Package,
       description: "Logzz e outras plataformas"
+    },
+    {
+      id: "payments" as const,
+      label: "Pagamentos",
+      icon: CreditCard,
+      description: "Cartões, histórico e renovação"
     }
   ];
 
@@ -60,6 +67,8 @@ export default function Settings() {
         return <PixelSettings />;
       case "logzz":
         return <LogzzIntegrationSettings />;
+      case "payments":
+        return <PaymentsSettings />;
       default:
         return <PushNotificationsSettings />;
     }
