@@ -88,27 +88,41 @@ serve(async (req) => {
     }
 
     if (paymentIntent.status === "succeeded") {
-      // Get credit price
-      const { data: config } = await supabaseClient
-        .from("credits_system_config")
-        .select("value")
-        .eq("key", "credit_price_brl")
-        .single();
+      // Add to wallet balance (R$), not credits
+      const { data: wallet } = await supabaseClient
+        .from("sms_user_wallets")
+        .select("balance")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-      const creditPrice = config?.value ? parseFloat(config.value) : 6.5;
-      const creditsToAdd = amount / creditPrice;
+      const currentBalance = wallet?.balance || 0;
+      const newBalance = currentBalance + amount;
 
-      // Add credits
-      await supabaseClient.rpc("add_credits", {
-        p_user_id: user.id,
-        p_amount: creditsToAdd,
-        p_description: `Recarga via cartão ****${method.card_last4} - R$ ${amount.toFixed(2)}`,
-      });
+      // Upsert wallet
+      await supabaseClient
+        .from("sms_user_wallets")
+        .upsert({
+          user_id: user.id,
+          balance: newBalance,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id" });
+
+      // Record transaction
+      await supabaseClient
+        .from("sms_transactions")
+        .insert({
+          user_id: user.id,
+          type: "deposit",
+          amount: amount,
+          description: `Recarga via cartão ****${method.card_last4} - R$ ${amount.toFixed(2)}`,
+          status: "completed",
+          external_id: paymentIntent.id,
+        });
 
       return new Response(JSON.stringify({ 
         success: true, 
-        creditsAdded: creditsToAdd,
-        amountCharged: amount,
+        amountAdded: amount,
+        newBalance: newBalance,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
