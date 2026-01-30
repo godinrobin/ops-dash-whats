@@ -106,6 +106,27 @@ export function LogzzIntegrationSettings() {
       fetchWebhooks();
       fetchFlows();
       fetchInstances();
+
+      // Subscribe to real-time flow changes
+      const flowsChannel = supabase
+        .channel('logzz-flows-realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'inbox_flows',
+            filter: `user_id=eq.${user.id}`
+          },
+          () => {
+            fetchFlows();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(flowsChannel);
+      };
     } else {
       setLoading(false);
     }
@@ -177,11 +198,11 @@ export function LogzzIntegrationSettings() {
     if (!user) return;
 
     try {
+      // Fetch ALL flows, not just active ones, so user can select any flow
       const { data, error } = await supabase
         .from('inbox_flows')
         .select('id, name')
         .eq('user_id', user.id)
-        .eq('is_active', true)
         .order('name');
 
       if (error) throw error;
