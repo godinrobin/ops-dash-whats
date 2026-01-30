@@ -70,7 +70,7 @@ export function PaymentMethodModal({
               <div className="text-left flex-1">
                 <p className="font-semibold text-lg">Cartão de Crédito</p>
                 <p className="text-sm text-muted-foreground">
-                  Débito ou crédito via Stripe
+                  Pagamento via cartão de crédito
                 </p>
               </div>
             </Button>
