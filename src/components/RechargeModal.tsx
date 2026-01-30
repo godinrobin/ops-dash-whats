@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Copy, CheckCircle2 } from "lucide-react";
+import { Loader2, Copy, CheckCircle2, ArrowLeft, QrCode } from "lucide-react";
 import { useToast } from "@/hooks/useSplashedToast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -214,7 +214,8 @@ export function RechargeModal({ open, onOpenChange, onSuccess }: RechargeModalPr
               onClick={() => setPixData(null)}
               className="w-full"
             >
-              Cancelar e voltar
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Voltar
             </Button>
           </div>
         </DialogContent>
@@ -226,7 +227,10 @@ export function RechargeModal({ open, onOpenChange, onSuccess }: RechargeModalPr
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md border-2 border-accent">
         <DialogHeader>
-          <DialogTitle className="text-center">💰 Recarregar Saldo</DialogTitle>
+          <DialogTitle className="text-center flex items-center justify-center gap-2">
+            <QrCode className="h-5 w-5 text-green-500" />
+            Recarregar via PIX
+          </DialogTitle>
         </DialogHeader>
         
         <div className="space-y-4">
@@ -244,7 +248,7 @@ export function RechargeModal({ open, onOpenChange, onSuccess }: RechargeModalPr
                 onChange={(e) => handleCustomAmountChange(e.target.value)}
                 className="pl-10"
                 min={5}
-                max={1000}
+                max={5000}
                 step={0.01}
               />
             </div>
@@ -283,7 +287,7 @@ export function RechargeModal({ open, onOpenChange, onSuccess }: RechargeModalPr
           <Button
             onClick={handleGeneratePix}
             disabled={loading || getFinalAmount() < 5}
-            className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+            className="w-full bg-green-600 text-white hover:bg-green-700"
           >
             {loading ? (
               <>
@@ -291,7 +295,13 @@ export function RechargeModal({ open, onOpenChange, onSuccess }: RechargeModalPr
                 Gerando PIX...
               </>
             ) : (
-              `Gerar QR Code PIX${getFinalAmount() >= 5 ? ` - R$ ${getFinalAmount().toFixed(2)}` : ''}`
+              <>
+                <QrCode className="h-4 w-4 mr-2" />
+                {getFinalAmount() >= 5 
+                  ? `Gerar QR Code PIX - R$ ${getFinalAmount().toFixed(2)}`
+                  : 'Gerar QR Code PIX'
+                }
+              </>
             )}
           </Button>
 

@@ -209,3 +209,9 @@ verify_jwt = false
 
 [functions.webhook-logzz-order]
 verify_jwt = false
+
+[functions.stripe-create-wallet-checkout]
+verify_jwt = true
+
+[functions.stripe-wallet-webhook]
+verify_jwt = false
