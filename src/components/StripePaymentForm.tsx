@@ -14,6 +14,7 @@ export function StripePaymentForm({ amount, onSuccess, onError }: StripePaymentF
   const elements = useElements();
   const [loading, setLoading] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [elementReady, setElementReady] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,7 +59,7 @@ export function StripePaymentForm({ amount, onSuccess, onError }: StripePaymentF
   if (paymentSuccess) {
     return (
       <div className="flex flex-col items-center justify-center py-8 space-y-4">
-      <div className="relative">
+        <div className="relative">
           <CheckCircle2 className="h-16 w-16 text-accent animate-in zoom-in-50 duration-300" />
         </div>
         <div className="text-center space-y-2">
@@ -73,35 +74,46 @@ export function StripePaymentForm({ amount, onSuccess, onError }: StripePaymentF
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="rounded-lg border border-border p-4 bg-card">
+      {!elementReady && (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-8 w-8 animate-spin text-accent" />
+        </div>
+      )}
+      
+      <div className={`rounded-lg border border-border p-4 bg-card ${!elementReady ? 'hidden' : ''}`}>
         <PaymentElement 
+          onReady={() => setElementReady(true)}
           options={{
             layout: 'tabs',
           }}
         />
       </div>
 
-      <Button
-        type="submit"
-        disabled={!stripe || loading}
-        className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
-      >
-        {loading ? (
-          <>
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            Processando...
-          </>
-        ) : (
-          <>
-            <CreditCard className="h-4 w-4 mr-2" />
-            Pagar R$ {amount.toFixed(2)}
-          </>
-        )}
-      </Button>
+      {elementReady && (
+        <>
+          <Button
+            type="submit"
+            disabled={!stripe || loading}
+            className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Processando...
+              </>
+            ) : (
+              <>
+                <CreditCard className="h-4 w-4 mr-2" />
+                Pagar R$ {amount.toFixed(2)}
+              </>
+            )}
+          </Button>
 
-      <p className="text-xs text-center text-muted-foreground">
-        Pagamento seguro processado pela <strong>Stripe</strong>
-      </p>
+          <p className="text-xs text-center text-muted-foreground">
+            Pagamento seguro processado pela <strong>Stripe</strong>
+          </p>
+        </>
+      )}
     </form>
   );
 }
