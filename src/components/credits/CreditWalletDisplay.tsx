@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { AutoRenewalIndicator } from "./AutoRenewalIndicator";
 
 interface CreditWalletDisplayProps {
   compact?: boolean;
@@ -76,6 +77,9 @@ export const CreditWalletDisplay = ({ compact = false, showTransactions = false 
             Recarregar Créditos
             <ArrowRight className="h-4 w-4 ml-2" />
           </Button>
+
+          {/* Auto Renewal Indicator */}
+          <AutoRenewalIndicator />
 
           {showTransactions && transactions.length > 0 && (
             <div className="mt-4 pt-4 border-t border-border">

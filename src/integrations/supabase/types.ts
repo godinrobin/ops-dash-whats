@@ -2416,6 +2416,60 @@ export type Database = {
         }
         Relationships: []
       }
+      instance_renewal_logs: {
+        Row: {
+          card_amount_charged: number | null
+          created_at: string
+          credits_used: number | null
+          error_message: string | null
+          id: string
+          instance_id: string | null
+          payment_method_id: string | null
+          renewal_type: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          card_amount_charged?: number | null
+          created_at?: string
+          credits_used?: number | null
+          error_message?: string | null
+          id?: string
+          instance_id?: string | null
+          payment_method_id?: string | null
+          renewal_type: string
+          status: string
+          user_id: string
+        }
+        Update: {
+          card_amount_charged?: number | null
+          created_at?: string
+          credits_used?: number | null
+          error_message?: string | null
+          id?: string
+          instance_id?: string | null
+          payment_method_id?: string | null
+          renewal_type?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "instance_renewal_logs_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "instance_renewal_logs_payment_method_id_fkey"
+            columns: ["payment_method_id"]
+            isOneToOne: false
+            referencedRelation: "user_payment_methods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       instance_subscriptions: {
         Row: {
           created_at: string | null
@@ -3579,6 +3633,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          auto_renewal_enabled: boolean | null
           avatar_url: string | null
           created_at: string
           credits_system_test_user: boolean | null
@@ -3603,6 +3658,7 @@ export type Database = {
           username: string
         }
         Insert: {
+          auto_renewal_enabled?: boolean | null
           avatar_url?: string | null
           created_at?: string
           credits_system_test_user?: boolean | null
@@ -3627,6 +3683,7 @@ export type Database = {
           username: string
         }
         Update: {
+          auto_renewal_enabled?: boolean | null
           avatar_url?: string | null
           created_at?: string
           credits_system_test_user?: boolean | null
@@ -4713,6 +4770,48 @@ export type Database = {
           period_start?: string
           system_id?: string
           usage_count?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_payment_methods: {
+        Row: {
+          card_brand: string | null
+          card_exp_month: number | null
+          card_exp_year: number | null
+          card_last4: string
+          created_at: string
+          id: string
+          is_primary: boolean | null
+          stripe_customer_id: string
+          stripe_payment_method_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          card_brand?: string | null
+          card_exp_month?: number | null
+          card_exp_year?: number | null
+          card_last4: string
+          created_at?: string
+          id?: string
+          is_primary?: boolean | null
+          stripe_customer_id: string
+          stripe_payment_method_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          card_brand?: string | null
+          card_exp_month?: number | null
+          card_exp_year?: number | null
+          card_last4?: string
+          created_at?: string
+          id?: string
+          is_primary?: boolean | null
+          stripe_customer_id?: string
+          stripe_payment_method_id?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
