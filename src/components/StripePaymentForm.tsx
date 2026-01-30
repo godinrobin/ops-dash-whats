@@ -74,19 +74,26 @@ export function StripePaymentForm({ amount, onSuccess, onError }: StripePaymentF
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {!elementReady && (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-8 w-8 animate-spin text-accent" />
+      <div className="relative rounded-lg border border-border bg-card p-4 min-h-[180px]">
+        {!elementReady && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-accent" />
+          </div>
+        )}
+
+        {/*
+          IMPORTANTE:
+          Não use `hidden` / `display:none` antes do `PaymentElement` estar pronto.
+          O Stripe pode não conseguir inicializar e o `onReady` nunca dispara.
+        */}
+        <div className={elementReady ? "opacity-100" : "opacity-0"}>
+          <PaymentElement
+            onReady={() => setElementReady(true)}
+            options={{
+              layout: "tabs",
+            }}
+          />
         </div>
-      )}
-      
-      <div className={`rounded-lg border border-border p-4 bg-card ${!elementReady ? 'hidden' : ''}`}>
-        <PaymentElement 
-          onReady={() => setElementReady(true)}
-          options={{
-            layout: 'tabs',
-          }}
-        />
       </div>
 
       {elementReady && (
