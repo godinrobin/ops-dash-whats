@@ -315,8 +315,21 @@ serve(async (req) => {
                 return String(val);
               };
 
-              // Extract product name from products array
-              const productName = body.products?.main?.[0]?.product_name || body.products?.[0]?.product_name || '';
+              // Extract product name from products object (can be nested as products.main or products.main[0])
+              const extractProductName = (): string => {
+                const products = body.products;
+                if (!products) return '';
+                // Try products.main.product_name (object format)
+                if (products.main?.product_name) return products.main.product_name;
+                // Try products.main[0].product_name (array format)
+                if (Array.isArray(products.main) && products.main[0]?.product_name) return products.main[0].product_name;
+                // Try products[0].product_name (direct array)
+                if (Array.isArray(products) && products[0]?.product_name) return products[0].product_name;
+                // Try direct product_name on products
+                if (products.product_name) return products.product_name;
+                return '';
+              };
+              const productName = extractProductName();
 
               const baseVariables = {
                 lastMessage: "",
