@@ -2981,6 +2981,7 @@ export type Database = {
           event_type: string
           flow_id: string | null
           id: string
+          instance_id: string | null
           is_active: boolean | null
           name: string | null
           updated_at: string | null
@@ -2992,6 +2993,7 @@ export type Database = {
           event_type?: string
           flow_id?: string | null
           id?: string
+          instance_id?: string | null
           is_active?: boolean | null
           name?: string | null
           updated_at?: string | null
@@ -3003,6 +3005,7 @@ export type Database = {
           event_type?: string
           flow_id?: string | null
           id?: string
+          instance_id?: string | null
           is_active?: boolean | null
           name?: string | null
           updated_at?: string | null
@@ -3015,6 +3018,13 @@ export type Database = {
             columns: ["flow_id"]
             isOneToOne: false
             referencedRelation: "inbox_flows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "logzz_webhooks_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
             referencedColumns: ["id"]
           },
         ]

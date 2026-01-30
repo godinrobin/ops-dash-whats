@@ -35,6 +35,29 @@ const SYSTEM_VARIABLES = [
   'telefone'
 ];
 
+// Logzz webhook variables - prefixed with logzz_ for clarity
+const LOGZZ_VARIABLES = [
+  { name: 'logzz_client_name', description: 'Nome do cliente' },
+  { name: 'logzz_client_phone', description: 'Telefone do cliente' },
+  { name: 'logzz_client_email', description: 'Email do cliente' },
+  { name: 'logzz_client_document', description: 'CPF/CNPJ do cliente' },
+  { name: 'logzz_product_name', description: 'Nome do produto' },
+  { name: 'logzz_order_number', description: 'Número do pedido' },
+  { name: 'logzz_order_status', description: 'Status do pedido' },
+  { name: 'logzz_order_value', description: 'Valor do pedido' },
+  { name: 'logzz_client_address_city', description: 'Cidade do cliente' },
+  { name: 'logzz_client_address_state', description: 'Estado do cliente' },
+  { name: 'logzz_client_address_number', description: 'Número do endereço' },
+  { name: 'logzz_client_address_country', description: 'País do cliente' },
+  { name: 'logzz_client_address_district', description: 'Bairro do cliente' },
+  { name: 'logzz_client_address', description: 'Rua do cliente' },
+  { name: 'logzz_client_zip_code', description: 'CEP do cliente' },
+  { name: 'logzz_checkout_url', description: 'URL do checkout' },
+  { name: 'logzz_tracking_code', description: 'Código de rastreio' },
+  { name: 'logzz_carrier', description: 'Transportadora' },
+  { name: 'logzz_delivery_estimate', description: 'Previsão de entrega' },
+];
+
 // Function to sanitize file names for upload (removes accents and special characters)
 const sanitizeFileName = (filename: string): string => {
   // Remove accents/diacritics
@@ -347,7 +370,7 @@ export const PropertiesPanel = ({
         );
 
       case 'text':
-        // Get all available variables: system + custom from DB + custom from nodes
+        // Get all available variables: system + custom from DB + custom from nodes + logzz
         const getAvailableVariablesForText = () => {
           const nodeVariables = extractCustomVariablesFromNodes(allNodes);
           const allVariables = [...SYSTEM_VARIABLES, ...dbCustomVariables, ...nodeVariables];
@@ -355,6 +378,7 @@ export const PropertiesPanel = ({
           return [...new Set(allVariables)].sort();
         };
         const textVariables = getAvailableVariablesForText();
+        const logzzVariableNames = LOGZZ_VARIABLES.map(v => v.name);
         
         const insertVariable = (varName: string) => {
           const currentMessage = (nodeData.message as string) || '';
@@ -374,20 +398,42 @@ export const PropertiesPanel = ({
             </div>
             <div className="space-y-2">
               <Label className="text-xs">Variáveis disponíveis</Label>
-              <div className="flex flex-wrap gap-1">
-                {textVariables.map((varName) => (
-                  <Badge 
-                    key={varName}
-                    variant="secondary" 
-                    className="cursor-pointer hover:bg-primary hover:text-primary-foreground text-xs"
-                    onClick={() => insertVariable(varName)}
-                  >
-                    {`{{${varName}}}`}
-                  </Badge>
-                ))}
-              </div>
+              
+              {/* Dropdown for selecting variables */}
+              <Select
+                onValueChange={(value) => insertVariable(value)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Clique para inserir variável..." />
+                </SelectTrigger>
+                <SelectContent className="max-h-80">
+                  {/* System Variables Group */}
+                  <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted/50">
+                    Sistema
+                  </div>
+                  {textVariables.filter(v => !v.startsWith('logzz_')).map((varName) => (
+                    <SelectItem key={varName} value={varName}>
+                      {`{{${varName}}}`}
+                    </SelectItem>
+                  ))}
+                  
+                  {/* Logzz Variables Group */}
+                  <div className="px-2 py-1 text-xs font-semibold text-accent bg-accent/10 mt-1">
+                    🔗 Logzz (Webhook)
+                  </div>
+                  {LOGZZ_VARIABLES.map((variable) => (
+                    <SelectItem key={variable.name} value={variable.name}>
+                      <span className="flex items-center gap-2">
+                        <span className="text-accent">{`{{${variable.name}}}`}</span>
+                        <span className="text-muted-foreground text-xs">- {variable.description}</span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
               <p className="text-xs text-muted-foreground">
-                Clique para inserir no texto
+                Selecione uma variável para inserir no texto. Variáveis Logzz são preenchidas automaticamente via webhook.
               </p>
             </div>
             

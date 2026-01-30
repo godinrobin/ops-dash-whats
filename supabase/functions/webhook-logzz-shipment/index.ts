@@ -56,7 +56,7 @@ serve(async (req) => {
 
     const { data: webhook, error: webhookError } = await supabase
       .from('logzz_webhooks')
-      .select('id, user_id, is_active, flow_id, event_type, name')
+      .select('id, user_id, is_active, flow_id, event_type, name, instance_id')
       .eq('webhook_token', token)
       .maybeSingle();
 
@@ -78,6 +78,7 @@ serve(async (req) => {
 
     const userId = webhook.user_id;
     const flowId = webhook.flow_id;
+    const configuredInstanceId = webhook.instance_id;
 
     const body = await req.json();
     console.log(`[${runId}] Received Logzz shipment webhook for user:`, userId);
