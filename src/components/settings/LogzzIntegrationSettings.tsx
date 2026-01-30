@@ -68,7 +68,7 @@ export function LogzzIntegrationSettings() {
   const [expandedWebhook, setExpandedWebhook] = useState<string | null>(null);
   const [history, setHistory] = useState<Record<string, WebhookHistoryItem[]>>({});
 
-  const WEBHOOK_BASE_URL = "https://dcjizoulbggsavizbukq.supabase.co/functions/v1";
+  const WEBHOOK_BASE_URL = "https://zapdata.co/functions/v1";
 
   useEffect(() => {
     if (user && isAdmin) {
