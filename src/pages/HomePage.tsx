@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { SystemsSidebar } from "@/components/layout/SystemsSidebar";
 import { Feed } from "@/components/feed/Feed";
+import { PopularSystemsMarquee } from "@/components/feed/PopularSystemsMarquee";
 import { RestrictedFeatureModal } from "@/components/RestrictedFeatureModal";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 import Marketplace from "./Marketplace";
@@ -58,6 +59,9 @@ const HomePage = () => {
       
       {/* Main Content Area */}
       <main className={`${sidebarOpen ? 'lg:ml-64' : ''} transition-all duration-200`}>
+        {/* Popular Systems Marquee - Full width */}
+        <PopularSystemsMarquee />
+        
         <div className="max-w-2xl mx-auto px-4 py-8">
           {/* Feed Header */}
           <div className="mb-8">

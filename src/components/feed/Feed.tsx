@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Loader2, Lock, ChevronDown, ChevronUp, Check, X, Clock } from "lucide-react";
 import { CreatePostCard } from "./CreatePostCard";
 import { FeedPost } from "./FeedPost";
-import { PopularSystemsMarquee } from "./PopularSystemsMarquee";
+
 import { useAuth } from "@/contexts/AuthContext";
 import { useAccessLevel } from "@/hooks/useAccessLevel";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
@@ -388,10 +388,6 @@ export const Feed = () => {
 
   return (
     <div className="space-y-4">
-      {/* Popular Systems Marquee */}
-      <PopularSystemsMarquee />
-      
-      {/* Create Post Card - only one instance now */}
       {/* Create Post Card - semi-full and full members can post */}
       {canAccessFeed && <CreatePostCard onPostCreated={() => { fetchPosts(); fetchPendingPosts(); }} isAdmin={isAdmin} />}
 
