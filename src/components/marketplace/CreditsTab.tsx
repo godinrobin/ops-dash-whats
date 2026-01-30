@@ -9,6 +9,7 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditsSystem } from "@/hooks/useCreditsSystem";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { AutoRenewalIndicator } from "@/components/credits/AutoRenewalIndicator";
 
 interface CreditPackage {
   id: string;
@@ -182,6 +183,9 @@ export const CreditsTab = ({ onRecharge }: CreditsTabProps) => {
               </div>
             </div>
           </div>
+          
+          {/* Auto Renewal Indicator */}
+          <AutoRenewalIndicator />
         </CardContent>
       </Card>
 
