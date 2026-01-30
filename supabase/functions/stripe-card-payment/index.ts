@@ -24,9 +24,11 @@ serve(async (req) => {
     if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
     logStep("Stripe key verified");
 
+    // Use service role to update wallet after payment
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      { auth: { persistSession: false } }
     );
 
     const authHeader = req.headers.get("Authorization");
@@ -40,15 +42,100 @@ serve(async (req) => {
     if (!user?.email) throw new Error("User not authenticated or email not available");
     logStep("User authenticated", { userId: user.id, email: user.email });
 
-    const { amount } = await req.json();
-    logStep("Request body", { amount });
+    const { amount, confirmPayment, paymentIntentId } = await req.json();
+    logStep("Request body", { amount, confirmPayment, paymentIntentId });
 
-    // Validate amount (R$ 5 - R$ 5.000)
+    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+
+    // If this is a confirmation request (payment succeeded on frontend)
+    if (confirmPayment && paymentIntentId) {
+      logStep("Processing payment confirmation", { paymentIntentId });
+      
+      // Verify the payment intent actually succeeded
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      
+      if (paymentIntent.status !== 'succeeded') {
+        throw new Error("Pagamento não foi confirmado pelo Stripe");
+      }
+
+      const paidAmount = parseFloat(paymentIntent.metadata?.amount || "0");
+      const userId = paymentIntent.metadata?.user_id;
+
+      if (!paidAmount || !userId || userId !== user.id) {
+        throw new Error("Metadados do pagamento inválidos");
+      }
+
+      logStep("Payment verified", { paidAmount, userId });
+
+      // Check if already processed (idempotency)
+      const { data: existingTx } = await supabaseClient
+        .from("sms_transactions")
+        .select("id")
+        .eq("external_id", paymentIntentId)
+        .maybeSingle();
+
+      if (existingTx) {
+        logStep("Payment already processed", { transactionId: existingTx.id });
+        return new Response(JSON.stringify({ 
+          success: true, 
+          already_processed: true,
+          amount: paidAmount 
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Update wallet balance
+      const { data: wallet } = await supabaseClient
+        .from("sms_user_wallets")
+        .select("balance")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      const currentBalance = wallet?.balance || 0;
+      const newBalance = currentBalance + paidAmount;
+
+      // Upsert wallet
+      const { error: upsertError } = await supabaseClient
+        .from("sms_user_wallets")
+        .upsert({
+          user_id: user.id,
+          balance: newBalance,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id" });
+
+      if (upsertError) {
+        logStep("Error updating wallet", { error: upsertError });
+        throw new Error("Failed to update wallet");
+      }
+
+      // Record transaction
+      await supabaseClient
+        .from("sms_transactions")
+        .insert({
+          user_id: user.id,
+          type: "deposit",
+          amount: paidAmount,
+          description: `Depósito via Cartão - R$ ${paidAmount.toFixed(2)}`,
+          status: "completed",
+          external_id: paymentIntentId,
+        });
+
+      logStep("Wallet credited successfully", { userId: user.id, amount: paidAmount, newBalance });
+
+      return new Response(JSON.stringify({ 
+        success: true, 
+        amount: paidAmount,
+        newBalance 
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Original flow: Create PaymentIntent
     if (!amount || typeof amount !== 'number' || amount < 5 || amount > 5000) {
       throw new Error("Valor inválido. Mínimo R$ 5,00 e máximo R$ 5.000,00");
     }
-
-    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
     // Find or create Stripe customer
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
