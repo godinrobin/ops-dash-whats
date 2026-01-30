@@ -1,94 +1,192 @@
 
+# Plano: Corrigir Instâncias Sem Status de Renovação
 
-## Plano: Corrigir Créditos Comprados Erroneamente
+## Diagnóstico
 
-### Resumo do Problema Identificado
+Identifiquei a **causa raiz** do problema: a edge function `maturador-evolution` na ação `create-instance` **não retorna o ID da instância criada**. 
 
-Os dados mostram que múltiplos usuários realizaram compras de créditos sem que o valor correspondente fosse descontado da carteira. A função `purchase_credits` criada anteriormente protege **compras futuras**, mas os dados incorretos do passado ainda estão no banco.
+O código atual:
+```typescript
+const { error: insertError } = await supabaseClient
+  .from('maturador_instances')
+  .insert(insertData);
+```
 
-**Usuários afetados:**
-- `otaviozamarrenho@gmail.com`: 8 compras de pacote profissional (1.600 créditos com bônus), saldo de carteira ainda R$500
-- `lucasgyn65@gmail.com`: 6 compras em 3 minutos (200 créditos)
-- `thiagopradodealmeida@hotmail.com`: 3 compras consecutivas (60 créditos)
-- `admin@metricas.local`: 2 compras duplicadas recentes
+Deveria capturar e retornar o ID:
+```typescript
+const { data: insertedData, error: insertError } = await supabaseClient
+  .from('maturador_instances')
+  .insert(insertData)
+  .select('id')
+  .single();
+```
+
+**Resultado:** Quando o frontend chama `registerInstance(data.instanceId)`, o `instanceId` é `undefined`, então nenhum registro é criado na tabela `instance_subscriptions`.
+
+### Instâncias Afetadas (sem assinatura)
+| Instância | Usuário | Criada em |
+|-----------|---------|-----------|
+| numero_lidiane_dd11 | SILAS BARROS DE ARAUJO | 30/01 19:13 |
+| W2 | luccasbiazotti10@gmail.com | 30/01 18:23 |
+| neuro | kleytonkardoso1@gmail.com | 30/01 16:52 |
+| ZAP | arthur alves sabino | 30/01 16:26 |
 
 ---
 
-### Etapas de Implementação
+## Implementacao
 
-**1. Migração SQL para Limpar Dados Incorretos**
+### Parte 1: Corrigir Edge Function (Evitar Novas Orfas)
 
-Criar uma migração que:
+**Arquivo:** `supabase/functions/maturador-evolution/index.ts`
 
-a) **Identifica transações duplicadas/fraudulentas**
-   - Transações do tipo "purchase" com menos de 60 segundos de diferença para o mesmo pacote e usuário serão consideradas duplicatas
-   - Apenas a primeira transação legítima será mantida
+Alterar o insert para capturar o ID e inclui-lo na resposta:
 
-b) **Remove as transações duplicadas**
-   - Deleta da tabela `credit_transactions` todas as entradas identificadas como duplicatas
+```typescript
+// Antes (linha 766-768):
+const { error: insertError } = await supabaseClient
+  .from('maturador_instances')
+  .insert(insertData);
 
-c) **Recalcula o saldo de créditos (`user_credits`)**
-   - Para cada usuário afetado, recalcula o `balance` baseado na soma de todas as transações restantes válidas
+// Depois:
+const { data: insertedData, error: insertError } = await supabaseClient
+  .from('maturador_instances')
+  .insert(insertData)
+  .select('id')
+  .single();
+```
 
-**2. Script SQL da Limpeza**
+E no resultado final (linha 942-947):
+
+```typescript
+// Antes:
+result = {
+  ...result,
+  qrcode: qrCodeBase64 ? { base64: qrCodeBase64 } : result.qrcode,
+  api_provider: apiProvider,
+};
+
+// Depois:
+result = {
+  ...result,
+  instanceId: insertedData?.id,  // <-- ADICIONAR
+  qrcode: qrCodeBase64 ? { base64: qrCodeBase64 } : result.qrcode,
+  api_provider: apiProvider,
+};
+```
+
+### Parte 2: Backfill das 4 Instancias Orfas
+
+Executar SQL para criar registros em `instance_subscriptions` para as instancias existentes sem assinatura. Como sao instancias novas, serao marcadas como `is_free=true` (primeira instancia de cada usuario) ou com expiracao de 3 dias (se ja tiverem 3 instancias gratuitas).
 
 ```sql
--- 1. Criar tabela temporária com IDs a manter (primeira transação de cada grupo)
-WITH ranked_purchases AS (
-  SELECT 
-    id,
-    user_id,
-    description,
-    created_at,
-    ROW_NUMBER() OVER (
-      PARTITION BY user_id, description, DATE_TRUNC('minute', created_at)
-      ORDER BY created_at ASC
-    ) as rn
-  FROM credit_transactions
-  WHERE type = 'purchase'
-),
-duplicates_to_delete AS (
-  SELECT id FROM ranked_purchases WHERE rn > 1
-)
--- 2. Deletar duplicatas
-DELETE FROM credit_transactions
-WHERE id IN (SELECT id FROM duplicates_to_delete);
+INSERT INTO instance_subscriptions (instance_id, user_id, is_free, expires_at, created_at)
+SELECT 
+  mi.id,
+  mi.user_id,
+  CASE 
+    WHEN (SELECT COUNT(*) FROM instance_subscriptions WHERE user_id = mi.user_id) < 3 
+    THEN true 
+    ELSE false 
+  END,
+  CASE 
+    WHEN (SELECT COUNT(*) FROM instance_subscriptions WHERE user_id = mi.user_id) < 3 
+    THEN NULL 
+    ELSE NOW() + INTERVAL '3 days' 
+  END,
+  NOW()
+FROM maturador_instances mi
+LEFT JOIN instance_subscriptions iss ON mi.id = iss.instance_id
+WHERE iss.id IS NULL
+  AND mi.status IN ('connected', 'open');
+```
 
--- 3. Recalcular saldos de créditos baseado nas transações restantes
-UPDATE user_credits uc
-SET balance = (
-  SELECT COALESCE(SUM(amount), 0)
-  FROM credit_transactions ct
-  WHERE ct.user_id = uc.user_id
-),
-updated_at = now();
+### Parte 3: Trigger de Seguranca (Prevencao Futura)
+
+Criar um trigger no banco de dados que automaticamente cria um registro em `instance_subscriptions` sempre que uma nova instancia e inserida em `maturador_instances`. Isso serve como rede de seguranca caso o frontend falhe em chamar `registerInstance`.
+
+```sql
+CREATE OR REPLACE FUNCTION auto_create_instance_subscription()
+RETURNS TRIGGER AS $$
+DECLARE
+  user_sub_count INTEGER;
+  is_free_slot BOOLEAN;
+BEGIN
+  -- Contar quantas subscriptions o usuario ja tem
+  SELECT COUNT(*) INTO user_sub_count
+  FROM instance_subscriptions
+  WHERE user_id = NEW.user_id;
+  
+  -- Primeiras 3 sao gratuitas
+  is_free_slot := user_sub_count < 3;
+  
+  -- Inserir subscription automaticamente
+  INSERT INTO instance_subscriptions (instance_id, user_id, is_free, expires_at)
+  VALUES (
+    NEW.id,
+    NEW.user_id,
+    is_free_slot,
+    CASE WHEN is_free_slot THEN NULL ELSE NOW() + INTERVAL '3 days' END
+  )
+  ON CONFLICT (instance_id) DO NOTHING;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_auto_create_subscription
+AFTER INSERT ON maturador_instances
+FOR EACH ROW
+EXECUTE FUNCTION auto_create_instance_subscription();
 ```
 
 ---
 
-### Resultado Esperado
+## Resumo das Mudancas
 
-| Usuário | Créditos Antes | Créditos Depois (Estimado) |
-|---------|----------------|---------------------------|
-| otaviozamarrenho@gmail.com | 1.632 | ~400-600 (depende de uso legítimo) |
-| lucasgyn65@gmail.com | 200 | ~60-80 |
-| thiagopradodealmeida@hotmail.com | 60 | ~20 |
+| Item | Arquivo/Local | Acao |
+|------|---------------|------|
+| 1 | `supabase/functions/maturador-evolution/index.ts` | Retornar `instanceId` na resposta de `create-instance` |
+| 2 | Database Migration | Backfill das 4 instancias orfas |
+| 3 | Database Migration | Trigger para prevenir futuras orfas |
 
 ---
 
-### Seção Técnica
+## Secao Tecnica
 
-**Critérios de identificação de duplicatas:**
-- Mesmo `user_id`
-- Mesma `description` (nome do pacote)
-- Diferença de menos de 1 minuto (`DATE_TRUNC('minute', created_at)`)
-- Mantém apenas a primeira transação (ordenada por `created_at ASC`)
+### Arquivos Modificados
+- `supabase/functions/maturador-evolution/index.ts`
+  - Linhas 766-768: Alterar insert para usar `.select('id').single()`
+  - Linhas 942-947: Incluir `instanceId: insertedData?.id` no resultado
 
-**Proteção para futuras compras:**
-- A função RPC `purchase_credits` já implementada usa `FOR UPDATE` para lock de linha, garantindo atomicidade
-- Futuras compras já estão protegidas contra race conditions
+### Migracao SQL
+```sql
+-- Backfill existing orphan instances
+INSERT INTO instance_subscriptions (instance_id, user_id, is_free, expires_at, created_at)
+SELECT mi.id, mi.user_id,
+  (SELECT COUNT(*) FROM instance_subscriptions WHERE user_id = mi.user_id) < 3,
+  CASE WHEN (SELECT COUNT(*) FROM instance_subscriptions WHERE user_id = mi.user_id) < 3 
+       THEN NULL ELSE NOW() + INTERVAL '3 days' END,
+  NOW()
+FROM maturador_instances mi
+LEFT JOIN instance_subscriptions iss ON mi.id = iss.instance_id
+WHERE iss.id IS NULL AND mi.status IN ('connected', 'open');
 
-**Tabelas afetadas:**
-- `credit_transactions` (remoção de registros duplicados)
-- `user_credits` (recálculo de saldo baseado nas transações válidas)
+-- Create safety trigger
+CREATE OR REPLACE FUNCTION auto_create_instance_subscription()
+RETURNS TRIGGER AS $$
+DECLARE user_sub_count INTEGER; is_free_slot BOOLEAN;
+BEGIN
+  SELECT COUNT(*) INTO user_sub_count FROM instance_subscriptions WHERE user_id = NEW.user_id;
+  is_free_slot := user_sub_count < 3;
+  INSERT INTO instance_subscriptions (instance_id, user_id, is_free, expires_at)
+  VALUES (NEW.id, NEW.user_id, is_free_slot,
+    CASE WHEN is_free_slot THEN NULL ELSE NOW() + INTERVAL '3 days' END)
+  ON CONFLICT (instance_id) DO NOTHING;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
+CREATE TRIGGER trigger_auto_create_subscription
+AFTER INSERT ON maturador_instances
+FOR EACH ROW EXECUTE FUNCTION auto_create_instance_subscription();
+```
