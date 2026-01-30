@@ -27,7 +27,8 @@ import {
   Home,
   Lock,
   Zap,
-  Send
+  Send,
+  Star
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAccessLevel } from "@/hooks/useAccessLevel";
@@ -48,6 +49,13 @@ interface SystemGroup {
   title: string;
   systems: SystemItem[];
 }
+
+// Popular/most used systems - shown at the top of sidebar
+const popularSystems: (SystemItem & { tag?: string })[] = [
+  { id: "automatizap", path: "/inbox", title: "Automati-Zap", icon: <Zap className="w-4 h-4" />, restricted: true, tag: "Bot" },
+  { id: "maturador", path: "/maturador", title: "Maturador", icon: <Flame className="w-4 h-4" />, restricted: true },
+  { id: "audio", path: "/gerador-audio", title: "Gerador de Áudios", icon: <Mic className="w-4 h-4" />, restricted: true },
+];
 
 const systemGroups: SystemGroup[] = [
   {
@@ -204,6 +212,39 @@ export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: 
     );
   };
 
+  const renderPopularSystemButton = (system: (typeof popularSystems)[0]) => {
+    const isLocked = !accessLoading && !isFullMember && system.restricted && !isAdmin;
+    const isActive = isActiveSystem(system.path);
+
+    return (
+      <button
+        key={system.id}
+        onClick={() => handleSystemClick(system)}
+        className={cn(
+          "group flex items-center gap-3 w-full px-3 py-2 text-sm rounded-md transition-colors",
+          isActive 
+            ? "bg-accent/10 text-accent" 
+            : "text-muted-foreground hover:text-foreground hover:bg-secondary",
+          isLocked && "opacity-60"
+        )}
+      >
+        <span className={cn(
+          "flex-shrink-0 transition-colors",
+          isActive ? "text-accent" : "text-muted-foreground group-hover:text-foreground"
+        )}>
+          {system.icon}
+        </span>
+        <span className="flex-1 min-w-0 text-left truncate">{system.title}</span>
+        {system.tag && (
+          <span className="text-[9px] px-1.5 py-0.5 bg-accent/20 text-accent rounded font-semibold uppercase">
+            {system.tag}
+          </span>
+        )}
+        {isLocked && !system.tag && <Lock className="w-3 h-3 text-muted-foreground flex-shrink-0" />}
+      </button>
+    );
+  };
+
   const sidebarContent = (
     <div className="flex flex-col h-full">
       {/* Logo/Brand area */}
@@ -237,6 +278,13 @@ export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: 
 
       {/* Systems Navigation */}
       <div className="flex-1 overflow-y-auto scrollbar-sidebar px-2 pb-4">
+        {/* Popular Systems Section */}
+        <CollapsibleSection title="Sistemas Mais Usados">
+          <div className="space-y-0.5 pl-2">
+            {popularSystems.map(renderPopularSystemButton)}
+          </div>
+        </CollapsibleSection>
+        
         {systemGroups.map((group) => (
           <CollapsibleSection key={group.id} title={group.title}>
             <div className="space-y-0.5 pl-2">
