@@ -91,14 +91,15 @@ export function LogzzIntegrationSettings() {
     if (!webhook) return;
 
     const fetchHistory = async () => {
-      const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString();
+      // Show last 24 hours of events (not just 30 seconds)
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       
       // Use logzz_webhook_events table for all event types
       const { data, error } = await supabase
         .from('logzz_webhook_events')
         .select('id, event_type, customer_name, customer_phone, product_name, order_id, checkout_url, raw_payload, created_at')
         .eq('user_id', user.id)
-        .gte('created_at', thirtySecondsAgo)
+        .gte('created_at', twentyFourHoursAgo)
         .order('created_at', { ascending: false })
         .limit(20);
 
@@ -458,7 +459,7 @@ export function LogzzIntegrationSettings() {
                     >
                       <span className="flex items-center gap-2">
                         <History className="h-4 w-4" />
-                        Histórico (últimos 30s)
+                        Histórico (últimas 24h)
                       </span>
                       <Badge variant="outline" className="text-xs">
                         {history[webhook.id]?.length || 0}

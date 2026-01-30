@@ -34,6 +34,17 @@ function normalizePhone(phone: string | null | undefined): string | null {
   return cleaned.length >= 12 ? cleaned : null;
 }
 
+function safeISODate(dateValue: unknown): string | null {
+  if (!dateValue) return null;
+  try {
+    const date = new Date(dateValue as string);
+    if (isNaN(date.getTime())) return null;
+    return date.toISOString();
+  } catch {
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -113,9 +124,9 @@ serve(async (req) => {
       client_address_country: body.client_address_country || null,
       // Informações do pedido
       order_number: body.order_number || body.order_code || null,
-      date_order: body.date_order ? new Date(body.date_order).toISOString() : null,
+      date_order: safeISODate(body.date_order),
       date_order_day: body.date_order_day || null,
-      date_delivery: body.date_delivery ? new Date(body.date_delivery).toISOString() : null,
+      date_delivery: safeISODate(body.date_delivery),
       date_delivery_day: body.date_delivery_day || null,
       delivery_estimate: body.delivery_estimate || null,
       order_status: body.order_status || null,
