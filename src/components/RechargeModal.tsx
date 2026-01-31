@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2, Copy, CheckCircle2, ArrowLeft, QrCode } from "lucide-react";
 import { useToast } from "@/hooks/useSplashedToast";
 import { supabase } from "@/integrations/supabase/client";
+import { trackPurchase } from "@/utils/facebookPixel";
 
 interface RechargeModalProps {
   open: boolean;
@@ -64,6 +65,8 @@ export function RechargeModal({ open, onOpenChange, onSuccess }: RechargeModalPr
         if (data.status === 'completed') {
           setPaymentCompleted(true);
           toast({ title: "Pagamento confirmado!" });
+          // Fire Facebook Pixel Purchase event
+          trackPurchase(pixData.amount);
           onSuccess(data.newBalance);
         } else if (data.status === 'failed') {
           toast({ title: "Pagamento falhou ou expirou", variant: "destructive" });

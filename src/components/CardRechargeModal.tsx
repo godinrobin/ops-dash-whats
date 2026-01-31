@@ -21,6 +21,7 @@ import {
   useElements 
 } from "@stripe/react-stripe-js";
 import { FlippableCreditCard } from "@/components/ui/credit-debit-card";
+import { trackPurchase } from "@/utils/facebookPixel";
 
 interface CardRechargeModalProps {
   open: boolean;
@@ -209,6 +210,9 @@ function CardForm({
             console.warn('Failed to auto-save card:', err);
           });
         }
+        
+        // Fire Facebook Pixel Purchase event
+        trackPurchase(amount);
         
         setPaymentSuccess(true);
         setTimeout(() => {
@@ -443,6 +447,9 @@ export function CardRechargeModal({ open, onOpenChange, onBack }: CardRechargeMo
       if (error || data?.error) {
         throw new Error(data?.error || 'Erro ao processar pagamento');
       }
+
+      // Fire Facebook Pixel Purchase event
+      trackPurchase(getFinalAmount());
 
       toast({ 
         title: "Pagamento aprovado!",
