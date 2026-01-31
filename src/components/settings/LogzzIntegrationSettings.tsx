@@ -102,7 +102,7 @@ export function LogzzIntegrationSettings() {
   const WEBHOOK_BASE_URL = "https://dcjizoulbggsavizbukq.supabase.co/functions/v1";
 
   useEffect(() => {
-    if (user && isAdmin) {
+    if (user) {
       fetchWebhooks();
       fetchFlows();
       fetchInstances();
@@ -130,11 +130,11 @@ export function LogzzIntegrationSettings() {
     } else {
       setLoading(false);
     }
-  }, [user, isAdmin]);
+  }, [user]);
 
   // Fetch recent webhook history for expanded webhook
   useEffect(() => {
-    if (!user || !isAdmin || !expandedWebhook) return;
+    if (!user || !expandedWebhook) return;
 
     const webhook = webhooks.find(w => w.id === expandedWebhook);
     if (!webhook) return;
@@ -142,12 +142,16 @@ export function LogzzIntegrationSettings() {
     const fetchHistory = async () => {
       // Show last 24 hours of events (not just 30 seconds)
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const webhookId = webhook.id;
+      const userId = user!.id;
       
-      // Use logzz_webhook_events table for all event types
-      const { data, error } = await supabase
+      // Use logzz_webhook_events table filtered by this specific webhook_id
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from('logzz_webhook_events')
         .select('id, event_type, customer_name, customer_phone, product_name, order_id, checkout_url, raw_payload, created_at')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
+        .eq('webhook_id', webhookId)
         .gte('created_at', twentyFourHoursAgo)
         .order('created_at', { ascending: false })
         .limit(20);
@@ -155,13 +159,15 @@ export function LogzzIntegrationSettings() {
       if (!error && data) {
         // Deduplicate by order_id to prevent showing same event multiple times
         const seen = new Set<string>();
-        const uniqueData = (data as WebhookHistoryItem[]).filter(item => {
+        const deduped: WebhookHistoryItem[] = [];
+        for (const item of data as WebhookHistoryItem[]) {
           const key = item.order_id || item.id;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-        setHistory(prev => ({ ...prev, [expandedWebhook]: uniqueData }));
+          if (!seen.has(key)) {
+            seen.add(key);
+            deduped.push(item);
+          }
+        }
+        setHistory(prev => ({ ...prev, [expandedWebhook!]: deduped }));
       }
     };
 
@@ -169,7 +175,7 @@ export function LogzzIntegrationSettings() {
     const interval = setInterval(fetchHistory, 3000);
 
     return () => clearInterval(interval);
-  }, [user, isAdmin, expandedWebhook, webhooks]);
+  }, [user, expandedWebhook, webhooks]);
 
   const fetchWebhooks = async () => {
     if (!user) return;
@@ -386,36 +392,7 @@ export function LogzzIntegrationSettings() {
     );
   }
 
-  if (!isAdmin) {
-    return (
-      <Card className="border-dashed">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-muted flex items-center justify-center">
-            <Package className="h-8 w-8 text-muted-foreground" />
-          </div>
-          <CardTitle className="flex items-center justify-center gap-2">
-            Integração Logzz
-            <Badge variant="secondary" className="ml-2">
-              <Clock className="h-3 w-3 mr-1" />
-              Em Breve
-            </Badge>
-          </CardTitle>
-          <CardDescription className="max-w-md mx-auto">
-            A integração com a plataforma Logzz estará disponível em breve. 
-            Você poderá receber webhooks de pedidos diretamente no ZapData.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="text-center">
-          <Button variant="outline" asChild>
-            <a href="https://app.logzz.com.br/" target="_blank" rel="noopener noreferrer">
-              <ExternalLink className="h-4 w-4 mr-2" />
-              Conhecer Logzz
-            </a>
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
+  // Removed admin check - feature now available to all users
 
   return (
     <div className="space-y-6">
