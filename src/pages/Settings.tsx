@@ -133,7 +133,14 @@ export default function Settings() {
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-sm">{item.label}</span>
                         {item.badge && (
-                          <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-accent/20 text-accent">
+                          <span className={cn(
+                            "px-1.5 py-0.5 text-[10px] font-semibold rounded",
+                            item.badge === "Beta" 
+                              ? "bg-purple-500/20 text-purple-400" 
+                              : item.badge === "Novo"
+                              ? "bg-emerald-500/20 text-emerald-400"
+                              : "bg-accent/20 text-accent"
+                          )}>
                             {item.badge}
                           </span>
                         )}
