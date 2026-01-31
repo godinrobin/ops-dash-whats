@@ -447,11 +447,44 @@ serve(async (req) => {
             }
 
             console.log(`[process-delay-queue] Delay job result for ${job.session_id}:`, invokeResult);
+            
+            // ========================================================================
+            // FIX FOR CONSECUTIVE DELAYS BUG:
+            // If the flow scheduled a NEW delay (e.g., 1min delay → text → 2min delay),
+            // the process-inbox-flow already UPSERTED the job with status='scheduled' and new run_at.
+            // We must NOT overwrite it with status='done'.
+            // ========================================================================
+            
+            // Check 1: Did process-inbox-flow return scheduledDelay=true?
+            const flowScheduledNewDelay = 
+              invokeResult && 
+              typeof invokeResult === 'object' && 
+              (invokeResult as { scheduledDelay?: boolean }).scheduledDelay === true;
+            
+            if (flowScheduledNewDelay) {
+              console.log(`[process-delay-queue] Flow scheduled a NEW consecutive delay for session ${job.session_id}, NOT marking job as done`);
+              return { success: true, processed: true };
+            }
+            
+            // Check 2: Verify current job status in DB - it may have been rescheduled
+            const { data: currentJobState } = await supabase
+              .from("inbox_flow_delay_jobs")
+              .select("status, run_at")
+              .eq("session_id", job.session_id)
+              .maybeSingle();
+            
+            if (currentJobState?.status === 'scheduled' && currentJobState?.run_at) {
+              const scheduledRunAt = new Date(currentJobState.run_at).getTime();
+              if (scheduledRunAt > Date.now()) {
+                console.log(`[process-delay-queue] Job was rescheduled to ${currentJobState.run_at}, NOT marking as done`);
+                return { success: true, processed: true };
+              }
+            }
           } else {
             console.log(`[process-delay-queue] Job ${job.session_id} doesn't match timeout or delay criteria, marking as done (node: ${currentNode?.type})`);
           }
           
-          // Mark job as done
+          // Mark job as done (only if NOT rescheduled by the flow)
           await supabase
             .from("inbox_flow_delay_jobs")
             .update({ 
