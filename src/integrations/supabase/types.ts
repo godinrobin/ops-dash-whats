@@ -3031,6 +3031,7 @@ export type Database = {
           product_name: string | null
           raw_payload: Json | null
           user_id: string
+          webhook_id: string | null
         }
         Insert: {
           checkout_url?: string | null
@@ -3043,6 +3044,7 @@ export type Database = {
           product_name?: string | null
           raw_payload?: Json | null
           user_id: string
+          webhook_id?: string | null
         }
         Update: {
           checkout_url?: string | null
@@ -3055,8 +3057,17 @@ export type Database = {
           product_name?: string | null
           raw_payload?: Json | null
           user_id?: string
+          webhook_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "logzz_webhook_events_webhook_id_fkey"
+            columns: ["webhook_id"]
+            isOneToOne: false
+            referencedRelation: "logzz_webhooks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       logzz_webhooks: {
         Row: {
