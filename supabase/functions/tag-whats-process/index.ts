@@ -1917,6 +1917,22 @@ Se não encontrar valor, responda: 0`;
               Array.isArray(ownerProfile.push_subscription_ids) && 
               ownerProfile.push_subscription_ids.length > 0) {
             
+            // Fetch the contact's ad_source_url for click redirection
+            let pushClickUrl: string | null = null;
+            const { data: pushContact } = await supabase
+              .from("inbox_contacts")
+              .select("ad_source_url")
+              .eq("phone", phone)
+              .eq("user_id", instance.user_id)
+              .eq("instance_id", instance.id)
+              .limit(1)
+              .maybeSingle();
+            
+            if (pushContact?.ad_source_url) {
+              pushClickUrl = pushContact.ad_source_url;
+              console.log(`[TAG-WHATS] Push notification will redirect to: ${pushClickUrl}`);
+            }
+            
             // Fetch user's custom notification templates
             const { data: templates, error: templatesError } = await supabase
               .from("sale_notification_templates")
@@ -1977,6 +1993,7 @@ Se não encontrar valor, responda: 0`;
                 title: notificationTitle,
                 message: notificationMessage,
                 icon_url: "https://zapdata.com.br/favicon.png",
+                click_url: pushClickUrl,
               });
             
             if (insertError) {

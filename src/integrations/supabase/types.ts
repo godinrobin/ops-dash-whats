@@ -3996,6 +3996,7 @@ export type Database = {
       }
       push_notification_queue: {
         Row: {
+          click_url: string | null
           created_at: string
           icon_url: string | null
           id: string
@@ -4007,6 +4008,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          click_url?: string | null
           created_at?: string
           icon_url?: string | null
           id?: string
@@ -4018,6 +4020,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          click_url?: string | null
           created_at?: string
           icon_url?: string | null
           id?: string
@@ -5518,6 +5521,7 @@ export type Database = {
       claim_push_notifications: {
         Args: { batch_size?: number }
         Returns: {
+          click_url: string | null
           created_at: string
           icon_url: string | null
           id: string
