@@ -19,6 +19,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import zapdataLogo from "@/assets/zapdata-logo.png";
+import { trackCompleteRegistration } from "@/utils/facebookPixel";
 
 const Auth = () => {
   const [loginEmail, setLoginEmail] = useState("");
@@ -266,6 +267,9 @@ const Auth = () => {
         splashedToast.error("Erro ao criar conta", error.message);
         return;
       }
+
+      // Fire Facebook Pixel CompleteRegistration event
+      trackCompleteRegistration();
 
       splashedToast.success("Conta criada!", "Você já pode fazer login");
 
