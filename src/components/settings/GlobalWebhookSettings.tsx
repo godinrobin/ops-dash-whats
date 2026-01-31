@@ -570,14 +570,14 @@ export function GlobalWebhookSettings() {
             <div className="space-y-2">
               <Label>Instância para Disparo</Label>
               <Select
-                value={newWebhook.instance_id}
-                onValueChange={(value) => setNewWebhook(prev => ({ ...prev, instance_id: value }))}
+                value={newWebhook.instance_id || "__default__"}
+                onValueChange={(value) => setNewWebhook(prev => ({ ...prev, instance_id: value === "__default__" ? "" : value }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Primeira conectada (padrão)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Primeira conectada (padrão)</SelectItem>
+                  <SelectItem value="__default__">Primeira conectada (padrão)</SelectItem>
                   {instances.map((instance) => (
                     <SelectItem key={instance.id} value={instance.id}>
                       {instance.phone_number || instance.label || instance.instance_name}
