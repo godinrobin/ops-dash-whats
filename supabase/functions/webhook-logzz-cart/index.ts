@@ -180,6 +180,7 @@ serve(async (req) => {
         .from('logzz_webhook_events')
         .insert({
           user_id: userId,
+          webhook_id: webhook.id,
           event_type: 'cart',
           customer_name: body.client_name || null,
           customer_phone: clientPhone,
@@ -187,7 +188,7 @@ serve(async (req) => {
           checkout_url: body.checkout_url || null,
           raw_payload: body,
         });
-      console.log(`[${runId}] Event logged for admin`);
+      console.log(`[${runId}] Event logged for admin with webhook_id: ${webhook.id}`);
     } catch (logError) {
       console.warn(`[${runId}] Failed to log event (non-critical):`, logError);
     }
