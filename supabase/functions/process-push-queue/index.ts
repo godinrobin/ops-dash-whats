@@ -66,6 +66,12 @@ Deno.serve(async (req) => {
           firefox_icon: notification.icon_url || "https://zapdata.com.br/favicon.png",
         };
 
+        // Add click URL for redirection when notification is clicked
+        if (notification.click_url) {
+          oneSignalPayload.url = notification.click_url;
+          oneSignalPayload.web_url = notification.click_url;
+        }
+
         console.log(`Sending notification to ${subscriptionIds.length} devices:`, notification.title);
 
         const oneSignalResponse = await fetch("https://onesignal.com/api/v1/notifications", {
