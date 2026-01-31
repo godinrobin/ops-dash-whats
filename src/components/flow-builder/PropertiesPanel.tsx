@@ -399,23 +399,41 @@ export const PropertiesPanel = ({
             <div className="space-y-2">
               <Label className="text-xs">Variáveis disponíveis</Label>
               
-              {/* Dropdown for selecting variables */}
+              {/* Dropdown for selecting variables - uses key to force reset after selection */}
               <Select
-                onValueChange={(value) => insertVariable(value)}
+                key={`var-select-${(nodeData.message as string)?.length || 0}`}
+                value=""
+                onValueChange={(value) => {
+                  if (value) insertVariable(value);
+                }}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Clique para inserir variável..." />
                 </SelectTrigger>
                 <SelectContent className="max-h-80">
-                  {/* System Variables Group */}
+                  {/* System Variables Group - only truly system variables */}
                   <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted/50">
                     Sistema
                   </div>
-                  {textVariables.filter(v => !v.startsWith('logzz_')).map((varName) => (
+                  {SYSTEM_VARIABLES.map((varName) => (
                     <SelectItem key={varName} value={varName}>
                       {`{{${varName}}}`}
                     </SelectItem>
                   ))}
+                  
+                  {/* Custom/User Variables Group */}
+                  {customVariables.length > 0 && (
+                    <>
+                      <div className="px-2 py-1 text-xs font-semibold text-blue-400 bg-blue-500/10 mt-1">
+                        📝 Variáveis do Fluxo
+                      </div>
+                      {customVariables.map((varName) => (
+                        <SelectItem key={varName} value={varName}>
+                          {`{{${varName}}}`}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
                   
                   {/* Logzz Variables Group */}
                   <div className="px-2 py-1 text-xs font-semibold text-accent bg-accent/10 mt-1">

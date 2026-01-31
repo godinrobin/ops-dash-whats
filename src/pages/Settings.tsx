@@ -47,9 +47,10 @@ export default function Settings() {
     },
     {
       id: "logzz" as const,
-      label: "Integrações",
+      label: "Integração Logzz",
       icon: Package,
-      description: "Logzz e outras plataformas"
+      description: "Automação de pedidos e entregas",
+      badge: "Beta"
     },
     {
       id: "payments" as const,
@@ -119,7 +120,14 @@ export default function Settings() {
                       activeSection === item.id ? "text-accent" : "text-muted-foreground"
                     )} />
                     <div className="flex-1">
-                      <span className="font-medium text-sm">{item.label}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm">{item.label}</span>
+                        {item.badge && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-accent/20 text-accent">
+                            {item.badge}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
                     </div>
                   </motion.button>
