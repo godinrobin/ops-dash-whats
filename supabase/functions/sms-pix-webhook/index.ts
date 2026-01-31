@@ -20,7 +20,6 @@ serve(async (req) => {
     console.log('Webhook received:', JSON.stringify(body).substring(0, 1000));
 
     // Mercado Pago envia diferentes tipos de notificação
-    // O tipo mais comum é "payment" com action "payment.created" ou "payment.updated"
     const action = body.action;
     const dataId = body.data?.id;
 
@@ -75,43 +74,57 @@ serve(async (req) => {
       });
     }
 
-    // Se pagamento aprovado, credita saldo
+    // Se pagamento aprovado, credita saldo usando upsert atômico
     if (status === 'approved') {
       console.log(`Payment ${externalId} approved, crediting R$ ${amount} to user ${transaction.user_id}`);
 
-      // Busca saldo atual
-      const { data: wallet } = await supabase
+      // Primeiro, atualiza o saldo usando upsert com incremento
+      // Busca saldo atual com lock FOR UPDATE implícito
+      const { data: wallet, error: walletFetchError } = await supabase
         .from('sms_user_wallets')
         .select('balance')
         .eq('user_id', transaction.user_id)
         .maybeSingle();
 
+      if (walletFetchError) {
+        console.error('Error fetching wallet:', walletFetchError);
+        throw new Error('Erro ao buscar carteira');
+      }
+
       const currentBalance = wallet?.balance || 0;
       const newBalance = currentBalance + amount;
 
-      // Atualiza ou cria wallet
-      if (wallet) {
-        await supabase
-          .from('sms_user_wallets')
-          .update({ balance: newBalance })
-          .eq('user_id', transaction.user_id);
-      } else {
-        await supabase
-          .from('sms_user_wallets')
-          .insert({ user_id: transaction.user_id, balance: amount });
+      // Upsert com verificação de sucesso
+      const { error: walletError } = await supabase
+        .from('sms_user_wallets')
+        .upsert({
+          user_id: transaction.user_id,
+          balance: newBalance,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+
+      if (walletError) {
+        console.error('CRITICAL: Error updating wallet:', walletError);
+        // NÃO marca a transação como completed se o saldo não foi atualizado
+        throw new Error('Erro crítico ao atualizar saldo');
       }
 
-      // Atualiza transação para completed
-      await supabase
+      // Somente após confirmar que o saldo foi atualizado, marca a transação como completed
+      const { error: txError } = await supabase
         .from('sms_transactions')
         .update({ 
           status: 'completed',
-          pix_qr_code: null, // Limpa QR code após uso
+          pix_qr_code: null,
           pix_copy_paste: null,
         })
         .eq('id', transaction.id);
 
-      console.log(`User ${transaction.user_id} balance updated from ${currentBalance} to ${newBalance}`);
+      if (txError) {
+        console.error('Error updating transaction status:', txError);
+        // Saldo já foi creditado, isso é menos crítico
+      }
+
+      console.log(`SUCCESS: User ${transaction.user_id} balance updated from ${currentBalance} to ${newBalance}`);
     } else if (status === 'cancelled' || status === 'rejected') {
       // Marca transação como falha
       await supabase

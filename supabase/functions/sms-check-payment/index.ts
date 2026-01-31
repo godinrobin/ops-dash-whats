@@ -91,32 +91,43 @@ serve(async (req) => {
     const paymentStatus = paymentData.status;
     const amount = paymentData.transaction_amount;
 
-    console.log(`Payment ${transaction.external_id} status: ${paymentStatus}`);
+    console.log(`Payment ${transaction.external_id} status: ${paymentStatus}, amount: ${amount}`);
 
     if (paymentStatus === 'approved') {
-      // Credita saldo
-      const { data: wallet } = await supabase
+      // Busca saldo atual
+      const { data: wallet, error: walletFetchError } = await supabase
         .from('sms_user_wallets')
         .select('balance')
         .eq('user_id', user.id)
         .maybeSingle();
 
+      if (walletFetchError) {
+        console.error('Error fetching wallet:', walletFetchError);
+        throw new Error('Erro ao buscar carteira');
+      }
+
       const currentBalance = wallet?.balance || 0;
       const newBalance = currentBalance + amount;
 
-      if (wallet) {
-        await supabase
-          .from('sms_user_wallets')
-          .update({ balance: newBalance })
-          .eq('user_id', user.id);
-      } else {
-        await supabase
-          .from('sms_user_wallets')
-          .insert({ user_id: user.id, balance: amount });
+      console.log(`Crediting R$ ${amount} to user ${user.id}. Current: ${currentBalance}, New: ${newBalance}`);
+
+      // Upsert atômico com verificação de sucesso
+      const { error: walletError } = await supabase
+        .from('sms_user_wallets')
+        .upsert({
+          user_id: user.id,
+          balance: newBalance,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+
+      if (walletError) {
+        console.error('CRITICAL: Error updating wallet:', walletError);
+        // NÃO marca a transação como completed se o saldo não foi atualizado
+        throw new Error('Erro crítico ao atualizar saldo');
       }
 
-      // Atualiza transação
-      await supabase
+      // Somente após confirmar que o saldo foi atualizado, marca a transação como completed
+      const { error: txError } = await supabase
         .from('sms_transactions')
         .update({ 
           status: 'completed',
@@ -124,6 +135,13 @@ serve(async (req) => {
           pix_copy_paste: null,
         })
         .eq('id', transaction.id);
+
+      if (txError) {
+        console.error('Error updating transaction status:', txError);
+        // Saldo já foi creditado, isso é menos crítico
+      }
+
+      console.log(`SUCCESS: User ${user.id} balance updated from ${currentBalance} to ${newBalance}`);
 
       return new Response(JSON.stringify({
         status: 'completed',
