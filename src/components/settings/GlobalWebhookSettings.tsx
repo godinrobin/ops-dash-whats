@@ -12,6 +12,7 @@ import { Copy, RefreshCw, Loader2, History, Plus, Trash2, Workflow, Smartphone, 
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -53,6 +54,7 @@ export function GlobalWebhookSettings() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [newWebhook, setNewWebhook] = useState({
     name: "",
     flow_id: "",
@@ -250,8 +252,6 @@ export function GlobalWebhookSettings() {
   };
 
   const deleteWebhook = async (id: string) => {
-    if (!confirm("Tem certeza que deseja excluir este webhook?")) return;
-
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
@@ -262,6 +262,7 @@ export function GlobalWebhookSettings() {
       if (error) throw error;
       
       setWebhooks(prev => prev.filter(w => w.id !== id));
+      setDeleteConfirmId(null);
       toast.success("Webhook excluído!");
     } catch (error) {
       console.error('Error deleting webhook:', error);
@@ -366,7 +367,7 @@ export function GlobalWebhookSettings() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-destructive hover:text-destructive"
-                      onClick={() => deleteWebhook(webhook.id)}
+                      onClick={() => setDeleteConfirmId(webhook.id)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -599,6 +600,27 @@ export function GlobalWebhookSettings() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Webhook</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir este webhook? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteConfirmId && deleteWebhook(deleteConfirmId)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
