@@ -444,14 +444,14 @@ export function GlobalWebhookSettings() {
                     Instância para Disparo
                   </Label>
                   <Select
-                    value={webhook.instance_id || ""}
-                    onValueChange={(value) => updateWebhook(webhook.id, { instance_id: value || null })}
+                    value={webhook.instance_id || "__default__"}
+                    onValueChange={(value) => updateWebhook(webhook.id, { instance_id: value === "__default__" ? null : value })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Primeira conectada (padrão)" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Primeira conectada (padrão)</SelectItem>
+                      <SelectItem value="__default__">Primeira conectada (padrão)</SelectItem>
                       {instances.map((instance) => (
                         <SelectItem key={instance.id} value={instance.id}>
                           {instance.phone_number || instance.label || instance.instance_name}
