@@ -1763,6 +1763,89 @@ export type Database = {
         }
         Relationships: []
       }
+      global_webhook_events: {
+        Row: {
+          created_at: string
+          id: string
+          raw_payload: Json | null
+          user_id: string
+          webhook_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          raw_payload?: Json | null
+          user_id: string
+          webhook_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          raw_payload?: Json | null
+          user_id?: string
+          webhook_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "global_webhook_events_webhook_id_fkey"
+            columns: ["webhook_id"]
+            isOneToOne: false
+            referencedRelation: "global_webhooks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      global_webhooks: {
+        Row: {
+          created_at: string
+          flow_id: string | null
+          id: string
+          instance_id: string | null
+          is_active: boolean
+          name: string
+          updated_at: string
+          user_id: string
+          webhook_token: string
+        }
+        Insert: {
+          created_at?: string
+          flow_id?: string | null
+          id?: string
+          instance_id?: string | null
+          is_active?: boolean
+          name: string
+          updated_at?: string
+          user_id: string
+          webhook_token?: string
+        }
+        Update: {
+          created_at?: string
+          flow_id?: string | null
+          id?: string
+          instance_id?: string | null
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+          user_id?: string
+          webhook_token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "global_webhooks_flow_id_fkey"
+            columns: ["flow_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_flows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "global_webhooks_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "maturador_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inbox_contact_activity: {
         Row: {
           contact_id: string

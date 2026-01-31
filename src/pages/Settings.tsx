@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { Bell, Megaphone, ChevronLeft, Settings as SettingsIcon, ShoppingBag, ChevronRight, Package, CreditCard } from "lucide-react";
+import { Bell, Megaphone, ChevronLeft, Settings as SettingsIcon, ShoppingBag, ChevronRight, Package, CreditCard, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -9,9 +9,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { PushNotificationsSettings } from "@/components/settings/PushNotificationsSettings";
 import { PixelSettings } from "@/components/settings/PixelSettings";
 import { LogzzIntegrationSettings } from "@/components/settings/LogzzIntegrationSettings";
+import { GlobalWebhookSettings } from "@/components/settings/GlobalWebhookSettings";
 import { PaymentsSettings } from "@/components/settings/PaymentsSettings";
 
-type SettingsSection = "notifications" | "pixel" | "logzz" | "payments";
+type SettingsSection = "notifications" | "pixel" | "logzz" | "global_webhook" | "payments";
 
 export default function Settings() {
   const { user } = useAuth();
@@ -53,6 +54,13 @@ export default function Settings() {
       badge: "Beta"
     },
     {
+      id: "global_webhook" as const,
+      label: "Webhook Global",
+      icon: Globe,
+      description: "Integração com sistemas externos",
+      badge: "Novo"
+    },
+    {
       id: "payments" as const,
       label: "Pagamentos",
       icon: CreditCard,
@@ -68,6 +76,8 @@ export default function Settings() {
         return <PixelSettings />;
       case "logzz":
         return <LogzzIntegrationSettings />;
+      case "global_webhook":
+        return <GlobalWebhookSettings />;
       case "payments":
         return <PaymentsSettings />;
       default:
