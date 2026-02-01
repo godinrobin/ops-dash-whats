@@ -5556,6 +5556,7 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: number
       }
+      get_public_user_count: { Args: never; Returns: number }
       get_sao_paulo_date: { Args: never; Returns: string }
       has_role: {
         Args: {
