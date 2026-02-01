@@ -690,10 +690,7 @@ const Auth = () => {
                   </button>
                 </div>
 
-                <p className="text-xs text-muted-foreground text-center mt-4">
-                  Ao criar uma conta, você terá acesso limitado às funcionalidades. 
-                  Para acesso completo, torne-se membro da comunidade.
-                </p>
+                <UserCountDisplay />
               </motion.form>
             )}
           </div>
