@@ -21,6 +21,43 @@ import { Checkbox } from "@/components/ui/checkbox";
 import zapdataLogo from "@/assets/zapdata-logo.png";
 import { trackCompleteRegistration } from "@/utils/facebookPixel";
 
+// Component to display real user count
+const UserCountDisplay = () => {
+  const [userCount, setUserCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    const fetchUserCount = async () => {
+      try {
+        const { count, error } = await supabase
+          .from("profiles")
+          .select("*", { count: "exact", head: true });
+        
+        if (!error && count !== null) {
+          setUserCount(count);
+        }
+      } catch (err) {
+        console.error("Error fetching user count:", err);
+      }
+    };
+
+    fetchUserCount();
+  }, []);
+
+  if (userCount === null) {
+    return (
+      <p className="text-xs text-muted-foreground text-center mt-4">
+        Junte-se à nossa comunidade de usuários
+      </p>
+    );
+  }
+
+  return (
+    <p className="text-xs text-muted-foreground text-center mt-4">
+      Mais de <span className="text-accent font-semibold">{userCount.toLocaleString('pt-BR')}</span> usuários cadastrados
+    </p>
+  );
+};
+
 const Auth = () => {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -690,10 +727,7 @@ const Auth = () => {
                   </button>
                 </div>
 
-                <p className="text-xs text-muted-foreground text-center mt-4">
-                  Ao criar uma conta, você terá acesso limitado às funcionalidades. 
-                  Para acesso completo, torne-se membro da comunidade.
-                </p>
+                <UserCountDisplay />
               </motion.form>
             )}
           </div>
