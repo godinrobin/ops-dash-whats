@@ -28,13 +28,10 @@ const UserCountDisplay = () => {
   useEffect(() => {
     const fetchUserCount = async () => {
       try {
-        const { count, error } = await supabase
-          .from("profiles")
-          .select("*", { count: "exact", head: true });
-        
-        if (!error && count !== null) {
-          setUserCount(count);
-        }
+        // NOTE: Counting rows in `profiles` is affected by RLS (unauthenticated users can see 0).
+        // Use a SECURITY DEFINER RPC that returns the real public count.
+        const { data, error } = await supabase.rpc("get_public_user_count");
+        if (!error && typeof data === "number") setUserCount(data);
       } catch (err) {
         console.error("Error fetching user count:", err);
       }
