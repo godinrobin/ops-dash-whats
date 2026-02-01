@@ -7,12 +7,10 @@ import Autoplay from "embla-carousel-autoplay";
 import Marketplace from "./Marketplace";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useAccessLevel } from "@/hooks/useAccessLevel";
 import { useAdminStatus } from "@/hooks/useAdminStatus";
-import { RestrictedFeatureModal } from "@/components/RestrictedFeatureModal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Lock, Clock } from "lucide-react";
+import { Clock } from "lucide-react";
 import { BackgroundBeams } from "@/components/ui/background-beams";
 import { GlowCard } from "@/components/ui/spotlight-card";
 import { cn } from "@/lib/utils";
@@ -27,14 +25,13 @@ interface SystemCardProps {
   shortTitle?: string;
   description: string;
   onClick: () => void;
-  isLocked?: boolean;
   isBeta?: boolean;
   isComingSoon?: boolean;
   gradient?: string | null;
   glowColor?: 'blue' | 'purple' | 'green' | 'red' | 'orange';
 }
 
-const SystemCard = ({ icon, title, shortTitle, description, onClick, isLocked, isBeta, isComingSoon, gradient, glowColor = 'purple' }: SystemCardProps) => {
+const SystemCard = ({ icon, title, shortTitle, description, onClick, isBeta, isComingSoon, gradient, glowColor = 'purple' }: SystemCardProps) => {
   return (
     <GlowCard
       glowColor={glowColor}
@@ -45,13 +42,6 @@ const SystemCard = ({ icon, title, shortTitle, description, onClick, isLocked, i
       )}
       onClick={onClick}
     >
-      {isLocked && !isComingSoon && (
-        <div className="absolute top-3 right-3 z-10">
-          <div className="w-7 h-7 rounded-full bg-accent/20 flex items-center justify-center">
-            <Lock className="w-4 h-4 text-accent" />
-          </div>
-        </div>
-      )}
       {isComingSoon && (
         <div className="absolute top-2 left-2 z-10">
           <span className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-yellow-500/20 text-yellow-500 border border-yellow-500/30 rounded-full flex items-center gap-1">
@@ -99,10 +89,7 @@ interface HomeProps {
 const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { isFullMember, loading: accessLoading } = useAccessLevel();
   const { isAdmin } = useAdminStatus();
-  const [restrictedModalOpen, setRestrictedModalOpen] = useState(false);
-  const [selectedFeatureName, setSelectedFeatureName] = useState<string>("");
   
   const autoplayPlugin = useRef(
     Autoplay({ delay: 3000, stopOnInteraction: true })
@@ -345,12 +332,8 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
       }
     }
     
-    if (isFullMember || !system.restricted || isAdmin) {
-      navigate(system.path);
-      return;
-    }
-    setSelectedFeatureName(system.title);
-    setRestrictedModalOpen(true);
+    // All authenticated users have full access - navigate directly
+    navigate(system.path);
   };
 
   // Don't navigate to ads in restricted mode - stay on home
@@ -410,7 +393,6 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
             }}
           >
             {systems.map((system, index) => {
-              const isLocked = !accessLoading && isFullMember === false && system.restricted && !isAdmin;
               // Check if user has access to allowed emails restricted systems
               const userEmail = user?.email?.toLowerCase() || '';
               const isAllowedByEmail = system.allowedEmails?.some(email => email.toLowerCase() === userEmail) || isAdmin;
@@ -446,7 +428,6 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
                     shortTitle={system.shortTitle}
                     description={system.description}
                     onClick={() => handleSystemClick(system)}
-                    isLocked={isLocked}
                     isBeta={system.isBeta}
                     isComingSoon={showComingSoon}
                     gradient={system.gradient}
@@ -503,13 +484,6 @@ const Home = ({ restrictedMode = false, restrictedFeatureName }: HomeProps) => {
           </footer>
         </div>
       </div>
-
-      <RestrictedFeatureModal
-        open={restrictedModalOpen}
-        onOpenChange={setRestrictedModalOpen}
-        featureName={selectedFeatureName}
-      />
-
     </>
   );
 };

@@ -25,13 +25,12 @@ import {
   ChevronDown,
   ChevronRight,
   Home,
-  Lock,
   Zap,
   Send,
   Star
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAccessLevel } from "@/hooks/useAccessLevel";
+
 import { useAdminStatus } from "@/hooks/useAdminStatus";
 import tiktokLogo from "@/assets/tiktok-logo.png";
 
@@ -147,15 +146,13 @@ const CollapsibleSection = ({ title, children, defaultOpen = true }: Collapsible
 };
 
 interface SystemsSidebarProps {
-  onRestrictedClick?: (featureName: string) => void;
   isOpen?: boolean;
   onToggle?: () => void;
 }
 
-export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: SystemsSidebarProps) => {
+export const SystemsSidebar = ({ isOpen = false, onToggle }: SystemsSidebarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isFullMember, loading: accessLoading } = useAccessLevel();
   const { isAdmin } = useAdminStatus();
 
   const handleSystemClick = (system: SystemItem) => {
@@ -163,11 +160,7 @@ export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: 
       return;
     }
     
-    if (system.restricted && !isFullMember && !isAdmin) {
-      onRestrictedClick?.(system.title);
-      return;
-    }
-    
+    // All authenticated users have full access - no membership check needed
     navigate(system.path);
     onToggle?.();
   };
@@ -177,7 +170,6 @@ export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: 
   };
 
   const renderSystemButton = (system: SystemItem) => {
-    const isLocked = !accessLoading && !isFullMember && system.restricted && !isAdmin;
     const isComingSoon = system.comingSoon && !isAdmin;
     const isActive = isActiveSystem(system.path);
 
@@ -190,8 +182,7 @@ export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: 
           isActive 
             ? "bg-accent/20 text-accent font-medium" 
             : "text-muted-foreground hover:text-foreground hover:bg-secondary",
-          isComingSoon && "opacity-40 cursor-not-allowed",
-          isLocked && "opacity-60"
+          isComingSoon && "opacity-40 cursor-not-allowed"
         )}
         disabled={isComingSoon}
       >
@@ -202,7 +193,6 @@ export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: 
           {system.icon}
         </span>
         <span className="flex-1 min-w-0 text-left truncate">{system.title}</span>
-        {isLocked && !isComingSoon && <Lock className="w-3 h-3 text-muted-foreground flex-shrink-0" />}
         {isComingSoon && (
           <span className="text-[9px] px-1.5 py-0.5 bg-accent/20 text-accent rounded font-medium">
             breve
@@ -213,7 +203,6 @@ export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: 
   };
 
   const renderPopularSystemButton = (system: (typeof popularSystems)[0]) => {
-    const isLocked = !accessLoading && !isFullMember && system.restricted && !isAdmin;
     const isActive = isActiveSystem(system.path);
 
     return (
@@ -224,8 +213,7 @@ export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: 
           "group flex items-center gap-3 w-full px-3 py-2 text-sm rounded-md transition-colors",
           isActive 
             ? "bg-accent/20 text-accent font-medium" 
-            : "text-muted-foreground hover:text-foreground hover:bg-secondary",
-          isLocked && "opacity-60"
+            : "text-muted-foreground hover:text-foreground hover:bg-secondary"
         )}
       >
         <span className={cn(
@@ -240,7 +228,6 @@ export const SystemsSidebar = ({ onRestrictedClick, isOpen = false, onToggle }: 
             {system.tag}
           </span>
         )}
-        {isLocked && !system.tag && <Lock className="w-3 h-3 text-muted-foreground flex-shrink-0" />}
       </button>
     );
   };

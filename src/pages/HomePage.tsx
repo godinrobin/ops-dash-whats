@@ -4,7 +4,6 @@ import { Header } from "@/components/Header";
 import { SystemsSidebar } from "@/components/layout/SystemsSidebar";
 import { Feed } from "@/components/feed/Feed";
 import { PopularSystemsMarquee } from "@/components/feed/PopularSystemsMarquee";
-import { RestrictedFeatureModal } from "@/components/RestrictedFeatureModal";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 import Marketplace from "./Marketplace";
 
@@ -13,8 +12,6 @@ export type AppMode = "sistemas" | "marketplace" | "ads";
 const HomePage = () => {
   const navigate = useNavigate();
   const { isImpersonating } = useImpersonation();
-  const [restrictedModalOpen, setRestrictedModalOpen] = useState(false);
-  const [selectedFeatureName, setSelectedFeatureName] = useState<string>("");
   const [refreshFeed, setRefreshFeed] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -35,11 +32,6 @@ const HomePage = () => {
     }
   }, [mode, navigate]);
 
-  const handleRestrictedClick = (featureName: string) => {
-    setSelectedFeatureName(featureName);
-    setRestrictedModalOpen(true);
-  };
-
   if (mode === "marketplace") {
     return <Marketplace onModeChange={setMode} currentMode={mode} />;
   }
@@ -52,7 +44,6 @@ const HomePage = () => {
       <div className={spacerHeight} />
       
       <SystemsSidebar 
-        onRestrictedClick={handleRestrictedClick} 
         isOpen={sidebarOpen} 
         onToggle={() => setSidebarOpen(!sidebarOpen)} 
       />
@@ -75,12 +66,6 @@ const HomePage = () => {
           <Feed key={refreshFeed} />
         </div>
       </main>
-
-      <RestrictedFeatureModal
-        open={restrictedModalOpen}
-        onOpenChange={setRestrictedModalOpen}
-        featureName={selectedFeatureName}
-      />
     </div>
   );
 };
